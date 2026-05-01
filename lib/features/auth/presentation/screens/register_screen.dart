@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../features/onboarding/domain/onboarding_data.dart';
-import '../../../../features/onboarding/presentation/screens/onboarding_gender_screen.dart';
+import '../../../../features/home/presentation/screens/home_screen.dart';
+import '../utils/auth_error_messages.dart';
+import '../widgets/auth_error_banner.dart';
 import '../widgets/auth_text_field.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -12,13 +15,16 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _passwordVisible = false;
+  bool _isLoading = false;
   String _password = '';
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -42,20 +48,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool get _hasDigit => _password.contains(RegExp(r'[0-9]'));
 
   _PasswordStrength get _strength {
-    final score = [_hasMinLength, _hasUpperCase, _hasDigit].where((v) => v).length;
+    final score =
+        [_hasMinLength, _hasUpperCase, _hasDigit].where((v) => v).length;
     if (score == 3) return _PasswordStrength.strong;
     if (score == 2) return _PasswordStrength.medium;
     if (score == 1) return _PasswordStrength.weak;
     return _PasswordStrength.none;
   }
 
-  void _handleSubmit() {
-    // TODO: call Supabase Auth createUser here, then navigate
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OnboardingGenderScreen(data: OnboardingData()),
-      ),
-    );
+  Future<void> _handleSubmit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await ServiceLocator.authRepository.register(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+      );
+      await ServiceLocator.tokenStorage.saveToken(result.token);
+      await ServiceLocator.tokenStorage.saveUser(result.user);
+
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => HomeScreen(user: result.user)),
+        (_) => false,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = authErrorMessage(e.message);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = authErrorMessage('network_error');
+      });
+    }
   }
 
   @override
@@ -69,35 +105,93 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Header(),
-                    const SizedBox(height: 28),
-                    _FormSection(
-                      firstNameController: _firstNameController,
-                      lastNameController: _lastNameController,
-                      emailController: _emailController,
-                      passwordController: _passwordController,
-                      passwordVisible: _passwordVisible,
-                      password: _password,
-                      strength: _strength,
-                      hasMinLength: _hasMinLength,
-                      hasUpperCase: _hasUpperCase,
-                      hasDigit: _hasDigit,
-                      onPasswordChanged: _handlePasswordChanged,
-                      onToggleVisibility: _handleTogglePasswordVisibility,
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _handleSubmit,
-                      child: const Text('Utwórz konto'),
-                    ),
-                    const SizedBox(height: 16),
-                    _LoginLink(),
-                    const SizedBox(height: 28),
-                    _WhySection(),
-                  ],
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Header(),
+                      const SizedBox(height: 28),
+                      AuthTextField(
+                        hint: 'Imię',
+                        prefixIcon: Icons.person_outline_rounded,
+                        controller: _firstNameController,
+                        textInputAction: TextInputAction.next,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Imię jest wymagane.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      AuthTextField(
+                        hint: 'Nazwisko',
+                        prefixIcon: Icons.person_outline_rounded,
+                        controller: _lastNameController,
+                        textInputAction: TextInputAction.next,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Nazwisko jest wymagane.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      AuthTextField(
+                        hint: 'E-mail',
+                        prefixIcon: Icons.mail_outline_rounded,
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        validator: _validateEmail,
+                      ),
+                      const SizedBox(height: 12),
+                      AuthTextField(
+                        hint: 'Hasło',
+                        prefixIcon: Icons.lock_outline_rounded,
+                        controller: _passwordController,
+                        obscureText: !_passwordVisible,
+                        onChanged: _handlePasswordChanged,
+                        textInputAction: TextInputAction.done,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _passwordVisible
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: AppColors.textMuted,
+                            size: 20,
+                          ),
+                          onPressed: _handleTogglePasswordVisibility,
+                        ),
+                        validator: _validatePassword,
+                      ),
+                      if (_password.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _PasswordStrengthBar(strength: _strength),
+                        const SizedBox(height: 12),
+                        _PasswordRequirements(
+                          hasMinLength: _hasMinLength,
+                          hasUpperCase: _hasUpperCase,
+                          hasDigit: _hasDigit,
+                        ),
+                      ],
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 16),
+                        AuthErrorBanner(message: _errorMessage!),
+                      ],
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _handleSubmit,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Utwórz konto'),
+                      ),
+                      const SizedBox(height: 16),
+                      _LoginLink(),
+                      const SizedBox(height: 28),
+                      _WhySection(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -107,6 +201,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+
+String? _validateEmail(String? value) {
+  if (value == null || value.trim().isEmpty) return 'E-mail jest wymagany.';
+  final regex = RegExp(r'^[\w\-.+]+@[\w\-]+\.[a-zA-Z]{2,}$');
+  if (!regex.hasMatch(value.trim())) return 'Podaj prawidłowy adres e-mail.';
+  return null;
+}
+
+String? _validatePassword(String? value) {
+  if (value == null || value.isEmpty) return 'Hasło jest wymagane.';
+  if (value.length < 8) return 'Min. 8 znaków.';
+  if (!value.contains(RegExp(r'[A-Z]'))) return 'Wymagana wielka litera.';
+  if (!value.contains(RegExp(r'[0-9]'))) return 'Wymagana cyfra.';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Enums & sub-widgets
+// ---------------------------------------------------------------------------
 
 enum _PasswordStrength { none, weak, medium, strong }
 
@@ -118,27 +231,15 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 24, 8),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-            padding: EdgeInsets.zero,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: 0.4,
-                backgroundColor: AppColors.border,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                minHeight: 4,
-              ),
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(8, 12, 24, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: IconButton(
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          padding: EdgeInsets.zero,
+        ),
       ),
     );
   }
@@ -147,115 +248,20 @@ class _TopBar extends StatelessWidget {
 class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
+      children: [
         Text(
           'Utwórz konto',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
-          ),
+              color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800),
         ),
         SizedBox(height: 6),
         Text(
           'Zacznij swoją drogę do lepszej wersji siebie.',
           style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-            height: 1.4,
-          ),
+              color: AppColors.textSecondary, fontSize: 14, height: 1.4),
         ),
-      ],
-    );
-  }
-}
-
-class _FormSection extends StatelessWidget {
-  const _FormSection({
-    required this.firstNameController,
-    required this.lastNameController,
-    required this.emailController,
-    required this.passwordController,
-    required this.passwordVisible,
-    required this.password,
-    required this.strength,
-    required this.hasMinLength,
-    required this.hasUpperCase,
-    required this.hasDigit,
-    required this.onPasswordChanged,
-    required this.onToggleVisibility,
-  });
-
-  final TextEditingController firstNameController;
-  final TextEditingController lastNameController;
-  final TextEditingController emailController;
-  final TextEditingController passwordController;
-  final bool passwordVisible;
-  final String password;
-  final _PasswordStrength strength;
-  final bool hasMinLength;
-  final bool hasUpperCase;
-  final bool hasDigit;
-  final ValueChanged<String> onPasswordChanged;
-  final VoidCallback onToggleVisibility;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AuthTextField(
-          hint: 'Imię',
-          prefixIcon: Icons.person_outline_rounded,
-          controller: firstNameController,
-          textInputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 12),
-        AuthTextField(
-          hint: 'Nazwisko',
-          prefixIcon: Icons.person_outline_rounded,
-          controller: lastNameController,
-          textInputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 12),
-        AuthTextField(
-          hint: 'E-mail',
-          prefixIcon: Icons.mail_outline_rounded,
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-        ),
-        const SizedBox(height: 12),
-        AuthTextField(
-          hint: 'Hasło',
-          prefixIcon: Icons.lock_outline_rounded,
-          controller: passwordController,
-          obscureText: !passwordVisible,
-          onChanged: onPasswordChanged,
-          textInputAction: TextInputAction.done,
-          suffixIcon: IconButton(
-            icon: Icon(
-              passwordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: AppColors.textMuted,
-              size: 20,
-            ),
-            onPressed: onToggleVisibility,
-          ),
-        ),
-        if (password.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _PasswordStrengthBar(strength: strength),
-        ],
-        if (password.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _PasswordRequirements(
-            hasMinLength: hasMinLength,
-            hasUpperCase: hasUpperCase,
-            hasDigit: hasDigit,
-          ),
-        ],
       ],
     );
   }
@@ -266,32 +272,26 @@ class _PasswordStrengthBar extends StatelessWidget {
 
   final _PasswordStrength strength;
 
-  Color get _color {
-    return switch (strength) {
-      _PasswordStrength.weak => AppColors.strengthWeak,
-      _PasswordStrength.medium => AppColors.strengthMedium,
-      _PasswordStrength.strong => AppColors.strengthStrong,
-      _PasswordStrength.none => AppColors.border,
-    };
-  }
+  Color get _color => switch (strength) {
+        _PasswordStrength.weak => AppColors.strengthWeak,
+        _PasswordStrength.medium => AppColors.strengthMedium,
+        _PasswordStrength.strong => AppColors.strengthStrong,
+        _PasswordStrength.none => AppColors.border,
+      };
 
-  String get _label {
-    return switch (strength) {
-      _PasswordStrength.weak => 'Słabe',
-      _PasswordStrength.medium => 'Średnie',
-      _PasswordStrength.strong => 'Silne',
-      _PasswordStrength.none => '',
-    };
-  }
+  String get _label => switch (strength) {
+        _PasswordStrength.weak => 'Słabe',
+        _PasswordStrength.medium => 'Średnie',
+        _PasswordStrength.strong => 'Silne',
+        _PasswordStrength.none => '',
+      };
 
-  double get _progress {
-    return switch (strength) {
-      _PasswordStrength.none => 0.0,
-      _PasswordStrength.weak => 0.33,
-      _PasswordStrength.medium => 0.66,
-      _PasswordStrength.strong => 1.0,
-    };
-  }
+  double get _progress => switch (strength) {
+        _PasswordStrength.none => 0.0,
+        _PasswordStrength.weak => 0.33,
+        _PasswordStrength.medium => 0.66,
+        _PasswordStrength.strong => 1.0,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -309,10 +309,9 @@ class _PasswordStrengthBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(
-          _label,
-          style: TextStyle(color: _color, fontSize: 12, fontWeight: FontWeight.w500),
-        ),
+        Text(_label,
+            style: TextStyle(
+                color: _color, fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -340,19 +339,19 @@ class _PasswordRequirements extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _Requirement(label: 'Minimum 8 znaków', met: hasMinLength),
+          _Req(label: 'Minimum 8 znaków', met: hasMinLength),
           const SizedBox(height: 8),
-          _Requirement(label: 'Jedna wielka litera', met: hasUpperCase),
+          _Req(label: 'Jedna wielka litera', met: hasUpperCase),
           const SizedBox(height: 8),
-          _Requirement(label: 'Jedna cyfra', met: hasDigit),
+          _Req(label: 'Jedna cyfra', met: hasDigit),
         ],
       ),
     );
   }
 }
 
-class _Requirement extends StatelessWidget {
-  const _Requirement({required this.label, required this.met});
+class _Req extends StatelessWidget {
+  const _Req({required this.label, required this.met});
 
   final String label;
   final bool met;
@@ -362,7 +361,9 @@ class _Requirement extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          met ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+          met
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
           color: met ? AppColors.success : AppColors.textMuted,
           size: 18,
         ),
@@ -385,19 +386,16 @@ class _LoginLink extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text(
-          'Masz już konto? ',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-        ),
+        const Text('Masz już konto? ',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
         GestureDetector(
           onTap: () => Navigator.of(context).pop(),
           child: const Text(
             'Zaloguj się',
             style: TextStyle(
-              color: AppColors.primary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+                color: AppColors.primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -415,16 +413,13 @@ class _WhySection extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           Text(
             'Dlaczego warto?',
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
           ),
           SizedBox(height: 16),
           _BenefitItem(
@@ -485,23 +480,17 @@ class _BenefitItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Text(title,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text(
-                description,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
+              Text(description,
+                  style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4)),
             ],
           ),
         ),

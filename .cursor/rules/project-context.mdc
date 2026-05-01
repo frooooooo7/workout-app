@@ -7,7 +7,7 @@ alwaysApply: true
 
 Przed większymi zmianami funkcjonalnymi lub architektonicznymi **otwórz i uwzględnij** plik **`PROJECT.md`** w katalogu głównym repozytorium.
 
-- Opisuje cel aplikacji (Strava-like + warstwa społecznościowa), zakres i uzgodniony **stack** (Flutter, Supabase, PostGIS, integracje).
+- Opisuje cel aplikacji (Strava-like + warstwa społecznościowa), zakres i uzgodniony **stack** (Flutter, backend Node.js, PostgreSQL / PostGIS, integracje).
 - Nie rozszerzaj zakresu „jak pełna Strava”, jeśli zadanie tego nie wymaga — trzymaj się MVP i `PROJECT.md`.
 
 Szczegółowe standardy Flutter/Dart: **`.cursor/rules/flutter-ai-standards.mdc`** oraz **`.cursor/rules/flutter-ai-ui-testing.mdc`** (stosują się przy pracy nad plikami `*.dart`). Dodatkowo: **`.agents/skills/`** — używaj, gdy pasują do zadania.

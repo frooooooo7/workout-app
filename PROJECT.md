@@ -13,7 +13,7 @@ Aplikacja mobilna **wzorowana na funkcjonalnościach Stravy**: śledzenie i arch
 - Nagrywanie / rejestrowanie aktywności (w tym trasy na mapie tam, gdzie ma to sens).
 - Archiwum treningów i podstawowa analityka (np. prędkość, tętno, przewyższenia — zgodnie z dostępnymi danymi).
 - Feed lub tablica społecznościowa (wpisy, interakcje — szczegóły do doprecyzowania w backlogu).
-- Wspólne sesje (organizacja, zaproszenia, powiadomienia — szczegóły implementacyjne w Supabase / Edge Functions).
+- Wspólne sesje (organizacja, zaproszenia, powiadomienia — szczegóły implementacyjne po stronie backendu Node.js).
 
 ## Frontend — Flutter
 
@@ -30,16 +30,17 @@ Aplikacja mobilna **wzorowana na funkcjonalnościach Stravy**: śledzenie i arch
 
 **Architektura:** preferuj warstwowy podział (UI / logika prezentacji / dane); w repozytorium są wskazówki w `.agents/skills/flutter-apply-architecture-best-practices/`.
 
-## Backend — Supabase
+## Backend — Node.js + PostgreSQL
 
 | Obszar | Technologia |
 |--------|-------------|
-| Baza | PostgreSQL (wbudowana w Supabase) + rozszerzenie **PostGIS** (geometria tras, zapytania przestrzenne). |
-| Autoryzacja | Supabase Auth. |
-| Pliki | Supabase Storage. |
-| Cięższa logika | Edge Functions (TypeScript / Deno). |
+| Runtime / API | **Node.js** (własny serwis HTTP — REST lub podobny kontrakt; kod backendu zwykle w osobnym repozytorium lub podkatalogu). |
+| Baza | **PostgreSQL** (własna instancja / hosting) + rozszerzenie **PostGIS** (geometria tras, zapytania przestrzenne). |
+| Autoryzacja | Po stronie API (np. JWT, sesje) — szczegół do uzgodnienia z integracją z klientem Flutter; ewentualnie zewnętrzny IdP. |
+| Pliki | Dowolny storage obiektowy (np. **S3‑compatible**). |
+| Cięższa logika | Ten sam serwis Node.js lub osobne worker’y / kolejki w razie potrzeby skalowania. |
 
-Przy modelowaniu danych uwzględnij **RLS** (Row Level Security) dla treści społecznościowych i profili.
+Reguły dostępu do danych społecznościowych i profili implementuj przede wszystkim **w warstwie API**; opcjonalnie wzmocnij model **RLS** w PostgreSQL (defense in depth), jeśli baza jest dostępna tylko dla backendu z jedną rolą techniczną.
 
 ## Integracje i jakość
 
