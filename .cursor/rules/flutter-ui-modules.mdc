@@ -1,0 +1,44 @@
+---
+description: Dzielenie ekranów Flutter na osobne pliki (widżety i modele) — unikanie jednego ogromnego pliku
+globs:
+  - "lib/**/*.dart"
+alwaysApply: false
+---
+
+# Organizacja plików UI (GYM — Flutter)
+
+## Zasada
+
+**Nie trzymaj całego ekranu ani długich sekcji w jednym `*_screen.dart`.** Dziel kod na osobne pliki zgodnie z warstwo-feature:
+
+- **`presentation/screens/`** — tylko strona zbiorcza (Scaffold + kompozycja), rządząca kolejnością widżetów i przekazywaniem danych.
+- **`presentation/widgets/`** — reużywalne widżety lub większe bloki jednego feature (np. nagłówek ekranu, karta „Twoja aktywność”, lista ostatnich aktywności).
+- **`domain/models/`** (lub **`data/`**) — czyste modele domenowe / stanu widoku bez zależności od konkretnego `build`, jeśli to możliwe.
+
+## Kryteria rozdziału na pliki
+
+- Nowy blok UI z własnym nagłówkiem / kartą → **oddzielny plik widżetu** (np. `home_activity_summary_card.dart`).
+- Kilka bardzo ściśle powiązanych pomocników wizualnych (jeden przycisk wewnątrz większego nagłówka) można zostawić w **jednym** pliku z głównym widżetem eksportowanym jako publiczny, reszta prywatna — ale unikaj plików dłuższych niż **~250 linii** bez wyraźnego powodu.
+
+## Nazewnictwo
+
+- Jedna główna klasa widżetu na plik, nazwa zbliżona do nazwy pliku (`home_header.dart` → `HomeHeader`).
+- Modele: `recent_activity.dart` → `RecentActivity`, `RecentActivityKind` itd.
+
+## Spójność z architekturą
+
+Zgodnie z `PROJECT.md` i warstwowym podziałem: UI w `presentation`, logika biznesowa i kontrakty danych nie mieszają się z opisem layoutu w jednym gigantycznym pliku.
+
+Przykład układu dla feature `home`:
+
+```text
+lib/features/home/
+  domain/models/recent_activity.dart
+  presentation/screens/home_screen.dart
+  presentation/widgets/home_header.dart
+  presentation/widgets/home_activity_summary_card.dart
+  presentation/widgets/recent_activities_card.dart
+  ...
+```
+
+Przy dodawaniu nowych ekranów przestrzegaj tego samego wzorca — **ekran jako komponentor, nie magazyn wszystkich widżetów**.
