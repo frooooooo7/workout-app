@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../features/home/presentation/screens/home_screen.dart';
 import '../utils/auth_error_messages.dart';
 import '../widgets/auth_error_banner.dart';
 import '../widgets/auth_text_field.dart';
@@ -73,12 +73,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       await ServiceLocator.tokenStorage.saveToken(result.token);
       await ServiceLocator.tokenStorage.saveUser(result.user);
+      ServiceLocator.currentUser.value = result.user;
 
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen(user: result.user)),
-        (_) => false,
-      );
+      context.go('/app/home');
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -101,7 +99,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(onBack: () => Navigator.of(context).pop()),
+            _TopBar(onBack: () => context.pop()),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
@@ -389,7 +387,7 @@ class _LoginLink extends StatelessWidget {
         const Text('Masz już konto? ',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
         GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
+          onTap: () => context.pop(),
           child: const Text(
             'Zaloguj się',
             style: TextStyle(

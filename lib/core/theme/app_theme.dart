@@ -13,6 +13,44 @@ final class AppTheme {
           onPrimary: AppColors.onPrimary,
           onSurface: AppColors.textPrimary,
         ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: AppColors.surface,
+          indicatorColor: AppColors.primary.withValues(alpha: 0.18),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const IconThemeData(color: AppColors.primary, size: 24);
+            }
+            return const IconThemeData(color: AppColors.textMuted, size: 24);
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return const TextStyle(
+                color: AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              );
+            }
+            return const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            );
+          }),
+          elevation: 0,
+          height: 72,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            fontSize: 16,
+          ),
+          iconTheme: IconThemeData(color: AppColors.textSecondary),
+        ),
         fontFamily: 'Roboto',
         inputDecorationTheme: InputDecorationTheme(
           filled: true,

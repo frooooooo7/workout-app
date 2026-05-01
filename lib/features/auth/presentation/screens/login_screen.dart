@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
-import 'login_form_screen.dart';
-import 'register_screen.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -385,15 +384,11 @@ class _BottomSection extends StatelessWidget {
   final BuildContext context;
 
   void _handleLoginTap() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginFormScreen()),
-    );
+    context.push('/login/form');
   }
 
   void _handleRegisterTap() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RegisterScreen()),
-    );
+    context.push('/login/register');
   }
 
   @override
