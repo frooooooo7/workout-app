@@ -24,6 +24,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   List<Exercise> _exercises = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -33,24 +34,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _load() async {
     if (!mounted) return;
-    setState(() => _loading = true);
-
-    final result = await _repo.getAll(
-      filter: _filter,
-      muscleGroup: _category,
-      query: _query,
-    );
-
-    if (!mounted) return;
     setState(() {
-      _exercises = result;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+
+    try {
+      final result = await _repo.getAll(
+        filter: _filter,
+        muscleGroup: _category,
+        query: _query,
+      );
+      if (!mounted) return;
+      setState(() {
+        _exercises = result;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Nie można załadować ćwiczeń. Sprawdź połączenie.';
+      });
+    }
   }
 
   Future<void> _toggleFavourite(Exercise exercise) async {
-    await _repo.setFavourite(exercise.id, isFavourite: !exercise.isFavourite);
-    await _load();
+    try {
+      await _repo.setFavourite(exercise.id, isFavourite: !exercise.isFavourite);
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zaktualizować ulubionych.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _onFilterChanged(LibraryFilter f) {
@@ -113,12 +134,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Expanded(
               child: _loading
                   ? const _LoadingState()
-                  : _exercises.isEmpty
-                      ? const _EmptyState()
-                      : _ExerciseGrid(
-                          exercises: _exercises,
-                          onFavouriteTap: _toggleFavourite,
-                        ),
+                  : _error != null
+                      ? _ErrorState(message: _error!)
+                      : _exercises.isEmpty
+                          ? const _EmptyState()
+                          : _ExerciseGrid(
+                              exercises: _exercises,
+                              onFavouriteTap: _toggleFavourite,
+                            ),
             ),
           ],
         ),
@@ -223,6 +246,54 @@ class _ExerciseGrid extends StatelessWidget {
 // ──────────────────────────────────────────────
 // States
 // ──────────────────────────────────────────────
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(
+              Icons.wifi_off_rounded,
+              color: AppColors.textMuted,
+              size: 30,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Brak połączenia',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _LoadingState extends StatelessWidget {
   const _LoadingState();

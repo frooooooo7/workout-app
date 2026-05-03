@@ -17,7 +17,6 @@ void main() async {
   }
 
   ServiceLocator.init();
-  await ServiceLocator.seedLibrary();
   runApp(GymApp());
 }
 
@@ -35,19 +34,24 @@ class GymApp extends StatelessWidget {
     final token = await ServiceLocator.tokenStorage.readToken();
     if (token == null || token.isEmpty) return null;
 
-    // Restore from cache first (offline-first — no network wait on startup)
+    // Restore from cache first (offline-first — no network wait on startup).
     final cached = await ServiceLocator.tokenStorage.readUser();
     if (cached != null) {
-      // Verify in background after shell is shown
+      // Set immediately so the currentUser listener fires synchronously and
+      // initialises the user-scoped ExerciseRepository before the shell opens.
+      ServiceLocator.currentUser.value = cached;
+      // Verify token freshness in the background after the shell is shown.
       _verifyInBackground();
       return cached;
     }
 
-    // No cache yet — try network before showing shell
+    // No cached user yet — must hit the network first.
     try {
       final data = await ServiceLocator.apiClient.get('/auth/me', auth: true);
       final user = AuthUser.fromJson(data as Map<String, dynamic>);
       await ServiceLocator.tokenStorage.saveUser(user);
+      // Same eager set so ExerciseRepository is ready before navigation.
+      ServiceLocator.currentUser.value = user;
       return user;
     } on ApiException catch (e) {
       if (e.statusCode == 401) {

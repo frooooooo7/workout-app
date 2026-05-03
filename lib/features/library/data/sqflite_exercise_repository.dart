@@ -4,7 +4,10 @@ import '../domain/models/exercise.dart';
 import '../domain/repositories/exercise_repository.dart';
 import 'exercise_database.dart';
 import 'exercise_dto.dart';
+import 'exercise_filter_utils.dart';
 
+/// Local-only [ExerciseRepository] backed by SQLite.
+/// Used in tests or as a standalone fallback where no API is available.
 class SqfliteExerciseRepository implements ExerciseRepository {
   const SqfliteExerciseRepository(this._dbInstance);
 
@@ -20,36 +23,9 @@ class SqfliteExerciseRepository implements ExerciseRepository {
   }) async {
     final db = await _db;
     final maps = await db.query(ExerciseDatabase.tableExercises);
-
-    var exercises = maps.map((m) => ExerciseDto.fromMap(m).toDomain()).toList();
-
-    // Filter: tab chip
-    if (filter == LibraryFilter.mine) {
-      exercises = exercises.where((e) => e.isMine).toList();
-    } else if (filter == LibraryFilter.favourite) {
-      exercises = exercises.where((e) => e.isFavourite).toList();
-    } else if (filter == LibraryFilter.recent) {
-      exercises = exercises.where((e) => e.isMine || e.isFavourite).toList();
-    }
-
-    // Filter: muscle group
-    if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      exercises =
-          exercises.where((e) => e.muscles.contains(muscleGroup)).toList();
-    }
-
-    // Filter: search query
-    if (query != null && query.isNotEmpty) {
-      final q = query.toLowerCase();
-      exercises = exercises.where((e) {
-        final matchName = e.name.toLowerCase().contains(q);
-        final matchMuscle =
-            e.muscles.any((m) => m.label.toLowerCase().contains(q));
-        return matchName || matchMuscle;
-      }).toList();
-    }
-
-    return exercises;
+    final all = maps.map((m) => ExerciseDto.fromMap(m).toDomain()).toList();
+    return ExerciseFilterUtils.apply(all,
+        muscleGroup: muscleGroup, filter: filter, query: query);
   }
 
   @override
@@ -64,14 +40,52 @@ class SqfliteExerciseRepository implements ExerciseRepository {
   }
 
   @override
-  Future<void> upsert(Exercise exercise) async {
+  Future<Exercise> create({
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+  }) async {
+    final exercise = Exercise(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      muscles: muscles,
+      category: category,
+      isMine: true,
+      createdAt: DateTime.now().toUtc(),
+    );
     final db = await _db;
-    final dto = ExerciseDto.fromDomain(exercise);
     await db.insert(
       ExerciseDatabase.tableExercises,
-      dto.toMap(),
+      ExerciseDto.fromDomain(exercise).toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    return exercise;
+  }
+
+  @override
+  Future<Exercise> update({
+    required String id,
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+  }) async {
+    final db = await _db;
+    await db.update(
+      ExerciseDatabase.tableExercises,
+      {
+        'name': name,
+        'muscles': ExerciseDto.encodeMusclesToJson(muscles),
+        'category': category.name,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    final maps = await db.query(
+      ExerciseDatabase.tableExercises,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return ExerciseDto.fromMap(maps.first).toDomain();
   }
 
   @override
@@ -82,25 +96,5 @@ class SqfliteExerciseRepository implements ExerciseRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
-  }
-
-  @override
-  Future<void> seedIfEmpty(List<Exercise> builtIn) async {
-    final db = await _db;
-    final count = Sqflite.firstIntValue(
-      await db.rawQuery(
-          'SELECT COUNT(*) FROM ${ExerciseDatabase.tableExercises}'),
-    );
-    if (count != null && count > 0) return;
-
-    final batch = db.batch();
-    for (final e in builtIn) {
-      batch.insert(
-        ExerciseDatabase.tableExercises,
-        ExerciseDto.fromDomain(e).toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-    await batch.commit(noResult: true);
   }
 }

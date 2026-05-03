@@ -70,6 +70,7 @@ class Exercise {
     required this.category,
     this.isFavourite = false,
     this.isMine = false,
+    this.createdAt,
   });
 
   final String id;
@@ -78,6 +79,8 @@ class Exercise {
   final ExerciseCategory category;
   final bool isFavourite;
   final bool isMine;
+  /// UTC timestamp from the server. Null for locally-constructed mock data.
+  final DateTime? createdAt;
 }
 
 // ──────────────────────────────────────────────

@@ -1,7 +1,9 @@
 import '../models/exercise.dart';
 
 abstract interface class ExerciseRepository {
-  /// Returns all exercises, applying optional filters.
+  /// Returns exercises applying optional filters.
+  /// Implementations should attempt a network fetch and fall back to local
+  /// cache when the backend is unreachable.
   Future<List<Exercise>> getAll({
     MuscleGroup? muscleGroup,
     LibraryFilter? filter,
@@ -9,14 +11,25 @@ abstract interface class ExerciseRepository {
   });
 
   /// Toggles favourite state for the given [id].
+  /// Implementations should optimistically update the local cache and
+  /// sync with the backend when possible.
   Future<void> setFavourite(String id, {required bool isFavourite});
 
-  /// Inserts or updates a custom (user-created) exercise.
-  Future<void> upsert(Exercise exercise);
+  /// Creates a new user-owned exercise via the backend and caches it locally.
+  Future<Exercise> create({
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+  });
 
-  /// Deletes a user-created exercise by [id].
+  /// Updates an existing user-owned exercise via the backend and local cache.
+  Future<Exercise> update({
+    required String id,
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+  });
+
+  /// Deletes a user-owned exercise from the backend and local cache.
   Future<void> delete(String id);
-
-  /// Seeds built-in exercises if the database is empty.
-  Future<void> seedIfEmpty(List<Exercise> builtIn);
 }

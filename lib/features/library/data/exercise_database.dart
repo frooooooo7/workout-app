@@ -1,16 +1,19 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-/// Singleton that owns the SQLite connection and schema migrations.
+/// Manages a single SQLite connection for the exercise cache.
+///
+/// Not a singleton — create one instance per user (keyed by [dbName]).
+/// [ServiceLocator] is responsible for creating and re-creating this when the
+/// authenticated user changes.
 class ExerciseDatabase {
-  ExerciseDatabase._();
-  static final ExerciseDatabase instance = ExerciseDatabase._();
+  ExerciseDatabase(this._dbName);
+
+  final String _dbName;
 
   Database? _db;
 
-  static const _dbName = 'gym_library.db';
   static const _dbVersion = 1;
-
   static const tableExercises = 'exercises';
 
   Future<Database> get db async {

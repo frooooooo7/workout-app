@@ -19,7 +19,7 @@ class ExerciseDto {
   final String category; // ExerciseCategory.name
   final bool isFavourite;
   final bool isMine;
-  final int createdAt; // millisecondsSinceEpoch
+  final int createdAt; // millisecondsSinceEpoch (from server or now() on first write)
 
   // ── DB ──────────────────────────────────────
 
@@ -45,14 +45,20 @@ class ExerciseDto {
 
   // ── Domain ───────────────────────────────────
 
+  static String encodeMusclesToJson(List<MuscleGroup> muscles) =>
+      jsonEncode(muscles.map((m) => m.name).toList());
+
   factory ExerciseDto.fromDomain(Exercise e) => ExerciseDto(
         id: e.id,
         name: e.name,
-        muscles: jsonEncode(e.muscles.map((m) => m.name).toList()),
+        muscles: encodeMusclesToJson(e.muscles),
         category: e.category.name,
         isFavourite: e.isFavourite,
         isMine: e.isMine,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
+        // Preserve the server timestamp; fall back to now() for locally-created
+        // exercises that haven't been synced yet.
+        createdAt: e.createdAt?.millisecondsSinceEpoch ??
+            DateTime.now().millisecondsSinceEpoch,
       );
 
   Exercise toDomain() => Exercise(
@@ -64,5 +70,6 @@ class ExerciseDto {
         category: ExerciseCategory.values.firstWhere((c) => c.name == category),
         isFavourite: isFavourite,
         isMine: isMine,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(createdAt, isUtc: true),
       );
 }
