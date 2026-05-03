@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/exercise.dart';
 import '../widgets/exercise_card.dart';
@@ -14,48 +15,57 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
+  final _repo = ServiceLocator.exerciseRepository;
+
   LibraryFilter _filter = LibraryFilter.all;
   MuscleGroup _category = MuscleGroup.all;
   String _query = '';
   final _searchController = TextEditingController();
 
-  final Set<String> _favouriteIds = {
-    for (final e in mockExercises)
-      if (e.isFavourite) e.id
-  };
+  List<Exercise> _exercises = [];
+  bool _loading = true;
 
-  List<Exercise> get _filtered {
-    return mockExercises.where((e) {
-      if (_filter == LibraryFilter.mine && !e.isMine) return false;
-      if (_filter == LibraryFilter.favourite &&
-          !_favouriteIds.contains(e.id)) {
-        return false;
-      }
-      if (_filter == LibraryFilter.recent && !e.isMine && !e.isFavourite) {
-        return false;
-      }
-      if (_category != MuscleGroup.all && !e.muscles.contains(_category)) {
-        return false;
-      }
-      if (_query.isNotEmpty) {
-        final q = _query.toLowerCase();
-        final matchName = e.name.toLowerCase().contains(q);
-        final matchMuscle =
-            e.muscles.any((m) => m.label.toLowerCase().contains(q));
-        if (!matchName && !matchMuscle) return false;
-      }
-      return true;
-    }).toList();
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
 
-  void _toggleFavourite(Exercise exercise) {
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+
+    final result = await _repo.getAll(
+      filter: _filter,
+      muscleGroup: _category,
+      query: _query,
+    );
+
+    if (!mounted) return;
     setState(() {
-      if (_favouriteIds.contains(exercise.id)) {
-        _favouriteIds.remove(exercise.id);
-      } else {
-        _favouriteIds.add(exercise.id);
-      }
+      _exercises = result;
+      _loading = false;
     });
+  }
+
+  Future<void> _toggleFavourite(Exercise exercise) async {
+    await _repo.setFavourite(exercise.id, isFavourite: !exercise.isFavourite);
+    await _load();
+  }
+
+  void _onFilterChanged(LibraryFilter f) {
+    setState(() => _filter = f);
+    _load();
+  }
+
+  void _onCategoryChanged(MuscleGroup c) {
+    setState(() => _category = c);
+    _load();
+  }
+
+  void _onQueryChanged(String q) {
+    setState(() => _query = q);
+    _load();
   }
 
   @override
@@ -66,15 +76,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final exercises = _filtered;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Static top section (not scrolling)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Column(
@@ -82,36 +89,36 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 children: [
                   LibraryHeader(
                     searchController: _searchController,
-                    onSearchChanged: (q) => setState(() => _query = q),
+                    onSearchChanged: _onQueryChanged,
                     onFilterTap: () {},
                     onAddTap: () {},
                   ),
                   const SizedBox(height: 14),
                   LibraryFilterChips(
                     selected: _filter,
-                    onSelected: (f) => setState(() => _filter = f),
+                    onSelected: _onFilterChanged,
                   ),
                   const SizedBox(height: 14),
                   LibraryCategoryTabs(
                     selected: _category,
-                    onSelected: (c) => setState(() => _category = c),
+                    onSelected: _onCategoryChanged,
                   ),
                   const SizedBox(height: 14),
-                  _ResultsBar(count: exercises.length),
+                  _ResultsBar(count: _exercises.length),
                 ],
               ),
             ),
             const SizedBox(height: 12),
 
-            // Scrollable grid
             Expanded(
-              child: exercises.isEmpty
-                  ? const _EmptyState()
-                  : _ExerciseGrid(
-                      exercises: exercises,
-                      favouriteIds: _favouriteIds,
-                      onFavouriteTap: _toggleFavourite,
-                    ),
+              child: _loading
+                  ? const _LoadingState()
+                  : _exercises.isEmpty
+                      ? const _EmptyState()
+                      : _ExerciseGrid(
+                          exercises: _exercises,
+                          onFavouriteTap: _toggleFavourite,
+                        ),
             ),
           ],
         ),
@@ -135,7 +142,7 @@ class _ResultsBar extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          '${count.toString().padLeft(1)} ĆWICZEŃ',
+          '$count ĆWICZEŃ',
           style: const TextStyle(
             color: AppColors.textMuted,
             fontSize: 11,
@@ -145,8 +152,8 @@ class _ResultsBar extends StatelessWidget {
         ),
         GestureDetector(
           onTap: () {},
-          child: Row(
-            children: const [
+          child: const Row(
+            children: [
               Text(
                 'Sortuj: ',
                 style: TextStyle(
@@ -184,13 +191,11 @@ class _ResultsBar extends StatelessWidget {
 class _ExerciseGrid extends StatelessWidget {
   const _ExerciseGrid({
     required this.exercises,
-    required this.favouriteIds,
     required this.onFavouriteTap,
   });
 
   final List<Exercise> exercises;
-  final Set<String> favouriteIds;
-  final ValueChanged<Exercise> onFavouriteTap;
+  final Future<void> Function(Exercise) onFavouriteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -205,17 +210,8 @@ class _ExerciseGrid extends StatelessWidget {
       itemCount: exercises.length,
       itemBuilder: (context, index) {
         final exercise = exercises[index];
-        final isFav = favouriteIds.contains(exercise.id);
-        final cardExercise = Exercise(
-          id: exercise.id,
-          name: exercise.name,
-          muscles: exercise.muscles,
-          category: exercise.category,
-          isFavourite: isFav,
-          isMine: exercise.isMine,
-        );
         return ExerciseCard(
-          exercise: cardExercise,
+          exercise: exercise,
           onTap: () {},
           onFavouriteTap: () => onFavouriteTap(exercise),
         );
@@ -225,8 +221,22 @@ class _ExerciseGrid extends StatelessWidget {
 }
 
 // ──────────────────────────────────────────────
-// Empty state
+// States
 // ──────────────────────────────────────────────
+
+class _LoadingState extends StatelessWidget {
+  const _LoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: CircularProgressIndicator(
+        color: AppColors.primary,
+        strokeWidth: 2.5,
+      ),
+    );
+  }
+}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();

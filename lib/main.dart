@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:sqflite/sqflite.dart';
 
 import 'core/navigation/app_router.dart';
 import 'core/network/api_client.dart';
@@ -8,7 +11,13 @@ import 'features/auth/domain/models/auth_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  }
+
   ServiceLocator.init();
+  await ServiceLocator.seedLibrary();
   runApp(GymApp());
 }
 
