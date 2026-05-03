@@ -9,6 +9,7 @@ import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
+import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../services/service_locator.dart';
 import 'app_shell.dart';
@@ -84,6 +85,14 @@ GoRouter buildRouter({
               GoRoute(
                 path: '/app/activity',
                 builder: (_, s) => const ActivityScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/app/library',
+                builder: (_, s) => const LibraryScreen(),
               ),
             ],
           ),

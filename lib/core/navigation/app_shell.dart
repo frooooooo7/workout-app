@@ -52,6 +52,11 @@ class AppShell extends StatelessWidget {
                 label: 'Aktywność',
               ),
               NavigationDestination(
+                icon: Icon(Icons.menu_book_outlined),
+                selectedIcon: Icon(Icons.menu_book_rounded),
+                label: 'Biblioteka',
+              ),
+              NavigationDestination(
                 icon: Icon(Icons.person_outline_rounded),
                 selectedIcon: Icon(Icons.person_rounded),
                 label: 'Profil',
