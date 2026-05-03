@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/training_header.dart';
 import '../widgets/training_session_tab.dart';
@@ -30,7 +31,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const TrainingHeader(),
+                  TrainingHeader(
+                    onAddTap: () => context.push('/app/training/pick-activity-type'),
+                  ),
                   const SizedBox(height: 20),
                   _TrainingTabBar(
                     active: _activeTab,

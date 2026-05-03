@@ -6,16 +6,20 @@ import '../../features/auth/presentation/screens/login_form_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../services/service_locator.dart';
 import 'app_shell.dart';
 
+final appRootNavigatorKey = GlobalKey<NavigatorState>();
+
 GoRouter buildRouter({
   required Future<AuthUser?> Function() resolveUser,
 }) {
   return GoRouter(
+    navigatorKey: appRootNavigatorKey,
     initialLocation: '/splash',
     routes: [
       GoRoute(
@@ -65,6 +69,13 @@ GoRouter buildRouter({
               GoRoute(
                 path: '/app/training',
                 builder: (_, s) => const TrainingScreen(),
+                routes: [
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'pick-activity-type',
+                    builder: (_, s) => const ActivityTypeSelectionScreen(),
+                  ),
+                ],
               ),
             ],
           ),
