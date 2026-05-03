@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import 'training_activity_summary.dart';
 
 // ──────────────────────────────────────────────
 // Models
@@ -86,6 +87,8 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
             selectedDay: _selectedDay,
             onDaySelected: (day) => setState(() => _selectedDay = day),
           ),
+          const SizedBox(height: 24),
+          const TrainingActivitySummary(),
         ],
       ),
     );
