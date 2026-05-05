@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'core/navigation/app_router.dart';
-import 'core/network/api_client.dart';
 import 'core/services/service_locator.dart';
+import 'core/session/app_user_bootstrap.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/domain/models/auth_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,67 +17,29 @@ void main() async {
   }
 
   ServiceLocator.init();
-  runApp(GymApp());
+  runApp(const GymApp());
 }
 
-class GymApp extends StatelessWidget {
-  GymApp({super.key});
+class GymApp extends StatefulWidget {
+  const GymApp({super.key});
 
-  late final _router = buildRouter(resolveUser: _resolveUser);
+  @override
+  State<GymApp> createState() => _GymAppState();
+}
 
-  /// Offline-first session resolution:
-  /// 1. Read cached user from secure storage → render shell immediately.
-  /// 2. Verify token in the background via GET /auth/me.
-  ///    – 401 → clear session, redirect to login.
-  ///    – network error → keep offline session.
-  Future<AuthUser?> _resolveUser() async {
-    final token = await ServiceLocator.tokenStorage.readToken();
-    if (token == null || token.isEmpty) return null;
+class _GymAppState extends State<GymApp> {
+  late final AppUserBootstrap _bootstrap;
+  late final GoRouter _router;
 
-    // Restore from cache first (offline-first — no network wait on startup).
-    final cached = await ServiceLocator.tokenStorage.readUser();
-    if (cached != null) {
-      // Set immediately so the currentUser listener fires synchronously and
-      // initialises the user-scoped ExerciseRepository before the shell opens.
-      ServiceLocator.currentUser.value = cached;
-      // Verify token freshness in the background after the shell is shown.
-      _verifyInBackground();
-      return cached;
-    }
-
-    // No cached user yet — must hit the network first.
-    try {
-      final data = await ServiceLocator.apiClient.get('/auth/me', auth: true);
-      final user = AuthUser.fromJson(data as Map<String, dynamic>);
-      await ServiceLocator.tokenStorage.saveUser(user);
-      // Same eager set so ExerciseRepository is ready before navigation.
-      ServiceLocator.currentUser.value = user;
-      return user;
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) {
-        await ServiceLocator.tokenStorage.clear();
-      }
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _verifyInBackground() async {
-    try {
-      final data = await ServiceLocator.apiClient.get('/auth/me', auth: true);
-      final fresh = AuthUser.fromJson(data as Map<String, dynamic>);
-      await ServiceLocator.tokenStorage.saveUser(fresh);
-      ServiceLocator.currentUser.value = fresh;
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) {
-        await ServiceLocator.tokenStorage.clear();
-        ServiceLocator.currentUser.value = null;
-        _router.go('/login');
-      }
-    } catch (_) {
-      // Network error — keep current session
-    }
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap = AppUserBootstrap(
+      onSessionInvalidated: () => _router.go('/login'),
+    );
+    _router = buildRouter(
+      resolveUser: _bootstrap.resolveInitialUser,
+    );
   }
 
   @override

@@ -1,0 +1,37 @@
+---
+description: Flutter GYM — feature-first warstwy, UI moduły, Cubit tam gdzie stan ekranu
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Struktura warstwowa Flutter (GYM)
+
+Zgodnie z [PROJECT.md](PROJECT.md): **feature-first**, podział **presentation / domain / data** w `lib/features/<feature>/`. Reguły UI: [flutter-ui-modules.mdc](.cursor/rules/flutter-ui-modules.mdc) (ekran jako kompozytor, **unikaj plików > ~250 linii**).
+
+## Katalogi
+
+- `lib/core/` — routing (`go_router`), tema, `ServiceLocator`, sieć, sesja ([`app_user_bootstrap.dart`](lib/core/session/app_user_bootstrap.dart)), współdzielone stałe.
+- `lib/features/<nazwa>/domain/` — modele, opcjonalnie `repositories/` (kontrakty).
+- `lib/features/<nazwa>/data/` — implementacje repozytoriów, źródła danych.
+- `lib/features/<nazwa>/presentation/screens/` — cienkie ekrany (Scaffold, składanie widżetów).
+- `lib/features/<nazwa>/presentation/widgets/` — widżety: **jedna główna klasa publiczna na plik** gdy ma to sens.
+
+## Stan aplikacji (Bloc/Cubit)
+
+- Używaj **`flutter_bloc`** (`Cubit` dla prostych ekranów) tam, gdzie wcześniej były rozbudowane `StatefulWidget` z wieloma wywołaniami repozytorium ([przykład: `library_cubit.dart`](lib/features/library/presentation/bloc/library_cubit.dart)).
+- Pliki: `presentation/bloc/` w obrębie feature. **Nie** wpinaj bezpośrednio repozytoriów do rozbudowanych `build()` — przenieś to do Cubita/Usecase.
+- Dostęp do zależności globalnych nadal przez [`ServiceLocator`](lib/core/services/service_locator.dart) (MVP); provider dla Cubita twórz w ekranie (`BlocProvider`).
+
+## Main / bootstrap
+
+- [`main.dart`](lib/main.dart) tylko: `WidgetsFlutterBinding`, init platformy, `ServiceLocator.init()`, `runApp`.
+- Logika „offline-first” sesji i `/auth/me` w tle: **`AppUserBootstrap`** w `lib/core/session/`, nie w `GymApp.build`.
+
+## Nowe funkcje
+
+1. Model / kontrakt w `domain/`.
+2. Implementacja w `data/`.
+3. Cubit (jeśli jest zmienny stan ekranu) w `presentation/bloc/`.
+4. Widżety w osobnych plikach; ekran tylko składa drzewo i dostarcza `BlocProvider`.
+
+Nie rozpychaj MVP o pełny DDD ani `isar` poza faktycznym zadaniem z backlogu.
