@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../data/exercise_image_uri.dart';
 import '../../domain/models/exercise.dart';
 
 class ExerciseCardIllustration extends StatelessWidget {
@@ -35,48 +36,78 @@ class ExerciseCardIllustration extends StatelessWidget {
         _ => AppColors.primary,
       };
 
+  Widget _fallbackGraphic() {
+    final svgPath = _svgAsset;
+
+    return svgPath != null
+        ? SvgPicture.asset(
+            svgPath,
+            width: 72,
+            height: 72,
+            colorFilter: ColorFilter.mode(
+              _accentColor.withValues(alpha: 0.7),
+              BlendMode.srcIn,
+            ),
+          )
+        : Icon(
+            _fallbackIcon,
+            size: 52,
+            color: _accentColor.withValues(alpha: 0.35),
+          );
+  }
+
+  Widget _patternBackground() {
+    return ColoredBox(
+      color: _accentColor.withValues(alpha: 0.08),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: const Alignment(0.3, -0.2),
+            radius: 1.15,
+            colors: [
+              _accentColor.withValues(alpha: 0.18),
+              Colors.transparent,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _photoErrorFallback() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _patternBackground(),
+        Center(child: _fallbackGraphic()),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final svgPath = _svgAsset;
+    final resolved = exerciseImageResolvedUri(exercise.imageUrl);
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      child: Container(
+      child: SizedBox(
         height: 122,
-        color: _accentColor.withValues(alpha: 0.08),
+        width: double.infinity,
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: const Alignment(0.3, -0.2),
-                    radius: 1.15,
-                    colors: [
-                      _accentColor.withValues(alpha: 0.18),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: svgPath != null
-                  ? SvgPicture.asset(
-                      svgPath,
-                      width: 72,
-                      height: 72,
-                      colorFilter: ColorFilter.mode(
-                        _accentColor.withValues(alpha: 0.7),
-                        BlendMode.srcIn,
-                      ),
-                    )
-                  : Icon(
-                      _fallbackIcon,
-                      size: 52,
-                      color: _accentColor.withValues(alpha: 0.35),
-                    ),
-            ),
+            if (resolved != null)
+              Image.network(
+                resolved.toString(),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (context, error, stackTrace) =>
+                    _photoErrorFallback(),
+              )
+            else
+              _patternBackground(),
+            if (resolved == null) Center(child: _fallbackGraphic()),
             Positioned(
               top: 8,
               right: 8,

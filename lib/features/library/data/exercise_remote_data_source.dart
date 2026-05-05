@@ -1,3 +1,9 @@
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
+
 import '../../../core/network/api_client.dart';
 import '../domain/models/exercise.dart';
 
@@ -23,12 +29,42 @@ class ExerciseRemoteDataSource {
           (c) => c.name == j['category'] as String,
           orElse: () => ExerciseCategory.compound,
         ),
+        description: j['description'] as String? ?? '',
+        imageUrl: j['imageUrl'] as String?,
         createdAt: j['createdAt'] != null
             ? DateTime.tryParse(j['createdAt'] as String)?.toUtc()
             : null,
         isFavourite: j['isFavourite'] as bool,
         isMine: j['isMine'] as bool,
+        isPendingSync: false,
       );
+
+  /// Web clients often use filenames like `blob` without an extension — backend
+  /// and MIME detection need a real extension.
+  String _normalizeExerciseImageFilename(String filename) {
+    var name = filename.trim();
+    if (name.isEmpty || name.toLowerCase() == 'blob') {
+      name = 'upload.jpg';
+    }
+    final lower = name.toLowerCase();
+    final hasExt = lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp');
+    if (!hasExt) {
+      name = '$name.jpg';
+    }
+    return name;
+  }
+
+  MediaType _mediaTypeForExerciseImage(String filename) {
+    final typed = lookupMimeType(filename);
+    if (typed != null) return MediaType.parse(typed);
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return MediaType('image', 'png');
+    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
+    return MediaType('image', 'jpeg');
+  }
 
   String _buildPath({
     required MuscleGroup? muscleGroup,
@@ -90,14 +126,40 @@ class ExerciseRemoteDataSource {
     required String name,
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
+    required String description,
+    String? clientId,
   }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'muscles': muscles.map((m) => m.name).toList(),
+      'category': category.name,
+      'description': description,
+      'clientId': ?clientId,
+    };
     final data = await _api.post(
       '/exercises',
-      {
-        'name': name,
-        'muscles': muscles.map((m) => m.name).toList(),
-        'category': category.name,
-      },
+      body,
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Multipart `POST /exercises/:id/image` — updates `imageUrl` on the server.
+  Future<Exercise> uploadExerciseImage(
+    String exerciseId,
+    Uint8List bytes,
+    String filename,
+  ) async {
+    final safeName = _normalizeExerciseImageFilename(filename);
+    final file = http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: safeName,
+      contentType: _mediaTypeForExerciseImage(safeName),
+    );
+    final data = await _api.postMultipart(
+      '/exercises/$exerciseId/image',
+      files: [file],
       auth: true,
     );
     return _fromJson(data as Map<String, dynamic>);
@@ -110,6 +172,7 @@ class ExerciseRemoteDataSource {
     required String name,
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
+    required String description,
   }) async {
     final data = await _api.put(
       '/exercises/$id',
@@ -117,6 +180,7 @@ class ExerciseRemoteDataSource {
         'name': name,
         'muscles': muscles.map((m) => m.name).toList(),
         'category': category.name,
+        'description': description,
       },
       auth: true,
     );

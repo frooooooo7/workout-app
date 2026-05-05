@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
@@ -5,9 +7,10 @@ import '../network/api_client.dart';
 import '../storage/token_storage.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/domain/models/auth_models.dart';
-import '../../features/library/data/cached_exercise_repository.dart';
 import '../../features/library/data/exercise_database.dart';
 import '../../features/library/data/exercise_remote_data_source.dart';
+import '../../features/library/data/offline_first_exercise_repository.dart';
+import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
 
 class ServiceLocator {
@@ -21,6 +24,10 @@ class ServiceLocator {
   // User-scoped repository: recreated on login/logout via [currentUser] listener.
   static ExerciseRepository? _exerciseRepository;
   static ExerciseDatabase? _exerciseDatabase;
+  static ExerciseSyncEngine? _exerciseSyncEngine;
+
+  /// Serialized dispose/setup so DB close never races a new user open.
+  static Future<void>? _exerciseScopeFuture;
 
   static ExerciseRepository get exerciseRepository {
     assert(
@@ -44,36 +51,38 @@ class ServiceLocator {
     authRepository = AuthRepository(apiClient);
     _remoteDataSource = ExerciseRemoteDataSource(apiClient);
 
-    // Automatically create/destroy the per-user exercise repository whenever
-    // the authenticated user changes (login, logout, token refresh).
     currentUser.addListener(_onUserChanged);
   }
 
   static void _onUserChanged() {
-    final user = currentUser.value;
-    if (user != null) {
-      _initExerciseRepository(user.id);
-    } else {
-      _clearExerciseRepository();
-    }
+    _exerciseScopeFuture =
+        (_exerciseScopeFuture ?? Future<void>.value()).then((_) async {
+      await _disposeExerciseScoped();
+      final still = currentUser.value;
+      if (still != null) {
+        _setupExerciseScoped(still.id);
+      }
+    });
   }
 
-  /// Creates a new user-scoped [ExerciseRepository] backed by a SQLite DB file
-  /// named after [userId]. Closes the previous DB connection if it exists.
-  static void _initExerciseRepository(String userId) {
-    // Close the previous connection (fire-and-forget; sqflite handles it).
-    _exerciseDatabase?.close().ignore();
+  static Future<void> _disposeExerciseScoped() async {
+    _exerciseSyncEngine?.stop();
+    _exerciseSyncEngine = null;
+    _exerciseRepository = null;
+    await _exerciseDatabase?.close();
+    _exerciseDatabase = null;
+  }
 
+  static void _setupExerciseScoped(String userId) {
     _exerciseDatabase = ExerciseDatabase('gym_library_$userId.db');
-    _exerciseRepository = CachedExerciseRepository(
+    _exerciseSyncEngine = ExerciseSyncEngine(
       remote: _remoteDataSource,
       localDb: _exerciseDatabase!,
     );
-  }
-
-  static void _clearExerciseRepository() {
-    _exerciseDatabase?.close().ignore();
-    _exerciseDatabase = null;
-    _exerciseRepository = null;
+    _exerciseRepository = OfflineFirstExerciseRepository(
+      localDb: _exerciseDatabase!,
+      syncEngine: _exerciseSyncEngine!,
+    );
+    _exerciseSyncEngine!.scheduleBootstrap();
   }
 }

@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/exercise.dart';
 import '../bloc/library_cubit.dart';
+import '../widgets/library_add_exercise_sheet.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
 import '../widgets/library_error_state.dart';
@@ -53,7 +57,40 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           searchController: _searchController,
                           onSearchChanged: cubit.setQuery,
                           onFilterTap: () {},
-                          onAddTap: () {},
+                          onAddTap: () async {
+                            final created = await showLibraryAddExerciseSheet(
+                              context,
+                              onSubmit: ({
+                                required String name,
+                                required List<MuscleGroup> muscles,
+                                required ExerciseCategory category,
+                                required String description,
+                                Uint8List? imageBytes,
+                                String? imageFilename,
+                              }) =>
+                                  cubit.createExercise(
+                                    name: name,
+                                    muscles: muscles,
+                                    category: category,
+                                    description: description,
+                                    imageBytes: imageBytes,
+                                    imageFilename: imageFilename,
+                                  ),
+                            );
+                            if (!context.mounted) return;
+                            if (created != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    created.isPendingSync
+                                        ? 'Dodano ćwiczenie. Synchronizacja w toku…'
+                                        : 'Dodano ćwiczenie do biblioteki.',
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
                         ),
                         const SizedBox(height: 14),
                         LibraryFilterChips(

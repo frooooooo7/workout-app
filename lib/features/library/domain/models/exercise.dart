@@ -68,19 +68,28 @@ class Exercise {
     required this.name,
     required this.muscles,
     required this.category,
+    this.description = '',
+    this.imageUrl,
     this.isFavourite = false,
     this.isMine = false,
     this.createdAt,
+    this.isPendingSync = false,
   });
 
   final String id;
   final String name;
   final List<MuscleGroup> muscles;
   final ExerciseCategory category;
+  /// Optional user-visible instructions / notes from API (`description`).
+  final String description;
+  /// Relative upload path or absolute URL from API (`imageUrl`).
+  final String? imageUrl;
   final bool isFavourite;
   final bool isMine;
   /// UTC timestamp from the server. Null for locally-constructed mock data.
   final DateTime? createdAt;
+  /// Local row has outbound sync work (`pending_op` or dirty favourite).
+  final bool isPendingSync;
 }
 
 // ──────────────────────────────────────────────

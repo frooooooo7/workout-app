@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/models/exercise.dart';
@@ -45,8 +48,20 @@ class LibraryCubit extends Cubit<LibraryState> {
 
   final ExerciseRepository _repository;
 
-  Future<void> refresh() async {
-    emit(state.copyWith(loading: true, clearError: true));
+  Timer? _queryDebounce;
+
+  @override
+  Future<void> close() async {
+    _queryDebounce?.cancel();
+    return super.close();
+  }
+
+  Future<void> refresh({bool showLoadingIndicator = true}) async {
+    if (showLoadingIndicator) {
+      emit(state.copyWith(loading: true, clearError: true));
+    } else {
+      emit(state.copyWith(clearError: true));
+    }
     try {
       final result = await _repository.getAll(
         filter: state.filter,
@@ -82,7 +97,10 @@ class LibraryCubit extends Cubit<LibraryState> {
 
   void setQuery(String query) {
     emit(state.copyWith(query: query));
-    refresh();
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 250), () {
+      refresh(showLoadingIndicator: false);
+    });
   }
 
   Future<void> toggleFavourite(Exercise exercise) async {
@@ -91,9 +109,30 @@ class LibraryCubit extends Cubit<LibraryState> {
         exercise.id,
         isFavourite: !exercise.isFavourite,
       );
-      await refresh();
+      await refresh(showLoadingIndicator: false);
     } catch (_) {
       rethrow;
     }
+  }
+
+  /// Saves locally first (offline-first), refreshes from SQLite, returns created row.
+  Future<Exercise> createExercise({
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageFilename,
+  }) async {
+    final created = await _repository.create(
+      name: name,
+      muscles: muscles,
+      category: category,
+      description: description,
+      imageBytes: imageBytes,
+      imageFilename: imageFilename,
+    );
+    await refresh(showLoadingIndicator: false);
+    return created;
   }
 }

@@ -129,4 +129,43 @@ class ApiClient {
       throw const ApiException('network_error');
     }
   }
+
+  /// Multipart POST (e.g. exercise image). Does not set `Content-Type`; the
+  /// boundary is added automatically by [http.MultipartRequest].
+  Future<dynamic> postMultipart(
+    String path, {
+    required List<http.MultipartFile> files,
+    Map<String, String> fields = const {},
+    bool auth = false,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl$path');
+      final request = http.MultipartRequest('POST', uri);
+      request.fields.addAll(fields);
+      request.files.addAll(files);
+
+      final headers = <String, String>{
+        'Accept': 'application/json',
+      };
+      if (auth && getToken != null) {
+        final token = await getToken!();
+        if (token != null) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+      }
+      request.headers.addAll(headers);
+
+      final streamed = await _client
+          .send(request)
+          .timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamed);
+      return _parse(response);
+    } on ApiException {
+      rethrow;
+    } on SocketException {
+      throw const ApiException('network_error');
+    } catch (_) {
+      throw const ApiException('network_error');
+    }
+  }
 }

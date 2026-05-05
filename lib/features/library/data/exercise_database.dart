@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -6,23 +8,65 @@ import 'package:sqflite/sqflite.dart';
 /// Not a singleton — create one instance per user (keyed by [dbName]).
 /// [ServiceLocator] is responsible for creating and re-creating this when the
 /// authenticated user changes.
+///
+/// Use [run] for all DB access so [close] can wait for in-flight work safely.
+///
+/// [directoryOverride] — absolute directory for the DB file (tests only).
 class ExerciseDatabase {
-  ExerciseDatabase(this._dbName);
+  ExerciseDatabase(
+    this._dbName, {
+    String? directoryOverride,
+  }) : _directoryOverride = directoryOverride;
 
   final String _dbName;
+  final String? _directoryOverride;
 
   Database? _db;
 
-  static const _dbVersion = 1;
+  bool _isClosing = false;
+  int _activeOps = 0;
+  Completer<void>? _closeWaiter;
+
+  static const _dbVersion = 3;
   static const tableExercises = 'exercises';
+  static const tableOutboxLog = 'outbox_log';
+
+  static const _tmpV3Table = 'exercises_v3_tmp';
 
   Future<Database> get db async {
+    if (_isClosing) {
+      throw StateError('ExerciseDatabase is closing');
+    }
     _db ??= await _open();
     return _db!;
   }
 
+  /// Wraps database work so [close] waits until all tracked operations finish.
+  Future<T> run<T>(Future<T> Function(Database database) action) async {
+    if (_isClosing) {
+      throw StateError('ExerciseDatabase is closing');
+    }
+    final database = await db;
+    _activeOps++;
+    try {
+      return await action(database);
+    } finally {
+      _activeOps--;
+      _maybeCompleteCloseWait();
+    }
+  }
+
+  void _maybeCompleteCloseWait() {
+    if (_activeOps == 0 &&
+        _closeWaiter != null &&
+        !_closeWaiter!.isCompleted) {
+      _closeWaiter!.complete();
+    }
+  }
+
   Future<Database> _open() async {
-    final dbPath = await getDatabasesPath();
+    final dbPath =
+        _directoryOverride ?? await getDatabasesPath();
     final path = p.join(dbPath, _dbName);
 
     return openDatabase(
@@ -33,25 +77,117 @@ class ExerciseDatabase {
     );
   }
 
-  Future<void> _onCreate(Database db, int version) async {
+  Future<void> _createOutboxLog(Database db) async {
     await db.execute('''
-      CREATE TABLE $tableExercises (
-        id            TEXT PRIMARY KEY,
-        name          TEXT NOT NULL,
-        muscles       TEXT NOT NULL,
-        category      TEXT NOT NULL,
-        is_favourite  INTEGER NOT NULL DEFAULT 0,
-        is_mine       INTEGER NOT NULL DEFAULT 0,
-        created_at    INTEGER NOT NULL
+      CREATE TABLE IF NOT EXISTS $tableOutboxLog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        local_id TEXT NOT NULL,
+        op TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at INTEGER NOT NULL
       )
     ''');
   }
 
-  // Placeholder for future migrations.
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {}
+  Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE $tableExercises (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        name TEXT NOT NULL,
+        muscles TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        image_url TEXT,
+        is_favourite INTEGER NOT NULL DEFAULT 0,
+        is_mine INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        pending_op TEXT,
+        is_favourite_dirty INTEGER NOT NULL DEFAULT 0,
+        local_image_bytes BLOB,
+        local_image_filename TEXT
+      )
+    ''');
+    await _createOutboxLog(db);
+  }
+
+  Future<void> _migrateToV3(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_tmpV3Table (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        name TEXT NOT NULL,
+        muscles TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        image_url TEXT,
+        is_favourite INTEGER NOT NULL DEFAULT 0,
+        is_mine INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        pending_op TEXT,
+        is_favourite_dirty INTEGER NOT NULL DEFAULT 0,
+        local_image_bytes BLOB,
+        local_image_filename TEXT
+      )
+    ''');
+
+    await db.execute('''
+      INSERT INTO $_tmpV3Table (
+        local_id, server_id, name, muscles, category, description, image_url,
+        is_favourite, is_mine, created_at, pending_op, is_favourite_dirty,
+        local_image_bytes, local_image_filename
+      )
+      SELECT
+        id,
+        id,
+        name,
+        muscles,
+        category,
+        COALESCE(description, ''),
+        image_url,
+        is_favourite,
+        is_mine,
+        created_at,
+        NULL,
+        0,
+        NULL,
+        NULL
+      FROM $tableExercises
+    ''');
+
+    await db.execute('DROP TABLE $tableExercises');
+    await db.execute('ALTER TABLE $_tmpV3Table RENAME TO $tableExercises');
+    await _createOutboxLog(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE $tableExercises ADD COLUMN description TEXT NOT NULL DEFAULT ""',
+      );
+      await db.execute(
+        'ALTER TABLE $tableExercises ADD COLUMN image_url TEXT',
+      );
+    }
+    if (oldVersion < 3) {
+      await _migrateToV3(db);
+    }
+  }
 
   Future<void> close() async {
-    await _db?.close();
+    final handle = _db;
+    if (handle == null) {
+      return;
+    }
+    _isClosing = true;
+    if (_activeOps > 0) {
+      _closeWaiter = Completer<void>();
+      await _closeWaiter!.future;
+    }
+    await handle.close();
     _db = null;
+    _isClosing = false;
+    _closeWaiter = null;
   }
 }

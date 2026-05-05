@@ -79,6 +79,17 @@ class ExerciseCard extends StatelessWidget {
                             ExerciseCategoryBadge(
                               category: exercise.category,
                             ),
+                            if (exercise.isPendingSync) ...[
+                              const SizedBox(width: 8),
+                              Tooltip(
+                                message: 'Synchronizacja z serwerem',
+                                child: Icon(
+                                  Icons.cloud_sync_outlined,
+                                  size: 18,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                             const Spacer(),
                             GestureDetector(
                               onTap: onFavouriteTap,

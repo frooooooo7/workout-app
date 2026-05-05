@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../models/exercise.dart';
 
 abstract interface class ExerciseRepository {
@@ -20,6 +22,9 @@ abstract interface class ExerciseRepository {
     required String name,
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageFilename,
   });
 
   /// Updates an existing user-owned exercise via the backend and local cache.
@@ -28,6 +33,7 @@ abstract interface class ExerciseRepository {
     required String name,
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
+    required String description,
   });
 
   /// Deletes a user-owned exercise from the backend and local cache.
