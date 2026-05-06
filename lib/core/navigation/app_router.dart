@@ -7,6 +7,7 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
+import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
@@ -73,8 +74,15 @@ GoRouter buildRouter({
                 routes: [
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
+                    name: 'pick-activity-type',
                     path: 'pick-activity-type',
                     builder: (_, s) => const ActivityTypeSelectionScreen(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'ongoing-workout',
+                    path: 'ongoing-workout',
+                    builder: (_, s) => const OngoingWorkoutScreen(),
                   ),
                 ],
               ),

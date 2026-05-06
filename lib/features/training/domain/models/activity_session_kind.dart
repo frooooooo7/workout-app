@@ -1,1 +1,1 @@
-enum ActivitySessionKind { strength, movement, custom }
+enum ActivitySessionKind { strength, movement, custom, plan }
