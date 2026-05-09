@@ -5,6 +5,8 @@ import '../widgets/training_header.dart';
 import '../widgets/training_session_tab.dart';
 import '../widgets/training_plans_tab.dart';
 import '../widgets/training_history_tab.dart';
+import '../bloc/training_plans_cubit.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 enum _TrainingTab { sesja, plany, historia }
 
@@ -20,8 +22,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return BlocProvider(
+      create: (_) => TrainingPlansCubit(),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -53,7 +57,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 

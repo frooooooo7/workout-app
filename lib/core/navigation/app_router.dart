@@ -9,11 +9,15 @@ import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
+import '../../features/training/presentation/screens/create_plan_screen.dart';
+import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
+import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../services/service_locator.dart';
 import 'app_shell.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 final appRootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -83,6 +87,35 @@ GoRouter buildRouter({
                     name: 'ongoing-workout',
                     path: 'ongoing-workout',
                     builder: (_, s) => const OngoingWorkoutScreen(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'create-plan',
+                    path: 'create-plan',
+                    builder: (context, state) {
+                      final args = state.extra as CreatePlanArgs;
+                      return BlocProvider.value(
+                        value: args.cubit,
+                        child: CreatePlanScreen(existingPlan: args.existingPlan),
+                      );
+                    },
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: appRootNavigatorKey,
+                        name: 'pick-exercise-for-plan',
+                        path: 'pick-exercise',
+                        builder: (_, s) => const PickExerciseScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'plan-details',
+                    path: 'plan-details',
+                    builder: (context, state) {
+                      final args = state.extra as PlanDetailsArgs;
+                      return PlanDetailsScreen(args: args);
+                    },
                   ),
                 ],
               ),
