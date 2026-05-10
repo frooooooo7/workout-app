@@ -86,7 +86,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     });
   }
 
-  void _savePlan() {
+  Future<void> _savePlan() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,10 +110,11 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     );
 
     if (widget.existingPlan != null) {
-      context.read<TrainingPlansCubit>().updatePlan(plan);
+      await context.read<TrainingPlansCubit>().updatePlan(plan);
     } else {
-      context.read<TrainingPlansCubit>().addPlan(plan);
+      await context.read<TrainingPlansCubit>().addPlan(plan);
     }
+    if (!mounted) return;
     context.pop();
   }
 

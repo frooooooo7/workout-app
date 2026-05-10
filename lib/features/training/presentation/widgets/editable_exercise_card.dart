@@ -231,7 +231,15 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                 TextButton.icon(
                   onPressed: () {
                     final newSets = List<ExerciseSet>.from(planExercise.sets);
-                    newSets.add(newSets.isNotEmpty ? newSets.last.copyWith(id: null) : ExerciseSet());
+                    final previous = newSets.isNotEmpty ? newSets.last : null;
+                    newSets.add(
+                      ExerciseSet(
+                        weight: previous?.weight,
+                        reps: previous?.reps ?? '',
+                        rir: previous?.rir,
+                        tempo: previous?.tempo,
+                      ),
+                    );
                     widget.onChanged(planExercise.copyWith(sets: newSets));
                   },
                   icon: const Icon(Icons.add, size: 18),
