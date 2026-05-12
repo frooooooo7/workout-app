@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
+import '../bloc/training_session_cubit.dart';
 import '../screens/create_plan_screen.dart';
 import '../screens/plan_details_screen.dart';
 
@@ -21,92 +23,37 @@ class TrainingPlansTab extends StatelessWidget {
 
         return Stack(
           children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (state.plans.isEmpty)
-                    const _EmptyState(
-                      icon: Icons.calendar_today_rounded,
-                      title: 'Brak planów',
-                      subtitle: 'Tutaj pojawią się Twoje plany treningowe.',
-                    )
-                  else
-                    ...state.plans.map((plan) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () {
-                                context.push(
-                                  '/app/training/plan-details',
-                                  extra: PlanDetailsArgs(
-                                    plan: plan,
-                                    cubit: context.read<TrainingPlansCubit>(),
-                                  ),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surface,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.border),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            plan.name,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${plan.exercises.length} ćwiczeń',
-                                            style: const TextStyle(
-                                              color: AppColors.textSecondary,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      onPressed: () {
-                                        context.read<TrainingPlansCubit>().removePlan(plan.id);
-                                      },
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        )),
-                ],
+            if (state.plans.isEmpty)
+              const SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(24, 0, 24, 100),
+                child: _EmptyState(
+                  icon: Icons.calendar_today_rounded,
+                  title: 'Brak planow',
+                  subtitle: 'Tutaj pojawia sie Twoje plany treningowe.',
+                ),
+              )
+            else
+              ListView.builder(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                itemCount: state.plans.length,
+                itemBuilder: (context, index) {
+                  return _TrainingPlanTile(plan: state.plans[index]);
+                },
               ),
-            ),
             Positioned(
               bottom: 24,
               right: 24,
               child: FloatingActionButton.extended(
                 onPressed: () => context.push(
                   '/app/training/create-plan',
-                  extra: CreatePlanArgs(cubit: context.read<TrainingPlansCubit>()),
+                  extra: CreatePlanArgs(
+                    cubit: context.read<TrainingPlansCubit>(),
+                  ),
                 ),
                 backgroundColor: AppColors.primary,
                 icon: const Icon(Icons.add, color: Colors.white),
                 label: const Text(
-                  'Utwórz plan',
+                  'Utworz plan',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -117,6 +64,76 @@ class TrainingPlansTab extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _TrainingPlanTile extends StatelessWidget {
+  const _TrainingPlanTile({required this.plan});
+
+  final CustomTrainingPlan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            context.push(
+              '/app/training/plan-details',
+              extra: PlanDetailsArgs(
+                plan: plan,
+                cubit: context.read<TrainingPlansCubit>(),
+                sessionCubit: context.read<TrainingSessionCubit>(),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        plan.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${plan.exercises.length} cwiczen',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    context.read<TrainingPlansCubit>().removePlan(plan.id);
+                  },
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

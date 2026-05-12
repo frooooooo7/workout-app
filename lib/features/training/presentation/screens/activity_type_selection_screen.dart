@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../domain/models/activity_session_kind.dart';
 import '../widgets/activity_type_option_tile.dart';
 
 class ActivityTypeSelectionScreen extends StatelessWidget {
@@ -17,12 +16,15 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: AppColors.textSecondary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textSecondary,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
         title: const Text(
-          'Nowa aktywność',
+          'Nowa aktywnosc',
           style: TextStyle(
             color: Colors.white,
             fontSize: 17,
@@ -39,7 +41,7 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Wybierz typ aktywności',
+                'Wybierz typ aktywnosci',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 14,
@@ -51,16 +53,17 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
                 icon: Icons.list_alt_rounded,
                 iconColor: AppColors.primaryVariant,
                 title: 'Moje plany',
-                description: 'Wybierz trening z zapisanych planów.',
-                onTap: () => context.pop(ActivitySessionKind.plan),
+                description: 'Wybierz trening z zapisanych planow.',
+                onTap: () => context.pushReplacement('/app/training/pick-plan'),
               ),
               const SizedBox(height: 12),
               ActivityTypeOptionTile(
                 icon: Icons.tune_rounded,
                 iconColor: const Color(0xFFF59E0B),
                 title: 'Niestandardowa',
-                description: 'Własny lub mieszany charakter treningu.',
-                onTap: () => context.pushReplacement('/app/training/ongoing-workout'),
+                description: 'Wlasny lub mieszany charakter treningu.',
+                onTap: () =>
+                    context.pushReplacement('/app/training/ongoing-workout'),
               ),
             ],
           ),

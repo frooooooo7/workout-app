@@ -8,6 +8,7 @@ import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
 import '../../features/training/presentation/screens/plan_details_screen.dart';
@@ -86,7 +87,16 @@ GoRouter buildRouter({
                     parentNavigatorKey: appRootNavigatorKey,
                     name: 'ongoing-workout',
                     path: 'ongoing-workout',
-                    builder: (_, s) => const OngoingWorkoutScreen(),
+                    builder: (_, s) {
+                      final args = s.extra as OngoingWorkoutArgs?;
+                      return OngoingWorkoutScreen(args: args);
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'pick-training-plan',
+                    path: 'pick-plan',
+                    builder: (_, s) => const PickTrainingPlanScreen(),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,

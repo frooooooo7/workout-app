@@ -17,27 +17,29 @@ class ExerciseRemoteDataSource {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   static Exercise fromJson(Map<String, dynamic> j) => Exercise(
-        id: j['id'] as String,
-        name: j['name'] as String,
-        muscles: (j['muscles'] as List)
-            .map((s) => MuscleGroup.values.firstWhere(
-                  (m) => m.name == s,
-                  orElse: () => MuscleGroup.abs, // unknown muscle → safe fallback
-                ))
-            .toList(),
-        category: ExerciseCategory.values.firstWhere(
-          (c) => c.name == j['category'] as String,
-          orElse: () => ExerciseCategory.compound,
-        ),
-        description: j['description'] as String? ?? '',
-        imageUrl: j['imageUrl'] as String?,
-        createdAt: j['createdAt'] != null
-            ? DateTime.tryParse(j['createdAt'] as String)?.toUtc()
-            : null,
-        isFavourite: (j['isFavourite'] as bool?) ?? false,
-        isMine: (j['isMine'] as bool?) ?? true,
-        isPendingSync: false,
-      );
+    id: j['id'] as String,
+    name: j['name'] as String,
+    muscles: (j['muscles'] as List)
+        .map(
+          (s) => MuscleGroup.values.firstWhere(
+            (m) => m.name == s,
+            orElse: () => MuscleGroup.abs, // unknown muscle → safe fallback
+          ),
+        )
+        .toList(),
+    category: ExerciseCategory.values.firstWhere(
+      (c) => c.name == j['category'] as String,
+      orElse: () => ExerciseCategory.compound,
+    ),
+    description: j['description'] as String? ?? '',
+    imageUrl: j['imageUrl'] as String?,
+    createdAt: j['createdAt'] != null
+        ? DateTime.tryParse(j['createdAt'] as String)?.toUtc()
+        : null,
+    isFavourite: (j['isFavourite'] as bool?) ?? false,
+    isMine: (j['isMine'] as bool?) ?? true,
+    isPendingSync: false,
+  );
 
   /// Web clients often use filenames like `blob` without an extension — backend
   /// and MIME detection need a real extension.
@@ -47,7 +49,8 @@ class ExerciseRemoteDataSource {
       name = 'upload.jpg';
     }
     final lower = name.toLowerCase();
-    final hasExt = lower.endsWith('.jpg') ||
+    final hasExt =
+        lower.endsWith('.jpg') ||
         lower.endsWith('.jpeg') ||
         lower.endsWith('.png') ||
         lower.endsWith('.webp');
@@ -84,8 +87,10 @@ class ExerciseRemoteDataSource {
     }
 
     // Use Uri to properly encode query parameters.
-    return Uri(path: '/exercises', queryParameters: params.isEmpty ? null : params)
-        .toString();
+    return Uri(
+      path: '/exercises',
+      queryParameters: params.isEmpty ? null : params,
+    ).toString();
   }
 
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -112,11 +117,7 @@ class ExerciseRemoteDataSource {
   /// Calls `POST /exercises/:id/favourite` (toggle) and returns the **server's**
   /// authoritative new favourite state.
   Future<bool> toggleFavourite(String id) async {
-    final data = await _api.post(
-      '/exercises/$id/favourite',
-      {},
-      auth: true,
-    );
+    final data = await _api.post('/exercises/$id/favourite', {}, auth: true);
     return (data as Map<String, dynamic>)['isFavourite'] as bool;
   }
 
@@ -134,13 +135,11 @@ class ExerciseRemoteDataSource {
       'muscles': muscles.map((m) => m.name).toList(),
       'category': category.name,
       'description': description,
-      if (clientId != null) 'clientId': clientId,
     };
-    final data = await _api.post(
-      '/exercises',
-      body,
-      auth: true,
-    );
+    if (clientId != null) {
+      body['clientId'] = clientId;
+    }
+    final data = await _api.post('/exercises', body, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }
 
@@ -174,16 +173,12 @@ class ExerciseRemoteDataSource {
     required ExerciseCategory category,
     required String description,
   }) async {
-    final data = await _api.put(
-      '/exercises/$id',
-      {
-        'name': name,
-        'muscles': muscles.map((m) => m.name).toList(),
-        'category': category.name,
-        'description': description,
-      },
-      auth: true,
-    );
+    final data = await _api.put('/exercises/$id', {
+      'name': name,
+      'muscles': muscles.map((m) => m.name).toList(),
+      'category': category.name,
+      'description': description,
+    }, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }
 

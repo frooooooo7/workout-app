@@ -65,8 +65,16 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
 
   void _scheduleSync() {
     if (_sync.isStopped) return;
-    unawaited(_sync.flush());
-    unawaited(_sync.pull());
+    unawaited(
+      _sync.flush().catchError((_) {
+        /* background sync must never break the UI event loop */
+      }),
+    );
+    unawaited(
+      _sync.pull().catchError((_) {
+        /* background sync must never break the UI event loop */
+      }),
+    );
   }
 
   @override

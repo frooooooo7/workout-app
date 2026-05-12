@@ -1,32 +1,80 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../widgets/training_header.dart';
-import '../widgets/training_session_tab.dart';
-import '../widgets/training_plans_tab.dart';
-import '../widgets/training_history_tab.dart';
 import '../bloc/training_plans_cubit.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/training_session_cubit.dart';
+import '../widgets/training_header.dart';
+import '../widgets/training_history_tab.dart';
+import '../widgets/training_plans_tab.dart';
+import '../widgets/training_session_tab.dart';
+import 'ongoing_workout_screen.dart';
 
 enum _TrainingTab { sesja, plany, historia }
 
-class TrainingScreen extends StatefulWidget {
+class TrainingScreen extends StatelessWidget {
   const TrainingScreen({super.key});
 
   @override
-  State<TrainingScreen> createState() => _TrainingScreenState();
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) =>
+              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+        ),
+        BlocProvider(
+          create: (_) =>
+              TrainingSessionCubit(ServiceLocator.trainingSessionRepository),
+        ),
+      ],
+      child: const _TrainingShellContent(),
+    );
+  }
 }
 
-class _TrainingScreenState extends State<TrainingScreen> {
+class _TrainingShellContent extends StatefulWidget {
+  const _TrainingShellContent();
+
+  @override
+  State<_TrainingShellContent> createState() => _TrainingShellContentState();
+}
+
+class _TrainingShellContentState extends State<_TrainingShellContent> {
   _TrainingTab _activeTab = _TrainingTab.sesja;
+  GoRouter? _router;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.of(context);
+    if (!identical(_router, router)) {
+      _router?.routerDelegate.removeListener(_onRouteStackChanged);
+      _router = router;
+      _router!.routerDelegate.addListener(_onRouteStackChanged);
+    }
+  }
+
+  void _onRouteStackChanged() {
+    if (!mounted) return;
+    final path = _router?.state.uri.path;
+    if (path == '/app/training') {
+      context.read<TrainingSessionCubit>().refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _router?.routerDelegate.removeListener(_onRouteStackChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
-      child: Scaffold(
-        backgroundColor: AppColors.background,
+    return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -36,8 +84,32 @@ class _TrainingScreenState extends State<TrainingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TrainingHeader(
-                    onAddTap: () => context.push('/app/training/pick-activity-type'),
+                  BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+                    builder: (context, sessionState) {
+                      final active = sessionState.activeSession;
+                      return TrainingHeader(
+                        activePlanName: active?.planName,
+                        onActiveTap: active == null
+                            ? null
+                            : () {
+                                final cubit =
+                                    context.read<TrainingSessionCubit>();
+                                context
+                                    .push(
+                                      '/app/training/ongoing-workout',
+                                      extra: OngoingWorkoutArgs(
+                                        initialSession: active,
+                                        sessionCubit: cubit,
+                                      ),
+                                    )
+                                    .then((_) {
+                                  if (context.mounted) cubit.refresh();
+                                });
+                              },
+                        onAddTap: () =>
+                            context.push('/app/training/pick-activity-type'),
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                   _TrainingTabBar(
@@ -58,15 +130,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
           ],
         ),
       ),
-    ));
+    );
   }
 }
 
 class _TrainingTabBar extends StatelessWidget {
-  const _TrainingTabBar({
-    required this.active,
-    required this.onTabSelected,
-  });
+  const _TrainingTabBar({required this.active, required this.onTabSelected});
 
   final _TrainingTab active;
   final ValueChanged<_TrainingTab> onTabSelected;
@@ -83,11 +152,13 @@ class _TrainingTabBar extends StatelessWidget {
       ),
       child: Row(
         children: _TrainingTab.values
-            .map((tab) => _TrainingTabItem(
-                  tab: tab,
-                  isActive: tab == active,
-                  onTap: () => onTabSelected(tab),
-                ))
+            .map(
+              (tab) => _TrainingTabItem(
+                tab: tab,
+                isActive: tab == active,
+                onTap: () => onTabSelected(tab),
+              ),
+            )
             .toList(),
       ),
     );
@@ -106,10 +177,10 @@ class _TrainingTabItem extends StatelessWidget {
   final VoidCallback onTap;
 
   String get _label => switch (tab) {
-        _TrainingTab.sesja => 'Sesja',
-        _TrainingTab.plany => 'Plany',
-        _TrainingTab.historia => 'Historia',
-      };
+    _TrainingTab.sesja => 'Sesja',
+    _TrainingTab.plany => 'Plany',
+    _TrainingTab.historia => 'Historia',
+  };
 
   @override
   Widget build(BuildContext context) {
