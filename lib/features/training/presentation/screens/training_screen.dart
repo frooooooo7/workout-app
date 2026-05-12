@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/training_header.dart';
 import '../widgets/training_session_tab.dart';
@@ -23,7 +24,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => TrainingPlansCubit(),
+      create: (_) => TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
       child: Scaffold(
         backgroundColor: AppColors.background,
       body: SafeArea(

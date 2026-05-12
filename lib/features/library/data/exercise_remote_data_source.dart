@@ -16,7 +16,7 @@ class ExerciseRemoteDataSource {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  Exercise _fromJson(Map<String, dynamic> j) => Exercise(
+  static Exercise fromJson(Map<String, dynamic> j) => Exercise(
         id: j['id'] as String,
         name: j['name'] as String,
         muscles: (j['muscles'] as List)
@@ -34,8 +34,8 @@ class ExerciseRemoteDataSource {
         createdAt: j['createdAt'] != null
             ? DateTime.tryParse(j['createdAt'] as String)?.toUtc()
             : null,
-        isFavourite: j['isFavourite'] as bool,
-        isMine: j['isMine'] as bool,
+        isFavourite: (j['isFavourite'] as bool?) ?? false,
+        isMine: (j['isMine'] as bool?) ?? true,
         isPendingSync: false,
       );
 
@@ -103,7 +103,7 @@ class ExerciseRemoteDataSource {
     final data = await _api.get(path, auth: true);
     return (data as List)
         .cast<Map<String, dynamic>>()
-        .map(_fromJson)
+        .map(ExerciseRemoteDataSource.fromJson)
         .toList();
   }
 
@@ -134,14 +134,14 @@ class ExerciseRemoteDataSource {
       'muscles': muscles.map((m) => m.name).toList(),
       'category': category.name,
       'description': description,
-      'clientId': ?clientId,
+      if (clientId != null) 'clientId': clientId,
     };
     final data = await _api.post(
       '/exercises',
       body,
       auth: true,
     );
-    return _fromJson(data as Map<String, dynamic>);
+    return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }
 
   /// Multipart `POST /exercises/:id/image` — updates `imageUrl` on the server.
@@ -162,7 +162,7 @@ class ExerciseRemoteDataSource {
       files: [file],
       auth: true,
     );
-    return _fromJson(data as Map<String, dynamic>);
+    return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }
 
   // ── Update ────────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ class ExerciseRemoteDataSource {
       },
       auth: true,
     );
-    return _fromJson(data as Map<String, dynamic>);
+    return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────

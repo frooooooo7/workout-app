@@ -27,9 +27,12 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 3;
+  static const _dbVersion = 4;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
+  static const tableTrainingPlans = 'training_plans';
+  static const tableTrainingPlanExercises = 'training_plan_exercises';
+  static const tableTrainingPlanSets = 'training_plan_sets';
 
   static const _tmpV3Table = 'exercises_v3_tmp';
 
@@ -72,6 +75,9 @@ class ExerciseDatabase {
     return openDatabase(
       path,
       version: _dbVersion,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -110,6 +116,47 @@ class ExerciseDatabase {
       )
     ''');
     await _createOutboxLog(db);
+    await _createTrainingPlanTables(db);
+  }
+
+  Future<void> _createTrainingPlanTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingPlans (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        name TEXT NOT NULL,
+        note TEXT,
+        selected_days TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        pending_op TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingPlanExercises (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        plan_local_id TEXT NOT NULL,
+        exercise_local_id TEXT NOT NULL,
+        exercise_server_id TEXT,
+        position INTEGER NOT NULL,
+        FOREIGN KEY(plan_local_id) REFERENCES $tableTrainingPlans(local_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingPlanSets (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        plan_exercise_local_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        weight TEXT,
+        reps TEXT NOT NULL DEFAULT '',
+        rir TEXT,
+        tempo TEXT,
+        FOREIGN KEY(plan_exercise_local_id) REFERENCES $tableTrainingPlanExercises(local_id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future<void> _migrateToV3(Database db) async {
@@ -172,6 +219,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 3) {
       await _migrateToV3(db);
+    }
+    if (oldVersion < 4) {
+      await _createTrainingPlanTables(db);
     }
   }
 
