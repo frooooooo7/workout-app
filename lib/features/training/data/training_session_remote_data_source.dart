@@ -22,6 +22,7 @@ class TrainingSessionRemoteDataSource {
                   actualWeight: set['actualWeight'] as String?,
                   actualReps: set['actualReps'] as String?,
                   actualRir: set['actualRir'] as String?,
+                  actualTempo: set['actualTempo'] as String?,
                   completed: (set['completed'] as bool?) ?? false,
                   completedAt: set['completedAt'] != null
                       ? DateTime.tryParse(set['completedAt'] as String)?.toUtc()
@@ -102,6 +103,7 @@ class TrainingSessionRemoteDataSource {
               'actualWeight': set.actualWeight,
               'actualReps': set.actualReps,
               'actualRir': set.actualRir,
+              'actualTempo': set.actualTempo,
               'completed': set.completed,
               'completedAt': set.completedAt?.toUtc().toIso8601String(),
             };

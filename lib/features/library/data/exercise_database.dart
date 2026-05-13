@@ -13,10 +13,8 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// [directoryOverride] — absolute directory for the DB file (tests only).
 class ExerciseDatabase {
-  ExerciseDatabase(
-    this._dbName, {
-    String? directoryOverride,
-  }) : _directoryOverride = directoryOverride;
+  ExerciseDatabase(this._dbName, {String? directoryOverride})
+    : _directoryOverride = directoryOverride;
 
   final String _dbName;
   final String? _directoryOverride;
@@ -27,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 5;
+  static const _dbVersion = 6;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -63,16 +61,13 @@ class ExerciseDatabase {
   }
 
   void _maybeCompleteCloseWait() {
-    if (_activeOps == 0 &&
-        _closeWaiter != null &&
-        !_closeWaiter!.isCompleted) {
+    if (_activeOps == 0 && _closeWaiter != null && !_closeWaiter!.isCompleted) {
       _closeWaiter!.complete();
     }
   }
 
   Future<Database> _open() async {
-    final dbPath =
-        _directoryOverride ?? await getDatabasesPath();
+    final dbPath = _directoryOverride ?? await getDatabasesPath();
     final path = p.join(dbPath, _dbName);
 
     return openDatabase(
@@ -208,6 +203,7 @@ class ExerciseDatabase {
         actual_weight TEXT,
         actual_reps TEXT,
         actual_rir TEXT,
+        actual_tempo TEXT,
         completed INTEGER NOT NULL DEFAULT 0,
         completed_at INTEGER,
         FOREIGN KEY(session_exercise_local_id) REFERENCES $tableTrainingSessionExercises(local_id) ON DELETE CASCADE
@@ -269,9 +265,7 @@ class ExerciseDatabase {
       await db.execute(
         'ALTER TABLE $tableExercises ADD COLUMN description TEXT NOT NULL DEFAULT ""',
       );
-      await db.execute(
-        'ALTER TABLE $tableExercises ADD COLUMN image_url TEXT',
-      );
+      await db.execute('ALTER TABLE $tableExercises ADD COLUMN image_url TEXT');
     }
     if (oldVersion < 3) {
       await _migrateToV3(db);
@@ -281,6 +275,11 @@ class ExerciseDatabase {
     }
     if (oldVersion < 5) {
       await _createTrainingSessionTables(db);
+    }
+    if (oldVersion >= 5 && oldVersion < 6) {
+      await db.execute(
+        'ALTER TABLE $tableTrainingSessionSets ADD COLUMN actual_tempo TEXT',
+      );
     }
   }
 

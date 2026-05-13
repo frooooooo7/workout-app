@@ -14,6 +14,7 @@ class TrainingSessionSet {
     this.actualWeight,
     this.actualReps,
     this.actualRir,
+    this.actualTempo,
     this.completed = false,
     this.completedAt,
   }) : id = id ?? const Uuid().v4();
@@ -26,6 +27,7 @@ class TrainingSessionSet {
   final String? actualWeight;
   final String? actualReps;
   final String? actualRir;
+  final String? actualTempo;
   final bool completed;
   final DateTime? completedAt;
 
@@ -38,11 +40,13 @@ class TrainingSessionSet {
     String? actualWeight,
     String? actualReps,
     String? actualRir,
+    String? actualTempo,
     bool? completed,
     DateTime? completedAt,
     bool clearActualWeight = false,
     bool clearActualReps = false,
     bool clearActualRir = false,
+    bool clearActualTempo = false,
     bool clearCompletedAt = false,
   }) {
     return TrainingSessionSet(
@@ -51,13 +55,14 @@ class TrainingSessionSet {
       plannedReps: plannedReps ?? this.plannedReps,
       plannedRir: plannedRir ?? this.plannedRir,
       plannedTempo: plannedTempo ?? this.plannedTempo,
-      actualWeight:
-          clearActualWeight ? null : (actualWeight ?? this.actualWeight),
+      actualWeight: clearActualWeight
+          ? null
+          : (actualWeight ?? this.actualWeight),
       actualReps: clearActualReps ? null : (actualReps ?? this.actualReps),
       actualRir: clearActualRir ? null : (actualRir ?? this.actualRir),
+      actualTempo: clearActualTempo ? null : (actualTempo ?? this.actualTempo),
       completed: completed ?? this.completed,
-      completedAt:
-          clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
     );
   }
 }
@@ -115,8 +120,8 @@ class TrainingSession {
     this.finishedAt,
     required this.exercises,
     this.pendingOp,
-  })  : id = id ?? const Uuid().v4(),
-        startedAt = startedAt ?? DateTime.now().toUtc();
+  }) : id = id ?? const Uuid().v4(),
+       startedAt = startedAt ?? DateTime.now().toUtc();
 
   final String id;
   final String? serverId;
@@ -174,8 +179,9 @@ class TrainingSession {
             (exercise) => TrainingSessionExercise(
               exerciseId: exercise.exercise.id,
               exerciseName: exercise.exercise.name,
-              exerciseMuscles:
-                  exercise.exercise.muscles.map((m) => m.name).toList(),
+              exerciseMuscles: exercise.exercise.muscles
+                  .map((m) => m.name)
+                  .toList(),
               exerciseCategory: exercise.exercise.category.name,
               exerciseImageUrl: exercise.exercise.imageUrl,
               sets: exercise.sets
@@ -188,6 +194,7 @@ class TrainingSession {
                       actualWeight: set.weight,
                       actualReps: set.reps,
                       actualRir: set.rir,
+                      actualTempo: set.tempo,
                     ),
                   )
                   .toList(),

@@ -34,6 +34,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   final PageController _exercisePageController = PageController();
   Duration _elapsed = Duration.zero;
   TrainingSession? _draftSession;
+  final Set<String> _userEnabledRirColumns = {};
+  final Set<String> _userEnabledTempoColumns = {};
+  final Set<String> _userHiddenRirColumns = {};
+  final Set<String> _userHiddenTempoColumns = {};
   int _currentExerciseIndex = 0;
   bool _hasUnsavedDraft = false;
   bool _allowPop = false;
@@ -80,6 +84,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         if (sourceSession == null) return const _MissingSessionScreen();
         if (_draftSession == null || _draftSession!.id != sourceSession.id) {
           _draftSession = sourceSession;
+          _userEnabledRirColumns.clear();
+          _userEnabledTempoColumns.clear();
+          _userHiddenRirColumns.clear();
+          _userHiddenTempoColumns.clear();
           _currentExerciseIndex = 0;
         }
         final session = _draftSession!;
@@ -134,8 +142,49 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                           child: _SessionExerciseCard(
                             exerciseIndex: index,
                             exercise: session.exercises[index],
+                            showRirColumn: _shouldShowRirColumn(
+                              session.exercises[index],
+                            ),
+                            showTempoColumn: _shouldShowTempoColumn(
+                              session.exercises[index],
+                            ),
+                            onShowRirColumn: () => setState(() {
+                              _userHiddenRirColumns.remove(
+                                session.exercises[index].id,
+                              );
+                              _userEnabledRirColumns.add(
+                                session.exercises[index].id,
+                              );
+                            }),
+                            onShowTempoColumn: () => setState(() {
+                              _userHiddenTempoColumns.remove(
+                                session.exercises[index].id,
+                              );
+                              _userEnabledTempoColumns.add(
+                                session.exercises[index].id,
+                              );
+                            }),
+                            onHideRirColumn: () => setState(() {
+                              _userEnabledRirColumns.remove(
+                                session.exercises[index].id,
+                              );
+                              _userHiddenRirColumns.add(
+                                session.exercises[index].id,
+                              );
+                            }),
+                            onHideTempoColumn: () => setState(() {
+                              _userEnabledTempoColumns.remove(
+                                session.exercises[index].id,
+                              );
+                              _userHiddenTempoColumns.add(
+                                session.exercises[index].id,
+                              );
+                            }),
                             onSetChanged: (setIndex, set) =>
                                 _updateSet(context, index, setIndex, set),
+                            onAddSet: () => _addSet(context, index),
+                            onRemoveSet: (setIndex) =>
+                                _removeSet(context, index, setIndex),
                           ),
                         );
                       },
@@ -199,6 +248,49 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     _scheduleDraftSave(context.read<TrainingSessionCubit>());
   }
 
+  void _addSet(BuildContext context, int exerciseIndex) {
+    final session = _draftSession;
+    if (session == null) return;
+    final exercises = List<TrainingSessionExercise>.from(session.exercises);
+    final exercise = exercises[exerciseIndex];
+    final sets = List<TrainingSessionSet>.from(exercise.sets);
+    final previousSet = sets.isNotEmpty ? sets.last : null;
+    sets.add(
+      TrainingSessionSet(
+        plannedWeight: previousSet?.plannedWeight,
+        plannedReps: previousSet?.plannedReps ?? '',
+        plannedRir: previousSet?.plannedRir,
+        plannedTempo: previousSet?.plannedTempo,
+        actualWeight: previousSet?.actualWeight ?? previousSet?.plannedWeight,
+        actualReps: previousSet?.actualReps ?? previousSet?.plannedReps,
+        actualRir: previousSet?.actualRir ?? previousSet?.plannedRir,
+        actualTempo: previousSet?.actualTempo ?? previousSet?.plannedTempo,
+      ),
+    );
+    exercises[exerciseIndex] = exercise.copyWith(sets: sets);
+    setState(() {
+      _draftSession = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+    });
+    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+  }
+
+  void _removeSet(BuildContext context, int exerciseIndex, int setIndex) {
+    final session = _draftSession;
+    if (session == null) return;
+    final exercises = List<TrainingSessionExercise>.from(session.exercises);
+    final exercise = exercises[exerciseIndex];
+    if (exercise.sets.length <= 1) return;
+    final sets = List<TrainingSessionSet>.from(exercise.sets)
+      ..removeAt(setIndex);
+    exercises[exerciseIndex] = exercise.copyWith(sets: sets);
+    setState(() {
+      _draftSession = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+    });
+    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+  }
+
   void _scheduleDraftSave(TrainingSessionCubit cubit) {
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 900), () {
@@ -213,6 +305,26 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (draft == null || !_hasUnsavedDraft) return;
     await cubit.save(draft);
     _hasUnsavedDraft = false;
+  }
+
+  bool _shouldShowRirColumn(TrainingSessionExercise exercise) {
+    if (_userHiddenRirColumns.contains(exercise.id)) return false;
+    return _userEnabledRirColumns.contains(exercise.id) ||
+        exercise.sets.any(
+          (set) =>
+              (set.plannedRir?.trim().isNotEmpty ?? false) ||
+              (set.actualRir?.trim().isNotEmpty ?? false),
+        );
+  }
+
+  bool _shouldShowTempoColumn(TrainingSessionExercise exercise) {
+    if (_userHiddenTempoColumns.contains(exercise.id)) return false;
+    return _userEnabledTempoColumns.contains(exercise.id) ||
+        exercise.sets.any(
+          (set) =>
+              (set.plannedTempo?.trim().isNotEmpty ?? false) ||
+              (set.actualTempo?.trim().isNotEmpty ?? false),
+        );
   }
 
   void _goToExercise(int index) {
@@ -436,12 +548,28 @@ class _SessionExerciseCard extends StatelessWidget {
   const _SessionExerciseCard({
     required this.exerciseIndex,
     required this.exercise,
+    required this.showRirColumn,
+    required this.showTempoColumn,
+    required this.onShowRirColumn,
+    required this.onShowTempoColumn,
+    required this.onHideRirColumn,
+    required this.onHideTempoColumn,
     required this.onSetChanged,
+    required this.onAddSet,
+    required this.onRemoveSet,
   });
 
   final int exerciseIndex;
   final TrainingSessionExercise exercise;
+  final bool showRirColumn;
+  final bool showTempoColumn;
+  final VoidCallback onShowRirColumn;
+  final VoidCallback onShowTempoColumn;
+  final VoidCallback onHideRirColumn;
+  final VoidCallback onHideTempoColumn;
   final void Function(int setIndex, TrainingSessionSet set) onSetChanged;
+  final VoidCallback onAddSet;
+  final void Function(int setIndex) onRemoveSet;
 
   @override
   Widget build(BuildContext context) {
@@ -490,20 +618,62 @@ class _SessionExerciseCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (!showRirColumn) ...[
+                const SizedBox(width: 8),
+                _OptionalColumnButton(
+                  key: ValueKey('show-rir-column-button-$exerciseIndex'),
+                  label: 'RIR',
+                  adding: true,
+                  onTap: onShowRirColumn,
+                ),
+              ] else ...[
+                const SizedBox(width: 8),
+                _OptionalColumnButton(
+                  key: ValueKey('hide-rir-column-button-$exerciseIndex'),
+                  label: 'RIR',
+                  adding: false,
+                  onTap: onHideRirColumn,
+                ),
+              ],
+              if (!showTempoColumn) ...[
+                const SizedBox(width: 8),
+                _OptionalColumnButton(
+                  key: ValueKey('show-tempo-column-button-$exerciseIndex'),
+                  label: 'Tempo',
+                  adding: true,
+                  onTap: onShowTempoColumn,
+                ),
+              ] else ...[
+                const SizedBox(width: 8),
+                _OptionalColumnButton(
+                  key: ValueKey('hide-tempo-column-button-$exerciseIndex'),
+                  label: 'Tempo',
+                  adding: false,
+                  onTap: onHideTempoColumn,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 14),
-          const Row(
+          Row(
             children: [
-              SizedBox(width: 34, child: _HeaderText('SET')),
-              SizedBox(width: 8),
-              Expanded(child: _HeaderText('KG')),
-              SizedBox(width: 8),
-              Expanded(child: _HeaderText('POWT.')),
-              SizedBox(width: 8),
-              Expanded(child: _HeaderText('RIR')),
-              SizedBox(width: 8),
-              SizedBox(width: 44, child: _HeaderText('OK')),
+              const SizedBox(width: 34, child: _HeaderText('SET')),
+              const SizedBox(width: 8),
+              const Expanded(child: _HeaderText('KG')),
+              const SizedBox(width: 8),
+              const Expanded(child: _HeaderText('POWT.')),
+              if (showRirColumn) ...[
+                const SizedBox(width: 8),
+                const Expanded(child: _HeaderText('RIR')),
+              ],
+              if (showTempoColumn) ...[
+                const SizedBox(width: 8),
+                const Expanded(child: _HeaderText('TEMPO')),
+              ],
+              const SizedBox(width: 8),
+              const SizedBox(width: 44, child: _HeaderText('OK')),
+              const SizedBox(width: 8),
+              const SizedBox(width: 44),
             ],
           ),
           const SizedBox(height: 8),
@@ -573,22 +743,46 @@ class _SessionExerciseCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TableCellInput(
-                        value: set.actualRir ?? '',
-                        hint: set.plannedRir?.isNotEmpty == true
-                            ? set.plannedRir!
-                            : '-',
-                        onChanged: (value) => onSetChanged(
-                          setIndex,
-                          set.copyWith(
-                            actualRir: value,
-                            clearActualRir: value.trim().isEmpty,
+                    if (showRirColumn) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TableCellInput(
+                          value: set.actualRir ?? '',
+                          hint: set.plannedRir?.isNotEmpty == true
+                              ? set.plannedRir!
+                              : '-',
+                          onChanged: (value) => onSetChanged(
+                            setIndex,
+                            set.copyWith(
+                              actualRir: value,
+                              clearActualRir: value.trim().isEmpty,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
+                    if (showTempoColumn) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TableCellInput(
+                          key: ValueKey(
+                            'session-set-tempo-$exerciseIndex-$setIndex',
+                          ),
+                          value: set.actualTempo ?? '',
+                          hint: set.plannedTempo?.isNotEmpty == true
+                              ? set.plannedTempo!
+                              : '-',
+                          keyboardType: TextInputType.text,
+                          onChanged: (value) => onSetChanged(
+                            setIndex,
+                            set.copyWith(
+                              actualTempo: value,
+                              clearActualTempo: value.trim().isEmpty,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     SizedBox(
                       width: 44,
@@ -607,12 +801,89 @@ class _SessionExerciseCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 44,
+                      child: IconButton(
+                        tooltip: 'Usuń serię',
+                        onPressed: exercise.sets.length > 1
+                            ? () => onRemoveSet(setIndex)
+                            : null,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        color: AppColors.textSecondary,
+                        disabledColor: AppColors.textMuted,
+                      ),
+                    ),
                   ],
                 ),
               ),
             );
           }),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const ValueKey('add-session-set-button'),
+              onPressed: onAddSet,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: const Text('Dodaj serię'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryVariant,
+                side: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.45),
+                ),
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _OptionalColumnButton extends StatelessWidget {
+  const _OptionalColumnButton({
+    super.key,
+    required this.label,
+    required this.adding,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool adding;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                adding ? Icons.add_rounded : Icons.close_rounded,
+                color: AppColors.primaryVariant,
+                size: 16,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                '${adding ? '+' : '-'}$label',
+                style: const TextStyle(
+                  color: AppColors.primaryVariant,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

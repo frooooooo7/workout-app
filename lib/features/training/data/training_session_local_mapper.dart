@@ -11,7 +11,8 @@ class TrainingSessionLocalMapper {
   static List<String> decodeStrings(String raw) =>
       (jsonDecode(raw) as List).map((value) => value as String).toList();
 
-  static int? encodeDate(DateTime? value) => value?.toUtc().millisecondsSinceEpoch;
+  static int? encodeDate(DateTime? value) =>
+      value?.toUtc().millisecondsSinceEpoch;
 
   static DateTime? decodeDate(Object? value) {
     final ms = value as int?;
@@ -47,12 +48,14 @@ class TrainingSessionLocalMapper {
       exercises.add(
         TrainingSessionExercise(
           id: exerciseRow['local_id'] as String,
-          exerciseId: (exerciseRow['exercise_local_id'] as String?) ??
+          exerciseId:
+              (exerciseRow['exercise_local_id'] as String?) ??
               (exerciseRow['exercise_server_id'] as String?) ??
               '',
           exerciseName: exerciseRow['exercise_name'] as String,
-          exerciseMuscles:
-              decodeStrings(exerciseRow['exercise_muscles'] as String),
+          exerciseMuscles: decodeStrings(
+            exerciseRow['exercise_muscles'] as String,
+          ),
           exerciseCategory: exerciseRow['exercise_category'] as String,
           exerciseImageUrl: exerciseRow['exercise_image_url'] as String?,
           sets: setRows
@@ -66,6 +69,7 @@ class TrainingSessionLocalMapper {
                   actualWeight: set['actual_weight'] as String?,
                   actualReps: set['actual_reps'] as String?,
                   actualRir: set['actual_rir'] as String?,
+                  actualTempo: set['actual_tempo'] as String?,
                   completed: ((set['completed'] as int?) ?? 0) == 1,
                   completedAt: decodeDate(set['completed_at']),
                 ),
@@ -178,6 +182,7 @@ class TrainingSessionLocalMapper {
           'actual_weight': set.actualWeight,
           'actual_reps': set.actualReps,
           'actual_rir': set.actualRir,
+          'actual_tempo': set.actualTempo,
           'completed': set.completed ? 1 : 0,
           'completed_at': encodeDate(set.completedAt),
         });
