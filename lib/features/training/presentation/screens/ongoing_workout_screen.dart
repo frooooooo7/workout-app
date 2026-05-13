@@ -31,8 +31,10 @@ class OngoingWorkoutScreen extends StatefulWidget {
 class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Timer? _timer;
   Timer? _saveDebounce;
+  final PageController _exercisePageController = PageController();
   Duration _elapsed = Duration.zero;
   TrainingSession? _draftSession;
+  int _currentExerciseIndex = 0;
   bool _hasUnsavedDraft = false;
   bool _allowPop = false;
 
@@ -52,6 +54,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   void dispose() {
     _timer?.cancel();
     _saveDebounce?.cancel();
+    _exercisePageController.dispose();
     super.dispose();
   }
 
@@ -77,8 +80,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         if (sourceSession == null) return const _MissingSessionScreen();
         if (_draftSession == null || _draftSession!.id != sourceSession.id) {
           _draftSession = sourceSession;
+          _currentExerciseIndex = 0;
         }
         final session = _draftSession!;
+        final exerciseCount = session.exercises.length;
+        if (exerciseCount == 0) return const _MissingSessionScreen();
+        if (exerciseCount > 0 && _currentExerciseIndex >= exerciseCount) {
+          _currentExerciseIndex = exerciseCount - 1;
+        }
 
         return PopScope(
           canPop: _allowPop,
@@ -99,16 +108,35 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                     onFinish: () => _finish(context, session),
                     onBack: () => _leaveWorkout(context),
                   ),
+                  _ExerciseProgressBar(
+                    currentIndex: _currentExerciseIndex,
+                    exerciseCount: exerciseCount,
+                    exerciseName:
+                        session.exercises[_currentExerciseIndex].exerciseName,
+                    onPrevious: _currentExerciseIndex > 0
+                        ? () => _goToExercise(_currentExerciseIndex - 1)
+                        : null,
+                    onNext: _currentExerciseIndex < exerciseCount - 1
+                        ? () => _goToExercise(_currentExerciseIndex + 1)
+                        : null,
+                    onShowList: () => _showExercisePicker(context, session),
+                  ),
                   Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    child: PageView.builder(
+                      controller: _exercisePageController,
                       itemCount: session.exercises.length,
+                      onPageChanged: (index) {
+                        setState(() => _currentExerciseIndex = index);
+                      },
                       itemBuilder: (context, index) {
-                        return _SessionExerciseCard(
-                          exerciseIndex: index,
-                          exercise: session.exercises[index],
-                          onSetChanged: (setIndex, set) =>
-                              _updateSet(context, index, setIndex, set),
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                          child: _SessionExerciseCard(
+                            exerciseIndex: index,
+                            exercise: session.exercises[index],
+                            onSetChanged: (setIndex, set) =>
+                                _updateSet(context, index, setIndex, set),
+                          ),
                         );
                       },
                     ),
@@ -185,6 +213,222 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (draft == null || !_hasUnsavedDraft) return;
     await cubit.save(draft);
     _hasUnsavedDraft = false;
+  }
+
+  void _goToExercise(int index) {
+    if (!_exercisePageController.hasClients) return;
+    _exercisePageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _showExercisePicker(
+    BuildContext context,
+    TrainingSession session,
+  ) async {
+    final selectedIndex = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            itemCount: session.exercises.length,
+            separatorBuilder: (_, _) =>
+                const Divider(color: AppColors.border, height: 1),
+            itemBuilder: (context, index) {
+              final exercise = session.exercises[index];
+              final completedSets = exercise.sets
+                  .where((set) => set.completed)
+                  .length;
+              final isCurrent = index == _currentExerciseIndex;
+              return ListTile(
+                selected: isCurrent,
+                selectedTileColor: AppColors.primary.withValues(alpha: 0.12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: CircleAvatar(
+                  backgroundColor: isCurrent
+                      ? AppColors.primary.withValues(alpha: 0.2)
+                      : AppColors.surfaceVariant,
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      color: isCurrent
+                          ? AppColors.primaryVariant
+                          : AppColors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                title: Text(
+                  exercise.exerciseName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  '$completedSets / ${exercise.sets.length} serii',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                trailing: isCurrent
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: AppColors.primaryVariant,
+                      )
+                    : null,
+                onTap: () => Navigator.of(context).pop(index),
+              );
+            },
+          ),
+        );
+      },
+    );
+    if (selectedIndex == null || !mounted) return;
+    _goToExercise(selectedIndex);
+  }
+}
+
+class _ExerciseProgressBar extends StatelessWidget {
+  const _ExerciseProgressBar({
+    required this.currentIndex,
+    required this.exerciseCount,
+    required this.exerciseName,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onShowList,
+  });
+
+  final int currentIndex;
+  final int exerciseCount;
+  final String exerciseName;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback onShowList;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _NavigationButton(
+                icon: Icons.chevron_left_rounded,
+                onTap: onPrevious,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Material(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: onShowList,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.format_list_bulleted_rounded,
+                            color: AppColors.primaryVariant,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${currentIndex + 1} / $exerciseCount',
+                                  style: const TextStyle(
+                                    color: AppColors.primaryVariant,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  exerciseName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _NavigationButton(
+                icon: Icons.chevron_right_rounded,
+                onTap: onNext,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 4,
+              value: exerciseCount == 0
+                  ? 0
+                  : (currentIndex + 1) / exerciseCount,
+              backgroundColor: AppColors.surfaceVariant,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.primaryVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NavigationButton extends StatelessWidget {
+  const _NavigationButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: onTap == null ? AppColors.surfaceVariant : AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 48,
+          height: 56,
+          child: Icon(
+            icon,
+            color: onTap == null
+                ? AppColors.textMuted
+                : AppColors.textSecondary,
+            size: 26,
+          ),
+        ),
+      ),
+    );
   }
 }
 
