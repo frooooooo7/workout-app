@@ -53,7 +53,7 @@ void main() {
     await fixture.dispose();
   });
 
-  test('finish removes active session without writing history', () async {
+  test('finish updates active session status to completed', () async {
     final fixture = await _Fixture.create();
     final repo = fixture.stoppedRepo();
     final session = await repo.startFromPlan(_plan());
@@ -61,9 +61,11 @@ void main() {
     final finished = await repo.finish(session.id);
 
     expect(finished.id, session.id);
+    expect(finished.status, TrainingSessionStatus.completed);
     await fixture.db.run((db) async {
       final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
-      expect(rows, isEmpty);
+      expect(rows, hasLength(1));
+      expect(rows.single['status'], 'completed');
     });
 
     await fixture.dispose();

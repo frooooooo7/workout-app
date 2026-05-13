@@ -122,28 +122,44 @@ class OfflineFirstTrainingSessionRepository
   Future<TrainingSession> finish(String sessionId) async {
     final row = await _findRow(sessionId);
     if (row == null) throw StateError('Training session not found');
-    return _removeActive(row);
+    return _updateActiveStatus(row, TrainingSessionStatus.completed);
   }
 
   @override
   Future<TrainingSession> cancel(String sessionId) async {
     final row = await _findRow(sessionId);
     if (row == null) throw StateError('Training session not found');
-    return _removeActive(row);
+    return _updateActiveStatus(row, TrainingSessionStatus.cancelled);
   }
 
-  Future<TrainingSession> _removeActive(Map<String, dynamic> row) async {
-    late TrainingSession removed;
+  Future<TrainingSession> _updateActiveStatus(
+    Map<String, dynamic> row,
+    TrainingSessionStatus status,
+  ) async {
+    late TrainingSession updated;
     await _localDb.run((db) async {
       final current = await TrainingSessionLocalMapper.fromDb(db, row);
       if (current == null) throw StateError('Training session not found');
-      removed = current;
-      await db.delete(
-        ExerciseDatabase.tableTrainingSessions,
-        where: 'local_id = ?',
-        whereArgs: [row['local_id']],
+      
+      final pending = row['pending_op'] as String?;
+      final nextPending = pending == 'create' ? 'create' : 'update';
+      
+      updated = current.copyWith(
+        status: status,
+        finishedAt: status == TrainingSessionStatus.completed
+            ? DateTime.now().toUtc()
+            : current.finishedAt,
+        pendingOp: nextPending,
+      );
+      
+      await TrainingSessionLocalMapper.upsert(
+        db,
+        updated,
+        serverId: row['server_id'] as String?,
+        pendingOp: nextPending,
       );
     });
-    return removed;
+    _scheduleSync();
+    return updated;
   }
 }
