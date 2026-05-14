@@ -24,10 +24,23 @@ final appRootNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter buildRouter({
   required Future<AuthUser?> Function() resolveUser,
+  String initialLocation = '/splash',
 }) {
   return GoRouter(
     navigatorKey: appRootNavigatorKey,
-    initialLocation: '/splash',
+    initialLocation: initialLocation,
+    redirect: (_, state) async {
+      final isProtectedRoute = state.uri.path.startsWith('/app/');
+      if (!isProtectedRoute || ServiceLocator.currentUser.value != null) {
+        return null;
+      }
+
+      final user = await resolveUser();
+      if (user == null) return '/login';
+
+      ServiceLocator.currentUser.value = user;
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',
