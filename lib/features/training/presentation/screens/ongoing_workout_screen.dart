@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../library/domain/models/exercise.dart';
+import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
 import '../bloc/training_session_cubit.dart';
 import '../widgets/ongoing_workout_footer.dart';
@@ -13,10 +15,15 @@ import '../widgets/ongoing_workout_header.dart';
 import '../widgets/table_cell_input.dart';
 
 class OngoingWorkoutArgs {
-  const OngoingWorkoutArgs({this.initialSession, this.sessionCubit});
+  const OngoingWorkoutArgs({
+    this.initialSession,
+    this.sessionCubit,
+    this.pickExercise,
+  });
 
   final TrainingSession? initialSession;
   final TrainingSessionCubit? sessionCubit;
+  final Future<Exercise?> Function(BuildContext context)? pickExercise;
 }
 
 class OngoingWorkoutScreen extends StatefulWidget {
@@ -31,8 +38,10 @@ class OngoingWorkoutScreen extends StatefulWidget {
 class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Timer? _timer;
   Timer? _saveDebounce;
+  Timer? _restTimer;
   final PageController _exercisePageController = PageController();
   Duration _elapsed = Duration.zero;
+  Duration _restRemaining = Duration.zero;
   TrainingSession? _draftSession;
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
@@ -58,6 +67,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   void dispose() {
     _timer?.cancel();
     _saveDebounce?.cancel();
+    _restTimer?.cancel();
     _exercisePageController.dispose();
     super.dispose();
   }
@@ -71,6 +81,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final minutes = (_elapsed.inMinutes % 60).toString().padLeft(2, '0');
     final seconds = (_elapsed.inSeconds % 60).toString().padLeft(2, '0');
     return '$hours:$minutes:$seconds';
+  }
+
+  bool get _restActive => _restTimer?.isActive == true;
+
+  String get _restTimeLabel {
+    final minutes = _restRemaining.inMinutes.toString().padLeft(2, '0');
+    final seconds = (_restRemaining.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -190,7 +208,17 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                       },
                     ),
                   ),
-                  const OngoingWorkoutFooter(),
+                  if (_restActive)
+                    _RestTimerBanner(
+                      remaining: _restTimeLabel,
+                      onStop: _stopRestTimer,
+                    ),
+                  OngoingWorkoutFooter(
+                    restLabel: 'Odpoczynek',
+                    restActive: _restActive,
+                    onRestTap: _toggleRestTimer,
+                    onAddExerciseTap: () => _addExerciseToSession(context),
+                  ),
                 ],
               ),
             ),
@@ -226,6 +254,73 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (!context.mounted) return;
     setState(() => _allowPop = true);
     context.pop();
+  }
+
+  Future<void> _addExerciseToSession(BuildContext context) async {
+    final session = _draftSession;
+    if (session == null) return;
+
+    final picked =
+        await (widget.args?.pickExercise?.call(context) ??
+            Navigator.of(context).push<Exercise>(
+              MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+            ));
+    if (picked == null || !context.mounted) return;
+
+    final exercises = List<TrainingSessionExercise>.from(session.exercises)
+      ..add(
+        TrainingSessionExercise(
+          exerciseId: picked.id,
+          exerciseName: picked.name,
+          exerciseMuscles: picked.muscles.map((muscle) => muscle.name).toList(),
+          exerciseCategory: picked.category.name,
+          exerciseImageUrl: picked.imageUrl,
+          sets: [TrainingSessionSet()],
+        ),
+      );
+    final nextIndex = exercises.length - 1;
+    setState(() {
+      _draftSession = session.copyWith(exercises: exercises);
+      _currentExerciseIndex = nextIndex;
+      _hasUnsavedDraft = true;
+    });
+    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_exercisePageController.hasClients) return;
+      _exercisePageController.jumpToPage(nextIndex);
+      if (_currentExerciseIndex != nextIndex) {
+        setState(() => _currentExerciseIndex = nextIndex);
+      }
+    });
+  }
+
+  void _toggleRestTimer() {
+    if (_restActive) {
+      _stopRestTimer();
+    } else {
+      _startRestTimer();
+    }
+  }
+
+  void _startRestTimer() {
+    _restTimer?.cancel();
+    setState(() => _restRemaining = const Duration(seconds: 90));
+    _restTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_restRemaining <= const Duration(seconds: 1)) {
+        _stopRestTimer();
+        return;
+      }
+      setState(() {
+        _restRemaining -= const Duration(seconds: 1);
+      });
+    });
+  }
+
+  void _stopRestTimer() {
+    _restTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _restRemaining = Duration.zero);
   }
 
   void _updateSet(
@@ -328,6 +423,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   void _goToExercise(int index) {
+    if (_currentExerciseIndex != index) {
+      setState(() => _currentExerciseIndex = index);
+    }
     if (!_exercisePageController.hasClients) return;
     _exercisePageController.animateToPage(
       index,
@@ -509,6 +607,49 @@ class _ExerciseProgressBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RestTimerBanner extends StatelessWidget {
+  const _RestTimerBanner({required this.remaining, required this.onStop});
+
+  final String remaining;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.timer_outlined,
+              color: AppColors.primaryVariant,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                remaining,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            TextButton(onPressed: onStop, child: const Text('Zatrzymaj')),
+          ],
+        ),
       ),
     );
   }
