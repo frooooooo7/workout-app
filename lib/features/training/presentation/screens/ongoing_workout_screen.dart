@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -61,6 +62,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCustomRestDuration();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final session = _session;
       if (session == null || !mounted) return;
@@ -70,11 +72,24 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     });
   }
 
+  Future<void> _loadCustomRestDuration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seconds = prefs.getInt('last_custom_rest_duration');
+    if (seconds != null && mounted) {
+      setState(() {
+        _lastCustomRestDuration = Duration(seconds: seconds);
+      });
+    }
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
     _saveDebounce?.cancel();
     _restTimer?.cancel();
+    if (_restTimerScheduler != null) {
+      unawaited(_restTimerScheduler!.cancelRestFinished());
+    }
     _exercisePageController.dispose();
     super.dispose();
   }
@@ -92,8 +107,12 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   bool get _restActive => _restTimer?.isActive == true;
 
-  RestTimerScheduler get _restTimerScheduler {
-    return widget.args?.restTimerScheduler ?? ServiceLocator.restTimerScheduler;
+  RestTimerScheduler? get _restTimerScheduler {
+    try {
+      return widget.args?.restTimerScheduler ?? ServiceLocator.restTimerScheduler;
+    } catch (_) {
+      return null;
+    }
   }
 
   String get _restTimeLabel {
@@ -319,7 +338,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     _restTimer?.cancel();
     _selectedRestDuration = duration;
     try {
-      await _restTimerScheduler.scheduleRestFinished(duration: duration);
+      if (_restTimerScheduler != null) {
+        await _restTimerScheduler!.scheduleRestFinished(duration: duration);
+      }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -347,7 +368,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   void _stopRestTimer() {
     _restTimer?.cancel();
-    unawaited(_restTimerScheduler.cancelRestFinished());
+    if (_restTimerScheduler != null) {
+      unawaited(_restTimerScheduler!.cancelRestFinished());
+    }
     if (!mounted) return;
     setState(() => _restRemaining = Duration.zero);
   }
@@ -423,6 +446,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                         );
                         if (!sheetContext.mounted || duration == null) return;
                         _lastCustomRestDuration = duration;
+                        unawaited(
+                          SharedPreferences.getInstance().then(
+                            (p) => p.setInt(
+                              'last_custom_rest_duration',
+                              duration.inSeconds,
+                            ),
+                          ),
+                        );
                         Navigator.of(sheetContext).pop(duration);
                       },
                     ),

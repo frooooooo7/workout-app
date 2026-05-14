@@ -19,6 +19,7 @@ class RestTimerNotificationScheduler implements RestTimerScheduler {
 
   final FlutterLocalNotificationsPlugin _notifications;
   bool _initialized = false;
+  bool _initializing = false;
   bool _timezoneInitialized = false;
 
   @override
@@ -68,18 +69,29 @@ class RestTimerNotificationScheduler implements RestTimerScheduler {
     }
 
     if (_initialized) return;
-
-    await _notifications.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
+    if (_initializing) {
+      while (_initializing) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      return;
+    }
+    
+    _initializing = true;
+    try {
+      await _notifications.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          iOS: DarwinInitializationSettings(
+            requestAlertPermission: false,
+            requestBadgePermission: false,
+            requestSoundPermission: false,
+          ),
         ),
-      ),
-    );
-    _initialized = true;
+      );
+      _initialized = true;
+    } finally {
+      _initializing = false;
+    }
   }
 
   Future<void> _requestPermissions() async {

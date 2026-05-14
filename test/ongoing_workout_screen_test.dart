@@ -7,8 +7,13 @@ import 'package:gym/features/training/domain/repositories/training_session_repos
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/presentation/bloc/training_session_cubit.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('shows one exercise at a time with quick exercise navigation', (
     tester,
   ) async {

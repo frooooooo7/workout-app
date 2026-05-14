@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 
@@ -151,13 +151,13 @@ class _CustomRestDurationDialogState extends State<CustomRestDurationDialog> {
 
   void _addMinutes(int delta) {
     setState(() {
-      _totalSeconds = (_totalSeconds + delta * 60).clamp(_minSeconds, 5999);
+      _totalSeconds = (_totalSeconds + delta * 60).clamp(_minSeconds, 900);
     });
   }
 
   void _addSeconds(int delta) {
     setState(() {
-      _totalSeconds = (_totalSeconds + delta).clamp(_minSeconds, 5999);
+      _totalSeconds = (_totalSeconds + delta).clamp(_minSeconds, 900);
     });
   }
 
