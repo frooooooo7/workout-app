@@ -45,6 +45,9 @@ dependencies:
   http_parser: ^4.1.2
   mime: ^2.0.0
   uuid: ^4.5.1
+  flutter_local_notifications: ^21.0.0
+  flutter_timezone: ^5.0.2
+  timezone: ^0.11.0
 
 dev_dependencies:
   flutter_test:

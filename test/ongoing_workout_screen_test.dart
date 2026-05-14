@@ -4,6 +4,7 @@ import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
+import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/presentation/bloc/training_session_cubit.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
 
@@ -232,6 +233,7 @@ void main() {
     tester,
   ) async {
     final session = _session();
+    final scheduler = _FakeRestTimerScheduler();
     final cubit = TrainingSessionCubit(
       _FakeTrainingSessionRepository(session),
       autoRefresh: false,
@@ -243,25 +245,125 @@ void main() {
           args: OngoingWorkoutArgs(
             initialSession: session,
             sessionCubit: cubit,
+            restTimerScheduler: scheduler,
           ),
         ),
       ),
     );
 
     await tester.tap(find.text('Odpoczynek'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('30s'), findsNothing);
+    expect(find.text('1:30'), findsOneWidget);
+    expect(find.text('2:00'), findsOneWidget);
+    expect(find.text('3:00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('rest-duration-option-60')));
     await tester.pump();
 
-    expect(find.text('01:30'), findsOneWidget);
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 60)]);
+    expect(find.text('01:00'), findsOneWidget);
     expect(find.text('Zatrzymaj'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('01:29'), findsOneWidget);
+    expect(find.text('00:59'), findsOneWidget);
 
     await tester.tap(find.text('Zatrzymaj'));
     await tester.pump();
 
+    expect(scheduler.cancelCount, 1);
     expect(find.text('Odpoczynek'), findsOneWidget);
-    expect(find.text('01:29'), findsNothing);
+    expect(find.text('00:59'), findsNothing);
+
+    await cubit.close();
+  });
+
+  testWidgets('starts the rest timer with the custom digital picker', (
+    tester,
+  ) async {
+    final session = _session();
+    final scheduler = _FakeRestTimerScheduler();
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            restTimerScheduler: scheduler,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Odpoczynek'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('rest-duration-custom-option')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('custom-rest-time-display')),
+        matching: find.text('01:30'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('custom-rest-minutes-dial')),
+      const Offset(0, -80),
+    );
+    await tester.pump();
+    await tester.drag(
+      find.byKey(const ValueKey('custom-rest-seconds-dial')),
+      const Offset(0, 80),
+    );
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('custom-rest-time-display')),
+        matching: find.text('02:29'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('custom-rest-start-button')));
+    await tester.pump();
+
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 149)]);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.key == const ValueKey('rest-timer-remaining-label') &&
+            widget.data == '02:29',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Zatrzymaj'));
+    await tester.pump();
+
+    await tester.tap(find.text('Odpoczynek'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ostatni własny'), findsOneWidget);
+    expect(find.text('2:29'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('rest-duration-last-custom')));
+    await tester.pump();
+
+    expect(scheduler.scheduledDurations, [
+      const Duration(seconds: 149),
+      const Duration(seconds: 149),
+    ]);
 
     await cubit.close();
   });
@@ -317,4 +419,19 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   @override
   Future<TrainingSession> cancel(String sessionId) async =>
       session.copyWith(status: TrainingSessionStatus.cancelled);
+}
+
+class _FakeRestTimerScheduler implements RestTimerScheduler {
+  final List<Duration> scheduledDurations = [];
+  int cancelCount = 0;
+
+  @override
+  Future<void> scheduleRestFinished({required Duration duration}) async {
+    scheduledDurations.add(duration);
+  }
+
+  @override
+  Future<void> cancelRestFinished() async {
+    cancelCount += 1;
+  }
 }

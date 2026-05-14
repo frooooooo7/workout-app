@@ -9,7 +9,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/services/rest_timer_scheduler.dart';
 import '../bloc/training_session_cubit.dart';
+import '../widgets/ongoing_workout/ongoing_workout_progress_bar.dart';
+import '../widgets/ongoing_workout/rest_timer_controls.dart';
 import '../widgets/ongoing_workout_footer.dart';
 import '../widgets/ongoing_workout_header.dart';
 import '../widgets/table_cell_input.dart';
@@ -19,11 +22,13 @@ class OngoingWorkoutArgs {
     this.initialSession,
     this.sessionCubit,
     this.pickExercise,
+    this.restTimerScheduler,
   });
 
   final TrainingSession? initialSession;
   final TrainingSessionCubit? sessionCubit;
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
+  final RestTimerScheduler? restTimerScheduler;
 }
 
 class OngoingWorkoutScreen extends StatefulWidget {
@@ -50,6 +55,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   int _currentExerciseIndex = 0;
   bool _hasUnsavedDraft = false;
   bool _allowPop = false;
+  Duration _selectedRestDuration = const Duration(seconds: 90);
+  Duration? _lastCustomRestDuration;
 
   @override
   void initState() {
@@ -84,6 +91,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   bool get _restActive => _restTimer?.isActive == true;
+
+  RestTimerScheduler get _restTimerScheduler {
+    return widget.args?.restTimerScheduler ?? ServiceLocator.restTimerScheduler;
+  }
 
   String get _restTimeLabel {
     final minutes = _restRemaining.inMinutes.toString().padLeft(2, '0');
@@ -134,7 +145,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                     onFinish: () => _finish(context, session),
                     onBack: () => _leaveWorkout(context),
                   ),
-                  _ExerciseProgressBar(
+                  OngoingWorkoutProgressBar(
                     currentIndex: _currentExerciseIndex,
                     exerciseCount: exerciseCount,
                     exerciseName:
@@ -209,14 +220,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                     ),
                   ),
                   if (_restActive)
-                    _RestTimerBanner(
+                    RestTimerBanner(
                       remaining: _restTimeLabel,
                       onStop: _stopRestTimer,
                     ),
                   OngoingWorkoutFooter(
                     restLabel: 'Odpoczynek',
                     restActive: _restActive,
-                    onRestTap: _toggleRestTimer,
+                    onRestTap: () => unawaited(_toggleRestTimer(context)),
                     onAddExerciseTap: () => _addExerciseToSession(context),
                   ),
                 ],
@@ -294,21 +305,38 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     });
   }
 
-  void _toggleRestTimer() {
+  Future<void> _toggleRestTimer(BuildContext context) async {
     if (_restActive) {
       _stopRestTimer();
     } else {
-      _startRestTimer();
+      final duration = await _showRestDurationPicker(context);
+      if (duration == null || !context.mounted) return;
+      await _startRestTimer(context, duration);
     }
   }
 
-  void _startRestTimer() {
+  Future<void> _startRestTimer(BuildContext context, Duration duration) async {
     _restTimer?.cancel();
-    setState(() => _restRemaining = const Duration(seconds: 90));
+    _selectedRestDuration = duration;
+    try {
+      await _restTimerScheduler.scheduleRestFinished(duration: duration);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Timer lokalny wystartował, ale powiadomienie systemowe nie zostało zaplanowane.',
+            ),
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _restRemaining = duration);
     _restTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       if (_restRemaining <= const Duration(seconds: 1)) {
-        _stopRestTimer();
+        _completeRestTimer();
         return;
       }
       setState(() {
@@ -319,8 +347,101 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   void _stopRestTimer() {
     _restTimer?.cancel();
+    unawaited(_restTimerScheduler.cancelRestFinished());
     if (!mounted) return;
     setState(() => _restRemaining = Duration.zero);
+  }
+
+  void _completeRestTimer() {
+    _restTimer?.cancel();
+    if (!mounted) return;
+    setState(() => _restRemaining = Duration.zero);
+  }
+
+  Future<Duration?> _showRestDurationPicker(BuildContext context) {
+    final options = <Duration>[
+      const Duration(seconds: 60),
+      const Duration(seconds: 90),
+      const Duration(seconds: 120),
+      const Duration(seconds: 180),
+    ];
+
+    return showModalBottomSheet<Duration>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Czas odpoczynku',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final option in options)
+                      RestDurationOption(
+                        key: ValueKey(
+                          'rest-duration-option-${option.inSeconds}',
+                        ),
+                        label: formatRestDurationOption(option),
+                        selected: option == _selectedRestDuration,
+                        onTap: () => Navigator.of(sheetContext).pop(option),
+                      ),
+                    if (_lastCustomRestDuration != null)
+                      RestDurationOption(
+                        key: const ValueKey('rest-duration-last-custom'),
+                        label: formatRestDurationOption(
+                          _lastCustomRestDuration!,
+                        ),
+                        eyebrow: 'Ostatni własny',
+                        selected:
+                            _lastCustomRestDuration == _selectedRestDuration,
+                        onTap: () => Navigator.of(
+                          sheetContext,
+                        ).pop(_lastCustomRestDuration),
+                      ),
+                    RestDurationOption(
+                      key: const ValueKey('rest-duration-custom-option'),
+                      label: 'Własny',
+                      selected: !options.contains(_selectedRestDuration),
+                      onTap: () async {
+                        final duration = await _showCustomRestDurationDialog(
+                          sheetContext,
+                        );
+                        if (!sheetContext.mounted || duration == null) return;
+                        _lastCustomRestDuration = duration;
+                        Navigator.of(sheetContext).pop(duration);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Duration?> _showCustomRestDurationDialog(BuildContext context) async {
+    return showDialog<Duration>(
+      context: context,
+      builder: (_) =>
+          CustomRestDurationDialog(initialDuration: _selectedRestDuration),
+    );
   }
 
   void _updateSet(
@@ -500,188 +621,6 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
     if (selectedIndex == null || !mounted) return;
     _goToExercise(selectedIndex);
-  }
-}
-
-class _ExerciseProgressBar extends StatelessWidget {
-  const _ExerciseProgressBar({
-    required this.currentIndex,
-    required this.exerciseCount,
-    required this.exerciseName,
-    required this.onPrevious,
-    required this.onNext,
-    required this.onShowList,
-  });
-
-  final int currentIndex;
-  final int exerciseCount;
-  final String exerciseName;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final VoidCallback onShowList;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _NavigationButton(
-                icon: Icons.chevron_left_rounded,
-                onTap: onPrevious,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Material(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: onShowList,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.format_list_bulleted_rounded,
-                            color: AppColors.primaryVariant,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${currentIndex + 1} / $exerciseCount',
-                                  style: const TextStyle(
-                                    color: AppColors.primaryVariant,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  exerciseName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              _NavigationButton(
-                icon: Icons.chevron_right_rounded,
-                onTap: onNext,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              minHeight: 4,
-              value: exerciseCount == 0
-                  ? 0
-                  : (currentIndex + 1) / exerciseCount,
-              backgroundColor: AppColors.surfaceVariant,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.primaryVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RestTimerBanner extends StatelessWidget {
-  const _RestTimerBanner({required this.remaining, required this.onStop});
-
-  final String remaining;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.timer_outlined,
-              color: AppColors.primaryVariant,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                remaining,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            TextButton(onPressed: onStop, child: const Text('Zatrzymaj')),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NavigationButton extends StatelessWidget {
-  const _NavigationButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: onTap == null ? AppColors.surfaceVariant : AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          width: 48,
-          height: 56,
-          child: Icon(
-            icon,
-            color: onTap == null
-                ? AppColors.textMuted
-                : AppColors.textSecondary,
-            size: 26,
-          ),
-        ),
-      ),
-    );
   }
 }
 

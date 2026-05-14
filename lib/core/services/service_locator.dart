@@ -14,12 +14,14 @@ import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
 import '../../features/training/data/offline_first_training_session_repository.dart';
+import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
 import '../../features/training/data/sync/training_session_sync_engine.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
 import '../../features/training/data/training_session_remote_data_source.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 import '../../features/training/domain/repositories/training_session_repository.dart';
+import '../../features/training/domain/services/rest_timer_scheduler.dart';
 
 class ServiceLocator {
   ServiceLocator._();
@@ -31,6 +33,7 @@ class ServiceLocator {
   static late final TrainingPlanRemoteDataSource _trainingPlanRemoteDataSource;
   static late final TrainingSessionRemoteDataSource
       _trainingSessionRemoteDataSource;
+  static late final RestTimerScheduler restTimerScheduler;
 
   // User-scoped repository: recreated on login/logout via [currentUser] listener.
   static ExerciseRepository? _exerciseRepository;
@@ -84,6 +87,7 @@ class ServiceLocator {
     _trainingPlanRemoteDataSource = TrainingPlanRemoteDataSource(apiClient);
     _trainingSessionRemoteDataSource =
         TrainingSessionRemoteDataSource(apiClient);
+    restTimerScheduler = RestTimerNotificationScheduler();
 
     currentUser.addListener(_onUserChanged);
   }
