@@ -29,43 +29,66 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
             color: Colors.white,
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            letterSpacing: -0.2,
+            letterSpacing: 0,
           ),
         ),
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Wybierz typ aktywnosci',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Wybierz jak zaczynamy',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    height: 1.08,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              ActivityTypeOptionTile(
-                icon: Icons.list_alt_rounded,
-                iconColor: AppColors.primaryVariant,
-                title: 'Moje plany',
-                description: 'Wybierz trening z zapisanych planow.',
-                onTap: () => context.pushReplacement('/app/training/pick-plan'),
-              ),
-              const SizedBox(height: 12),
-              ActivityTypeOptionTile(
-                icon: Icons.tune_rounded,
-                iconColor: const Color(0xFFF59E0B),
-                title: 'Niestandardowa',
-                description: 'Wlasny lub mieszany charakter treningu.',
-                onTap: () =>
-                    context.pushReplacement('/app/training/ongoing-workout'),
-              ),
-            ],
+                const SizedBox(height: 8),
+                const Text(
+                  'Dwie szybkie drogi do nowego treningu.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ActivityTypeOptionTile(
+                  icon: Icons.view_week_rounded,
+                  iconColor: AppColors.primaryVariant,
+                  imageAsset: 'assets/images/login-hero.png',
+                  imageAlignment: Alignment.centerRight,
+                  eyebrow: 'Gotowy plan',
+                  title: 'Moje plany',
+                  description: 'Odpal zapisany program i trzymaj tempo sesji.',
+                  ctaLabel: 'Wybierz plan',
+                  onTap: () =>
+                      context.pushReplacement('/app/training/pick-plan'),
+                ),
+                const SizedBox(height: 16),
+                ActivityTypeOptionTile(
+                  icon: Icons.bolt_rounded,
+                  iconColor: const Color(0xFFF59E0B),
+                  imageAsset: 'assets/images/login-hero.png',
+                  imageAlignment: Alignment.centerLeft,
+                  eyebrow: 'Wolny trening',
+                  title: 'Niestandardowa',
+                  description: 'Zbuduj trening na biezaco, bez szablonu.',
+                  ctaLabel: 'Start od zera',
+                  onTap: () =>
+                      context.pushReplacement('/app/training/ongoing-workout'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
