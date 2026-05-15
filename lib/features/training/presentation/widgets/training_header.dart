@@ -6,11 +6,15 @@ class TrainingHeader extends StatelessWidget {
   const TrainingHeader({
     super.key,
     this.onAddTap,
+    this.addTooltip = 'Dodaj trening',
+    this.addLabel,
     this.activePlanName,
     this.onActiveTap,
   });
 
   final VoidCallback? onAddTap;
+  final String addTooltip;
+  final String? addLabel;
   final String? activePlanName;
   final VoidCallback? onActiveTap;
 
@@ -54,7 +58,11 @@ class TrainingHeader extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        _AddButton(onTap: onAddTap ?? () {}),
+        _AddButton(
+          tooltip: addTooltip,
+          label: addLabel,
+          onTap: onAddTap ?? () {},
+        ),
       ],
     );
   }
@@ -131,22 +139,54 @@ class _ActiveSessionButton extends StatelessWidget {
 }
 
 class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onTap});
+  const _AddButton({required this.tooltip, required this.onTap, this.label});
 
+  final String tooltip;
+  final String? label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppColors.primary,
+    final text = label?.trim();
+    final hasLabel = text != null && text.isNotEmpty;
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
+          child: Ink(
+            width: hasLabel ? null : 42,
+            height: 42,
+            padding: hasLabel
+                ? const EdgeInsets.symmetric(horizontal: 12)
+                : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                if (hasLabel) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
       ),
     );
   }

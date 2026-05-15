@@ -10,6 +10,7 @@ import '../widgets/training_header.dart';
 import '../widgets/training_history_tab.dart';
 import '../widgets/training_plans_tab.dart';
 import '../widgets/training_session_tab.dart';
+import 'create_plan_screen.dart';
 import 'ongoing_workout_screen.dart';
 
 enum _TrainingTab { sesja, plany, historia }
@@ -89,11 +90,17 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                       final active = sessionState.activeSession;
                       return TrainingHeader(
                         activePlanName: active?.planName,
+                        addTooltip: _activeTab == _TrainingTab.plany
+                            ? 'Utworz plan'
+                            : 'Dodaj trening',
+                        addLabel: _activeTab == _TrainingTab.plany
+                            ? 'Dodaj plan'
+                            : null,
                         onActiveTap: active == null
                             ? null
                             : () {
-                                final cubit =
-                                    context.read<TrainingSessionCubit>();
+                                final cubit = context
+                                    .read<TrainingSessionCubit>();
                                 context
                                     .push(
                                       '/app/training/ongoing-workout',
@@ -103,11 +110,22 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                                       ),
                                     )
                                     .then((_) {
-                                  if (context.mounted) cubit.refresh();
-                                });
+                                      if (context.mounted) cubit.refresh();
+                                    });
                               },
-                        onAddTap: () =>
-                            context.push('/app/training/pick-activity-type'),
+                        onAddTap: () {
+                          if (_activeTab == _TrainingTab.plany) {
+                            context.push(
+                              '/app/training/create-plan',
+                              extra: CreatePlanArgs(
+                                cubit: context.read<TrainingPlansCubit>(),
+                              ),
+                            );
+                            return;
+                          }
+
+                          context.push('/app/training/pick-activity-type');
+                        },
                       );
                     },
                   ),
