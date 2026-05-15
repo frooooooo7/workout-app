@@ -13,9 +13,15 @@ import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
+import '../../features/training/data/offline_first_training_session_repository.dart';
+import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
+import '../../features/training/data/sync/training_session_sync_engine.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
+import '../../features/training/data/training_session_remote_data_source.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
+import '../../features/training/domain/repositories/training_session_repository.dart';
+import '../../features/training/domain/services/rest_timer_scheduler.dart';
 
 class ServiceLocator {
   ServiceLocator._();
@@ -25,6 +31,9 @@ class ServiceLocator {
   static late final AuthRepository authRepository;
   static late final ExerciseRemoteDataSource _remoteDataSource;
   static late final TrainingPlanRemoteDataSource _trainingPlanRemoteDataSource;
+  static late final TrainingSessionRemoteDataSource
+      _trainingSessionRemoteDataSource;
+  static late final RestTimerScheduler restTimerScheduler;
 
   // User-scoped repository: recreated on login/logout via [currentUser] listener.
   static ExerciseRepository? _exerciseRepository;
@@ -32,6 +41,8 @@ class ServiceLocator {
   static ExerciseSyncEngine? _exerciseSyncEngine;
   static TrainingPlanRepository? _trainingPlanRepository;
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
+  static TrainingSessionRepository? _trainingSessionRepository;
+  static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
 
   /// Serialized dispose/setup so DB close never races a new user open.
   static Future<void>? _exerciseScopeFuture;
@@ -54,6 +65,14 @@ class ServiceLocator {
     return _trainingPlanRepository!;
   }
 
+  static TrainingSessionRepository get trainingSessionRepository {
+    assert(
+      _trainingSessionRepository != null,
+      'trainingSessionRepository is not initialized. Ensure the user is logged in.',
+    );
+    return _trainingSessionRepository!;
+  }
+
   /// Holds the currently authenticated user. Survives tab switches.
   static final currentUser = ValueNotifier<AuthUser?>(null);
 
@@ -66,6 +85,9 @@ class ServiceLocator {
     authRepository = AuthRepository(apiClient);
     _remoteDataSource = ExerciseRemoteDataSource(apiClient);
     _trainingPlanRemoteDataSource = TrainingPlanRemoteDataSource(apiClient);
+    _trainingSessionRemoteDataSource =
+        TrainingSessionRemoteDataSource(apiClient);
+    restTimerScheduler = RestTimerNotificationScheduler();
 
     currentUser.addListener(_onUserChanged);
   }
@@ -84,6 +106,9 @@ class ServiceLocator {
   static Future<void> _disposeExerciseScoped() async {
     _exerciseSyncEngine?.stop();
     _trainingPlanSyncEngine?.stop();
+    _trainingSessionSyncEngine?.stop();
+    _trainingSessionSyncEngine = null;
+    _trainingSessionRepository = null;
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
     _exerciseSyncEngine = null;
@@ -110,7 +135,16 @@ class ServiceLocator {
       localDb: _exerciseDatabase!,
       syncEngine: _trainingPlanSyncEngine!,
     );
+    _trainingSessionSyncEngine = TrainingSessionSyncEngine(
+      remote: _trainingSessionRemoteDataSource,
+      localDb: _exerciseDatabase!,
+    );
+    _trainingSessionRepository = OfflineFirstTrainingSessionRepository(
+      localDb: _exerciseDatabase!,
+      syncEngine: _trainingSessionSyncEngine!,
+    );
     _exerciseSyncEngine!.scheduleBootstrap();
     _trainingPlanSyncEngine!.scheduleBootstrap();
+    _trainingSessionSyncEngine!.scheduleBootstrap();
   }
 }

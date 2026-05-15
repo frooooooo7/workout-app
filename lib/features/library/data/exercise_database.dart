@@ -13,10 +13,8 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// [directoryOverride] — absolute directory for the DB file (tests only).
 class ExerciseDatabase {
-  ExerciseDatabase(
-    this._dbName, {
-    String? directoryOverride,
-  }) : _directoryOverride = directoryOverride;
+  ExerciseDatabase(this._dbName, {String? directoryOverride})
+    : _directoryOverride = directoryOverride;
 
   final String _dbName;
   final String? _directoryOverride;
@@ -27,12 +25,15 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 4;
+  static const _dbVersion = 6;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
   static const tableTrainingPlanExercises = 'training_plan_exercises';
   static const tableTrainingPlanSets = 'training_plan_sets';
+  static const tableTrainingSessions = 'training_sessions';
+  static const tableTrainingSessionExercises = 'training_session_exercises';
+  static const tableTrainingSessionSets = 'training_session_sets';
 
   static const _tmpV3Table = 'exercises_v3_tmp';
 
@@ -60,16 +61,13 @@ class ExerciseDatabase {
   }
 
   void _maybeCompleteCloseWait() {
-    if (_activeOps == 0 &&
-        _closeWaiter != null &&
-        !_closeWaiter!.isCompleted) {
+    if (_activeOps == 0 && _closeWaiter != null && !_closeWaiter!.isCompleted) {
       _closeWaiter!.complete();
     }
   }
 
   Future<Database> _open() async {
-    final dbPath =
-        _directoryOverride ?? await getDatabasesPath();
+    final dbPath = _directoryOverride ?? await getDatabasesPath();
     final path = p.join(dbPath, _dbName);
 
     return openDatabase(
@@ -117,6 +115,7 @@ class ExerciseDatabase {
     ''');
     await _createOutboxLog(db);
     await _createTrainingPlanTables(db);
+    await _createTrainingSessionTables(db);
   }
 
   Future<void> _createTrainingPlanTables(Database db) async {
@@ -155,6 +154,59 @@ class ExerciseDatabase {
         rir TEXT,
         tempo TEXT,
         FOREIGN KEY(plan_exercise_local_id) REFERENCES $tableTrainingPlanExercises(local_id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createTrainingSessionTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingSessions (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        plan_local_id TEXT,
+        plan_server_id TEXT,
+        plan_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        note TEXT,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        pending_op TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingSessionExercises (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        session_local_id TEXT NOT NULL,
+        exercise_local_id TEXT,
+        exercise_server_id TEXT,
+        exercise_name TEXT NOT NULL,
+        exercise_muscles TEXT NOT NULL,
+        exercise_category TEXT NOT NULL,
+        exercise_image_url TEXT,
+        position INTEGER NOT NULL,
+        FOREIGN KEY(session_local_id) REFERENCES $tableTrainingSessions(local_id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingSessionSets (
+        local_id TEXT PRIMARY KEY NOT NULL,
+        server_id TEXT UNIQUE,
+        session_exercise_local_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        planned_weight TEXT,
+        planned_reps TEXT NOT NULL DEFAULT '',
+        planned_rir TEXT,
+        planned_tempo TEXT,
+        actual_weight TEXT,
+        actual_reps TEXT,
+        actual_rir TEXT,
+        actual_tempo TEXT,
+        completed INTEGER NOT NULL DEFAULT 0,
+        completed_at INTEGER,
+        FOREIGN KEY(session_exercise_local_id) REFERENCES $tableTrainingSessionExercises(local_id) ON DELETE CASCADE
       )
     ''');
   }
@@ -213,15 +265,21 @@ class ExerciseDatabase {
       await db.execute(
         'ALTER TABLE $tableExercises ADD COLUMN description TEXT NOT NULL DEFAULT ""',
       );
-      await db.execute(
-        'ALTER TABLE $tableExercises ADD COLUMN image_url TEXT',
-      );
+      await db.execute('ALTER TABLE $tableExercises ADD COLUMN image_url TEXT');
     }
     if (oldVersion < 3) {
       await _migrateToV3(db);
     }
     if (oldVersion < 4) {
       await _createTrainingPlanTables(db);
+    }
+    if (oldVersion < 5) {
+      await _createTrainingSessionTables(db);
+    }
+    if (oldVersion >= 5 && oldVersion < 6) {
+      await db.execute(
+        'ALTER TABLE $tableTrainingSessionSets ADD COLUMN actual_tempo TEXT',
+      );
     }
   }
 

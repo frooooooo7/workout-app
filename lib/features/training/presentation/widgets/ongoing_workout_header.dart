@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
 class OngoingWorkoutHeader extends StatelessWidget {
-  const OngoingWorkoutHeader({super.key});
+  const OngoingWorkoutHeader({
+    super.key,
+    required this.elapsed,
+    required this.onFinish,
+    required this.onBack,
+  });
+
+  final String elapsed;
+  final VoidCallback onFinish;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +22,6 @@ class OngoingWorkoutHeader extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Przycisk wstecz
           Positioned(
             left: 16,
             child: Material(
@@ -22,11 +29,11 @@ class OngoingWorkoutHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: () => context.pop(),
-                child: SizedBox(
+                onTap: onBack,
+                child: const SizedBox(
                   width: 44,
                   height: 44,
-                  child: const Icon(
+                  child: Icon(
                     Icons.arrow_back_ios_new_rounded,
                     color: AppColors.textSecondary,
                     size: 20,
@@ -35,8 +42,6 @@ class OngoingWorkoutHeader extends StatelessWidget {
               ),
             ),
           ),
-          
-          // Środek - tytuł i stoper
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -61,9 +66,9 @@ class OngoingWorkoutHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    '00:00:00', // TODO: Podłączyć rzeczywisty licznik czasu
-                    style: TextStyle(
+                  Text(
+                    elapsed,
+                    style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 13,
                       fontFeatures: [FontFeature.tabularFigures()],
@@ -74,8 +79,6 @@ class OngoingWorkoutHeader extends StatelessWidget {
               ),
             ],
           ),
-
-          // Prawa strona - Zakończ i opcje
           Positioned(
             right: 16,
             child: Row(
@@ -86,40 +89,18 @@ class OngoingWorkoutHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
-                    onTap: () {
-                      // TODO: Zaimplementować akcję zakończenia treningu
-                    },
+                    onTap: onFinish,
                     child: Container(
                       height: 44,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       alignment: Alignment.center,
                       child: const Text(
-                        'Zakończ',
+                        'Zakoncz',
                         style: TextStyle(
                           color: AppColors.primaryVariant,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Material(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () {
-                      // TODO: Otworzyć menu opcji treningu
-                    },
-                    child: SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: const Icon(
-                        Icons.more_horiz_rounded,
-                        color: AppColors.textSecondary,
-                        size: 24,
                       ),
                     ),
                   ),

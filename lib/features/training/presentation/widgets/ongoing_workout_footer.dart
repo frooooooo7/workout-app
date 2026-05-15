@@ -3,7 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class OngoingWorkoutFooter extends StatelessWidget {
-  const OngoingWorkoutFooter({super.key});
+  const OngoingWorkoutFooter({
+    super.key,
+    required this.onRestTap,
+    required this.onAddExerciseTap,
+    this.restLabel = 'Odpoczynek',
+    this.restActive = false,
+  });
+
+  final VoidCallback onRestTap;
+  final VoidCallback onAddExerciseTap;
+  final String restLabel;
+  final bool restActive;
 
   @override
   Widget build(BuildContext context) {
@@ -19,18 +30,17 @@ class OngoingWorkoutFooter extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildFooterButton(
-            icon: Icons.timer_outlined,
-            label: 'Odpoczynek',
-            onTap: () {
-              // TODO: Pokaż kontrolki stopera odpoczynku
-            },
+            icon: restActive
+                ? Icons.stop_circle_outlined
+                : Icons.timer_outlined,
+            label: restLabel,
+            onTap: onRestTap,
+            highlighted: restActive,
           ),
           _buildFooterButton(
             icon: Icons.add_rounded,
             label: 'Dodaj ćwiczenie',
-            onTap: () {
-              // TODO: Otwórz wyszukiwarkę ćwiczeń
-            },
+            onTap: onAddExerciseTap,
           ),
         ],
       ),
@@ -41,6 +51,7 @@ class OngoingWorkoutFooter extends StatelessWidget {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool highlighted = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -56,22 +67,24 @@ class OngoingWorkoutFooter extends StatelessWidget {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: highlighted ? AppColors.primary : AppColors.surface,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Icon(
                   icon,
-                  color: AppColors.textSecondary,
+                  color: highlighted ? Colors.white : AppColors.textSecondary,
                   size: 28,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 label,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: highlighted
+                      ? AppColors.primaryVariant
+                      : AppColors.textSecondary,
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
             ],

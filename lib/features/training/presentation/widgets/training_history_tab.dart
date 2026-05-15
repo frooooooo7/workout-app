@@ -6,17 +6,12 @@ class TrainingHistoryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _EmptyState(
-            icon: Icons.history_rounded,
-            title: 'Brak historii',
-            subtitle: 'Twoje ukończone treningi pojawią się tutaj.',
-          ),
-        ],
+    return const SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
+      child: _EmptyState(
+        icon: Icons.history_rounded,
+        title: 'Brak historii',
+        subtitle: 'Historia treningow pojawi sie tutaj w przyszlej wersji.',
       ),
     );
   }

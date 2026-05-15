@@ -4,40 +4,51 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
+import '../bloc/training_session_cubit.dart';
 import '../widgets/plan_days_list.dart';
 import '../widgets/plan_details_stats_card.dart';
 import 'create_plan_screen.dart';
+import 'ongoing_workout_screen.dart';
 
 class PlanDetailsArgs {
   final CustomTrainingPlan plan;
   final TrainingPlansCubit cubit;
+  final TrainingSessionCubit sessionCubit;
 
-  const PlanDetailsArgs({required this.plan, required this.cubit});
+  const PlanDetailsArgs({
+    required this.plan,
+    required this.cubit,
+    required this.sessionCubit,
+  });
 }
 
 class PlanDetailsScreen extends StatelessWidget {
-  const PlanDetailsScreen({
-    super.key,
-    required this.args,
-  });
+  const PlanDetailsScreen({super.key, required this.args});
 
   final PlanDetailsArgs args;
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: args.cubit,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: args.cubit),
+        BlocProvider.value(value: args.sessionCubit),
+      ],
       child: BlocBuilder<TrainingPlansCubit, TrainingPlansState>(
         builder: (context, state) {
-          final currentPlan = state.plans.cast<CustomTrainingPlan?>().firstWhere(
-                (p) => p?.id == args.plan.id,
-                orElse: () => null,
-              );
+          final currentPlan = state.plans
+              .cast<CustomTrainingPlan?>()
+              .firstWhere((p) => p?.id == args.plan.id, orElse: () => null);
 
           if (currentPlan == null) {
             return const Scaffold(
               backgroundColor: AppColors.background,
-              body: Center(child: Text('Nie znaleziono planu', style: TextStyle(color: Colors.white))),
+              body: Center(
+                child: Text(
+                  'Nie znaleziono planu',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
             );
           }
 
@@ -74,6 +85,58 @@ class PlanDetailsScreen extends StatelessWidget {
                 ),
               ],
             ),
+            bottomNavigationBar: SafeArea(
+              minimum: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final sessionCubit = context.read<TrainingSessionCubit>();
+                    final session = await sessionCubit.startFromPlan(
+                      currentPlan,
+                    );
+                    if (!context.mounted) return;
+                    if (session == null) {
+                      final conflict = sessionCubit.state.activeConflict;
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Masz juz aktywna sesje. Wznow ja albo zakoncz przed startem nowej.',
+                          ),
+                        ),
+                      );
+                      if (conflict != null) {
+                        context.push(
+                          '/app/training/ongoing-workout',
+                          extra: OngoingWorkoutArgs(
+                            initialSession: conflict,
+                            sessionCubit: sessionCubit,
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    context.push(
+                      '/app/training/ongoing-workout',
+                      extra: OngoingWorkoutArgs(
+                        initialSession: session,
+                        sessionCubit: sessionCubit,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Rozpocznij trening'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             body: SafeArea(
               child: CustomScrollView(
                 slivers: [
@@ -84,7 +147,8 @@ class PlanDetailsScreen extends StatelessWidget {
                         if (currentPlan.selectedDays.isNotEmpty)
                           PlanDaysList(selectedDays: currentPlan.selectedDays),
                         PlanDetailsStatsCard(plan: currentPlan),
-                        if (currentPlan.note != null && currentPlan.note!.isNotEmpty)
+                        if (currentPlan.note != null &&
+                            currentPlan.note!.isNotEmpty)
                           _NotesSection(note: currentPlan.note!),
                         const Padding(
                           padding: EdgeInsets.fromLTRB(24, 24, 24, 12),
@@ -101,19 +165,20 @@ class PlanDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final planExercise = currentPlan.exercises[index];
-                        final hasRir = planExercise.sets.any((s) => s.rir != null && s.rir!.isNotEmpty);
-                        final hasTempo = planExercise.sets.any((s) => s.tempo != null && s.tempo!.isNotEmpty);
-                        return _ExerciseCard(
-                          planExercise: planExercise,
-                          hasRir: hasRir,
-                          hasTempo: hasTempo,
-                        );
-                      },
-                      childCount: currentPlan.exercises.length,
-                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final planExercise = currentPlan.exercises[index];
+                      final hasRir = planExercise.sets.any(
+                        (s) => s.rir != null && s.rir!.isNotEmpty,
+                      );
+                      final hasTempo = planExercise.sets.any(
+                        (s) => s.tempo != null && s.tempo!.isNotEmpty,
+                      );
+                      return _ExerciseCard(
+                        planExercise: planExercise,
+                        hasRir: hasRir,
+                        hasTempo: hasTempo,
+                      );
+                    }, childCount: currentPlan.exercises.length),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
@@ -208,13 +273,19 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     borderRadius: BorderRadius.circular(10),
                     image: planExercise.exercise.imageUrl != null
                         ? DecorationImage(
-                            image: NetworkImage(planExercise.exercise.imageUrl!),
+                            image: NetworkImage(
+                              planExercise.exercise.imageUrl!,
+                            ),
                             fit: BoxFit.cover,
                           )
                         : null,
                   ),
                   child: planExercise.exercise.imageUrl == null
-                      ? const Icon(Icons.fitness_center, color: AppColors.textMuted, size: 22)
+                      ? const Icon(
+                          Icons.fitness_center,
+                          color: AppColors.textMuted,
+                          size: 22,
+                        )
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -232,7 +303,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                       ),
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
@@ -252,7 +326,9 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 IconButton(
                   onPressed: () => setState(() => _expanded = !_expanded),
                   icon: Icon(
-                    _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -262,7 +338,11 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: () {},
-                  icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 18),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: AppColors.textSecondary,
+                    size: 18,
+                  ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -281,36 +361,71 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     children: [
                       const SizedBox(
                         width: 40,
-                        child: Text('SERIA',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                        child: Text(
+                          'SERIA',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       const Expanded(
-                        child: Text('CIĘŻAR',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                        child: Text(
+                          'CIĘŻAR',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       const Expanded(
-                        child: Text('POWT.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                        child: Text(
+                          'POWT.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
                       ),
                       if (hasRir) ...[
                         const SizedBox(width: 8),
                         const Expanded(
-                          child: Text('RIR',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                          child: Text(
+                            'RIR',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
                         ),
                       ],
                       if (hasTempo) ...[
                         const SizedBox(width: 8),
                         const Expanded(
-                          child: Text('TEMPO',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+                          child: Text(
+                            'TEMPO',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -340,9 +455,15 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              set.weight != null && set.weight!.isNotEmpty ? '${set.weight} kg' : '-',
+                              set.weight != null && set.weight!.isNotEmpty
+                                  ? '${set.weight} kg'
+                                  : '-',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -350,16 +471,26 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                             child: Text(
                               set.reps.isNotEmpty ? set.reps : '-',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           if (hasRir) ...[
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                set.rir != null && set.rir!.isNotEmpty ? set.rir! : '-',
+                                set.rir != null && set.rir!.isNotEmpty
+                                    ? set.rir!
+                                    : '-',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -367,9 +498,15 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                set.tempo != null && set.tempo!.isNotEmpty ? set.tempo! : '-',
+                                set.tempo != null && set.tempo!.isNotEmpty
+                                    ? set.tempo!
+                                    : '-',
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
