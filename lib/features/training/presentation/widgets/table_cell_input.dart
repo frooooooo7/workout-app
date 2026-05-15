@@ -8,11 +8,13 @@ class TableCellInput extends StatefulWidget {
     required this.onChanged,
     this.hint = '',
     this.suffixText,
+    this.keyboardType = const TextInputType.numberWithOptions(decimal: true),
   });
 
   final String value;
   final String hint;
   final String? suffixText;
+  final TextInputType keyboardType;
   final ValueChanged<String> onChanged;
 
   @override
@@ -38,7 +40,9 @@ class _TableCellInputState extends State<TableCellInput> {
       if (selection.isValid && selection.end <= _controller.text.length) {
         _controller.selection = selection;
       } else {
-        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+        _controller.selection = TextSelection.collapsed(
+          offset: _controller.text.length,
+        );
       }
     }
   }
@@ -54,7 +58,7 @@ class _TableCellInputState extends State<TableCellInput> {
     return TextField(
       controller: _controller,
       onChanged: widget.onChanged,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      keyboardType: widget.keyboardType,
       textAlign: TextAlign.center,
       style: const TextStyle(
         color: Colors.white,

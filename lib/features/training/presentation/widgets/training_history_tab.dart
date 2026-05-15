@@ -14,7 +14,8 @@ class TrainingHistoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => TrainingHistoryCubit(ServiceLocator.trainingHistoryRepository),
+      create: (_) =>
+          TrainingHistoryCubit(ServiceLocator.trainingHistoryRepository),
       child: const _TrainingHistoryView(),
     );
   }
@@ -104,9 +105,11 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
                     child: _EmptyState(
                       icon: Icons.history_rounded,
                       title: 'Brak historii',
-                      subtitle: 'Rozpocznij pierwszy trening, aby zobaczyć sesje.',
+                      subtitle:
+                          'Rozpocznij pierwszy trening, aby zobaczyć sesje.',
                       ctaLabel: 'Rozpocznij pierwszy trening',
-                      onTap: () => context.push('/app/training/pick-activity-type'),
+                      onTap: () =>
+                          context.push('/app/training/pick-activity-type'),
                     ),
                   ),
                 )
@@ -162,7 +165,8 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
                       '/app/training/history/${groupedItems[index].id}',
                     ),
                   ),
-                  if (index < groupedItems.length - 1) const SizedBox(height: 8),
+                  if (index < groupedItems.length - 1)
+                    const SizedBox(height: 8),
                 ],
               ],
             ),
@@ -192,7 +196,10 @@ class _FiltersBar extends StatelessWidget {
           TextField(
             decoration: const InputDecoration(
               hintText: 'Szukaj planu lub ćwiczenia',
-              prefixIcon: Icon(Icons.search_rounded, color: AppColors.textMuted),
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                color: AppColors.textMuted,
+              ),
             ),
             onChanged: context.read<TrainingHistoryCubit>().setQuery,
           ),
@@ -207,14 +214,16 @@ class _FiltersBar extends StatelessWidget {
                       _FilterChip(
                         label: 'Wszystkie',
                         selected: state.statusFilter == null,
-                        onTap: () =>
-                            context.read<TrainingHistoryCubit>().setStatusFilter(null),
+                        onTap: () => context
+                            .read<TrainingHistoryCubit>()
+                            .setStatusFilter(null),
                       ),
                       const SizedBox(width: 8),
                       _FilterChip(
                         label: 'Ukończone',
                         selected:
-                            state.statusFilter == TrainingSessionStatus.completed,
+                            state.statusFilter ==
+                            TrainingSessionStatus.completed,
                         onTap: () => context
                             .read<TrainingHistoryCubit>()
                             .setStatusFilter(TrainingSessionStatus.completed),
@@ -222,7 +231,8 @@ class _FiltersBar extends StatelessWidget {
                       const SizedBox(width: 8),
                       _FilterChip(
                         label: 'Aktywne',
-                        selected: state.statusFilter == TrainingSessionStatus.active,
+                        selected:
+                            state.statusFilter == TrainingSessionStatus.active,
                         onTap: () => context
                             .read<TrainingHistoryCubit>()
                             .setStatusFilter(TrainingSessionStatus.active),
@@ -231,7 +241,8 @@ class _FiltersBar extends StatelessWidget {
                       _FilterChip(
                         label: 'Anulowane',
                         selected:
-                            state.statusFilter == TrainingSessionStatus.cancelled,
+                            state.statusFilter ==
+                            TrainingSessionStatus.cancelled,
                         onTap: () => context
                             .read<TrainingHistoryCubit>()
                             .setStatusFilter(TrainingSessionStatus.cancelled),
@@ -242,14 +253,19 @@ class _FiltersBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               PopupMenuButton<String?>(
-                icon: const Icon(Icons.filter_alt_outlined,
-                    color: AppColors.textSecondary),
+                icon: const Icon(
+                  Icons.filter_alt_outlined,
+                  color: AppColors.textSecondary,
+                ),
                 color: AppColors.surface,
                 enabled: plans.isNotEmpty,
                 onSelected: (value) =>
                     context.read<TrainingHistoryCubit>().setPlanFilter(value),
                 itemBuilder: (_) => [
-                  const PopupMenuItem(value: null, child: Text('Wszystkie plany')),
+                  const PopupMenuItem(
+                    value: null,
+                    child: Text('Wszystkie plany'),
+                  ),
                   ...plans.entries.map(
                     (entry) => PopupMenuItem(
                       value: entry.key,
@@ -285,7 +301,9 @@ class _FilterChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withValues(alpha: 0.24) : AppColors.surface,
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.24)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -364,8 +382,11 @@ class _SessionCard extends StatelessWidget {
                   ),
                 ),
                 if (item.hasNote)
-                  const Icon(Icons.sticky_note_2_outlined,
-                      color: AppColors.textSecondary, size: 17),
+                  const Icon(
+                    Icons.sticky_note_2_outlined,
+                    color: AppColors.textSecondary,
+                    size: 17,
+                  ),
               ],
             ),
           ],
@@ -484,10 +505,7 @@ class _SkeletonBox extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   final String message;
   final Future<void> Function() onRetry;
@@ -500,7 +518,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 34),
+            const Icon(
+              Icons.wifi_off_rounded,
+              color: AppColors.textMuted,
+              size: 34,
+            ),
             const SizedBox(height: 14),
             Text(
               message,
@@ -578,10 +600,7 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          ElevatedButton(
-            onPressed: onTap,
-            child: Text(ctaLabel),
-          ),
+          ElevatedButton(onPressed: onTap, child: Text(ctaLabel)),
         ],
       ),
     );
@@ -618,8 +637,8 @@ String _formatDuration(int durationSec) {
   final duration = Duration(seconds: durationSec);
   final hours = duration.inHours;
   final minutes = duration.inMinutes.remainder(60);
-  if (hours == 0) return '${minutes} min';
-  return '${hours}h ${minutes} min';
+  if (hours == 0) return '$minutes min';
+  return '${hours}h $minutes min';
 }
 
 String _groupLabel(DateTime date) {

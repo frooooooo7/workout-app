@@ -36,7 +36,11 @@ class ExerciseSyncEngine {
 
   /// Fire-and-forget initial flush + pull after login.
   void scheduleBootstrap() {
-    unawaited(_bootstrap());
+    unawaited(
+      _bootstrap().catchError((_) {
+        /* bootstrap sync is best-effort */
+      }),
+    );
   }
 
   Future<void> _bootstrap() async {

@@ -53,6 +53,7 @@ Reguły dostępu do danych społecznościowych i profili implementuj przede wszy
 2. Przy layoutach: `flutter-build-responsive-layout`, `flutter-fix-layout-issues`.
 3. Przy testach: odpowiednie skille `flutter-add-widget-test`, `flutter-add-integration-test`, `dart-add-unit-test`.
 4. **Nie zakładaj**, że cały zakres Stravy jest w MVP — implementuj to, co wynika z bieżącego zadania i tego dokumentu; niejasności zapisuj w issue / backlogu lub doprecyzuj z zespołem / maintainerami projektu.
+5. **Komendy Flutter/Dart uruchamia użytkownik.** Agent nie powinien sam wykonywać komend typu `flutter test`, `flutter analyze`, `flutter run`, `flutter pub ...`, `dart ...` ani innych komend związanych z Flutter/Dart, ponieważ w środowisku Codex potrafią wisieć bez końca. Jeśli weryfikacja Flutter/Dart jest potrzebna, agent ma podać dokładną komendę użytkownikowi i poprosić o wklejenie outputu.
 
 ## Nazewnictwo repozytorium
 

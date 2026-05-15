@@ -8,6 +8,7 @@ import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
 import '../../features/training/presentation/screens/plan_details_screen.dart';
@@ -24,10 +25,23 @@ final appRootNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter buildRouter({
   required Future<AuthUser?> Function() resolveUser,
+  String initialLocation = '/splash',
 }) {
   return GoRouter(
     navigatorKey: appRootNavigatorKey,
-    initialLocation: '/splash',
+    initialLocation: initialLocation,
+    redirect: (_, state) async {
+      final isProtectedRoute = state.uri.path.startsWith('/app/');
+      if (!isProtectedRoute || ServiceLocator.currentUser.value != null) {
+        return null;
+      }
+
+      final user = await resolveUser();
+      if (user == null) return '/login';
+
+      ServiceLocator.currentUser.value = user;
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/splash',
@@ -87,7 +101,16 @@ GoRouter buildRouter({
                     parentNavigatorKey: appRootNavigatorKey,
                     name: 'ongoing-workout',
                     path: 'ongoing-workout',
-                    builder: (_, s) => const OngoingWorkoutScreen(),
+                    builder: (_, s) {
+                      final args = s.extra as OngoingWorkoutArgs?;
+                      return OngoingWorkoutScreen(args: args);
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'pick-training-plan',
+                    path: 'pick-plan',
+                    builder: (_, s) => const PickTrainingPlanScreen(),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,

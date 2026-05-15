@@ -23,7 +23,11 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
 
   void _scheduleSync() {
     if (_sync.isStopped) return;
-    unawaited(_sync.flush().then((_) => _sync.pull()));
+    unawaited(
+      _sync.flush().then((_) => _sync.pull()).catchError((_) {
+        /* background sync must never break the UI event loop */
+      }),
+    );
   }
 
   Future<Map<String, dynamic>?> _findRow(Database db, String id) async {

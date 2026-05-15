@@ -31,7 +31,11 @@ class TrainingPlanSyncEngine {
   void stop() => _stopped = true;
 
   void scheduleBootstrap() {
-    unawaited(_bootstrap());
+    unawaited(
+      _bootstrap().catchError((_) {
+        /* bootstrap sync is best-effort */
+      }),
+    );
   }
 
   Future<void> _bootstrap() async {
