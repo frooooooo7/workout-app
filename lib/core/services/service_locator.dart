@@ -13,8 +13,12 @@ import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
+import '../../features/training/data/offline_first_training_history_repository.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
+import '../../features/training/data/training_history_local_cache.dart';
+import '../../features/training/data/training_history_remote_data_source.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
+import '../../features/training/domain/repositories/training_history_repository.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 
 class ServiceLocator {
@@ -25,12 +29,14 @@ class ServiceLocator {
   static late final AuthRepository authRepository;
   static late final ExerciseRemoteDataSource _remoteDataSource;
   static late final TrainingPlanRemoteDataSource _trainingPlanRemoteDataSource;
+  static late final TrainingHistoryRemoteDataSource _trainingHistoryRemoteDataSource;
 
   // User-scoped repository: recreated on login/logout via [currentUser] listener.
   static ExerciseRepository? _exerciseRepository;
   static ExerciseDatabase? _exerciseDatabase;
   static ExerciseSyncEngine? _exerciseSyncEngine;
   static TrainingPlanRepository? _trainingPlanRepository;
+  static TrainingHistoryRepository? _trainingHistoryRepository;
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
 
   /// Serialized dispose/setup so DB close never races a new user open.
@@ -54,6 +60,14 @@ class ServiceLocator {
     return _trainingPlanRepository!;
   }
 
+  static TrainingHistoryRepository get trainingHistoryRepository {
+    assert(
+      _trainingHistoryRepository != null,
+      'trainingHistoryRepository is not initialized. Ensure the user is logged in.',
+    );
+    return _trainingHistoryRepository!;
+  }
+
   /// Holds the currently authenticated user. Survives tab switches.
   static final currentUser = ValueNotifier<AuthUser?>(null);
 
@@ -66,6 +80,7 @@ class ServiceLocator {
     authRepository = AuthRepository(apiClient);
     _remoteDataSource = ExerciseRemoteDataSource(apiClient);
     _trainingPlanRemoteDataSource = TrainingPlanRemoteDataSource(apiClient);
+    _trainingHistoryRemoteDataSource = TrainingHistoryRemoteDataSource(apiClient);
 
     currentUser.addListener(_onUserChanged);
   }
@@ -86,6 +101,7 @@ class ServiceLocator {
     _trainingPlanSyncEngine?.stop();
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
+    _trainingHistoryRepository = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
     await _exerciseDatabase?.close();
@@ -109,6 +125,10 @@ class ServiceLocator {
     _trainingPlanRepository = OfflineFirstTrainingPlanRepository(
       localDb: _exerciseDatabase!,
       syncEngine: _trainingPlanSyncEngine!,
+    );
+    _trainingHistoryRepository = OfflineFirstTrainingHistoryRepository(
+      remote: _trainingHistoryRemoteDataSource,
+      localCache: TrainingHistoryLocalCache(_exerciseDatabase!),
     );
     _exerciseSyncEngine!.scheduleBootstrap();
     _trainingPlanSyncEngine!.scheduleBootstrap();

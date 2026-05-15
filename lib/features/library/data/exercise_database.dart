@@ -27,12 +27,14 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 4;
+  static const _dbVersion = 5;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
   static const tableTrainingPlanExercises = 'training_plan_exercises';
   static const tableTrainingPlanSets = 'training_plan_sets';
+  static const tableTrainingHistoryListCache = 'training_history_list_cache';
+  static const tableTrainingHistoryDetailCache = 'training_history_detail_cache';
 
   static const _tmpV3Table = 'exercises_v3_tmp';
 
@@ -117,6 +119,7 @@ class ExerciseDatabase {
     ''');
     await _createOutboxLog(db);
     await _createTrainingPlanTables(db);
+    await _createTrainingHistoryTables(db);
   }
 
   Future<void> _createTrainingPlanTables(Database db) async {
@@ -155,6 +158,23 @@ class ExerciseDatabase {
         rir TEXT,
         tempo TEXT,
         FOREIGN KEY(plan_exercise_local_id) REFERENCES $tableTrainingPlanExercises(local_id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createTrainingHistoryTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingHistoryListCache (
+        cache_key TEXT PRIMARY KEY NOT NULL,
+        payload_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableTrainingHistoryDetailCache (
+        session_id TEXT PRIMARY KEY NOT NULL,
+        payload_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       )
     ''');
   }
@@ -222,6 +242,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 4) {
       await _createTrainingPlanTables(db);
+    }
+    if (oldVersion < 5) {
+      await _createTrainingHistoryTables(db);
     }
   }
 

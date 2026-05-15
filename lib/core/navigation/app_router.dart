@@ -11,6 +11,7 @@ import '../../features/training/presentation/screens/ongoing_workout_screen.dart
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
 import '../../features/training/presentation/screens/plan_details_screen.dart';
+import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
@@ -115,6 +116,18 @@ GoRouter buildRouter({
                     builder: (context, state) {
                       final args = state.extra as PlanDetailsArgs;
                       return PlanDetailsScreen(args: args);
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'training-session-details',
+                    path: 'history/:sessionId',
+                    builder: (context, state) {
+                      final sessionId = state.pathParameters['sessionId']!;
+                      return TrainingSessionDetailsScreen(
+                        sessionId: sessionId,
+                        repository: ServiceLocator.trainingHistoryRepository,
+                      );
                     },
                   ),
                 ],
