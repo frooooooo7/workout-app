@@ -56,20 +56,15 @@ class _TrainingSessionDetailsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('SZCZEGÓŁY SESJI'),
-      ),
+      appBar: AppBar(title: const Text('SZCZEGÓŁY SESJI')),
       body: SafeArea(
         child: _loading
             ? const Center(
                 child: CircularProgressIndicator(color: AppColors.primary),
               )
             : _error != null
-                ? _ErrorState(
-                    message: _error!,
-                    onRetry: _load,
-                  )
-                : _DetailContent(detail: _detail!),
+            ? _ErrorState(message: _error!, onRetry: _load)
+            : _DetailContent(detail: _detail!),
       ),
     );
   }
@@ -262,10 +257,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   final String message;
   final Future<void> Function() onRetry;
@@ -278,7 +270,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, color: AppColors.textMuted, size: 34),
+            const Icon(
+              Icons.wifi_off_rounded,
+              color: AppColors.textMuted,
+              size: 34,
+            ),
             const SizedBox(height: 14),
             Text(
               message,
@@ -316,8 +312,8 @@ String _formatDuration(int durationSec) {
   final duration = Duration(seconds: durationSec);
   final hours = duration.inHours;
   final minutes = duration.inMinutes.remainder(60);
-  if (hours == 0) return '${minutes} min';
-  return '${hours}h ${minutes} min';
+  if (hours == 0) return '$minutes min';
+  return '${hours}h $minutes min';
 }
 
 String _formatStatus(TrainingSessionStatus status) {
@@ -332,4 +328,3 @@ String _formatDate(DateTime date) {
   final local = date.toLocal();
   return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}.${local.year}';
 }
-

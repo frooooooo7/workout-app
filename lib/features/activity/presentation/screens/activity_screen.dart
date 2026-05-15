@@ -6,9 +6,9 @@ class ActivityScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: AppBar(title: Text('HISTORIA')),
-      body: SafeArea(child: TrainingHistoryTab()),
+    return Scaffold(
+      appBar: AppBar(title: const Text('HISTORIA')),
+      body: const SafeArea(child: TrainingHistoryTab()),
     );
   }
 }
