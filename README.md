@@ -31,3 +31,10 @@ A mobile application modeled on the functionalities of Strava, designed for trac
    ```bash
    flutter run
    ```
+
+## Project Structure
+
+The project follows a layered feature-first architecture:
+- **Presentation**: UI widgets, state management (BLoC/Cubit), pages.
+- **Domain**: Entities, use cases, repository contracts.
+- **Data**: Data sources (local/remote API), models, repository implementations.
