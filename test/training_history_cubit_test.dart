@@ -31,6 +31,44 @@ void main() {
 
       await cubit.close();
     });
+
+    test('handles viewMode toggling and calendar session loading', () async {
+      final repository = _FakeTrainingHistoryRepository(
+        firstPage: TrainingSessionPage(
+          items: [_session('s1')],
+          nextCursor: null,
+          hasMore: false,
+          isFromCache: false,
+        ),
+        secondPage: TrainingSessionPage(
+          items: [],
+          nextCursor: null,
+          hasMore: false,
+          isFromCache: false,
+        ),
+      );
+
+      final cubit = TrainingHistoryCubit(repository);
+      expect(cubit.state.viewMode, HistoryViewMode.list);
+
+      // Przełączenie widoku na kalendarz
+      cubit.toggleViewMode();
+      expect(cubit.state.viewMode, HistoryViewMode.calendar);
+      expect(cubit.state.isCalendarLoading, isTrue);
+
+      // Oczekiwanie na załadowanie danych kalendarza
+      await Future.delayed(Duration.zero);
+      expect(cubit.state.calendarSessions, isNotEmpty);
+      expect(cubit.state.calendarSessions.first.id, 's1');
+      expect(cubit.state.isCalendarLoading, isFalse);
+
+      // Zmiana miesiąca w przód
+      final initialMonth = cubit.state.focusedMonth;
+      cubit.changeMonth(1);
+      expect(cubit.state.focusedMonth.month, (initialMonth.month % 12) + 1);
+
+      await cubit.close();
+    });
   });
 }
 

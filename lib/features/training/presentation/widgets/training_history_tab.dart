@@ -7,6 +7,9 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/training_history_models.dart';
 import '../bloc/training_history_cubit.dart';
+import 'training_history_calendar_view.dart';
+import 'training_history_filters_bar.dart';
+import 'training_history_session_card.dart';
 
 class TrainingHistoryTab extends StatelessWidget {
   const TrainingHistoryTab({super.key});
@@ -65,7 +68,7 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
         if (state.loading) {
           return const _LoadingSkeleton();
         }
-        if (state.error != null && state.items.isEmpty) {
+        if (state.error != null && state.items.isEmpty && state.calendarSessions.isEmpty) {
           return _ErrorState(
             message: state.error!,
             onRetry: () => context.read<TrainingHistoryCubit>().retry(),
@@ -82,7 +85,7 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _HistoryFiltersHeaderDelegate(
-                  child: _FiltersBar(state: state),
+                  child: TrainingHistoryFiltersBar(state: state),
                 ),
               ),
               if (state.fromCache)
@@ -98,7 +101,11 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
                     ),
                   ),
                 ),
-              if (state.items.isEmpty)
+              if (state.viewMode == HistoryViewMode.calendar) ...[
+                SliverToBoxAdapter(
+                  child: TrainingHistoryCalendarView(state: state),
+                ),
+              ] else if (state.items.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
@@ -159,7 +166,7 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
             child: Column(
               children: [
                 for (var index = 0; index < groupedItems.length; index++) ...[
-                  _SessionCard(
+                  TrainingHistorySessionCard(
                     item: groupedItems[index],
                     onTap: () => context.push(
                       '/app/training/history/${groupedItems[index].id}',
@@ -175,131 +182,6 @@ class _TrainingHistoryViewState extends State<_TrainingHistoryView> {
       );
     });
     return sections;
-  }
-}
-
-class _FiltersBar extends StatelessWidget {
-  const _FiltersBar({required this.state});
-
-  final TrainingHistoryState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final plans = {
-      for (final item in state.items) item.plan.id: item.plan.name,
-    };
-    return Container(
-      color: AppColors.background,
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Szukaj planu lub ćwiczenia',
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              onChanged: context.read<TrainingHistoryCubit>().setQuery,
-            ),
-          ),
-          const SizedBox(width: 12),
-          PopupMenuButton<String?>(
-            icon: Icon(
-              Icons.filter_alt_outlined,
-              color: state.planFilter != null
-                  ? AppColors.primaryVariant
-                  : AppColors.textSecondary,
-            ),
-            color: AppColors.surface,
-            enabled: plans.isNotEmpty,
-            onSelected: (value) =>
-                context.read<TrainingHistoryCubit>().setPlanFilter(value),
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: null,
-                child: Text('Wszystkie plany'),
-              ),
-              ...plans.entries.map(
-                (entry) => PopupMenuItem(
-                  value: entry.key,
-                  child: Text(entry.value),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.item, required this.onTap});
-
-  final TrainingSessionListItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item.plan.name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${_formatDuration(item.durationSec)} · ${item.exercisesCount} ćw. · ${item.completedSetsCount} serii',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12.5,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.progressHighlight?.label ?? 'Brak progresu',
-                    style: TextStyle(
-                      color: item.progressHighlight == null
-                          ? AppColors.textMuted
-                          : AppColors.success,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                if (item.hasNote)
-                  const Icon(
-                    Icons.sticky_note_2_outlined,
-                    color: AppColors.textSecondary,
-                    size: 17,
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -344,6 +226,8 @@ class _LoadingSkeleton extends StatelessWidget {
         Row(
           children: const [
             Expanded(child: _SkeletonBox(height: 44)),
+            SizedBox(width: 12),
+            _SkeletonBox(height: 44, width: 44),
             SizedBox(width: 12),
             _SkeletonBox(height: 44, width: 44),
           ],
@@ -507,14 +391,6 @@ class _HistoryFiltersHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _HistoryFiltersHeaderDelegate oldDelegate) {
     return oldDelegate.child != child;
   }
-}
-
-String _formatDuration(int durationSec) {
-  final duration = Duration(seconds: durationSec);
-  final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60);
-  if (hours == 0) return '$minutes min';
-  return '${hours}h $minutes min';
 }
 
 String _groupLabel(DateTime date) {
