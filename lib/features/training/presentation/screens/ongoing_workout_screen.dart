@@ -163,6 +163,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                     elapsed: _elapsedLabel,
                     onFinish: () => _finish(context, session),
                     onBack: () => _leaveWorkout(context),
+                    onCancel: () => _cancelWorkout(context, session),
                   ),
                   OngoingWorkoutProgressBar(
                     currentIndex: _currentExerciseIndex,
@@ -284,6 +285,39 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (!context.mounted) return;
     setState(() => _allowPop = true);
     context.pop();
+  }
+
+  Future<void> _cancelWorkout(BuildContext context, TrainingSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Odrzucić trening?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Czy na pewno chcesz odrzucić ten trening? Wszystkie zapisane postępy zostaną utracone.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Anuluj', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Odrzuć', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final cubit = context.read<TrainingSessionCubit>();
+      _saveDebounce?.cancel();
+      await cubit.cancel(session.id);
+      if (!context.mounted) return;
+      setState(() => _allowPop = true);
+      context.pop();
+    }
   }
 
   Future<void> _addExerciseToSession(BuildContext context) async {

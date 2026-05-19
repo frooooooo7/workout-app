@@ -14,7 +14,6 @@ class TrainingHistoryState {
     this.error,
     this.nextCursor,
     this.hasMore = true,
-    this.statusFilter,
     this.planFilter,
     this.query = '',
     this.fromCache = false,
@@ -27,7 +26,6 @@ class TrainingHistoryState {
   final String? error;
   final String? nextCursor;
   final bool hasMore;
-  final TrainingSessionStatus? statusFilter;
   final String? planFilter;
   final String query;
   final bool fromCache;
@@ -42,8 +40,6 @@ class TrainingHistoryState {
     String? nextCursor,
     bool clearNextCursor = false,
     bool? hasMore,
-    TrainingSessionStatus? statusFilter,
-    bool clearStatusFilter = false,
     String? planFilter,
     bool clearPlanFilter = false,
     String? query,
@@ -57,8 +53,6 @@ class TrainingHistoryState {
       error: clearError ? null : (error ?? this.error),
       nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
       hasMore: hasMore ?? this.hasMore,
-      statusFilter:
-          clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
       planFilter: clearPlanFilter ? null : (planFilter ?? this.planFilter),
       query: query ?? this.query,
       fromCache: fromCache ?? this.fromCache,
@@ -88,11 +82,6 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
 
   Future<void> retry() => _fetchInitialPage(showErrorStateWhenEmpty: true);
 
-  void setStatusFilter(TrainingSessionStatus? status) {
-    emit(state.copyWith(statusFilter: status, clearError: true));
-    unawaited(_fetchInitialPage(showErrorStateWhenEmpty: true));
-  }
-
   void setPlanFilter(String? planId) {
     emit(state.copyWith(planFilter: planId, clearError: true));
     unawaited(_fetchInitialPage(showErrorStateWhenEmpty: true));
@@ -113,7 +102,7 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
       final page = await _repository.getSessions(
         cursor: state.nextCursor,
         limit: 20,
-        status: state.statusFilter,
+        status: TrainingSessionStatus.completed,
         planId: state.planFilter,
         query: state.query,
       );
@@ -145,7 +134,7 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
     try {
       final page = await _repository.getSessions(
         limit: 20,
-        status: state.statusFilter,
+        status: TrainingSessionStatus.completed,
         planId: state.planFilter,
         query: state.query,
       );

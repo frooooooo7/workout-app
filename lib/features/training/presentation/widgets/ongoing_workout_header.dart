@@ -8,11 +8,13 @@ class OngoingWorkoutHeader extends StatelessWidget {
     required this.elapsed,
     required this.onFinish,
     required this.onBack,
+    this.onCancel,
   });
 
   final String elapsed;
   final VoidCallback onFinish;
   final VoidCallback onBack;
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +107,30 @@ class OngoingWorkoutHeader extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onCancel != null) ...[
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    color: AppColors.surface,
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: AppColors.textSecondary,
+                    ),
+                    onSelected: (value) {
+                      if (value == 'cancel') {
+                        onCancel!();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'cancel',
+                        child: Text(
+                          'Odrzuć trening',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

@@ -191,132 +191,46 @@ class _FiltersBar extends StatelessWidget {
     return Container(
       color: AppColors.background,
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 12),
-      child: Column(
+      child: Row(
         children: [
-          TextField(
-            decoration: const InputDecoration(
-              hintText: 'Szukaj planu lub ćwiczenia',
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: AppColors.textMuted,
+          Expanded(
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Szukaj planu lub ćwiczenia',
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: AppColors.textMuted,
+                ),
               ),
+              onChanged: context.read<TrainingHistoryCubit>().setQuery,
             ),
-            onChanged: context.read<TrainingHistoryCubit>().setQuery,
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FilterChip(
-                        label: 'Wszystkie',
-                        selected: state.statusFilter == null,
-                        onTap: () => context
-                            .read<TrainingHistoryCubit>()
-                            .setStatusFilter(null),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'Ukończone',
-                        selected:
-                            state.statusFilter ==
-                            TrainingSessionStatus.completed,
-                        onTap: () => context
-                            .read<TrainingHistoryCubit>()
-                            .setStatusFilter(TrainingSessionStatus.completed),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'Aktywne',
-                        selected:
-                            state.statusFilter == TrainingSessionStatus.active,
-                        onTap: () => context
-                            .read<TrainingHistoryCubit>()
-                            .setStatusFilter(TrainingSessionStatus.active),
-                      ),
-                      const SizedBox(width: 8),
-                      _FilterChip(
-                        label: 'Anulowane',
-                        selected:
-                            state.statusFilter ==
-                            TrainingSessionStatus.cancelled,
-                        onTap: () => context
-                            .read<TrainingHistoryCubit>()
-                            .setStatusFilter(TrainingSessionStatus.cancelled),
-                      ),
-                    ],
-                  ),
-                ),
+          const SizedBox(width: 12),
+          PopupMenuButton<String?>(
+            icon: Icon(
+              Icons.filter_alt_outlined,
+              color: state.planFilter != null
+                  ? AppColors.primaryVariant
+                  : AppColors.textSecondary,
+            ),
+            color: AppColors.surface,
+            enabled: plans.isNotEmpty,
+            onSelected: (value) =>
+                context.read<TrainingHistoryCubit>().setPlanFilter(value),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: null,
+                child: Text('Wszystkie plany'),
               ),
-              const SizedBox(width: 8),
-              PopupMenuButton<String?>(
-                icon: const Icon(
-                  Icons.filter_alt_outlined,
-                  color: AppColors.textSecondary,
+              ...plans.entries.map(
+                (entry) => PopupMenuItem(
+                  value: entry.key,
+                  child: Text(entry.value),
                 ),
-                color: AppColors.surface,
-                enabled: plans.isNotEmpty,
-                onSelected: (value) =>
-                    context.read<TrainingHistoryCubit>().setPlanFilter(value),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: null,
-                    child: Text('Wszystkie plany'),
-                  ),
-                  ...plans.entries.map(
-                    (entry) => PopupMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primary.withValues(alpha: 0.24)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? AppColors.primary : AppColors.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }
@@ -343,20 +257,13 @@ class _SessionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.plan.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                _StatusChip(status: item.status),
-              ],
+            Text(
+              item.plan.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -390,37 +297,6 @@ class _SessionCard extends StatelessWidget {
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final TrainingSessionStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      TrainingSessionStatus.completed => ('Ukończony', AppColors.success),
-      TrainingSessionStatus.cancelled => ('Anulowany', const Color(0xFFFF8A65)),
-      TrainingSessionStatus.active => ('Aktywny', AppColors.primary),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -465,13 +341,11 @@ class _LoadingSkeleton extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
       children: [
-        const _SkeletonBox(height: 44),
-        const SizedBox(height: 8),
         Row(
           children: const [
-            Expanded(child: _SkeletonBox(height: 32)),
-            SizedBox(width: 8),
-            Expanded(child: _SkeletonBox(height: 32)),
+            Expanded(child: _SkeletonBox(height: 44)),
+            SizedBox(width: 12),
+            _SkeletonBox(height: 44, width: 44),
           ],
         ),
         const SizedBox(height: 16),
@@ -488,14 +362,16 @@ class _LoadingSkeleton extends StatelessWidget {
 }
 
 class _SkeletonBox extends StatelessWidget {
-  const _SkeletonBox({required this.height});
+  const _SkeletonBox({required this.height, this.width});
 
   final double height;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: height,
+      width: width,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -613,10 +489,10 @@ class _HistoryFiltersHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
 
   @override
-  double get minExtent => 116;
+  double get minExtent => 70;
 
   @override
-  double get maxExtent => 116;
+  double get maxExtent => 70;
 
   @override
   Widget build(

@@ -47,9 +47,9 @@ class AppShell extends StatelessWidget {
                 label: 'Trening',
               ),
               NavigationDestination(
-                icon: Icon(Icons.history_outlined),
-                selectedIcon: Icon(Icons.history_rounded),
-                label: 'Historia',
+                icon: Icon(Icons.timeline_outlined),
+                selectedIcon: Icon(Icons.timeline_rounded),
+                label: 'Aktywność',
               ),
               NavigationDestination(
                 icon: Icon(Icons.menu_book_outlined),
