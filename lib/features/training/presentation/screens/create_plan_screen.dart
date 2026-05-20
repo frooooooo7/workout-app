@@ -12,14 +12,24 @@ import '../bloc/training_plans_cubit.dart';
 class CreatePlanArgs {
   final TrainingPlansCubit cubit;
   final CustomTrainingPlan? existingPlan;
+  final List<int> initialSelectedDays;
 
-  const CreatePlanArgs({required this.cubit, this.existingPlan});
+  const CreatePlanArgs({
+    required this.cubit,
+    this.existingPlan,
+    this.initialSelectedDays = const [],
+  });
 }
 
 class CreatePlanScreen extends StatefulWidget {
-  const CreatePlanScreen({super.key, this.existingPlan});
+  const CreatePlanScreen({
+    super.key,
+    this.existingPlan,
+    this.initialSelectedDays = const [],
+  });
 
   final CustomTrainingPlan? existingPlan;
+  final List<int> initialSelectedDays;
 
   @override
   State<CreatePlanScreen> createState() => _CreatePlanScreenState();
@@ -43,6 +53,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       _showNotes = widget.existingPlan!.note?.isNotEmpty == true;
       _exercises = List.from(widget.existingPlan!.exercises);
       _selectedDays = List.from(widget.existingPlan!.selectedDays);
+    } else {
+      _selectedDays = List.from(widget.initialSelectedDays);
     }
   }
 
@@ -257,10 +269,14 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(7, (index) {
-                  final isSelected = _selectedDays.contains(index + 1);
+                  final actualDay = index + 1;
+                  final isSelected = _selectedDays.contains(actualDay);
                   return GestureDetector(
                     onTap: () => _toggleDay(index),
                     child: Container(
+                      key: ValueKey(
+                        'create-plan-day-$actualDay-${isSelected ? 'selected' : 'idle'}',
+                      ),
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(

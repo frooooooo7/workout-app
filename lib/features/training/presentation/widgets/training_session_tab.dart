@@ -3,8 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/custom_training_plan.dart';
+import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
+import '../screens/create_plan_screen.dart';
 import '../screens/ongoing_workout_screen.dart';
+import '../screens/plan_details_screen.dart';
 import 'training_activity_summary.dart';
 import 'training_today_plan_section.dart';
 
@@ -26,44 +30,108 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
-      builder: (context, sessionState) {
-        final active = sessionState.activeSession;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (active != null) ...[
-                _ActiveSessionCard(
-                  planName: active.planName,
-                  onResume: () {
-                    final cubit = context.read<TrainingSessionCubit>();
-                    context
-                        .push(
-                          '/app/training/ongoing-workout',
-                          extra: OngoingWorkoutArgs(
-                            initialSession: active,
-                            sessionCubit: cubit,
-                          ),
-                        )
-                        .then((_) {
-                      if (context.mounted) cubit.refresh();
-                    });
-                  },
-                ),
-                const SizedBox(height: 18),
-              ],
-              TrainingTodayPlanSection(
-                selectedDay: _selectedDay,
-                onDaySelected: (day) => setState(() => _selectedDay = day),
+    return BlocBuilder<TrainingPlansCubit, TrainingPlansState>(
+      builder: (context, plansState) {
+        return BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+          builder: (context, sessionState) {
+            final active = sessionState.activeSession;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (active != null) ...[
+                    _ActiveSessionCard(
+                      planName: active.planName,
+                      onResume: () {
+                        final cubit = context.read<TrainingSessionCubit>();
+                        context
+                            .push(
+                              '/app/training/ongoing-workout',
+                              extra: OngoingWorkoutArgs(
+                                initialSession: active,
+                                sessionCubit: cubit,
+                              ),
+                            )
+                            .then((_) {
+                          if (context.mounted) cubit.refresh();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                  TrainingTodayPlanSection(
+                    selectedDay: _selectedDay,
+                    plans: plansState.plans,
+                    isLoading: plansState.isLoading,
+                    onDaySelected: (day) => setState(() => _selectedDay = day),
+                    onOpenPlan: (plan) => _openPlan(context, plan),
+                    onStartPlan: (plan) => _startPlan(context, plan),
+                    onCreatePlanForDay: (day) => _createPlan(context, day),
+                  ),
+                  const SizedBox(height: 24),
+                  const TrainingActivitySummary(),
+                ],
               ),
-              const SizedBox(height: 24),
-              const TrainingActivitySummary(),
-            ],
-          ),
+            );
+          },
         );
       },
+    );
+  }
+
+  void _openPlan(BuildContext context, CustomTrainingPlan plan) {
+    context.push(
+      '/app/training/plan-details',
+      extra: PlanDetailsArgs(
+        plan: plan,
+        cubit: context.read<TrainingPlansCubit>(),
+        sessionCubit: context.read<TrainingSessionCubit>(),
+      ),
+    );
+  }
+
+  Future<void> _startPlan(BuildContext context, CustomTrainingPlan plan) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final sessionCubit = context.read<TrainingSessionCubit>();
+    final session = await sessionCubit.startFromPlan(plan);
+    if (!context.mounted) return;
+    if (session == null) {
+      final conflict = sessionCubit.state.activeConflict;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Masz juz aktywna sesje. Wznow ja albo zakoncz przed startem nowej.',
+          ),
+        ),
+      );
+      if (conflict != null) {
+        context.push(
+          '/app/training/ongoing-workout',
+          extra: OngoingWorkoutArgs(
+            initialSession: conflict,
+            sessionCubit: sessionCubit,
+          ),
+        );
+      }
+      return;
+    }
+    context.push(
+      '/app/training/ongoing-workout',
+      extra: OngoingWorkoutArgs(
+        initialSession: session,
+        sessionCubit: sessionCubit,
+      ),
+    );
+  }
+
+  void _createPlan(BuildContext context, int day) {
+    context.push(
+      '/app/training/create-plan',
+      extra: CreatePlanArgs(
+        cubit: context.read<TrainingPlansCubit>(),
+        initialSelectedDays: [day],
+      ),
     );
   }
 }

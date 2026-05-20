@@ -120,7 +120,10 @@ GoRouter buildRouter({
                       final args = state.extra as CreatePlanArgs;
                       return BlocProvider.value(
                         value: args.cubit,
-                        child: CreatePlanScreen(existingPlan: args.existingPlan),
+                        child: CreatePlanScreen(
+                          existingPlan: args.existingPlan,
+                          initialSelectedDays: args.initialSelectedDays,
+                        ),
                       );
                     },
                     routes: [
