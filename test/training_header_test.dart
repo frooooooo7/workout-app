@@ -23,4 +23,26 @@ void main() {
     expect(tooltip.message, 'Utworz plan');
     expect(find.text('Dodaj plan'), findsOneWidget);
   });
+
+  testWidgets('shows stats button and delegates taps', (tester) async {
+    var tapped = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrainingHeader(
+            onStatsTap: () => tapped = true,
+            onAddTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.insert_chart_outlined_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.insert_chart_outlined_rounded));
+    await tester.pump();
+
+    expect(tapped, isTrue);
+  });
 }
