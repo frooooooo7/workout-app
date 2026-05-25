@@ -17,12 +17,25 @@ import '../../features/training/presentation/screens/training_stats_screen.dart'
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
+import '../../features/profile/data/mock_profile_repository.dart';
+import '../../features/profile/domain/repositories/profile_repository.dart';
+import '../../features/profile/presentation/bloc/profile_cubit.dart';
+import '../../features/profile/presentation/screens/find_people_screen.dart';
+import '../../features/profile/presentation/screens/following_list_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/profile/presentation/screens/profile_settings_screen.dart';
+import '../../features/profile/presentation/screens/user_profile_screen.dart';
 import '../services/service_locator.dart';
 import 'app_shell.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 final appRootNavigatorKey = GlobalKey<NavigatorState>();
+
+ProfileRepository _profileRepositoryForCurrentUser() {
+  final user = ServiceLocator.currentUser.value;
+  assert(user != null, 'ProfileRepository requires authenticated user');
+  return MockProfileRepository(user: user!);
+}
 
 GoRouter buildRouter({
   required Future<AuthUser?> Function() resolveUser,
@@ -190,12 +203,59 @@ GoRouter buildRouter({
                 builder: (_, s) {
                   final user = ServiceLocator.currentUser.value;
                   if (user == null) return const _LoadingScreen();
-                  return ProfileScreen(user: user);
+                  return BlocProvider(
+                    create: (_) => ProfileCubit(_profileRepositoryForCurrentUser()),
+                    child: const ProfileScreen(),
+                  );
                 },
+                routes: [
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'settings',
+                    builder: (_, s) {
+                      final user = ServiceLocator.currentUser.value;
+                      if (user == null) return const _LoadingScreen();
+                      return ProfileSettingsScreen(user: user);
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'following',
+                    builder: (_, s) => FollowingListScreen(
+                      repository: _profileRepositoryForCurrentUser(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'followers',
+                    builder: (_, s) => FollowersListScreen(
+                      repository: _profileRepositoryForCurrentUser(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'find-people',
+                    builder: (_, s) => FindPeopleScreen(
+                      repository: _profileRepositoryForCurrentUser(),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ],
+      ),
+
+      GoRoute(
+        parentNavigatorKey: appRootNavigatorKey,
+        path: '/app/users/:userId',
+        builder: (_, state) {
+          final userId = state.pathParameters['userId']!;
+          return UserProfileScreen(
+            userId: userId,
+            repository: _profileRepositoryForCurrentUser(),
+          );
+        },
       ),
     ],
   );

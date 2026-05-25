@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../auth/domain/models/auth_models.dart';
 
 class HomeHeader extends StatelessWidget {
@@ -27,7 +28,7 @@ class HomeHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        UserAvatar(user: user),
+        UserAvatar(user: user, size: UserAvatarSize.sm),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -59,48 +60,6 @@ class HomeHeader extends StatelessWidget {
         const SizedBox(width: 8),
         const HomeAddButton(),
       ],
-    );
-  }
-}
-
-class UserAvatar extends StatelessWidget {
-  const UserAvatar({super.key, required this.user});
-
-  final AuthUser user;
-
-  String get _initials {
-    final first = user.firstName.isNotEmpty ? user.firstName[0] : '';
-    final last = user.lastName.isNotEmpty ? user.lastName[0] : '';
-    return '$first$last'.toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryVariant],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.35),
-          width: 1.5,
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        _initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
-      ),
     );
   }
 }

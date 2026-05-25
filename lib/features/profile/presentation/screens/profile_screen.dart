@@ -1,282 +1,139 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/services/service_locator.dart';
+
 import '../../../../core/theme/app_colors.dart';
-import '../../../auth/domain/models/auth_models.dart';
+import '../bloc/profile_cubit.dart';
+import '../bloc/profile_state.dart';
+import '../widgets/edit_profile_bio_sheet.dart';
+import '../widgets/profile_activity_feed.dart';
+import '../widgets/profile_hero_header.dart';
+import '../widgets/profile_section_header.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, required this.user});
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
 
-  final AuthUser user;
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
 
-  Future<void> _handleLogout(BuildContext context) async {
-    await ServiceLocator.tokenStorage.clear();
-    if (!context.mounted) return;
-    context.go('/login');
+class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ProfileCubit>().load();
+  }
+
+  Future<void> _handleBioEdit(BuildContext context, ProfileState state) async {
+    final bio = state.profile?.bio ?? '';
+    final result = await showEditProfileBioSheet(context, initialBio: bio);
+    if (!context.mounted || result == null) return;
+    await context.read<ProfileCubit>().updateBio(result);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('PROFIL'),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Avatar(user: user),
-              const SizedBox(height: 32),
-              const _SectionLabel(label: 'Konto'),
-              const SizedBox(height: 12),
-              _InfoCard(
-                icon: Icons.person_outline_rounded,
-                label: 'Imię i nazwisko',
-                value: user.fullName,
-              ),
-              const SizedBox(height: 10),
-              _InfoCard(
-                icon: Icons.mail_outline_rounded,
-                label: 'Adres e-mail',
-                value: user.email,
-              ),
-              const SizedBox(height: 32),
-              const _SectionLabel(label: 'Ustawienia'),
-              const SizedBox(height: 12),
-              _MenuRow(
-                icon: Icons.notifications_outlined,
-                label: 'Powiadomienia',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 10),
-              _MenuRow(
-                icon: Icons.lock_outline_rounded,
-                label: 'Zmiana hasła',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 10),
-              _MenuRow(
-                icon: Icons.help_outline_rounded,
-                label: 'Pomoc',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
-                onPressed: () => _handleLogout(context),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Wyloguj się'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.strengthWeak,
-                  side: BorderSide(
-                    color: AppColors.strengthWeak.withValues(alpha: 0.5),
+      body: BlocBuilder<ProfileCubit, ProfileState>(
+        builder: (context, state) {
+          if (state.loading && state.profile == null) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
+          }
+
+          if (state.error != null && state.profile == null) {
+            return _ErrorView(
+              message: state.error!,
+              onRetry: () => context.read<ProfileCubit>().load(),
+            );
+          }
+
+          final profile = state.profile;
+          if (profile == null) {
+            return const SizedBox.shrink();
+          }
+
+          return RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: () => context.read<ProfileCubit>().refresh(),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ProfileHeroHeader(
+                    profile: profile,
+                    onSettingsTap: () => context.push('/app/profile/settings'),
+                    onBioEditTap: () => _handleBioEdit(context, state),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.user});
-
-  final AuthUser user;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.primary.withValues(alpha: 0.18),
-            border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.4),
-              width: 2,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              user.firstName.isNotEmpty
-                  ? user.firstName[0].toUpperCase()
-                  : '?',
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          user.fullName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          user.email,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label.toUpperCase(),
-      style: const TextStyle(
-        color: AppColors.textMuted,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.textMuted, size: 18),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
+                SliverToBoxAdapter(
+                  child: ProfileStatsRow(
+                    followingCount: profile.stats.followingCount,
+                    followersCount: profile.stats.followersCount,
+                    workoutsCount: profile.stats.workoutsCount,
+                    onFollowingTap: () => context.push('/app/profile/following'),
+                    onFollowersTap: () => context.push('/app/profile/followers'),
+                    onWorkoutsTap: () => context.go('/app/activity'),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                if (state.highlightActivity != null) ...[
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  SliverToBoxAdapter(
+                    child: ProfileHighlightActivity(
+                      activity: state.highlightActivity!,
+                      profile: profile,
+                    ),
+                  ),
+                ],
+                SliverToBoxAdapter(
+                  child: ProfileSectionHeader(
+                    title: 'Twoja aktywność',
+                    actionLabel: 'Zobacz wszystkie',
+                    onActionTap: () => context.go('/app/activity'),
                   ),
                 ),
+                SliverToBoxAdapter(
+                  child: ProfileActivityFeed(
+                    activities: state.recentActivities,
+                    profile: profile,
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
               ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.trailing,
-  });
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Widget? trailing;
+  final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.textSecondary, size: 20),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+            const Icon(Icons.error_outline, color: AppColors.strengthWeak, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
-            ?trailing,
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onRetry, child: const Text('Spróbuj ponownie')),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Text(
-        'Wkrótce',
-        style: TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
