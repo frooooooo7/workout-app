@@ -1,13 +1,61 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../domain/models/training_day_plan.dart';
+import '../../../library/domain/models/exercise.dart';
+import '../../domain/models/custom_training_plan.dart';
 import 'training_plan_detail_chips.dart';
 
 class TrainingPlanCard extends StatelessWidget {
-  const TrainingPlanCard({super.key, required this.plan});
+  const TrainingPlanCard({
+    super.key,
+    required this.plan,
+    required this.onOpen,
+    required this.onStart,
+  });
 
-  final TrainingDayPlan plan;
+  final CustomTrainingPlan plan;
+  final VoidCallback onOpen;
+  final Future<void> Function() onStart;
+
+  int get _setCount => plan.exercises.fold(
+        0,
+        (sum, exercise) => sum + exercise.sets.length,
+      );
+
+  String get _exerciseLabel {
+    final count = plan.exercises.length;
+    if (count == 1) return '1 cwiczenie';
+    return '$count cwiczenia';
+  }
+
+  String get _setLabel {
+    if (_setCount == 1) return '1 seria';
+    return '$_setCount serii';
+  }
+
+  String get _dayLabel {
+    final count = plan.selectedDays.length;
+    if (count == 1) return '1 dzien';
+    return '$count dni';
+  }
+
+  String get _musclesLabel {
+    final muscles = <MuscleGroup>{};
+    for (final exercise in plan.exercises) {
+      muscles.addAll(exercise.exercise.muscles);
+    }
+    final displayMuscles = muscles
+        .where((muscle) => muscle != MuscleGroup.all)
+        .toList();
+    final visible = displayMuscles
+        .take(3)
+        .map((muscle) => muscle.label)
+        .toList();
+    if (visible.isEmpty) return 'Bez partii';
+    final overflow = displayMuscles.length - visible.length;
+    if (overflow > 0) return '${visible.join(', ')} +$overflow';
+    return visible.join(', ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,21 +97,10 @@ class TrainingPlanCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${plan.dayLabel}  •  ${plan.type}',
+                  '$_dayLabel treningowe',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: plan.progress01,
-                    minHeight: 3,
-                    backgroundColor: AppColors.surfaceVariant,
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.primary),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -72,13 +109,9 @@ class TrainingPlanCard extends StatelessWidget {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    TrainingPlanDetailChip(
-                      label: '${plan.exerciseCount} ćwiczeń',
-                    ),
+                    TrainingPlanDetailChip(label: _exerciseLabel),
                     const TrainingPlanDetailDot(),
-                    TrainingPlanDetailChip(
-                      label: '~${plan.durationMin} min',
-                    ),
+                    TrainingPlanDetailChip(label: _setLabel),
                     const TrainingPlanDetailDot(),
                     const Icon(
                       Icons.local_fire_department_rounded,
@@ -86,15 +119,29 @@ class TrainingPlanCard extends StatelessWidget {
                       size: 13,
                     ),
                     const SizedBox(width: 3),
-                    TrainingPlanDetailChip(label: plan.muscles),
+                    TrainingPlanDetailChip(label: _musclesLabel),
                   ],
+                ),
+                const SizedBox(height: 10),
+                TextButton(
+                  onPressed: onOpen,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Zobacz',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
           GestureDetector(
-            onTap: () {},
+            onTap: () async => onStart(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(

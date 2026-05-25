@@ -10,6 +10,8 @@ class TrainingHeader extends StatelessWidget {
     this.addLabel,
     this.activePlanName,
     this.onActiveTap,
+    this.onStatsTap,
+    this.statsTooltip = 'Statystyki',
   });
 
   final VoidCallback? onAddTap;
@@ -17,6 +19,8 @@ class TrainingHeader extends StatelessWidget {
   final String? addLabel;
   final String? activePlanName;
   final VoidCallback? onActiveTap;
+  final VoidCallback? onStatsTap;
+  final String statsTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +59,14 @@ class TrainingHeader extends StatelessWidget {
           _ActiveSessionButton(
             planName: activePlanName!,
             onTap: onActiveTap ?? () {},
+          ),
+          const SizedBox(width: 10),
+        ],
+        if (onStatsTap != null) ...[
+          _IconHeaderButton(
+            tooltip: statsTooltip,
+            icon: Icons.insert_chart_outlined_rounded,
+            onTap: onStatsTap!,
           ),
           const SizedBox(width: 10),
         ],
@@ -131,6 +143,42 @@ class _ActiveSessionButton extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IconHeaderButton extends StatelessWidget {
+  const _IconHeaderButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Ink(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
           ),
         ),
       ),

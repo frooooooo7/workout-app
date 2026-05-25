@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../domain/models/training_day_plan.dart';
+
+const List<String> _trainingWeekdayShortLabels = [
+  'Pon',
+  'Wt',
+  'Sr',
+  'Czw',
+  'Pt',
+  'Sob',
+  'Ndz',
+];
 
 class TrainingWeekStrip extends StatelessWidget {
   const TrainingWeekStrip({
@@ -37,7 +46,10 @@ class TrainingWeekStrip extends StatelessWidget {
           final hasWorkout = workoutDays.contains(weekday);
 
           return TrainingWeekDayChip(
-            label: kTrainingWeekdayShortLabels[i],
+            key: ValueKey(
+              'week-day-$weekday-${hasWorkout ? 'has-workout' : 'rest'}',
+            ),
+            label: _trainingWeekdayShortLabels[i],
             day: date.day,
             isToday: isToday,
             isSelected: isSelected,

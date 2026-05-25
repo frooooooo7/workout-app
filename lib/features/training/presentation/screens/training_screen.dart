@@ -113,6 +113,9 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                                       if (context.mounted) cubit.refresh();
                                     });
                               },
+                        onStatsTap: () {
+                          context.push('/app/training/stats');
+                        },
                         onAddTap: () {
                           if (_activeTab == _TrainingTab.plany) {
                             context.push(

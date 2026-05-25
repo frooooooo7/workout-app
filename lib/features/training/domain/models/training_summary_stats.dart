@@ -3,7 +3,7 @@ enum ActivitySummaryPeriod {
   month,
 }
 
-/// Zmockowane agregaty pod widok podsumowania (do podłączenia pod backend).
+/// Mocked aggregates for the summary view until backend statistics are wired.
 class TrainingSummaryStats {
   const TrainingSummaryStats({
     required this.workouts,
@@ -52,7 +52,7 @@ String formatTrainingVolumeKg(int kg) {
   if (kg >= 1000) {
     final thousands = kg ~/ 1000;
     final remainder = (kg % 1000).toString().padLeft(3, '0');
-    return '$thousands\u2009$remainder';
+    return '$thousands $remainder';
   }
   return '$kg';
 }
@@ -60,5 +60,5 @@ String formatTrainingVolumeKg(int kg) {
 String workoutCountLabelPlural(int workouts) {
   if (workouts == 1) return 'trening';
   if (workouts <= 4) return 'treningi';
-  return 'treningów';
+  return 'treningow';
 }

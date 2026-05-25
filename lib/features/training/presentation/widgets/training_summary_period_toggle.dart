@@ -26,11 +26,11 @@ class TrainingSummaryPeriodToggle extends StatelessWidget {
       child: Row(
         children: ActivitySummaryPeriod.values
             .map(
-              (p) => Expanded(
+              (period) => Expanded(
                 child: _PeriodOptionChip(
-                  period: p,
-                  isSelected: p == selected,
-                  onTap: () => onChanged(p),
+                  period: period,
+                  isSelected: period == selected,
+                  onTap: () => onChanged(period),
                 ),
               ),
             )
@@ -52,8 +52,8 @@ class _PeriodOptionChip extends StatelessWidget {
   final VoidCallback onTap;
 
   String get _label => switch (period) {
-        ActivitySummaryPeriod.week => 'Tydzień',
-        ActivitySummaryPeriod.month => 'Miesiąc',
+        ActivitySummaryPeriod.week => 'Tydzien',
+        ActivitySummaryPeriod.month => 'Miesiac',
       };
 
   @override

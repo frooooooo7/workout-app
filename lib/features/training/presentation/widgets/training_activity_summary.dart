@@ -17,10 +17,9 @@ class TrainingActivitySummary extends StatefulWidget {
 class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
   ActivitySummaryPeriod _period = ActivitySummaryPeriod.week;
 
-  TrainingSummaryStats get _stats =>
-      _period == ActivitySummaryPeriod.week
-          ? kTrainingSummaryWeek
-          : kTrainingSummaryMonth;
+  TrainingSummaryStats get _stats => _period == ActivitySummaryPeriod.week
+      ? kTrainingSummaryWeek
+      : kTrainingSummaryMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +39,7 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
         iconColor: const Color(0xFFFF6B35),
         value: '${stats.durationH}h ${stats.durationMin}min',
         unit: '',
-        label: 'Czas aktywności',
+        label: 'Czas aktywnosci',
         compact: false,
       ),
     ];
@@ -59,7 +58,7 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
         iconColor: const Color(0xFF4DB6AC),
         value: '${stats.reps}',
         unit: 'powt.',
-        label: 'Powtórzenia',
+        label: 'Powtorzenia',
         compact: true,
       ),
       TrainingSummaryStatTile(
@@ -67,7 +66,7 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
         iconColor: const Color(0xFFF59E0B),
         value: formatTrainingVolumeKg(stats.volumeKg),
         unit: 'kg',
-        label: 'Łączny ciężar',
+        label: 'Laczny ciezar',
         compact: true,
       ),
     ];
@@ -76,8 +75,7 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
       TrainingSummaryStatTile(
         icon: Icons.directions_run_rounded,
         iconColor: AppColors.success,
-        value:
-            stats.distanceKm.toStringAsFixed(1).replaceAll('.', ','),
+        value: stats.distanceKm.toStringAsFixed(1).replaceAll('.', ','),
         unit: 'km',
         label: 'Dystans',
         compact: false,
@@ -123,7 +121,7 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
             children: [
               TrainingSummaryPeriodToggle(
                 selected: _period,
-                onChanged: (p) => setState(() => _period = p),
+                onChanged: (period) => setState(() => _period = period),
               ),
               const SizedBox(height: 16),
               rowTiles(topRow),
