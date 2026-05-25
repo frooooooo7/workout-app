@@ -129,6 +129,35 @@ class TrainingSessionLocalMapper {
     await replaceChildren(db, session);
   }
 
+  /// Removes all rows for [sessionLocalId] (session, exercises, sets).
+  static Future<void> deleteSession(Database db, String sessionLocalId) async {
+    await db.transaction((txn) async {
+      final oldExercises = await txn.query(
+        ExerciseDatabase.tableTrainingSessionExercises,
+        columns: ['local_id'],
+        where: 'session_local_id = ?',
+        whereArgs: [sessionLocalId],
+      );
+      for (final old in oldExercises) {
+        await txn.delete(
+          ExerciseDatabase.tableTrainingSessionSets,
+          where: 'session_exercise_local_id = ?',
+          whereArgs: [old['local_id']],
+        );
+      }
+      await txn.delete(
+        ExerciseDatabase.tableTrainingSessionExercises,
+        where: 'session_local_id = ?',
+        whereArgs: [sessionLocalId],
+      );
+      await txn.delete(
+        ExerciseDatabase.tableTrainingSessions,
+        where: 'local_id = ?',
+        whereArgs: [sessionLocalId],
+      );
+    });
+  }
+
   static Future<void> replaceChildren(
     Database db,
     TrainingSession session, {

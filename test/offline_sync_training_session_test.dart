@@ -40,6 +40,90 @@ void main() {
     },
   );
 
+  test(
+    'startCustom writes active local session without pending_op',
+    () async {
+      final fixture = await _Fixture.create();
+      final repo = fixture.stoppedRepo();
+
+      final session = await repo.startCustom();
+
+      expect(session.status, TrainingSessionStatus.active);
+      expect(session.planName, 'Niestandardowa');
+      await fixture.db.run((db) async {
+        final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+        expect(rows, hasLength(1));
+        expect(rows.single['local_id'], session.id);
+        expect(rows.single['pending_op'], isNull);
+      });
+
+      await fixture.dispose();
+    },
+  );
+
+  test(
+    'startCustom then save when exercise exists sets pending create',
+    () async {
+      final fixture = await _Fixture.create();
+      final repo = fixture.stoppedRepo();
+      final session = await repo.startCustom();
+
+      final withExercise = session.copyWith(
+        exercises: [
+          TrainingSessionExercise(
+            exerciseId: _exerciseId,
+            exerciseName: 'Bench',
+            exerciseMuscles: const [],
+            exerciseCategory: 'compound',
+            sets: [TrainingSessionSet()],
+          ),
+        ],
+      );
+      await repo.save(withExercise);
+
+      await fixture.db.run((db) async {
+        final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+        expect(rows.single['pending_op'], 'create');
+      });
+
+      await fixture.dispose();
+    },
+  );
+
+  test(
+    'startCustom blocks while another active session exists locally',
+    () async {
+      final fixture = await _Fixture.create();
+      final repo = fixture.stoppedRepo();
+      await repo.startFromPlan(_plan());
+
+      await expectLater(
+        repo.startCustom(),
+        throwsA(isA<ActiveTrainingSessionException>()),
+      );
+
+      await fixture.dispose();
+    },
+  );
+
+  test(
+    'cancel removes never-synced empty custom session from local DB',
+    () async {
+      final fixture = await _Fixture.create();
+      final repo = fixture.stoppedRepo();
+      final session = await repo.startCustom();
+
+      await repo.cancel(session.id);
+
+      await fixture.db.run((db) async {
+        final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+        expect(rows, isEmpty);
+      });
+
+      await fixture.dispose();
+    },
+  );
+
   test('startFromPlan blocks a second active local session', () async {
     final fixture = await _Fixture.create();
     final repo = fixture.stoppedRepo();

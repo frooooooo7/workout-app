@@ -6,13 +6,13 @@ class OngoingWorkoutHeader extends StatelessWidget {
   const OngoingWorkoutHeader({
     super.key,
     required this.elapsed,
-    required this.onFinish,
     required this.onBack,
+    this.onFinish,
     this.onCancel,
   });
 
   final String elapsed;
-  final VoidCallback onFinish;
+  final VoidCallback? onFinish;
   final VoidCallback onBack;
   final VoidCallback? onCancel;
 
@@ -90,18 +90,26 @@ class OngoingWorkoutHeader extends StatelessWidget {
                   color: AppColors.primary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                   clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: onFinish,
-                    child: Container(
-                      height: 44,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        'Zakoncz',
-                        style: TextStyle(
-                          color: AppColors.primaryVariant,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                  child: AbsorbPointer(
+                    absorbing: onFinish == null,
+                    child: InkWell(
+                      onTap: onFinish,
+                      child: Opacity(
+                        opacity: onFinish == null ? 0.4 : 1,
+                        child: Container(
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'Zakoncz',
+                            style: TextStyle(
+                              color: onFinish == null
+                                  ? AppColors.textSecondary
+                                  : AppColors.primaryVariant,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                     ),

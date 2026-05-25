@@ -166,6 +166,21 @@ class TrainingSession {
     );
   }
 
+  /// Default plan name used for custom (template-free) training sessions.
+  static const defaultCustomName = 'Niestandardowa';
+
+  /// Creates a local-only custom session that defers sync until the first
+  /// exercise is added ([pendingOp] starts as `null`).
+  factory TrainingSession.custom({String planName = defaultCustomName}) {
+    return TrainingSession(
+      planLocalId: null,
+      planServerId: null,
+      planName: planName,
+      exercises: const [],
+      pendingOp: null,
+    );
+  }
+
   factory TrainingSession.fromPlan(
     CustomTrainingPlan plan, {
     String? planServerId,

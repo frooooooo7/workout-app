@@ -140,7 +140,80 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         }
         final session = _draftSession!;
         final exerciseCount = session.exercises.length;
-        if (exerciseCount == 0) return const _MissingSessionScreen();
+        if (exerciseCount == 0) {
+          return PopScope(
+            canPop: _allowPop,
+            onPopInvokedWithResult: (didPop, result) async {
+              if (didPop) return;
+              await _flushDraft(context.read<TrainingSessionCubit>());
+              if (!context.mounted) return;
+              setState(() => _allowPop = true);
+              context.pop(result);
+            },
+            child: Scaffold(
+              backgroundColor: AppColors.background,
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    OngoingWorkoutHeader(
+                      elapsed: _elapsedLabel,
+                      onFinish: null,
+                      onBack: () => _leaveWorkout(context),
+                      onCancel: () => _cancelWorkout(context, session),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.fitness_center_rounded,
+                              size: 56,
+                              color: AppColors.primary.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Dodaj pierwsze ćwiczenie',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Wybór ćwiczeń i zapisywanie serii działa tak jak przy treningu z planu.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_restActive)
+                      RestTimerBanner(
+                        remaining: _restTimeLabel,
+                        onStop: _stopRestTimer,
+                      ),
+                    OngoingWorkoutFooter(
+                      restLabel: 'Odpoczynek',
+                      restActive: _restActive,
+                      onRestTap: () => unawaited(_toggleRestTimer(context)),
+                      onAddExerciseTap: () => _addExerciseToSession(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         if (exerciseCount > 0 && _currentExerciseIndex >= exerciseCount) {
           _currentExerciseIndex = exerciseCount - 1;
         }
@@ -271,6 +344,39 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _finish(BuildContext context, TrainingSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Zakończyć trening?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Czy na pewno chcesz zakończyć ten trening? Sesja zostanie zapisana w historii.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Zakończ',
+              style: TextStyle(color: AppColors.primaryVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     await cubit.finish(session.id);
@@ -324,6 +430,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final session = _draftSession;
     if (session == null) return;
 
+    final wasEmpty = session.exercises.isEmpty;
+
     final picked =
         await (widget.args?.pickExercise?.call(context) ??
             Navigator.of(context).push<Exercise>(
@@ -348,7 +456,13 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _currentExerciseIndex = nextIndex;
       _hasUnsavedDraft = true;
     });
-    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    final cubit = context.read<TrainingSessionCubit>();
+    if (wasEmpty) {
+      _saveDebounce?.cancel();
+      await _flushDraft(cubit);
+    } else {
+      _scheduleDraftSave(cubit);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_exercisePageController.hasClients) return;
       _exercisePageController.jumpToPage(nextIndex);

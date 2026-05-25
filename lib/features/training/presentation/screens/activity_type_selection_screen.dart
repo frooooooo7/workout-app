@@ -1,11 +1,55 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../bloc/training_session_cubit.dart';
 import '../widgets/activity_type_option_tile.dart';
+import 'ongoing_workout_screen.dart';
 
 class ActivityTypeSelectionScreen extends StatelessWidget {
   const ActivityTypeSelectionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) =>
+          TrainingSessionCubit(ServiceLocator.trainingSessionRepository),
+      child: const _ActivityTypeSelectionView(),
+    );
+  }
+}
+
+class _ActivityTypeSelectionView extends StatelessWidget {
+  const _ActivityTypeSelectionView();
+
+  Future<void> _startCustom(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final sessionCubit = context.read<TrainingSessionCubit>();
+    final session = await sessionCubit.startCustom();
+    if (!context.mounted) return;
+    final selected = session ?? sessionCubit.state.activeConflict;
+    if (selected == null) return;
+    if (session == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Masz juz aktywna sesje. Wznawiam obecny trening.',
+          ),
+        ),
+      );
+    }
+    context.pushReplacement(
+      '/app/training/ongoing-workout',
+      extra: OngoingWorkoutArgs(
+        initialSession: selected,
+        sessionCubit: sessionCubit,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,8 +128,7 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
                   title: 'Niestandardowa',
                   description: 'Zbuduj trening na biezaco, bez szablonu.',
                   ctaLabel: 'Start od zera',
-                  onTap: () =>
-                      context.pushReplacement('/app/training/ongoing-workout'),
+                  onTap: () => unawaited(_startCustom(context)),
                 ),
               ],
             ),

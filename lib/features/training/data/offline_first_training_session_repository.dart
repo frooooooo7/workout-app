@@ -53,6 +53,20 @@ class OfflineFirstTrainingSessionRepository
     });
   }
 
+  /// Stored [pending_op] from DB influences in-flight creates; exercises and
+  /// [serverId] determine whether local-only sessions defer sync entirely.
+  static String? nextPendingAfterWrite({
+    required String? serverId,
+    required List<TrainingSessionExercise> exercises,
+    required String? storedPendingOp,
+  }) {
+    if (serverId == null && exercises.isEmpty) return null;
+    if (serverId != null) {
+      return storedPendingOp == 'create' ? 'create' : 'update';
+    }
+    return 'create';
+  }
+
   @override
   Future<TrainingSession?> getActive() async {
     return _localDb.run((db) async {
@@ -93,6 +107,21 @@ class OfflineFirstTrainingSessionRepository
   }
 
   @override
+  Future<TrainingSession> startCustom({
+    String planName = TrainingSession.defaultCustomName,
+  }) async {
+    final active = await getActive();
+    if (active != null) throw ActiveTrainingSessionException(active);
+
+    late TrainingSession session;
+    await _localDb.run((db) async {
+      session = TrainingSession.custom(planName: planName);
+      await TrainingSessionLocalMapper.upsert(db, session, pendingOp: null);
+    });
+    return session;
+  }
+
+  @override
   Future<TrainingSession> save(TrainingSession session) async {
     TrainingSession saved = session;
     await _localDb.run((db) async {
@@ -102,8 +131,18 @@ class OfflineFirstTrainingSessionRepository
         whereArgs: [session.id],
         limit: 1,
       );
-      final pending = rows.isEmpty ? null : rows.first['pending_op'] as String?;
-      final nextPending = pending == 'create' ? 'create' : 'update';
+      final storedPending =
+          rows.isEmpty ? null : rows.first['pending_op'] as String?;
+      final serverIdInDb = rows.isEmpty
+          ? null
+          : rows.first['server_id'] as String?;
+      final effectiveServerId = serverIdInDb ?? session.serverId;
+
+      final nextPending = nextPendingAfterWrite(
+        serverId: effectiveServerId,
+        exercises: session.exercises,
+        storedPendingOp: storedPending,
+      );
       saved = session.copyWith(pendingOp: nextPending);
       await TrainingSessionLocalMapper.upsert(
         db,
@@ -129,7 +168,45 @@ class OfflineFirstTrainingSessionRepository
   Future<TrainingSession> cancel(String sessionId) async {
     final row = await _findRow(sessionId);
     if (row == null) throw StateError('Training session not found');
-    return _updateActiveStatus(row, TrainingSessionStatus.cancelled);
+
+    late TrainingSession snapshot;
+    var scheduleSyncAfter = true;
+
+    await _localDb.run((db) async {
+      final current = await TrainingSessionLocalMapper.fromDb(db, row);
+      if (current == null) throw StateError('Training session not found');
+
+      final serverId = row['server_id'] as String?;
+      if (serverId == null && current.exercises.isEmpty) {
+        snapshot =
+            current.copyWith(status: TrainingSessionStatus.cancelled);
+        await TrainingSessionLocalMapper.deleteSession(db, current.id);
+        scheduleSyncAfter = false;
+        return;
+      }
+
+      final pending = row['pending_op'] as String?;
+      final nextPending = nextPendingAfterWrite(
+        serverId: serverId,
+        exercises: current.exercises,
+        storedPendingOp: pending,
+      );
+
+      snapshot = current.copyWith(
+        status: TrainingSessionStatus.cancelled,
+        pendingOp: nextPending,
+      );
+
+      await TrainingSessionLocalMapper.upsert(
+        db,
+        snapshot,
+        serverId: row['server_id'] as String?,
+        pendingOp: nextPending,
+      );
+    });
+
+    if (scheduleSyncAfter) _scheduleSync();
+    return snapshot;
   }
 
   Future<TrainingSession> _updateActiveStatus(
@@ -140,10 +217,16 @@ class OfflineFirstTrainingSessionRepository
     await _localDb.run((db) async {
       final current = await TrainingSessionLocalMapper.fromDb(db, row);
       if (current == null) throw StateError('Training session not found');
-      
+
       final pending = row['pending_op'] as String?;
-      final nextPending = pending == 'create' ? 'create' : 'update';
-      
+      final serverId = row['server_id'] as String?;
+
+      final nextPending = nextPendingAfterWrite(
+        serverId: serverId,
+        exercises: current.exercises,
+        storedPendingOp: pending,
+      );
+
       updated = current.copyWith(
         status: status,
         finishedAt: status == TrainingSessionStatus.completed
@@ -151,7 +234,7 @@ class OfflineFirstTrainingSessionRepository
             : current.finishedAt,
         pendingOp: nextPending,
       );
-      
+
       await TrainingSessionLocalMapper.upsert(
         db,
         updated,

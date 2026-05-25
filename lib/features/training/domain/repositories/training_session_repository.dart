@@ -6,6 +6,10 @@ abstract interface class TrainingSessionRepository {
 
   Future<TrainingSession> startFromPlan(CustomTrainingPlan plan);
 
+  Future<TrainingSession> startCustom({
+    String planName = TrainingSession.defaultCustomName,
+  });
+
   Future<TrainingSession> save(TrainingSession session);
 
   Future<TrainingSession> finish(String sessionId);

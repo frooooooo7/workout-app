@@ -372,6 +372,101 @@ void main() {
 
     await cubit.close();
   });
+
+  testWidgets(
+    'empty session shows encouragement before first exercise',
+    (tester) async {
+      final session = TrainingSession.custom();
+      final repository = _FakeTrainingSessionRepository(session);
+      final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OngoingWorkoutScreen(
+            args: OngoingWorkoutArgs(
+              initialSession: session,
+              sessionCubit: cubit,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
+
+      await cubit.close();
+    },
+  );
+
+  testWidgets(
+    'add from empty session shows first exercise carousel',
+    (tester) async {
+      final session = TrainingSession.custom();
+      final repository = _FakeTrainingSessionRepository(session);
+      final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OngoingWorkoutScreen(
+            args: OngoingWorkoutArgs(
+              initialSession: session,
+              sessionCubit: cubit,
+              pickExercise: (ctx) async => Exercise(
+                id: 'row1',
+                name: 'Cable row',
+                muscles: const [MuscleGroup.back],
+                category: ExerciseCategory.compound,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Dodaj ćwiczenie'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cable row'), findsWidgets);
+      expect(repository.session.exercises, hasLength(1));
+
+      await cubit.close();
+    },
+  );
+
+  testWidgets('finish asks for confirmation before completing session', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Zakoncz'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Zakończyć trening?'), findsOneWidget);
+    expect(
+      find.text(
+        'Czy na pewno chcesz zakończyć ten trening? Sesja zostanie zapisana w historii.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Anuluj'));
+    await tester.pumpAndSettle();
+
+    expect(repository.session.status, TrainingSessionStatus.active);
+    expect(find.text('Zakończyć trening?'), findsNothing);
+
+    await cubit.close();
+  });
 }
 
 TrainingSession _session({TrainingSessionSet? firstSet}) {
@@ -410,6 +505,14 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   @override
   Future<TrainingSession> startFromPlan(CustomTrainingPlan plan) async =>
       session;
+
+  @override
+  Future<TrainingSession> startCustom({
+    String planName = TrainingSession.defaultCustomName,
+  }) async {
+    session = TrainingSession.custom(planName: planName);
+    return session;
+  }
 
   @override
   Future<TrainingSession> save(TrainingSession session) async {

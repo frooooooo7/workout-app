@@ -72,6 +72,21 @@ class TrainingSessionCubit extends Cubit<TrainingSessionState> {
     }
   }
 
+  Future<TrainingSession?> startCustom({
+    String planName = TrainingSession.defaultCustomName,
+  }) async {
+    try {
+      final session = await _repository.startCustom(planName: planName);
+      _emitIfOpen(
+        state.copyWith(activeSession: session, clearActiveConflict: true),
+      );
+      return session;
+    } on ActiveTrainingSessionException catch (e) {
+      _emitIfOpen(state.copyWith(activeConflict: e.session));
+      return null;
+    }
+  }
+
   Future<void> save(TrainingSession session) async {
     final saved = await _repository.save(session);
     _emitIfOpen(state.copyWith(activeSession: saved));

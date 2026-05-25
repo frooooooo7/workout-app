@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../../../../core/network/api_client.dart';
 import '../../../library/data/exercise_database.dart';
@@ -119,6 +120,13 @@ class TrainingSessionSyncEngine {
             return TrainingSessionLocalMapper.fromDb(db, row);
           });
           if (session == null) continue;
+          if (session.exercises.isEmpty) {
+            developer.log(
+              'Skipping empty session $localId',
+              name: 'TrainingSessionSyncEngine',
+            );
+            continue;
+          }
           final exerciseMap = await _exerciseServerIdsByLocalId(session);
           final serverId = row['server_id'] as String?;
           final saved = op == 'create' || serverId == null
