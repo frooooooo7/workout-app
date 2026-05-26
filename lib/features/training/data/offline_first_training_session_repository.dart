@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import '../../library/data/exercise_database.dart';
 import '../domain/models/custom_training_plan.dart';
@@ -11,6 +12,10 @@ class ActiveTrainingSessionException implements Exception {
   const ActiveTrainingSessionException(this.session);
 
   final TrainingSession session;
+
+  @override
+  String toString() =>
+      'ActiveTrainingSessionException(sessionId: ${session.id}, plan: ${session.planName})';
 }
 
 class OfflineFirstTrainingSessionRepository
@@ -27,8 +32,13 @@ class OfflineFirstTrainingSessionRepository
   void _scheduleSync() {
     if (_sync.isStopped) return;
     unawaited(
-      _sync.flush().catchError((_) {
-        /* background sync must never break the UI event loop */
+      _sync.flush().catchError((Object error, StackTrace stackTrace) {
+        developer.log(
+          'Training session sync failed',
+          name: 'OfflineFirstTrainingSessionRepository',
+          error: error,
+          stackTrace: stackTrace,
+        );
       }),
     );
   }

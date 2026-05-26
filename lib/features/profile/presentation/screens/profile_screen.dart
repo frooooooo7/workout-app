@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/profile_cubit.dart';
 import '../bloc/profile_state.dart';
@@ -18,10 +21,53 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  GoRouter? _router;
+
   @override
   void initState() {
     super.initState();
+    ServiceLocator.profileRefreshTick.addListener(_onProfileRefreshRequested);
     context.read<ProfileCubit>().load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final router = GoRouter.maybeOf(context);
+    if (router == null) return;
+    if (!identical(_router, router)) {
+      _router?.routerDelegate.removeListener(_onRouteStackChanged);
+      _router = router;
+      _router!.routerDelegate.addListener(_onRouteStackChanged);
+    }
+  }
+
+  void _onRouteStackChanged() {
+    if (!mounted) return;
+    if (_router?.state.uri.path == '/app/profile') {
+      _refreshIfLoaded();
+    }
+  }
+
+  void _onProfileRefreshRequested() {
+    if (!mounted) return;
+    if (_router?.state.uri.path == '/app/profile') {
+      _refreshIfLoaded();
+    }
+  }
+
+  void _refreshIfLoaded() {
+    final cubit = context.read<ProfileCubit>();
+    if (cubit.state.profile != null && !cubit.state.refreshing) {
+      unawaited(cubit.refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.profileRefreshTick.removeListener(_onProfileRefreshRequested);
+    _router?.routerDelegate.removeListener(_onRouteStackChanged);
+    super.dispose();
   }
 
   Future<void> _handleBioEdit(BuildContext context, ProfileState state) async {

@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/domain/models/auth_models.dart';
 import '../../home/domain/models/recent_activity.dart';
 import '../../home/presentation/widgets/recent_activities_card.dart';
@@ -12,9 +13,9 @@ import 'profile_bio_storage.dart';
 class MockProfileRepository implements ProfileRepository {
   MockProfileRepository({
     required AuthUser user,
-    ProfileBioStorage bioStorage = const ProfileBioStorage(),
+    required SharedPreferences prefs,
   })  : _user = user,
-        _bioStorage = bioStorage;
+        _bioStorage = ProfileBioStorage(prefs);
 
   final AuthUser _user;
   final ProfileBioStorage _bioStorage;
@@ -127,6 +128,9 @@ class MockProfileRepository implements ProfileRepository {
   ];
 
   static String handleFromUser(AuthUser user) {
+    // Note: toLowerCase() is called first, so we only need to normalize lowercase diacritics.
+    // All Polish diacritic uppercase equivalents (Ą, Ć, Ę, Ł, Ń, Ó, Ś, Ź, Ż) are mapped to
+    // lowercase first and then successfully normalized here.
     final raw = '${user.firstName}.${user.lastName}'.toLowerCase();
     return raw
         .replaceAll('ą', 'a')
@@ -207,7 +211,10 @@ class MockProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<List<ProfileActivity>> getRecentActivities({int limit = 5}) async {
+  Future<List<ProfileActivity>> getRecentActivities({
+    int limit = 5,
+    String? userId,
+  }) async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     return RecentActivitiesCard.mockActivities
         .asMap()
@@ -277,13 +284,5 @@ class MockProfileRepository implements ProfileRepository {
           const ProfileActivityStat(label: 'Strefa', value: 'Spokojna'),
         ],
     };
-  }
-}
-
-extension _FirstOrNull<E> on Iterable<E> {
-  E? get firstOrNull {
-    final iterator = this.iterator;
-    if (!iterator.moveNext()) return null;
-    return iterator.current;
   }
 }

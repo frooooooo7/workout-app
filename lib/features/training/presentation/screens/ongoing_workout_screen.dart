@@ -380,6 +380,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     await cubit.finish(session.id);
+    await ServiceLocator.flushTrainingSessionSync();
+    ServiceLocator.requestProfileRefresh();
     if (!context.mounted) return;
     setState(() => _allowPop = true);
     context.pop();

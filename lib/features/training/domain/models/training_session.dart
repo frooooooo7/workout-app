@@ -150,6 +150,7 @@ class TrainingSession {
     List<TrainingSessionExercise>? exercises,
     String? pendingOp,
     bool clearFinishedAt = false,
+    bool clearPendingOp = false,
   }) {
     return TrainingSession(
       id: id ?? this.id,
@@ -162,7 +163,7 @@ class TrainingSession {
       startedAt: startedAt ?? this.startedAt,
       finishedAt: clearFinishedAt ? null : (finishedAt ?? this.finishedAt),
       exercises: exercises ?? this.exercises,
-      pendingOp: pendingOp ?? this.pendingOp,
+      pendingOp: clearPendingOp ? null : (pendingOp ?? this.pendingOp),
     );
   }
 

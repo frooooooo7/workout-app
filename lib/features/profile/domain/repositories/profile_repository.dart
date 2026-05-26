@@ -11,7 +11,10 @@ abstract class ProfileRepository {
 
   Future<List<FollowingUser>> getFollowers({int limit = 20, int offset = 0});
 
-  Future<List<ProfileActivity>> getRecentActivities({int limit = 5});
+  Future<List<ProfileActivity>> getRecentActivities({
+    int limit = 5,
+    String? userId,
+  });
 
   Future<List<FollowingUser>> searchUsers(String query);
 

@@ -26,6 +26,8 @@ import '../../features/training/domain/repositories/training_history_repository.
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 import '../../features/training/domain/repositories/training_session_repository.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
+import '../../features/profile/data/api_profile_repository.dart';
+import '../../features/profile/domain/repositories/profile_repository.dart';
 
 class ServiceLocator {
   ServiceLocator._();
@@ -50,6 +52,8 @@ class ServiceLocator {
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
   static TrainingSessionRepository? _trainingSessionRepository;
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
+  static late final ProfileRepository profileRepository;
+  static final profileRefreshTick = ValueNotifier(0);
 
   /// Serialized dispose/setup so DB close never races a new user open.
   static Future<void>? _exerciseScopeFuture;
@@ -106,6 +110,7 @@ class ServiceLocator {
     _trainingSessionRemoteDataSource = TrainingSessionRemoteDataSource(
       apiClient,
     );
+    profileRepository = ApiProfileRepository(apiClient);
     restTimerScheduler = RestTimerNotificationScheduler();
 
     currentUser.addListener(_onUserChanged);
@@ -171,5 +176,19 @@ class ServiceLocator {
     _exerciseSyncEngine!.scheduleBootstrap();
     _trainingPlanSyncEngine!.scheduleBootstrap();
     _trainingSessionSyncEngine!.scheduleBootstrap();
+  }
+
+  static void requestProfileRefresh() {
+    profileRefreshTick.value++;
+  }
+
+  static Future<void> flushTrainingSessionSync() async {
+    final engine = _trainingSessionSyncEngine;
+    if (engine == null || engine.isStopped) return;
+    try {
+      await engine.flush();
+    } catch (_) {
+      /* sync is best-effort; profile refresh still runs afterward */
+    }
   }
 }

@@ -17,7 +17,6 @@ import '../../features/training/presentation/screens/training_stats_screen.dart'
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
-import '../../features/profile/data/mock_profile_repository.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
@@ -32,9 +31,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 final appRootNavigatorKey = GlobalKey<NavigatorState>();
 
 ProfileRepository _profileRepositoryForCurrentUser() {
-  final user = ServiceLocator.currentUser.value;
-  assert(user != null, 'ProfileRepository requires authenticated user');
-  return MockProfileRepository(user: user!);
+  return ServiceLocator.profileRepository;
 }
 
 GoRouter buildRouter({

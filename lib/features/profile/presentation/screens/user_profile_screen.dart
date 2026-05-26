@@ -32,6 +32,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant UserProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) {
+      _load();
+    }
+  }
+
   void _load() {
     _future = _fetch();
   }
@@ -39,7 +47,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Future<_UserProfileData> _fetch() async {
     final results = await Future.wait([
       widget.repository.getUserProfile(widget.userId),
-      widget.repository.getRecentActivities(limit: 4),
+      widget.repository.getRecentActivities(userId: widget.userId, limit: 4),
     ]);
     return _UserProfileData(
       profile: results[0] as UserProfile,
@@ -72,82 +80,95 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ? data.activities.sublist(1)
               : <ProfileActivity>[];
 
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Stack(
-                  children: [
-                    ProfileHeroHeader(
-                      profile: profile,
-                      onSettingsTap: () {},
-                      showSettings: false,
-                    ),
-                    if (!profile.isOwnProfile)
-                      Positioned(
-                        left: 24,
-                        top: MediaQuery.paddingOf(context).top + 8,
-                        child: IconButton(
-                          onPressed: () => context.pop(),
-                          icon: const Icon(Icons.arrow_back_rounded),
-                          color: AppColors.textSecondary,
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(44, 44),
-                            backgroundColor:
-                                AppColors.surface.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (!profile.isOwnProfile)
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _load();
+              });
+              try {
+                await _future;
+              } catch (_) {}
+            },
+            color: AppColors.primary,
+            backgroundColor: AppColors.surface,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                    child: FilledButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Obserwowanie ${profile.firstName} — wkrótce',
+                  child: Stack(
+                    children: [
+                      ProfileHeroHeader(
+                        profile: profile,
+                        onSettingsTap: () {},
+                        showSettings: false,
+                      ),
+                      if (!profile.isOwnProfile)
+                        Positioned(
+                          left: 24,
+                          top: MediaQuery.paddingOf(context).top + 8,
+                          child: IconButton(
+                            onPressed: () => context.pop(),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                            color: AppColors.textSecondary,
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(44, 44),
+                              backgroundColor:
+                                  AppColors.surface.withValues(alpha: 0.5),
                             ),
                           ),
-                        );
-                      },
-                      child: const Text('Obserwuj'),
-                    ),
+                        ),
+                    ],
                   ),
                 ),
-              SliverToBoxAdapter(
-                child: ProfileStatsRow(
-                  followingCount: profile.stats.followingCount,
-                  followersCount: profile.stats.followersCount,
-                  workoutsCount: profile.stats.workoutsCount,
-                  onFollowingTap: () {},
-                  onFollowersTap: () {},
-                  onWorkoutsTap: () {},
-                ),
-              ),
-              if (highlight != null) ...[
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                if (!profile.isOwnProfile)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                      child: FilledButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Obserwowanie ${profile.firstName} — wkrótce',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Obserwuj'),
+                      ),
+                    ),
+                  ),
                 SliverToBoxAdapter(
-                  child: ProfileHighlightActivity(
-                    activity: highlight,
+                  child: ProfileStatsRow(
+                    followingCount: profile.stats.followingCount,
+                    followersCount: profile.stats.followersCount,
+                    workoutsCount: profile.stats.workoutsCount,
+                    onFollowingTap: () {},
+                    onFollowersTap: () {},
+                    onWorkoutsTap: () {},
+                  ),
+                ),
+                if (highlight != null) ...[
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                  SliverToBoxAdapter(
+                    child: ProfileHighlightActivity(
+                      activity: highlight,
+                      profile: profile,
+                    ),
+                  ),
+                ],
+                SliverToBoxAdapter(
+                  child: ProfileSectionHeader(title: 'Aktywność'),
+                ),
+                SliverToBoxAdapter(
+                  child: ProfileActivityFeed(
+                    activities: rest,
                     profile: profile,
                   ),
                 ),
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
               ],
-              SliverToBoxAdapter(
-                child: ProfileSectionHeader(title: 'Aktywność'),
-              ),
-              SliverToBoxAdapter(
-                child: ProfileActivityFeed(
-                  activities: rest,
-                  profile: profile,
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
+            ),
           );
         },
       ),

@@ -87,6 +87,29 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> patch(
+    String path,
+    Map<String, dynamic> body, {
+    bool auth = false,
+  }) async {
+    try {
+      final response = await _client
+          .patch(
+            Uri.parse('$baseUrl$path'),
+            headers: await _headers(auth: auth),
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+      return _parse(response);
+    } on ApiException {
+      rethrow;
+    } on SocketException {
+      throw const ApiException('network_error');
+    } catch (_) {
+      throw const ApiException('network_error');
+    }
+  }
+
   Future<dynamic> put(
     String path,
     Map<String, dynamic> body, {
