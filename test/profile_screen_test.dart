@@ -10,9 +10,11 @@ import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
+import 'package:gym/features/profile/presentation/screens/following_list_screen.dart';
 import 'package:gym/features/profile/presentation/screens/profile_screen.dart';
 import 'package:gym/features/profile/presentation/widgets/following_avatar_strip.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_hero_header.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   testWidgets('ProfileScreen renders hero, stats and activity sections', (
@@ -126,6 +128,38 @@ void main() {
     expect(tapped, isTrue);
   });
 
+  testWidgets('FollowingListScreen shows find people action in app bar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp.router(
+        routerConfig: GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, state) => FollowingListScreen(
+                repository: const _FakeProfileRepository(),
+              ),
+            ),
+            GoRoute(
+              path: '/app/profile/find-people',
+              builder: (context, state) => const Scaffold(
+                body: Center(child: Text('Find people')),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Znajdź osoby'), findsOneWidget);
+    await tester.tap(find.byTooltip('Znajdź osoby'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Find people'), findsOneWidget);
+  });
+
   testWidgets('FollowingAvatarStrip shows empty state CTA', (tester) async {
     var tapped = false;
 
@@ -148,7 +182,7 @@ void main() {
 }
 
 class _FakeProfileCubit extends ProfileCubit {
-  _FakeProfileCubit(ProfileState initial) : super(_NoOpRepository()) {
+  _FakeProfileCubit(ProfileState initial) : super(const _FakeProfileRepository()) {
     emit(initial);
   }
 
@@ -156,15 +190,19 @@ class _FakeProfileCubit extends ProfileCubit {
   Future<void> load() async {}
 }
 
-class _NoOpRepository implements ProfileRepository {
-  @override
-  Future<List<FollowingUser>> getFollowers({int limit = 20, int offset = 0}) {
-    throw UnimplementedError();
-  }
+class _FakeProfileRepository implements ProfileRepository {
+  const _FakeProfileRepository({this.following = const []});
+
+  final List<FollowingUser> following;
 
   @override
   Future<List<FollowingUser>> getFollowing({int limit = 20, int offset = 0}) {
-    throw UnimplementedError();
+    return Future.value(following);
+  }
+
+  @override
+  Future<List<FollowingUser>> getFollowers({int limit = 20, int offset = 0}) {
+    return Future.value(const []);
   }
 
   @override

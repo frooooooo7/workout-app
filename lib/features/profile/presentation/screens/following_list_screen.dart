@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/following_user.dart';
@@ -27,7 +28,19 @@ class _FollowingListScreenState extends State<FollowingListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('OBSERWOWANI')),
+      appBar: AppBar(
+        title: const Text('OBSERWOWANI'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              onPressed: () => context.push('/app/profile/find-people'),
+              tooltip: 'Znajdź osoby',
+              icon: const Icon(Icons.person_add_outlined),
+            ),
+          ),
+        ],
+      ),
       body: FutureBuilder(
         future: _future,
         builder: (context, snapshot) {

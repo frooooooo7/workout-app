@@ -113,7 +113,7 @@ class ApiProfileRepository implements ProfileRepository {
   List<FollowingUser> _followingUsersFromJson(dynamic data) {
     if (data is! List) return const [];
     return data
-        .cast<Map<String, dynamic>>()
+        .whereType<Map<String, dynamic>>()
         .map(
           (json) => FollowingUser(
             id: json['id'] as String,
@@ -129,7 +129,7 @@ class ApiProfileRepository implements ProfileRepository {
   List<ProfileActivity> _activitiesFromJson(dynamic data) {
     if (data is! List) return const [];
     return data
-        .cast<Map<String, dynamic>>()
+        .whereType<Map<String, dynamic>>()
         .map(
           (json) => ProfileActivity(
             id: json['id'] as String?,
@@ -150,7 +150,7 @@ class ApiProfileRepository implements ProfileRepository {
   List<ProfileActivityStat> _statsFromJson(dynamic raw) {
     if (raw is! List) return const [];
     return raw
-        .cast<Map<String, dynamic>>()
+        .whereType<Map<String, dynamic>>()
         .map(
           (json) => ProfileActivityStat(
             label: json['label'] as String? ?? '',

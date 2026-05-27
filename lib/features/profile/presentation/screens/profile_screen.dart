@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/navigation/app_routes.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/profile_cubit.dart';
@@ -44,14 +45,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _onRouteStackChanged() {
     if (!mounted) return;
-    if (_router?.state.uri.path == '/app/profile') {
+    if (_router?.state.uri.path == AppRoutes.profile) {
       _refreshIfLoaded();
     }
   }
 
   void _onProfileRefreshRequested() {
     if (!mounted) return;
-    if (_router?.state.uri.path == '/app/profile') {
+    if (_router?.state.uri.path == AppRoutes.profile) {
       _refreshIfLoaded();
     }
   }
