@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/navigation/app_routes.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/user_profile.dart';
 import '../bloc/profile_cubit.dart';
 import '../bloc/profile_state.dart';
 import '../widgets/edit_profile_bio_sheet.dart';
@@ -78,6 +79,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await context.read<ProfileCubit>().updateBio(result);
   }
 
+  Future<void> _handleEditProfile(BuildContext context, ProfileState state) async {
+    final profile = state.profile;
+    if (profile == null) return;
+    final result = await context.push<UserProfile>(AppRoutes.editProfile, extra: profile);
+    if (!context.mounted || result == null) return;
+    await context.read<ProfileCubit>().refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -111,8 +120,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SliverToBoxAdapter(
                   child: ProfileHeroHeader(
                     profile: profile,
-                    onSettingsTap: () => context.push('/app/profile/settings'),
+                    onSettingsTap: () => context.push('/app/profile/settings', extra: profile),
                     onBioEditTap: () => _handleBioEdit(context, state),
+                    onAvatarTap: profile.isOwnProfile
+                        ? () => _handleEditProfile(context, state)
+                        : null,
                   ),
                 ),
                 SliverToBoxAdapter(

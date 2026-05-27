@@ -1,10 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../auth/domain/models/auth_models.dart';
 import '../../home/domain/models/recent_activity.dart';
 import '../../home/presentation/widgets/recent_activities_card.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_activity.dart';
 import '../domain/models/profile_activity_stat.dart';
+import '../domain/models/profile_update_input.dart';
 import '../domain/models/profile_stats.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
@@ -15,10 +19,17 @@ class MockProfileRepository implements ProfileRepository {
     required AuthUser user,
     required SharedPreferences prefs,
   })  : _user = user,
-        _bioStorage = ProfileBioStorage(prefs);
+        _bioStorage = ProfileBioStorage(prefs),
+        _firstName = user.firstName,
+        _lastName = user.lastName,
+        _handle = handleFromUser(user);
 
   final AuthUser _user;
   final ProfileBioStorage _bioStorage;
+  String _firstName;
+  String _lastName;
+  String _handle;
+  String? _avatarUrl;
 
   static const _mockFollowing = [
     FollowingUser(
@@ -151,10 +162,11 @@ class MockProfileRepository implements ProfileRepository {
     final bio = await _bioStorage.read(_user.id);
     return UserProfile(
       id: _user.id,
-      firstName: _user.firstName,
-      lastName: _user.lastName,
-      handle: handleFromUser(_user),
+      firstName: _firstName,
+      lastName: _lastName,
+      handle: _handle,
       bio: bio,
+      avatarUrl: _avatarUrl,
       stats: const ProfileStats(
         followingCount: 24,
         followersCount: 18,
@@ -165,8 +177,30 @@ class MockProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile> updateBio(String bio) async {
-    await _bioStorage.write(_user.id, bio);
+  Future<UserProfile> updateBio(String bio) async =>
+      updateProfile(ProfileUpdateInput(bio: bio));
+
+  @override
+  Future<UserProfile> updateProfile(ProfileUpdateInput input) async {
+    if (input.bio != null) {
+      await _bioStorage.write(_user.id, input.bio!);
+    }
+    if (input.firstName != null) {
+      _firstName = input.firstName!;
+    }
+    if (input.lastName != null) {
+      _lastName = input.lastName!;
+    }
+    if (input.handle != null) {
+      _handle = input.handle!;
+    }
+    return getOwnProfile();
+  }
+
+  @override
+  Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
+    _avatarUrl =
+        'https://example.invalid/avatar/${bytes.lengthInBytes}-$filename';
     return getOwnProfile();
   }
 

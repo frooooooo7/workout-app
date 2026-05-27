@@ -12,12 +12,14 @@ class ProfileHeroHeader extends StatelessWidget {
     required this.onSettingsTap,
     this.showSettings = true,
     this.onBioEditTap,
+    this.onAvatarTap,
   });
 
   final UserProfile profile;
   final VoidCallback onSettingsTap;
   final bool showSettings;
   final VoidCallback? onBioEditTap;
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -56,11 +58,30 @@ class ProfileHeroHeader extends StatelessWidget {
                 )
               else
                 const SizedBox(height: 44),
-              UserAvatar.fromNames(
-                firstName: profile.firstName,
-                lastName: profile.lastName,
-                imageUrl: profile.avatarUrl,
-                size: UserAvatarSize.lg,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  UserAvatar.fromNames(
+                    firstName: profile.firstName,
+                    lastName: profile.lastName,
+                    imageUrl: profile.avatarUrl,
+                    size: UserAvatarSize.lg,
+                  ),
+                  if (profile.isOwnProfile && onAvatarTap != null)
+                    Positioned.fill(
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onAvatarTap,
+                          borderRadius: BorderRadius.circular(UserAvatarSize.lg.radius),
+                          child: SizedBox(
+                            width: UserAvatarSize.lg.dimension,
+                            height: UserAvatarSize.lg.dimension,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 14),
               Text(

@@ -17,8 +17,10 @@ import '../../features/training/presentation/screens/training_stats_screen.dart'
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
+import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
+import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
@@ -212,7 +214,25 @@ GoRouter buildRouter({
                     builder: (_, s) {
                       final user = ServiceLocator.currentUser.value;
                       if (user == null) return const _LoadingScreen();
-                      return ProfileSettingsScreen(user: user);
+                      final initialProfile = s.extra as UserProfile?;
+                      return ProfileSettingsScreen(
+                        user: user,
+                        initialProfile: initialProfile,
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'edit',
+                    builder: (_, s) {
+                      final user = ServiceLocator.currentUser.value;
+                      if (user == null) return const _LoadingScreen();
+                      final initialProfile = s.extra as UserProfile?;
+                      return EditProfileScreen(
+                        repository: _profileRepositoryForCurrentUser(),
+                        user: user,
+                        initialProfile: initialProfile,
+                      );
                     },
                   ),
                   GoRoute(

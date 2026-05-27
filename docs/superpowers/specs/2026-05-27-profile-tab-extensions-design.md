@@ -1,95 +1,141 @@
 # Spec: Rozszerzenia zakładki Profil
 
 **Data:** 2026-05-27  
-**Status:** Zatwierdzony do planowania implementacji  
+**Ostatnia aktualizacja:** 2026-05-27  
+**Status:** Fazy 0 i 1 zrealizowane — następna: Faza 2 (Social)  
 **Repozytoria:** `gym` (Flutter), `gym-backend` (Node/Express)
 
 ---
 
 ## Cel dokumentu
 
-Research i roadmap funkcjonalności dla zakładki **Profil**. Dokument opisuje stan obecny, luki, proponowane fazy rozwoju oraz **zakres Fazy 0** przekazany do osobnego agenta implementacyjnego.
-
-### Wyłączenia z Fazy 0 (decyzja produktowa)
-
-Następujące pozycje z pierwotnej Fazy 0 **nie wchodzą** w bieżący zakres implementacji:
-
-| Wykluczone | Powód |
-|------------|-------|
-| Ujednolicenie danych Profil ↔ Home | Zakładka Home będzie przebudowana osobno |
-| Spięcie statystyki „Treningi” z prawdziwymi danymi / podmiana mockowej zakładki Aktywność | Poza zakresem Fazy 0 |
+Research i roadmap funkcjonalności dla zakładki **Profil**. Dokument opisuje stan obecny, zrealizowane fazy, luki oraz plan dalszego rozwoju.
 
 ---
 
-## Stan obecny
+## Postęp implementacji
 
-Profil jest zaprojektowany jako **społecznościowy profil treningowy**: hero, statystyki, feed aktywności z prawdziwych sesji treningowych. Sporo elementów jest gotowych w UI, ale niepodpiętych lub oznaczonych jako „Wkrótce”.
+| Faza | Status | Uwagi |
+|------|--------|-------|
+| **Faza 0** — Quick wins | ✅ Zrobione | Wejście „Znajdź osoby” w AppBar ekranu Obserwowani (nie na głównym profilu) |
+| **Faza 1** — Edycja profilu | ✅ Zrobione | Avatar, imię, nazwisko, handle, bio + ekran edycji |
+| **Faza 2** — Social | ⏳ Do zrobienia | Follow, kudos, komentarze |
+| **Faza 3** — Statystyki | ⏳ Do zrobienia | PR, streak, wykresy |
+| **Faza 4** — Ustawienia konta | ⏳ Do zrobienia | Hasło, powiadomienia, prywatność |
+| **Faza 5** — Nice-to-have | ⏳ Do zrobienia | Cele, zdjęcia z treningu, itd. |
+
+### Infrastruktura (poza fazami)
+
+| Element | Status |
+|---------|--------|
+| CORS dla `/uploads/*` (Flutter Web) | ✅ Naprawione — statyczne pliki za middleware `cors()` + `crossOriginResourcePolicy` |
+| Docker volume `uploads_data` → `/app/uploads` | ✅ Pliki avatara/ćwiczeń przetrwają rebuild kontenera |
+| `docker-entrypoint.sh` | ✅ Tworzy katalogi uploadów i ustawia uprawnienia `node` |
+
+---
+
+## Faza 0 — Zrealizowane
+
+### Zakres (po decyzji produktowej)
+
+| Zrobione | Szczegóły |
+|----------|-----------|
+| **Wejście „Znajdź osoby”** | Ikona `person_add_outlined` w AppBar ekranu **Obserwowani** → `/app/profile/find-people` |
+| **Margines ikony** | `padding: EdgeInsets.only(right: 12)` — ikona nie przyklejona do krawędzi |
+
+### Świadomie NIE zrobione (Faza 0)
+
+| Wykluczone | Powód |
+|------------|-------|
+| `FollowingAvatarStrip` na głównym profilu | Decyzja UX — pasek nie na ekranie głównym |
+| Ujednolicenie danych Profil ↔ Home | Home będzie przebudowane osobno |
+| Spięcie stat „Treningi” z prawdziwymi danymi | Poza zakresem |
+
+**Pliki:** `following_list_screen.dart`, test `FollowingListScreen shows find people action in app bar`
+
+---
+
+## Faza 1 — Zrealizowane
+
+### Backend
+
+| Endpoint / element | Opis |
+|--------------------|------|
+| `PATCH /profile/me` | `bio`, `firstName`, `lastName`, `handle` (walidacja + normalizacja, `handle_taken` → 409) |
+| `POST /profile/me/avatar` | Multipart upload, max 5 MB, JPG/PNG/WEBP |
+| Storage | Pliki na dysku: `uploads/avatar-images/<uuid>.ext` |
+| DB | Tylko ścieżka w `users.avatar_url` (TEXT) — **nie** binarny blob |
+| Serwowanie | `GET /uploads/avatar-images/...` via `express.static` |
+
+**Pliki:** `profile.schemas.ts`, `profile.repository.ts`, `profile.service.ts`, `profile.controller.ts`, `profile.routes.ts`, `profile.avatar-upload.ts`, `profile.handle.ts`
+
+### Frontend
+
+| Element | Opis |
+|---------|------|
+| **Ekran edycji** | `/app/profile/edit` — `EditProfileScreen` |
+| **Pola** | Avatar (galeria), imię, nazwisko, `@handle`, bio, email (read-only) |
+| **Wejścia** | Ustawienia → „Edytuj profil”; tap na avatarze na własnym profilu |
+| **Po zapisie** | `requestProfileRefresh()` + sync `ServiceLocator.currentUser` (imię/nazwisko) |
+| **URL avatara** | `resolveApiAssetUrl()` — relative path → pełny URL API |
+| **Błędy API** | Polskie komunikaty w `profile_form_utils.dart` |
+
+**Pliki:** `edit_profile_screen.dart`, `api_profile_repository.dart`, `profile_update_input.dart`, `api_asset_uri.dart`, `app_routes.dart`, `profile_settings_screen.dart`, `profile_hero_header.dart`
+
+### Testy
+
+- Backend: `profile.routes.test.ts` (PATCH rozszerzone, handle conflict, avatar schema)
+- Flutter: `profile_form_utils_test.dart`, `profile_screen_test.dart`
+
+---
+
+## Stan obecny (po Fazach 0 + 1)
 
 ### Co działa
 
 | Element | Szczegóły |
 |---------|-----------|
-| Hero header | Avatar (inicjały lub `avatarUrl`), imię, `@handle`, edytowalne bio, ikona ustawień |
-| Statystyki | Obserwowani → `/app/profile/following`, Obserwujący → `/app/profile/followers`, Treningi → `/app/activity` |
-| Feed aktywności | Z API (`training_sessions`), highlight + lista, tap → `/app/training/history/:sessionId` |
-| Listy social | Following, followers, wyszukiwanie użytkowników |
-| Ustawienia | Read-only imię/email, wylogowanie |
-| Odświeżanie | Po zakończeniu treningu via `ServiceLocator.profileRefreshTick` |
+| Hero header | Avatar (upload lub inicjały), imię, `@handle`, edytowalne bio, tap avatar → edycja |
+| Statystyki | Obserwowani / Obserwujący / Treningi (Treningi → mockowa Aktywność) |
+| Feed aktywności | Z API, highlight + lista |
+| Listy social | Following (+ ikona Znajdź osoby), followers, wyszukiwanie |
+| Edycja profilu | Pełny ekran + upload avatara |
+| Ustawienia | Edytuj profil, read-only imię/email, wylogowanie |
+| Odświeżanie | Po treningu + po edycji profilu |
 
-### Kluczowe pliki (frontend)
-
-| Plik | Rola |
-|------|------|
-| `lib/features/profile/presentation/screens/profile_screen.dart` | Główna zakładka Profil |
-| `lib/features/profile/presentation/bloc/profile_cubit.dart` | Stan + wywołania API |
-| `lib/features/profile/presentation/widgets/following_avatar_strip.dart` | Pasek obserwowanych — **gotowy, nieużywany na ekranie** |
-| `lib/features/profile/presentation/screens/find_people_screen.dart` | Wyszukiwanie — route istnieje, brak wejścia z UI |
-| `lib/features/profile/presentation/screens/profile_settings_screen.dart` | Ustawienia (stuby „Wkrótce”) |
-| `lib/features/profile/data/api_profile_repository.dart` | Mapowanie HTTP |
-
-### Kluczowe pliki (backend)
-
-| Plik | Rola |
-|------|------|
-| `src/modules/profile/profile.routes.ts` | Endpointy profilu |
-| `src/modules/profile/profile.service.ts` | Logika + formatowanie |
-| `src/db/migrate.ts` | Tabele `users`, `user_follows` |
-
-### Co jest tylko „na pokaz”
+### Co jest tylko „na pokaz” / do zrobienia
 
 | Element | Status |
 |---------|--------|
-| `FollowingAvatarStrip` | Zbudowany, testowany, **nie renderowany** w `ProfileScreen` |
-| `ProfileCubit` ładuje `following` | Dane pobierane, **nieużywane w UI** |
-| `/app/profile/find-people` | Route bez CTA na żywym profilu |
-| Follow/unfollow | SnackBar „wkrótce” na `user_profile_screen`, `find_people_screen` |
-| Kudos, komentarze, share | Puste handlery w `profile_activity_post_card.dart` |
-| Powiadomienia, zmiana hasła, pomoc | `profile_settings_screen.dart` — **Wkrótce** |
-| `avatarUrl` | W DB/modelu, brak uploadu |
-| `handle` | Generowany przy rejestracji, brak edycji |
-| Home + Aktywność | Mocki (86.4 km, 6752 kcal) — **nie spięte z profilem** |
+| `FollowingAvatarStrip` | Widget gotowy, **nieużywany** na głównym profilu |
+| Follow/unfollow | SnackBar „wkrótce” |
+| Kudos, komentarze, share | Puste handlery |
+| Powiadomienia, zmiana hasła, pomoc | **Wkrótce** w ustawieniach |
+| Home + Aktywność | Mocki — nie spięte z profilem |
 
-### Model danych
-
-**Frontend — `UserProfile`:** `id`, `firstName`, `lastName`, `handle`, `bio?`, `avatarUrl?`, `stats`, `isOwnProfile`  
-**Frontend — `ProfileStats`:** `followingCount`, `followersCount`, `workoutsCount`  
-**Backend — `users`:** core auth + `handle`, `bio`, `avatar_url`  
-**Backend — `user_follows`:** istnieje, brak write API
-
-### Istniejące endpointy API
+### Endpointy API (profil)
 
 | Method | Path | Opis |
 |--------|------|------|
 | GET | `/profile/me` | Własny profil + stats |
-| PATCH | `/profile/me` | Aktualizacja `bio` |
+| PATCH | `/profile/me` | `bio`, `firstName`, `lastName`, `handle` |
+| POST | `/profile/me/avatar` | Upload avatara (multipart) |
 | GET | `/profile/following` | Lista obserwowanych |
 | GET | `/profile/followers` | Lista obserwujących |
 | GET | `/profile/activities` | Ostatnie treningi |
 | GET | `/users/search` | Wyszukiwanie |
 | GET | `/users/:userId/profile` | Profil innego użytkownika |
 | GET | `/users/:userId/activities` | Aktywność innego użytkownika |
+| GET | `/uploads/avatar-images/:file` | Statyczny plik avatara |
 
-**Brak:** follow/unfollow, avatar upload, kudos, komentarze, zmiana hasła, powiadomienia.
+**Brak:** follow/unfollow, kudos, komentarze, zmiana hasła, powiadomienia.
+
+### Przechowywanie zdjęć
+
+```
+Upload → dysk (uploads/avatar-images/) → w DB tylko TEXT (ścieżka)
+Docker: volume uploads_data montowany w /app/uploads
+```
 
 ---
 
@@ -97,12 +143,10 @@ Profil jest zaprojektowany jako **społecznościowy profil treningowy**: hero, s
 
 ```
 ┌─────────────────────────────────────┐
-│  [Avatar]  Imię Nazwisko     ⚙️     │
+│  [Avatar]  Imię Nazwisko     ⚙️     │  ← tap avatar → edycja (Faza 1 ✅)
 │  @handle                            │
 │  Bio (tap to edit)                  │
-│  [Obserwujący] [Obserwowani] [🏋️]   │
-├─────────────────────────────────────┤
-│  👥 Pasek obserwowanych → Znajdź    │  ← Faza 0
+│  [Obserwujący] [Obserwowani] [🏋️]   │  ← Obserwowani → lista + Znajdź (Faza 0 ✅)
 ├─────────────────────────────────────┤
 │  📊 Ten tydzień / PR / streak       │  ← Faza 3
 ├─────────────────────────────────────┤
@@ -115,38 +159,7 @@ Profil jest zaprojektowany jako **społecznościowy profil treningowy**: hero, s
 
 ---
 
-## Roadmap faz
-
-### Faza 0 — Quick wins (zakres implementacji)
-
-**W zakresie** (plan implementacji — osobny agent):
-
-| Funkcja | Opis | Uwagi |
-|---------|------|-------|
-| **Pasek obserwowanych** | Integracja `FollowingAvatarStrip` w `ProfileScreen` | `ProfileCubit` już ładuje `following` |
-| **Wejście „Znajdź osoby”** | CTA do `/app/profile/find-people` | Pasek + empty state już to wspierają |
-
-**Poza zakresem Fazy 0:**
-
-- Ujednolicenie danych Profil ↔ Home
-- Spięcie stat „Treningi” z prawdziwymi danymi / podmiana mockowej zakładki Aktywność
-
-**Szacunek:** ~1 dzień frontend, bez nowych endpointów backendowych.
-
----
-
-### Faza 1 — Edycja profilu
-
-| Funkcja | Backend |
-|---------|---------|
-| Upload avatara | `POST /profile/me/avatar` + storage |
-| Edycja imienia / nazwiska | `PATCH /profile/me` |
-| Edycja handle | Walidacja unikalności |
-| Ekran „Edytuj profil” | Flutter settings + hero |
-
-**Szacunek:** 3–5 dni.
-
----
+## Roadmap — pozostałe fazy
 
 ### Faza 2 — Social
 
@@ -205,48 +218,45 @@ Profil jest zaprojektowany jako **społecznościowy profil treningowy**: hero, s
 
 ---
 
-## Priorytetyzacja
+## Priorytetyzacja (zaktualizowana)
 
-| Priorytet | Pakiet | ROI |
-|-----------|--------|-----|
-| **P0** | Faza 0 (pasek + find people) + follow/unfollow | Domyka obiecany social UX |
-| **P1** | Avatar + edycja profilu + zmiana hasła | Solidne konto |
-| **P2** | Kudos + statystyki (PR, streak) | Engagement |
-| **P3** | Komentarze, prywatność, powiadomienia | Skala social |
-| **P4** | Osiągnięcia, cele, zdjęcia | Retencja |
+| Priorytet | Pakiet | Status |
+|-----------|--------|--------|
+| ~~**P0**~~ | ~~Faza 0 + find people~~ | ✅ |
+| ~~**P1**~~ | ~~Avatar + edycja profilu~~ | ✅ |
+| **P0** | Faza 2 — follow/unfollow + kudos | Następny krok |
+| **P1** | Faza 3 — statystyki (PR, streak) | |
+| **P2** | Faza 4 — hasło, prywatność, powiadomienia | |
+| **P3** | Faza 5 — nice-to-have | |
 
 ---
 
-## Zależności techniczne (backend — przyszłe fazy)
+## Zależności techniczne (backend)
 
 ```
-users (+ privacy fields)
-user_follows          ← istnieje, brak write API
-activity_kudos        ← Faza 2
-activity_comments     ← Faza 2
-user_achievements     ← Faza 3
-user_notification_prefs ← Faza 4
-avatar storage        ← Faza 1
-/stats/summary        ← Faza 3
+users (+ privacy fields)     ← Faza 4
+user_follows                 ← istnieje, brak write API (Faza 2)
+activity_kudos               ← Faza 2
+activity_comments            ← Faza 2
+user_achievements            ← Faza 3
+user_notification_prefs      ← Faza 4
+avatar storage (filesystem)  ← ✅ Faza 1 (uploads/avatar-images + Docker volume)
+/stats/summary               ← Faza 3
 ```
 
 ---
 
 ## Ryzyka i uwagi
 
-1. **Niespójność danych Home ↔ Profil** — świadomie odroczone do przebudowy Home.
-2. **Stat „Treningi” → mockowa Aktywność** — pozostaje do czasu osobnej decyzji produktowej.
-3. **Social bez follow** — kudosy i komentarze sensowne dopiero po Fazie 2.
-4. **Avatar** — wymaga storage/CDN; osobna infrastruktura w Fazie 1.
-5. **Podział profil vs ustawienia** — statystyki i feed na profilu; konto i prywatność w ustawieniach.
+1. **Niespójność danych Home ↔ Profil** — odroczone do przebudowy Home.
+2. **Stat „Treningi” → mockowa Aktywność** — bez zmian.
+3. **Social bez follow** — kudosy i komentarze sensowne dopiero w Fazie 2.
+4. **Avatar na produkcji** — obecnie lokalny filesystem + Docker volume; na skalę → S3/CDN.
+5. **`docker compose down -v`** — usuwa volume `uploads_data` wraz z plikami.
+6. **Podział profil vs ustawienia** — edycja profilu w `/app/profile/edit`; hasło/prywatność w ustawieniach (Faza 4).
 
 ---
 
 ## Następny krok
 
-**Implementacja Fazy 0** — osobny agent tworzy plan implementacji (`writing-plans`) dla:
-
-- integracji `FollowingAvatarStrip` w `ProfileScreen`
-- wejścia do `/app/profile/find-people`
-
-**Bez:** ujednolicenia z Home, spięcia stat Treningi z prawdziwymi danymi.
+**Faza 2 — Social:** follow/unfollow, status relacji, kudos (opcjonalnie komentarze).

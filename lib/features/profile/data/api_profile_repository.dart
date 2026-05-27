@@ -1,9 +1,17 @@
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
+
+import '../../../core/network/api_asset_uri.dart';
 import '../../../core/network/api_client.dart';
 import '../../home/domain/models/recent_activity.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_activity.dart';
 import '../domain/models/profile_activity_stat.dart';
 import '../domain/models/profile_stats.dart';
+import '../domain/models/profile_update_input.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
 
@@ -20,10 +28,31 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile> updateBio(String bio) async {
-    final data = await _api.patch('/profile/me', {'bio': bio}, auth: true)
+  Future<UserProfile> updateBio(String bio) =>
+      updateProfile(ProfileUpdateInput(bio: bio));
+
+  @override
+  Future<UserProfile> updateProfile(ProfileUpdateInput input) async {
+    final data = await _api.patch('/profile/me', input.toJson(), auth: true)
         as Map<String, dynamic>;
     return _userProfileFromJson(data);
+  }
+
+  @override
+  Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
+    final safeName = _normalizeAvatarFilename(filename);
+    final file = http.MultipartFile.fromBytes(
+      'avatar',
+      bytes,
+      filename: safeName,
+      contentType: _mediaTypeForAvatar(safeName),
+    );
+    final data = await _api.postMultipart(
+      '/profile/me/avatar',
+      files: [file],
+      auth: true,
+    );
+    return _userProfileFromJson(data as Map<String, dynamic>);
   }
 
   @override
@@ -100,7 +129,7 @@ class ApiProfileRepository implements ProfileRepository {
       lastName: json['lastName'] as String,
       handle: json['handle'] as String,
       bio: json['bio'] as String?,
-      avatarUrl: json['avatarUrl'] as String?,
+      avatarUrl: resolveApiAssetUrl(json['avatarUrl'] as String?),
       stats: ProfileStats(
         followingCount: (stats['followingCount'] as num?)?.toInt() ?? 0,
         followersCount: (stats['followersCount'] as num?)?.toInt() ?? 0,
@@ -120,7 +149,7 @@ class ApiProfileRepository implements ProfileRepository {
             firstName: json['firstName'] as String,
             lastName: json['lastName'] as String,
             handle: json['handle'] as String,
-            avatarUrl: json['avatarUrl'] as String?,
+            avatarUrl: resolveApiAssetUrl(json['avatarUrl'] as String?),
           ),
         )
         .toList(growable: false);
@@ -167,5 +196,20 @@ class ApiProfileRepository implements ProfileRepository {
       'yoga' => RecentActivityKind.yoga,
       _ => RecentActivityKind.strength,
     };
+  }
+
+  String _normalizeAvatarFilename(String filename) {
+    final base = filename.split('/').last.split('\\').last;
+    final dotIndex = base.lastIndexOf('.');
+    final ext = dotIndex >= 0 ? base.substring(dotIndex).toLowerCase() : '.jpg';
+    const allowed = {'.jpg', '.jpeg', '.png', '.webp'};
+    final safeExt = allowed.contains(ext) ? ext : '.jpg';
+    return 'avatar$safeExt';
+  }
+
+  MediaType _mediaTypeForAvatar(String filename) {
+    final mime = lookupMimeType(filename);
+    if (mime != null) return MediaType.parse(mime);
+    return MediaType('image', 'jpeg');
   }
 }

@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import '../models/following_user.dart';
 import '../models/profile_activity.dart';
+import '../models/profile_update_input.dart';
 import '../models/user_profile.dart';
 
 abstract class ProfileRepository {
@@ -19,4 +22,8 @@ abstract class ProfileRepository {
   Future<List<FollowingUser>> searchUsers(String query);
 
   Future<UserProfile> updateBio(String bio);
+
+  Future<UserProfile> updateProfile(ProfileUpdateInput input);
+
+  Future<UserProfile> uploadAvatar(Uint8List bytes, String filename);
 }

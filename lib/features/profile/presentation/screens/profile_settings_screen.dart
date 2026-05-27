@@ -1,14 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/navigation/app_routes.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../domain/models/user_profile.dart';
 
-class ProfileSettingsScreen extends StatelessWidget {
-  const ProfileSettingsScreen({super.key, required this.user});
+class ProfileSettingsScreen extends StatefulWidget {
+  const ProfileSettingsScreen({
+    super.key,
+    required this.user,
+    this.initialProfile,
+  });
 
   final AuthUser user;
+  final UserProfile? initialProfile;
+
+  @override
+  State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+}
+
+class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
+  late UserProfile? _profile = widget.initialProfile;
+
+  Future<void> _handleEditProfile(BuildContext context) async {
+    final updated = await context.push<UserProfile>(
+      AppRoutes.editProfile,
+      extra: _profile,
+    );
+    if (!context.mounted || updated == null) return;
+    setState(() => _profile = updated);
+  }
 
   Future<void> _handleLogout(BuildContext context) async {
     await ServiceLocator.tokenStorage.clear();
@@ -24,61 +47,73 @@ class ProfileSettingsScreen extends StatelessWidget {
         title: const Text('USTAWIENIA'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const _SectionLabel(label: 'Konto'),
-              const SizedBox(height: 12),
-              _InfoCard(
-                icon: Icons.person_outline_rounded,
-                label: 'Imię i nazwisko',
-                value: user.fullName,
-              ),
-              const SizedBox(height: 10),
-              _InfoCard(
-                icon: Icons.mail_outline_rounded,
-                label: 'Adres e-mail',
-                value: user.email,
-              ),
-              const SizedBox(height: 32),
-              const _SectionLabel(label: 'Ustawienia'),
-              const SizedBox(height: 12),
-              _MenuRow(
-                icon: Icons.notifications_outlined,
-                label: 'Powiadomienia',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 10),
-              _MenuRow(
-                icon: Icons.lock_outline_rounded,
-                label: 'Zmiana hasła',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 10),
-              _MenuRow(
-                icon: Icons.help_outline_rounded,
-                label: 'Pomoc',
-                onTap: () {},
-                trailing: const _ComingSoon(),
-              ),
-              const SizedBox(height: 32),
-              OutlinedButton.icon(
-                onPressed: () => _handleLogout(context),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Wyloguj się'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.strengthWeak,
-                  side: BorderSide(
-                    color: AppColors.strengthWeak.withValues(alpha: 0.5),
+        child: ValueListenableBuilder<AuthUser?>(
+          valueListenable: ServiceLocator.currentUser,
+          builder: (context, currentUser, _) {
+            final displayUser = currentUser ?? widget.user;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _SectionLabel(label: 'Konto'),
+                  const SizedBox(height: 12),
+                  _MenuRow(
+                    icon: Icons.edit_outlined,
+                    label: 'Edytuj profil',
+                    onTap: () => _handleEditProfile(context),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  _InfoCard(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Imię i nazwisko',
+                    value: displayUser.fullName,
+                  ),
+                  const SizedBox(height: 10),
+                  _InfoCard(
+                    icon: Icons.mail_outline_rounded,
+                    label: 'Adres e-mail',
+                    value: displayUser.email,
+                  ),
+                  const SizedBox(height: 32),
+                  const _SectionLabel(label: 'Ustawienia'),
+                  const SizedBox(height: 12),
+                  _MenuRow(
+                    icon: Icons.notifications_outlined,
+                    label: 'Powiadomienia',
+                    onTap: () {},
+                    trailing: const _ComingSoon(),
+                  ),
+                  const SizedBox(height: 10),
+                  _MenuRow(
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Zmiana hasła',
+                    onTap: () {},
+                    trailing: const _ComingSoon(),
+                  ),
+                  const SizedBox(height: 10),
+                  _MenuRow(
+                    icon: Icons.help_outline_rounded,
+                    label: 'Pomoc',
+                    onTap: () {},
+                    trailing: const _ComingSoon(),
+                  ),
+                  const SizedBox(height: 32),
+                  OutlinedButton.icon(
+                    onPressed: () => _handleLogout(context),
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('Wyloguj się'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.strengthWeak,
+                      side: BorderSide(
+                        color: AppColors.strengthWeak.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

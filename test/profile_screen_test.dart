@@ -1,17 +1,24 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/navigation/app_routes.dart';
+import 'package:gym/core/services/service_locator.dart';
+import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/home/domain/models/recent_activity.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/models/profile_activity.dart';
 import 'package:gym/features/profile/domain/models/profile_activity_stat.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
+import 'package:gym/features/profile/domain/models/profile_update_input.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
 import 'package:gym/features/profile/presentation/screens/following_list_screen.dart';
 import 'package:gym/features/profile/presentation/screens/profile_screen.dart';
+import 'package:gym/features/profile/presentation/screens/profile_settings_screen.dart';
 import 'package:gym/features/profile/presentation/widgets/following_avatar_strip.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_hero_header.dart';
 import 'package:go_router/go_router.dart';
@@ -179,10 +186,91 @@ void main() {
     await tester.pump();
     expect(tapped, isTrue);
   });
+
+  testWidgets('ProfileSettingsScreen reuses profile returned from edit flow', (
+    tester,
+  ) async {
+    const user = AuthUser(
+      id: 'me',
+      email: 'jan@example.com',
+      firstName: 'Jan',
+      lastName: 'Kowalski',
+    );
+    const initialProfile = UserProfile(
+      id: 'me',
+      firstName: 'Jan',
+      lastName: 'Kowalski',
+      handle: 'jan.kowalski',
+      stats: ProfileStats(
+        followingCount: 0,
+        followersCount: 0,
+        workoutsCount: 0,
+      ),
+      isOwnProfile: true,
+    );
+    const updatedProfile = UserProfile(
+      id: 'me',
+      firstName: 'Adam',
+      lastName: 'Nowak',
+      handle: 'adam.nowak',
+      stats: ProfileStats(
+        followingCount: 0,
+        followersCount: 0,
+        workoutsCount: 0,
+      ),
+      isOwnProfile: true,
+    );
+
+    ServiceLocator.currentUser.value = user;
+    addTearDown(() => ServiceLocator.currentUser.value = null);
+
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const ProfileSettingsScreen(
+            user: user,
+            initialProfile: initialProfile,
+          ),
+        ),
+        GoRoute(
+          path: AppRoutes.editProfile,
+          builder: (context, state) {
+            final profile = state.extra as UserProfile?;
+            return Scaffold(
+              body: Column(
+                children: [
+                  Text('edit:${profile?.firstName ?? 'none'}'),
+                  TextButton(
+                    onPressed: () => context.pop(updatedProfile),
+                    child: const Text('save fake'),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+
+    await tester.tap(find.text('Edytuj profil'));
+    await tester.pumpAndSettle();
+    expect(find.text('edit:Jan'), findsOneWidget);
+
+    await tester.tap(find.text('save fake'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edytuj profil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('edit:Adam'), findsOneWidget);
+  });
 }
 
 class _FakeProfileCubit extends ProfileCubit {
-  _FakeProfileCubit(ProfileState initial) : super(const _FakeProfileRepository()) {
+  _FakeProfileCubit(ProfileState initial)
+      : super(const _FakeProfileRepository()) {
     emit(initial);
   }
 
@@ -191,13 +279,11 @@ class _FakeProfileCubit extends ProfileCubit {
 }
 
 class _FakeProfileRepository implements ProfileRepository {
-  const _FakeProfileRepository({this.following = const []});
-
-  final List<FollowingUser> following;
+  const _FakeProfileRepository();
 
   @override
   Future<List<FollowingUser>> getFollowing({int limit = 20, int offset = 0}) {
-    return Future.value(following);
+    return Future.value(const []);
   }
 
   @override
@@ -226,6 +312,16 @@ class _FakeProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> updateBio(String bio) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<UserProfile> updateProfile(ProfileUpdateInput input) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
     throw UnimplementedError();
   }
 }
