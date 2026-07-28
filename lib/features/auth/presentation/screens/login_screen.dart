@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../widgets/login_bottom_section.dart';
-import '../widgets/login_hero_section.dart';
+import '../widgets/auth_card.dart';
+import '../widgets/auth_glow_background.dart';
+import '../widgets/login_welcome_card.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -12,16 +13,19 @@ class LoginScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const LoginHeroSection(),
-            LoginBottomSection(
-              onPrimaryPressed: () => context.push('/login/form'),
-              onSecondaryPressed: () => context.push('/login/register'),
+      body: AuthGlowBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: AuthCard(
+                child: LoginWelcomeCard(
+                  onLoginPressed: () => context.push('/login/form'),
+                  onRegisterPressed: () => context.push('/login/register'),
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
