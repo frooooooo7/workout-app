@@ -91,7 +91,7 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
                 }
                 return ListView.separated(
                   itemCount: users.length,
-                  separatorBuilder: (_, __) => const Divider(
+                  separatorBuilder: (_, _) => const Divider(
                     height: 1,
                     color: AppColors.border,
                     indent: 90,

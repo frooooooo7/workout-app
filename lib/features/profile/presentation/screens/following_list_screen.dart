@@ -47,7 +47,7 @@ class _FollowingListScreenState extends State<FollowingListScreen> {
           }
           return ListView.separated(
             itemCount: users.length,
-            separatorBuilder: (_, __) =>
+            separatorBuilder: (_, _) =>
                 const Divider(height: 1, color: AppColors.border, indent: 90),
             itemBuilder: (_, i) => UserListTile(user: users[i]),
           );
@@ -99,7 +99,7 @@ class _FollowersListScreenState extends State<FollowersListScreen> {
           }
           return ListView.separated(
             itemCount: users.length,
-            separatorBuilder: (_, __) =>
+            separatorBuilder: (_, _) =>
                 const Divider(height: 1, color: AppColors.border, indent: 90),
             itemBuilder: (_, i) => UserListTile(user: users[i]),
           );

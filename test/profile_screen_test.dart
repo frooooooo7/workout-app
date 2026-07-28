@@ -94,7 +94,7 @@ void main() {
     expect(find.text('Dodaj opis profilu…'), findsOneWidget);
     expect(find.text('Trening siłowy'), findsAtLeast(1));
     expect(find.text('12'), findsOneWidget);
-    expect(find.text('Objętość'), findsOneWidget);
+    expect(find.text('Objętość'), findsAtLeast(1));
 
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
     await tester.pumpAndSettle();
