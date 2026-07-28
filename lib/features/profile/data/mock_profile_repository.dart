@@ -262,27 +262,10 @@ class MockProfileRepository implements ProfileRepository {
   static const _timeLabels = ['18:32', '07:15', '19:48', '12:05', '16:20'];
 
   List<ProfileActivityStat> _statsFor(RecentActivity activity) {
-    return switch (activity.kind) {
-      RecentActivityKind.strength => [
-          ProfileActivityStat(label: 'Czas', value: activity.duration),
-          ProfileActivityStat(label: 'Ćwiczenia', value: activity.detail ?? '—'),
-          const ProfileActivityStat(label: 'Objętość', value: '6 450 kg'),
-        ],
-      RecentActivityKind.run => [
-          ProfileActivityStat(label: 'Czas', value: activity.duration),
-          ProfileActivityStat(label: 'Dystans', value: activity.detail ?? '—'),
-          const ProfileActivityStat(label: 'Tempo', value: '6:32 /km'),
-        ],
-      RecentActivityKind.cycling => [
-          ProfileActivityStat(label: 'Czas', value: activity.duration),
-          ProfileActivityStat(label: 'Dystans', value: activity.detail ?? '—'),
-          const ProfileActivityStat(label: 'Prędkość', value: '23,6 km/h'),
-        ],
-      RecentActivityKind.yoga => [
-          ProfileActivityStat(label: 'Czas', value: activity.duration),
-          const ProfileActivityStat(label: 'Kalorie', value: '186 kcal'),
-          const ProfileActivityStat(label: 'Strefa', value: 'Spokojna'),
-        ],
-    };
+    return [
+      ProfileActivityStat(label: 'Czas', value: activity.duration),
+      ProfileActivityStat(label: 'Ćwiczenia', value: activity.detail ?? '—'),
+      const ProfileActivityStat(label: 'Objętość', value: '6 450 kg'),
+    ];
   }
 }

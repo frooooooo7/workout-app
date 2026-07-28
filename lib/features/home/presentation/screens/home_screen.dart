@@ -27,7 +27,7 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 24),
               const HomeActivitySummaryCard(
                 workouts: 14,
-                distanceKm: 86.4,
+                volumeKg: 86400,
                 caloriesKcal: 6752,
               ),
               const SizedBox(height: 16),

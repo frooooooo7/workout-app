@@ -24,28 +24,12 @@ class ProfileActivityPostCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isHighlighted;
 
-  static ActivityVisual visualFor(RecentActivityKind kind) => switch (kind) {
-        RecentActivityKind.strength => const ActivityVisual(
-            icon: Icons.fitness_center_rounded,
-            color: Color(0xFF6C8EFF),
-            label: 'Trening siłowy',
-          ),
-        RecentActivityKind.run => const ActivityVisual(
-            icon: Icons.directions_run_rounded,
-            color: Color(0xFF4CAF7D),
-            label: 'Bieg',
-          ),
-        RecentActivityKind.cycling => const ActivityVisual(
-            icon: Icons.directions_bike_rounded,
-            color: Color(0xFFFF9F43),
-            label: 'Kolarstwo',
-          ),
-        RecentActivityKind.yoga => const ActivityVisual(
-            icon: Icons.self_improvement_rounded,
-            color: Color(0xFFFF6B9D),
-            label: 'Joga',
-          ),
-      };
+  static ActivityVisual visualFor(RecentActivityKind kind) =>
+      const ActivityVisual(
+        icon: Icons.fitness_center_rounded,
+        color: Color(0xFF6C8EFF),
+        label: 'Trening siłowy',
+      );
 
   @override
   Widget build(BuildContext context) {

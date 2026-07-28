@@ -1,0 +1,43 @@
+---
+description: Utrzymuj PROJECT_CONTEXT.md na bieżąco przy istotnych zmianach w projekcie GYM
+alwaysApply: true
+---
+
+# Aktualizacja PROJECT_CONTEXT.md
+
+Plik `PROJECT_CONTEXT.md` w korzeniu workspace to **źródło prawdy** o architekturze, strukturze i integracji `gym-backend` + `gym-flutter`. Trzymaj go aktualny.
+
+## Kiedy aktualizować (w tej samej sesji / PR co zmiana)
+
+- nowy moduł, feature, ekran, endpoint lub grupa route’ów
+- zmiana struktury katalogów lub konwencji warstw (np. nowy folder w `lib/features/` lub `src/modules/`)
+- nowa/zmieniona technologia: zależność w `package.json` / `pubspec.yaml`, auth, baza, offline sync, routing
+- zmiana schematu DB, migracji lub kontraktu API (ścieżki, wersjonowanie, ETag, payload)
+- nowe/zmienione zmienne środowiskowe, Docker, skrypty npm, sposób uruchamiania
+- nowe luki, mocki lub ukończone funkcje opisane w sekcji „Stan vs plany”
+- usunięcie/przeniesienie plików wpływające na mapę projektu
+
+## Kiedy NIE aktualizować
+
+- drobne bugfixy, refaktory bez zmiany architektury ani kontraktu
+- zmiany stylu UI, copy, testów jednostkowych bez nowych modułów
+- kosmetyka formatowania
+
+## Jak aktualizować
+
+1. Edytuj **tylko** odpowiednie sekcje w `PROJECT_CONTEXT.md` — nie przepisuj całego pliku.
+2. Zachowaj fakty: ścieżki plików, endpointy, tabele, zależności — bez domysłów.
+3. Jeśli `gym-flutter/PROJECT.md` lub README backendu są sprzeczne ze stanem faktycznym, popraw też `PROJECT_CONTEXT.md` (oznacz aspiracje vs implementacja).
+4. Przy większej zmianie zaktualizuj datę w nagłówku pliku.
+
+## Zakres workspace
+
+- `gym-backend/` — API Node.js
+- `gym-flutter/` — klient Flutter
+- korzeń workspace — `PROJECT_CONTEXT.md`, worktree’y, skrypty wspólne
+
+Nie twórz duplikatów kontekstu w innych plikach — rozszerzaj `PROJECT_CONTEXT.md`.
+
+## Zakres produktu
+
+GYM to **dziennik treningowy siłowego + social**. Nie dodawaj ani nie opisuj w dokumentacji: biegania, roweru, GPS, map tras, tętna, prędkości, przewyższeń. Przy aktualizacji opisów trzymaj się tego zakresu.

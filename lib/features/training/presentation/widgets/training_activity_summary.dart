@@ -73,11 +73,11 @@ class _TrainingActivitySummaryState extends State<TrainingActivitySummary> {
 
     final bottomRow = [
       TrainingSummaryStatTile(
-        icon: Icons.directions_run_rounded,
+        icon: Icons.view_list_rounded,
         iconColor: AppColors.success,
-        value: stats.distanceKm.toStringAsFixed(1).replaceAll('.', ','),
-        unit: 'km',
-        label: 'Dystans',
+        value: '${stats.exercisesCount}',
+        unit: 'cwiczen',
+        label: 'Unikalne cwiczenia',
         compact: false,
       ),
       TrainingSummaryStatTile(

@@ -59,16 +59,16 @@ void main() {
         ),
         recentActivities: const [
           ProfileActivity(
-            kind: RecentActivityKind.run,
-            title: 'Bieg poranny',
+            kind: RecentActivityKind.strength,
+            title: 'Pull — plecy i biceps',
             date: 'Wczoraj',
-            duration: '34 min',
-            detail: '5,2 km',
+            duration: '52 min',
+            detail: '5 ćwiczeń',
             timeLabel: '07:15',
             stats: [
-              ProfileActivityStat(label: 'Czas', value: '34 min'),
-              ProfileActivityStat(label: 'Dystans', value: '5,2 km'),
-              ProfileActivityStat(label: 'Tempo', value: '6:32 /km'),
+              ProfileActivityStat(label: 'Czas', value: '52 min'),
+              ProfileActivityStat(label: 'Ćwiczenia', value: '5 ćwiczeń'),
+              ProfileActivityStat(label: 'Objętość', value: '5 820 kg'),
             ],
             kudosCount: 7,
           ),
@@ -99,7 +99,7 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bieg poranny'), findsOneWidget);
+    expect(find.text('Pull — plecy i biceps'), findsOneWidget);
   });
 
   testWidgets('ProfileStatsRow triggers onFollowingTap', (tester) async {

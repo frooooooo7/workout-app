@@ -7,12 +7,12 @@ class HomeActivitySummaryCard extends StatelessWidget {
   const HomeActivitySummaryCard({
     super.key,
     required this.workouts,
-    required this.distanceKm,
+    required this.volumeKg,
     required this.caloriesKcal,
   });
 
   final int workouts;
-  final double distanceKm;
+  final int volumeKg;
   final int caloriesKcal;
 
   static String pluralWorkoutsLabel(int n) {
@@ -32,6 +32,15 @@ class HomeActivitySummaryCard extends StatelessWidget {
       return '$thousands\u2009$remainder';
     }
     return '$kcal';
+  }
+
+  static String formatVolumeKg(int kg) {
+    if (kg >= 1000) {
+      final thousands = kg ~/ 1000;
+      final remainder = (kg % 1000).toString().padLeft(3, '0');
+      return '$thousands\u2009$remainder';
+    }
+    return '$kg';
   }
 
   @override
@@ -92,11 +101,11 @@ class HomeActivitySummaryCard extends StatelessWidget {
                 sublabel: 'w tym miesiącu',
               ),
               ActivityStatTile(
-                icon: Icons.location_on_rounded,
-                iconColor: const Color(0xFF4CAF7D),
-                value: distanceKm.toStringAsFixed(1).replaceAll('.', ','),
-                label: 'km',
-                sublabel: 'Łączny dystans',
+                icon: Icons.monitor_weight_rounded,
+                iconColor: const Color(0xFFF59E0B),
+                value: formatVolumeKg(volumeKg),
+                label: 'kg',
+                sublabel: 'Łączna objętość',
               ),
               ActivityStatTile(
                 icon: Icons.local_fire_department_rounded,

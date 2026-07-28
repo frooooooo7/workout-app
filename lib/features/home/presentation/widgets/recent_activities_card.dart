@@ -9,27 +9,27 @@ class RecentActivitiesCard extends StatelessWidget {
   /// When null, sample data is shown (placeholder until API is wired).
   final List<RecentActivity>? activities;
 
-  static List<RecentActivity> get mockActivities => [
-        const RecentActivity(
+  static List<RecentActivity> get mockActivities => const [
+        RecentActivity(
           kind: RecentActivityKind.strength,
-          title: 'Trening siłowy',
+          title: 'Push — klatka i barki',
           date: 'Dziś',
           duration: '58 min',
           detail: '6 ćwiczeń',
         ),
-        const RecentActivity(
-          kind: RecentActivityKind.run,
-          title: 'Bieg poranny',
+        RecentActivity(
+          kind: RecentActivityKind.strength,
+          title: 'Pull — plecy i biceps',
           date: 'Wczoraj',
-          duration: '34 min',
-          detail: '5,2 km',
+          duration: '52 min',
+          detail: '5 ćwiczeń',
         ),
-        const RecentActivity(
-          kind: RecentActivityKind.cycling,
-          title: 'Rower',
+        RecentActivity(
+          kind: RecentActivityKind.strength,
+          title: 'Trening nóg',
           date: '29 kwi',
           duration: '1 godz 12 min',
-          detail: '28,4 km',
+          detail: '7 ćwiczeń',
         ),
       ];
 
@@ -50,7 +50,7 @@ class RecentActivitiesCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Historia aktywności',
+                  'Historia treningów',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -101,28 +101,13 @@ class RecentActivityRow extends StatelessWidget {
 
   final RecentActivity activity;
 
-  static _ActivityVisual _visual(RecentActivityKind kind) => switch (kind) {
-        RecentActivityKind.strength => const _ActivityVisual(
-            icon: Icons.fitness_center_rounded,
-            color: Color(0xFF6C8EFF),
-          ),
-        RecentActivityKind.run => const _ActivityVisual(
-            icon: Icons.directions_run_rounded,
-            color: Color(0xFF4CAF7D),
-          ),
-        RecentActivityKind.cycling => const _ActivityVisual(
-            icon: Icons.directions_bike_rounded,
-            color: Color(0xFFFF9F43),
-          ),
-        RecentActivityKind.yoga => const _ActivityVisual(
-            icon: Icons.self_improvement_rounded,
-            color: Color(0xFFFF6B9D),
-          ),
-      };
+  static const _visual = _ActivityVisual(
+    icon: Icons.fitness_center_rounded,
+    color: Color(0xFF6C8EFF),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final v = _visual(activity.kind);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
@@ -131,10 +116,10 @@ class RecentActivityRow extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: v.color.withValues(alpha: 0.14),
+              color: _visual.color.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(v.icon, color: v.color, size: 20),
+            child: Icon(_visual.icon, color: _visual.color, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(

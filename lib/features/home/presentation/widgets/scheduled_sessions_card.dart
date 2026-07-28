@@ -19,18 +19,19 @@ class ScheduledSessionsCard extends StatelessWidget {
           placeName: 'Siłownia City',
         ),
         ScheduledSession(
-          kind: RecentActivityKind.run,
-          title: 'Bieg z Janem',
+          kind: RecentActivityKind.strength,
+          title: 'Push z Janem',
           dateLabel: 'Sob, 10 maj',
           time: '08:00',
           partnerName: 'Jan K.',
+          placeName: 'Siłownia City',
         ),
         ScheduledSession(
-          kind: RecentActivityKind.cycling,
-          title: 'Rower — długa trasa',
+          kind: RecentActivityKind.strength,
+          title: 'Pull — plecy',
           dateLabel: 'Niedz, 11 maj',
           time: '09:15',
-          placeName: 'Start: Most Poniatowskiego',
+          placeName: 'Siłownia City',
         ),
       ];
 
@@ -126,28 +127,13 @@ class ScheduledSessionRow extends StatelessWidget {
 
   final ScheduledSession session;
 
-  static _SessionVisual _visual(RecentActivityKind kind) => switch (kind) {
-        RecentActivityKind.strength => const _SessionVisual(
-            icon: Icons.event_note_rounded,
-            accent: Color(0xFF6C8EFF),
-          ),
-        RecentActivityKind.run => const _SessionVisual(
-            icon: Icons.directions_run_rounded,
-            accent: Color(0xFF4CAF7D),
-          ),
-        RecentActivityKind.cycling => const _SessionVisual(
-            icon: Icons.directions_bike_rounded,
-            accent: Color(0xFFFF9F43),
-          ),
-        RecentActivityKind.yoga => const _SessionVisual(
-            icon: Icons.self_improvement_rounded,
-            accent: Color(0xFFFF6B9D),
-          ),
-      };
+  static const _visual = _SessionVisual(
+    icon: Icons.event_note_rounded,
+    accent: Color(0xFF6C8EFF),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final v = _visual(session.kind);
     final meta = [
       '${session.dateLabel} · ${session.time}',
       if (session.partnerName != null) 'z ${session.partnerName}',
@@ -162,10 +148,10 @@ class ScheduledSessionRow extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: v.accent.withValues(alpha: 0.14),
+              color: _visual.accent.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(v.icon, color: v.accent, size: 20),
+            child: Icon(_visual.icon, color: _visual.accent, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(

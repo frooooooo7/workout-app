@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/last_activity.dart';
-import '../../domain/models/recent_activity.dart';
-import 'last_activity_map_placeholder.dart';
 
 class LastActivityCardBody extends StatelessWidget {
   const LastActivityCardBody({super.key, required this.activity});
@@ -17,10 +15,94 @@ class LastActivityCardBody extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const LastActivityMapPlaceholder(),
+          _LastActivityThumbnail(exerciseCount: activity.exerciseCount),
           const SizedBox(width: 14),
           Expanded(child: LastActivityStatsColumn(activity: activity)),
         ],
+      ),
+    );
+  }
+}
+
+class _LastActivityThumbnail extends StatelessWidget {
+  const _LastActivityThumbnail({required this.exerciseCount});
+
+  final int exerciseCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 130,
+        height: 140,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.primary.withValues(alpha: 0.35),
+                AppColors.primary.withValues(alpha: 0.08),
+                const Color(0xFF0D1117),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -8,
+                bottom: -12,
+                child: Icon(
+                  Icons.fitness_center_rounded,
+                  size: 88,
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.fitness_center_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$exerciseCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Text(
+                      'ćwiczeń',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -46,32 +128,6 @@ class LastActivityStatsColumn extends StatelessWidget {
   }
 }
 
-class _KindVisual {
-  const _KindVisual({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
-}
-
-_KindVisual _visualFor(RecentActivityKind kind) => switch (kind) {
-      RecentActivityKind.strength => const _KindVisual(
-          icon: Icons.fitness_center_rounded,
-          color: Color(0xFF6C8EFF),
-        ),
-      RecentActivityKind.run => const _KindVisual(
-          icon: Icons.directions_run_rounded,
-          color: Color(0xFF4CAF7D),
-        ),
-      RecentActivityKind.cycling => const _KindVisual(
-          icon: Icons.directions_bike_rounded,
-          color: Color(0xFFFF9F43),
-        ),
-      RecentActivityKind.yoga => const _KindVisual(
-          icon: Icons.self_improvement_rounded,
-          color: Color(0xFFFF6B9D),
-        ),
-    };
-
 class LastActivityTitleRow extends StatelessWidget {
   const LastActivityTitleRow({super.key, required this.activity});
 
@@ -79,17 +135,20 @@ class LastActivityTitleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = _visualFor(activity.kind);
     return Row(
       children: [
         Container(
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: v.color.withValues(alpha: 0.14),
+            color: const Color(0xFF6C8EFF).withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(v.icon, color: v.color, size: 17),
+          child: const Icon(
+            Icons.fitness_center_rounded,
+            color: Color(0xFF6C8EFF),
+            size: 17,
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -143,25 +202,14 @@ class LastActivityStatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stats = switch (activity) {
-      StrengthActivity s => [
-          _StatItem(value: s.durationLabel, label: 'Czas'),
-          _StatItem(
-            value: '${_fmtVolume(s.volumeKg)} kg',
-            label: 'Objętość',
-          ),
-          _StatItem(value: '${s.caloriesKcal}', label: 'Kalorie'),
-        ],
-      CardioActivity c => [
-          _StatItem(value: c.durationLabel, label: 'Czas'),
-          _StatItem(
-            value:
-                '${c.distanceKm.toStringAsFixed(1).replaceAll('.', ',')} km',
-            label: 'Dystans',
-          ),
-          _StatItem(value: '${c.avgPulseBpm} bpm', label: 'Śr. puls'),
-        ],
-    };
+    final stats = [
+      _StatItem(value: activity.durationLabel, label: 'Czas'),
+      _StatItem(
+        value: '${_fmtVolume(activity.volumeKg)} kg',
+        label: 'Objętość',
+      ),
+      _StatItem(value: '${activity.caloriesKcal}', label: 'Kalorie'),
+    ];
 
     return Row(
       children: stats

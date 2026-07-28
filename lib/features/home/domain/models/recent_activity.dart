@@ -1,9 +1,4 @@
-enum RecentActivityKind {
-  strength,
-  run,
-  cycling,
-  yoga,
-}
+enum RecentActivityKind { strength }
 
 class RecentActivity {
   const RecentActivity({

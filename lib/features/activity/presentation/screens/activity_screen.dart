@@ -28,7 +28,7 @@ class ActivityScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Podsumowanie ostatnich treningów i ruchu.',
+                'Podsumowanie ostatnich treningów siłowych.',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 14,
@@ -37,7 +37,7 @@ class ActivityScreen extends StatelessWidget {
               const SizedBox(height: 24),
               const HomeActivitySummaryCard(
                 workouts: 14,
-                distanceKm: 86.4,
+                volumeKg: 86400,
                 caloriesKcal: 6752,
               ),
               const SizedBox(height: 16),

@@ -160,12 +160,5 @@ class ApiProfileRepository implements ProfileRepository {
         .toList(growable: false);
   }
 
-  RecentActivityKind _kindFromApi(String? raw) {
-    return switch (raw) {
-      'run' => RecentActivityKind.run,
-      'cycling' => RecentActivityKind.cycling,
-      'yoga' => RecentActivityKind.yoga,
-      _ => RecentActivityKind.strength,
-    };
-  }
+  RecentActivityKind _kindFromApi(String? _) => RecentActivityKind.strength;
 }

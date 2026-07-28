@@ -12,7 +12,7 @@ class TrainingSummaryStats {
     required this.sets,
     required this.reps,
     required this.volumeKg,
-    required this.distanceKm,
+    required this.exercisesCount,
     required this.caloriesKcal,
   });
 
@@ -22,7 +22,7 @@ class TrainingSummaryStats {
   final int sets;
   final int reps;
   final int volumeKg;
-  final double distanceKm;
+  final int exercisesCount;
   final int caloriesKcal;
 }
 
@@ -33,7 +33,7 @@ const TrainingSummaryStats kTrainingSummaryWeek = TrainingSummaryStats(
   sets: 48,
   reps: 386,
   volumeKg: 4720,
-  distanceKm: 12.4,
+  exercisesCount: 18,
   caloriesKcal: 1840,
 );
 
@@ -44,7 +44,7 @@ const TrainingSummaryStats kTrainingSummaryMonth = TrainingSummaryStats(
   sets: 192,
   reps: 1544,
   volumeKg: 18960,
-  distanceKm: 47.2,
+  exercisesCount: 42,
   caloriesKcal: 7360,
 );
 

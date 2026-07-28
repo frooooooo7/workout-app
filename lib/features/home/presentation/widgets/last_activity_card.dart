@@ -10,13 +10,14 @@ class LastActivityCard extends StatelessWidget {
 
   final LastActivity activity;
 
-  static LastActivity get mock => StrengthActivity(
+  static LastActivity get mock => const LastActivity(
         title: 'Trening siłowy',
         date: 'Dzisiaj',
         time: '18:32',
         durationLabel: '1:15:24',
         volumeKg: 6450,
         caloriesKcal: 532,
+        exerciseCount: 6,
       );
 
   @override
