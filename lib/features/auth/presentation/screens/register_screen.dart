@@ -5,14 +5,14 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../utils/auth_error_messages.dart';
-import '../utils/auth_validators.dart';
-import '../widgets/auth_error_banner.dart';
+import '../widgets/auth_card.dart';
 import '../widgets/auth_form_top_bar.dart';
-import '../widgets/auth_text_field.dart';
+import '../widgets/auth_glow_background.dart';
 import '../widgets/password_strength_widgets.dart';
-import '../widgets/register_benefits_section.dart';
 import '../widgets/register_login_prompt.dart';
-import '../widgets/register_screen_header.dart';
+import '../widgets/register_step_account.dart';
+import '../widgets/register_step_name.dart';
+import '../widgets/register_step_progress.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -22,12 +22,14 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _nameFormKey = GlobalKey<FormState>();
+  final _accountFormKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  int _step = 0;
   bool _passwordVisible = false;
   bool _isLoading = false;
   String _password = '';
@@ -56,8 +58,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   PasswordStrength get _strength => passwordStrengthFor(_password);
 
+  void _handleNextStep() {
+    if (!(_nameFormKey.currentState?.validate() ?? false)) return;
+    setState(() => _step = 1);
+  }
+
+  void _handleBack() {
+    if (_step == 1) {
+      setState(() => _step = 0);
+      return;
+    }
+    context.pop();
+  }
+
   Future<void> _handleSubmit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_accountFormKey.currentState?.validate() ?? false)) return;
 
     setState(() {
       _isLoading = true;
@@ -96,106 +111,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            AuthFormTopBar(onBack: () => context.pop()),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const RegisterScreenHeader(),
-                      const SizedBox(height: 28),
-                      AuthTextField(
-                        hint: 'Imię',
-                        prefixIcon: Icons.person_outline_rounded,
-                        controller: _firstNameController,
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Imię jest wymagane.'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      AuthTextField(
-                        hint: 'Nazwisko',
-                        prefixIcon: Icons.person_outline_rounded,
-                        controller: _lastNameController,
-                        textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Nazwisko jest wymagane.'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-                      AuthTextField(
-                        hint: 'E-mail',
-                        prefixIcon: Icons.mail_outline_rounded,
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        validator: validateAuthEmail,
-                      ),
-                      const SizedBox(height: 12),
-                      AuthTextField(
-                        hint: 'Hasło',
-                        prefixIcon: Icons.lock_outline_rounded,
-                        controller: _passwordController,
-                        obscureText: !_passwordVisible,
-                        onChanged: _handlePasswordChanged,
-                        textInputAction: TextInputAction.done,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _passwordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: AppColors.textMuted,
-                            size: 20,
+      body: AuthGlowBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              AuthFormTopBar(
+                onBack: _handleBack,
+                child: RegisterStepProgress(currentStep: _step),
+              ),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
+                    child: Column(
+                      children: [
+                        AuthCard(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: _step == 0
+                                ? RegisterStepName(
+                                    key: const ValueKey('register-step-name'),
+                                    formKey: _nameFormKey,
+                                    firstNameController: _firstNameController,
+                                    lastNameController: _lastNameController,
+                                    onNext: _handleNextStep,
+                                  )
+                                : RegisterStepAccount(
+                                    key: const ValueKey(
+                                      'register-step-account',
+                                    ),
+                                    formKey: _accountFormKey,
+                                    emailController: _emailController,
+                                    passwordController: _passwordController,
+                                    passwordVisible: _passwordVisible,
+                                    password: _password,
+                                    strength: _strength,
+                                    hasMinLength: _hasMinLength,
+                                    hasUpperCase: _hasUpperCase,
+                                    hasDigit: _hasDigit,
+                                    errorMessage: _errorMessage,
+                                    isLoading: _isLoading,
+                                    onPasswordChanged: _handlePasswordChanged,
+                                    onTogglePasswordVisibility:
+                                        _handleTogglePasswordVisibility,
+                                    onSubmit: _handleSubmit,
+                                  ),
                           ),
-                          onPressed: _handleTogglePasswordVisibility,
                         ),
-                        validator: validateRegisterPassword,
-                      ),
-                      if (_password.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        PasswordStrengthBar(strength: _strength),
-                        const SizedBox(height: 12),
-                        PasswordRequirementsCard(
-                          hasMinLength: _hasMinLength,
-                          hasUpperCase: _hasUpperCase,
-                          hasDigit: _hasDigit,
-                        ),
-                      ],
-                      if (_errorMessage != null) ...[
                         const SizedBox(height: 16),
-                        AuthErrorBanner(message: _errorMessage!),
+                        const RegisterLoginPrompt(),
                       ],
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _isLoading ? null : _handleSubmit,
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Utwórz konto'),
-                      ),
-                      const SizedBox(height: 16),
-                      const RegisterLoginPrompt(),
-                      const SizedBox(height: 28),
-                      const RegisterBenefitsSection(),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
