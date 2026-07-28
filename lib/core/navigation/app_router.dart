@@ -25,6 +25,7 @@ import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_settings_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
 import '../services/service_locator.dart';
+import '../theme/app_colors.dart';
 import 'app_shell.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -264,9 +265,9 @@ class _LoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF0B0B14),
+      backgroundColor: AppColors.background,
       body: Center(
-        child: CircularProgressIndicator(color: Color(0xFF6C47FF)),
+        child: CircularProgressIndicator(color: AppColors.primary),
       ),
     );
   }
@@ -303,9 +304,9 @@ class _SplashRouteState extends State<_SplashRoute> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF0B0B14),
+      backgroundColor: AppColors.background,
       body: Center(
-        child: CircularProgressIndicator(color: Color(0xFF6C47FF)),
+        child: CircularProgressIndicator(color: AppColors.primary),
       ),
     );
   }
