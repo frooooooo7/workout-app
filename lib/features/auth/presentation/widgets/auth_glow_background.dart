@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
-/// Ciemne tło ekranów auth z subtelną pomarańczową poświatą
+/// Ciemne tło ekranów auth z subtelną poświatą akcentu (primary)
 /// w prawym dolnym rogu.
 class AuthGlowBackground extends StatelessWidget {
   const AuthGlowBackground({super.key, required this.child});

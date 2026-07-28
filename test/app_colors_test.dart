@@ -3,32 +3,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/theme/app_colors.dart';
 
 void main() {
-  group('AppColors — paleta Ember', () {
-    test('primary to pomarańcz ember', () {
-      expect(AppColors.primary, const Color(0xFFFF5A1F));
+  group('AppColors — paleta Steel Blue', () {
+    test('primary to niebieski akcent', () {
+      expect(AppColors.primary, const Color(0xFF2563EB));
     });
-    test('primaryVariant to jaśniejszy pomarańcz', () {
-      expect(AppColors.primaryVariant, const Color(0xFFFF8A50));
+    test('primaryVariant to jaśniejszy niebieski', () {
+      expect(AppColors.primaryVariant, const Color(0xFF3B82F6));
     });
-    test('onPrimary to ciemny (kontrast na pomarańczu)', () {
-      expect(AppColors.onPrimary, const Color(0xFF1A0F08));
+    test('onPrimary to biały (kontrast na niebieskim)', () {
+      expect(AppColors.onPrimary, const Color(0xFFFFFFFF));
     });
-    test('background to ciepła czerń', () {
-      expect(AppColors.background, const Color(0xFF131110));
+    test('background to ciemny grafit-niebieski', () {
+      expect(AppColors.background, const Color(0xFF0B0E14));
     });
-    test('surface i surfaceVariant są ciepłe', () {
-      expect(AppColors.surface, const Color(0xFF1B1713));
-      expect(AppColors.surfaceVariant, const Color(0xFF241E19));
+    test('surface i surfaceVariant są chłodne', () {
+      expect(AppColors.surface, const Color(0xFF141820));
+      expect(AppColors.surfaceVariant, const Color(0xFF1E2433));
     });
-    test('teksty i border w ciepłych odcieniach', () {
-      expect(AppColors.textPrimary, const Color(0xFFFFF7F2));
-      expect(AppColors.textSecondary, const Color(0xFFA89A8E));
-      expect(AppColors.textMuted, const Color(0xFF6B5F56));
-      expect(AppColors.border, const Color(0xFF2E2721));
+    test('teksty i border w chłodnych odcieniach', () {
+      expect(AppColors.textPrimary, const Color(0xFFFFFFFF));
+      expect(AppColors.textSecondary, const Color(0xFF9CA3AF));
+      expect(AppColors.textMuted, const Color(0xFF6B7280));
+      expect(AppColors.border, const Color(0xFF2A3344));
     });
-    test('gradienty bez fioletu', () {
-      expect(AppColors.gradientTop, const Color(0xFF131110));
-      expect(AppColors.gradientHero, const Color(0xFF2A1408));
+    test('gradienty dopasowane do hero', () {
+      expect(AppColors.gradientTop, const Color(0xFF0B0E14));
+      expect(AppColors.gradientHero, const Color(0xFF141B28));
+    });
+    test('surfaceGlass jest półprzezroczyste', () {
+      expect(AppColors.surfaceGlass.a, closeTo(0.85, 0.02));
     });
   });
 }
