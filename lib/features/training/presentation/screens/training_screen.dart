@@ -15,17 +15,9 @@ class TrainingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (_) =>
-              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
-        ),
-        BlocProvider(
-          create: (_) =>
-              TrainingSessionCubit(ServiceLocator.trainingSessionRepository),
-        ),
-      ],
+    return BlocProvider(
+      create: (_) =>
+          TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
       child: const _TrainingShellContent(),
     );
   }

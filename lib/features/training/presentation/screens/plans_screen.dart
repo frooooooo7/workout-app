@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/training_plans_cubit.dart';
-import '../bloc/training_session_cubit.dart';
 import '../widgets/training_header.dart';
 import '../widgets/training_plans_tab.dart';
 import 'create_plan_screen.dart';
@@ -15,17 +14,9 @@ class PlansScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (_) =>
-              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
-        ),
-        BlocProvider(
-          create: (_) =>
-              TrainingSessionCubit(ServiceLocator.trainingSessionRepository),
-        ),
-      ],
+    return BlocProvider(
+      create: (_) =>
+          TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
       child: const _PlansScreenContent(),
     );
   }

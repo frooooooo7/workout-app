@@ -16,6 +16,7 @@ import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/training/presentation/screens/plans_screen.dart';
 import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/training/presentation/screens/training_stats_screen.dart';
+import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
@@ -84,7 +85,11 @@ GoRouter buildRouter({
         builder: (context, state, navigationShell) {
           final user = ServiceLocator.currentUser.value;
           if (user == null) return const _LoadingScreen();
-          return AppShell(navigationShell: navigationShell, user: user);
+          return BlocProvider(
+            create: (_) =>
+                TrainingSessionCubit(ServiceLocator.trainingSessionRepository),
+            child: AppShell(navigationShell: navigationShell, user: user),
+          );
         },
         branches: [
           StatefulShellBranch(
