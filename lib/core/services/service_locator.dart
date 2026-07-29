@@ -116,6 +116,20 @@ class ServiceLocator {
     currentUser.addListener(_onUserChanged);
   }
 
+  /// Test seam: podmienia user-scoped repozytoria bez otwierania bazy.
+  @visibleForTesting
+  static void debugSetUserScopedRepositories({
+    ExerciseRepository? exerciseRepository,
+    TrainingPlanRepository? trainingPlanRepository,
+    TrainingHistoryRepository? trainingHistoryRepository,
+    TrainingSessionRepository? trainingSessionRepository,
+  }) {
+    _exerciseRepository = exerciseRepository;
+    _trainingPlanRepository = trainingPlanRepository;
+    _trainingHistoryRepository = trainingHistoryRepository;
+    _trainingSessionRepository = trainingSessionRepository;
+  }
+
   static void _onUserChanged() {
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((
       _,

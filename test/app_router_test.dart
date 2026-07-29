@@ -3,6 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/navigation/app_router.dart';
 import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
+import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/training_history_models.dart';
+import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
+import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
+import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 
 void main() {
   Future<void> setDesktopViewport(WidgetTester tester) async {
@@ -14,7 +20,16 @@ void main() {
     });
   }
 
+  setUp(() {
+    ServiceLocator.debugSetUserScopedRepositories(
+      trainingPlanRepository: _FakeTrainingPlanRepository(),
+      trainingHistoryRepository: _FakeTrainingHistoryRepository(),
+      trainingSessionRepository: _FakeTrainingSessionRepository(),
+    );
+  });
+
   tearDown(() {
+    ServiceLocator.debugSetUserScopedRepositories();
     ServiceLocator.currentUser.value = null;
   });
 
@@ -67,4 +82,77 @@ void main() {
     expect(ServiceLocator.currentUser.value, user);
     expect(router.routeInformationProvider.value.uri.path, '/app/activity');
   });
+}
+
+class _FakeTrainingPlanRepository implements TrainingPlanRepository {
+  @override
+  Future<List<CustomTrainingPlan>> getAll() async => const [];
+
+  @override
+  Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async => plan;
+
+  @override
+  Future<CustomTrainingPlan> update(CustomTrainingPlan plan) async => plan;
+
+  @override
+  Future<void> delete(String id) async {}
+}
+
+class _FakeTrainingHistoryRepository implements TrainingHistoryRepository {
+  @override
+  Future<TrainingSessionPage> getSessions({
+    String? cursor,
+    int limit = 20,
+    TrainingSessionStatus? status,
+    String? planId,
+    String? query,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    return const TrainingSessionPage(
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+      isFromCache: false,
+    );
+  }
+
+  @override
+  Future<TrainingSessionDetail> getSessionDetail(String sessionId) {
+    throw UnimplementedError();
+  }
+}
+
+class _FakeTrainingSessionRepository implements TrainingSessionRepository {
+  _FakeTrainingSessionRepository({this.active});
+
+  TrainingSession? active;
+
+  @override
+  Future<TrainingSession?> getActive() async => active;
+
+  @override
+  Future<TrainingSession> startFromPlan(CustomTrainingPlan plan) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TrainingSession> startCustom({
+    String planName = TrainingSession.defaultCustomName,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TrainingSession> save(TrainingSession session) async => session;
+
+  @override
+  Future<TrainingSession> finish(String sessionId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TrainingSession> cancel(String sessionId) {
+    throw UnimplementedError();
+  }
 }
