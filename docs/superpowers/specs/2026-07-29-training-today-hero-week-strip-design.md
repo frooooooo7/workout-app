@@ -133,4 +133,4 @@ Zaktualizować `training_today_plan_section_test.dart`:
 - Rest vs trening zależne od planu na wybranym weekday
 - ✓ / kropka / ramka zgodnie z §5
 - Dial usunięty, testy zielone
-`)
+)
