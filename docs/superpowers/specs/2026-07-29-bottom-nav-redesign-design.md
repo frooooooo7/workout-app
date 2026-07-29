@@ -68,12 +68,12 @@ Zastępuje `NavigationBar` w `AppShell`. Własny widget, brak nowych zależnośc
 **Struktura:**
 
 - `Stack`:
-  - tło belki: wysokość ~64 dp + `SafeArea` (bottom), kolor `AppColors.surface` (lub `background` — dobrać do otoczenia, dziś belka dziedziczy tło `Scaffold` + divider `AppColors.border` 1 px na górze — zachować divider),
+  - tło belki: wysokość ~64 dp + `SafeArea` (bottom), kolor `AppColors.surface`, na górze divider 1 px `AppColors.border` (jak dziś),
   - `CustomPaint` rysujący wcięcie (łuk) na środku górnej krawędzi belki — promień dopasowany do koła (notch ~62–64 dp szerokości, głębokość ~28–30 dp),
   - koło **56 dp** pozycjonowane `translate(-50%, -50%)` względem środka górnej krawędzi: `AppColors.primary`, ikona `Icons.fitness_center_rounded` biała ~24 dp, cień `BoxShadow` (primary, alpha ~0.45),
   - `Row` z 5 slotami: Historia / Plany / slot środkowy / Aktywność / Profil; slot środkowy zawiera tylko etykietę „Trening" przy dolnej krawędzi belki.
 - Małe pozycje: jak dotychczas — ikona outline → filled przy selected, pill (primary ~14–18% alpha) za ikoną, etykieta 10–11 sp; kolory: nieaktywna `textSecondary`, aktywna `primaryVariant`.
-- Ikony: Historia `Icons.history_outlined`/`history_rounded`, Plany `Icons.format_list_bulleted`(+ wariant filled), Aktywność `Icons.timeline_outlined`/`timeline_rounded`, Profil `Icons.person_outline_rounded`/`person_rounded`.
+- Ikony: Historia `Icons.history_outlined`/`history_rounded`, Aktywność `Icons.timeline_outlined`/`timeline_rounded`, Profil `Icons.person_outline_rounded`/`person_rounded`; Plany `Icons.format_list_bulleted_rounded` w obu stanach (brak wariantu outline — selected pokazujemy kolorem i pillem).
 
 **Stany środkowego przycisku:**
 
@@ -91,7 +91,7 @@ Zastępuje `NavigationBar` w `AppShell`. Własny widget, brak nowych zależnośc
   - `activeSession == null` → `goBranch(2)` (z `initialLocation` gdy już na Treningu).
 - Accessibility: każdy slot `Semantics(button: true, selected: ...)`, środkowy z label „Trening" i hintem „Trwa sesja — wróć do treningu" gdy aktywna; tap target min. 48 dp.
 
-`AppShell` pozostaje `StatelessWidget` (lub staje się `Stateful` jeśli wygodniej dla listenerów) — stan sesji wyłącznie przez `BlocBuilder`, brak lokalnego state'u nawigacji poza `navigationShell`.
+`AppShell` pozostaje `StatelessWidget` — stan sesji wyłącznie przez `BlocBuilder`, brak lokalnego state'u nawigacji poza `navigationShell`.
 
 ## 6. Zmiany w ekranach
 
