@@ -3,61 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/presentation/widgets/training_today_plan_section.dart';
+import 'package:gym/features/training/presentation/widgets/training_week_strip.dart';
 
 void main() {
-  testWidgets('shows every plan scheduled for the selected day', (
-    tester,
-  ) async {
-    final plans = [
-      CustomTrainingPlan(
-        name: 'Push Power',
-        selectedDays: const [1],
-        exercises: [
-          PlanExercise(exercise: mockExercises[0]),
-          PlanExercise(exercise: mockExercises[1]),
-        ],
-      ),
-      CustomTrainingPlan(
-        name: 'Pull Volume',
-        selectedDays: const [1, 3],
-        exercises: [PlanExercise(exercise: mockExercises[5])],
-      ),
-      CustomTrainingPlan(
-        name: 'Leg Day',
-        selectedDays: const [5],
-        exercises: [PlanExercise(exercise: mockExercises[8])],
-      ),
-    ];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: TrainingTodayPlanSection(
-            selectedDay: 1,
-            plans: plans,
-            isLoading: false,
-            onDaySelected: (_) {},
-            onOpenPlan: (_) {},
-            onStartPlan: (_) async {},
-            onCreatePlanForDay: (_) {},
-          ),
-        ),
-      ),
+  CustomTrainingPlan plan(
+    String name,
+    List<int> days, {
+    int exercisesCount = 1,
+  }) {
+    return CustomTrainingPlan(
+      name: name,
+      selectedDays: days,
+      exercises: [
+        for (var i = 0; i < exercisesCount; i++)
+          PlanExercise(exercise: mockExercises[i]),
+      ],
     );
+  }
 
-    expect(find.text('Push Power'), findsOneWidget);
-    expect(find.text('Pull Volume'), findsOneWidget);
-    expect(find.text('Leg Day'), findsNothing);
-    expect(find.text('2 cwiczenia'), findsOneWidget);
-    expect(find.text('1 cwiczenie'), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-day-1-has-workout')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-day-3-has-workout')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-day-5-has-workout')), findsOneWidget);
-  });
-
-  testWidgets('shows rest day card with create action when no plan matches', (
-    tester,
-  ) async {
+  testWidgets('rest day: copy, monk, create-plan on tap', (tester) async {
     int? requestedDay;
 
     await tester.pumpWidget(
@@ -65,13 +29,7 @@ void main() {
         home: Scaffold(
           body: TrainingTodayPlanSection(
             selectedDay: 2,
-            plans: [
-              CustomTrainingPlan(
-                name: 'Push Power',
-                selectedDays: const [1],
-                exercises: [PlanExercise(exercise: mockExercises[0])],
-              ),
-            ],
+            plans: [plan('Push Power', const [1])],
             isLoading: false,
             onDaySelected: (_) {},
             onOpenPlan: (_) {},
@@ -82,81 +40,54 @@ void main() {
       ),
     );
 
-    expect(find.text('Dzien odpoczynku'), findsOneWidget);
-    expect(find.text('Dodaj plan'), findsOneWidget);
+    expect(find.byKey(const ValueKey('monk-rest-icon')), findsOneWidget);
+    expect(find.text('Dzień odpoczynku'), findsOneWidget);
+    expect(find.text('Regeneracja to postęp.'), findsOneWidget);
 
-    await tester.tap(find.text('Dodaj plan'));
+    await tester.tap(find.byKey(const ValueKey('monk-rest-icon')));
     await tester.pump();
-
     expect(requestedDay, 2);
   });
 
-  testWidgets('delegates start and open actions for a scheduled plan', (
-    tester,
-  ) async {
-    final plan = CustomTrainingPlan(
-      name: 'Push Power',
-      selectedDays: const [1],
-      exercises: [PlanExercise(exercise: mockExercises[0])],
-    );
+  testWidgets('training day: opens plan on tap, no play button', (tester) async {
+    final scheduled = plan('Push Power', const [1, 3]);
     CustomTrainingPlan? opened;
-    CustomTrainingPlan? started;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingTodayPlanSection(
             selectedDay: 1,
-            plans: [plan],
+            plans: [scheduled],
             isLoading: false,
             onDaySelected: (_) {},
-            onOpenPlan: (plan) => opened = plan,
-            onStartPlan: (plan) async => started = plan,
+            onOpenPlan: (p) => opened = p,
+            onStartPlan: (_) async {},
             onCreatePlanForDay: (_) {},
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('Zobacz'));
-    await tester.pump();
-    expect(opened, same(plan));
+    expect(find.text('Dzień treningowy'), findsOneWidget);
+    expect(find.text('Push Power'), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
 
-    await tester.tap(find.text('Start'));
+    await tester.tap(find.text('Dzień treningowy'));
     await tester.pump();
-    expect(started, same(plan));
+    expect(opened, same(scheduled));
   });
 
-  testWidgets('does not count all-muscles marker as hidden muscle', (
-    tester,
-  ) async {
-    final plan = CustomTrainingPlan(
-      name: 'Full Body',
-      selectedDays: const [1],
-      exercises: [
-        PlanExercise(
-          exercise: const Exercise(
-            id: 'custom',
-            name: 'Combo',
-            muscles: [
-              MuscleGroup.all,
-              MuscleGroup.chest,
-              MuscleGroup.back,
-              MuscleGroup.legs,
-              MuscleGroup.shoulders,
-            ],
-            category: ExerciseCategory.compound,
-          ),
-        ),
-      ],
-    );
-
+  testWidgets('summarizes additional plans with +N', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingTodayPlanSection(
             selectedDay: 1,
-            plans: [plan],
+            plans: [
+              plan('Push Power', const [1]),
+              plan('Pull Volume', const [1, 3]),
+            ],
             isLoading: false,
             onDaySelected: (_) {},
             onOpenPlan: (_) {},
@@ -167,7 +98,52 @@ void main() {
       ),
     );
 
-    expect(find.text('Klatka piersiowa, Plecy, Nogi +1'), findsOneWidget);
-    expect(find.text('Klatka piersiowa, Plecy, Nogi +2'), findsNothing);
+    expect(find.text('Push Power +1'), findsOneWidget);
+  });
+
+  testWidgets('selects day from week strip', (tester) async {
+    int? selected;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrainingTodayPlanSection(
+            selectedDay: 2,
+            plans: const [],
+            isLoading: false,
+            onDaySelected: (day) => selected = day,
+            onOpenPlan: (_) {},
+            onStartPlan: (_) async {},
+            onCreatePlanForDay: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(TrainingWeekStrip), findsOneWidget);
+    await tester.tap(find.text('Czw'));
+    await tester.pump();
+    expect(selected, 4);
+  });
+
+  testWidgets('shows loader while plans load', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrainingTodayPlanSection(
+            selectedDay: 3,
+            plans: const [],
+            isLoading: true,
+            onDaySelected: (_) {},
+            onOpenPlan: (_) {},
+            onStartPlan: (_) async {},
+            onCreatePlanForDay: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byKey(const ValueKey('monk-rest-icon')), findsNothing);
   });
 }

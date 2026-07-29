@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
-import 'training_plan_card.dart';
-import 'training_rest_day_card.dart';
+import 'training_day_hero.dart';
+import 'training_day_status.dart';
 import 'training_week_strip.dart';
 
 class TrainingTodayPlanSection extends StatelessWidget {
@@ -23,6 +22,8 @@ class TrainingTodayPlanSection extends StatelessWidget {
   final bool isLoading;
   final ValueChanged<int> onDaySelected;
   final ValueChanged<CustomTrainingPlan> onOpenPlan;
+  /// Kept for parent API parity; session start lives in plan details, not hero.
+  // ignore: unused_field
   final Future<void> Function(CustomTrainingPlan plan) onStartPlan;
   final ValueChanged<int> onCreatePlanForDay;
 
@@ -31,131 +32,39 @@ class TrainingTodayPlanSection extends StatelessWidget {
     final scheduledPlans = plans
         .where((plan) => plan.selectedDays.contains(selectedDay))
         .toList();
-    final workoutDays = plans.expand((plan) => plan.selectedDays).toSet();
+    final scheduledPlan = scheduledPlans.isEmpty ? null : scheduledPlans.first;
+    final today = DateTime.now();
+    final selectedDate =
+        startOfWeekContaining(today).add(Duration(days: selectedDay - 1));
+    final isRest = scheduledPlan == null;
+    final subtitle = isRest
+        ? 'Regeneracja to postęp.'
+        : '${scheduledPlan.name}${scheduledPlans.length > 1 ? ' +${scheduledPlans.length - 1}' : ''}';
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Text(
-              'Twoj plan na dzis',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (scheduledPlans.length == 1)
-              GestureDetector(
-                onTap: () => onOpenPlan(scheduledPlans.first),
-                child: const Row(
-                  children: [
-                    Text(
-                      'Zobacz plan',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.primary,
-                      size: 18,
-                    ),
-                  ],
-                ),
-              ),
-          ],
+        TrainingDayHero(
+          label: trainingDayHeroLabel(selectedDate, today: today),
+          isLoading: isLoading,
+          isRestDay: isRest,
+          title: isRest ? 'Dzień odpoczynku' : 'Dzień treningowy',
+          subtitle: subtitle,
+          onTap: () {
+            if (isLoading) return;
+            final plan = scheduledPlan;
+            if (plan == null) {
+              onCreatePlanForDay(selectedDay);
+            } else {
+              onOpenPlan(plan);
+            }
+          },
         ),
-        const SizedBox(height: 12),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          switchInCurve: Curves.easeOut,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.04),
-                end: Offset.zero,
-              ).animate(animation),
-              child: child,
-            ),
-          ),
-          child: _TodayPlanContent(
-            key: ValueKey(
-              'today-plan-$selectedDay-${scheduledPlans.length}-$isLoading',
-            ),
-            selectedDay: selectedDay,
-            isLoading: isLoading,
-            plans: scheduledPlans,
-            onOpenPlan: onOpenPlan,
-            onStartPlan: onStartPlan,
-            onCreatePlanForDay: onCreatePlanForDay,
-          ),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 18),
         TrainingWeekStrip(
           selectedDay: selectedDay,
-          workoutDays: workoutDays,
           onDaySelected: onDaySelected,
         ),
-      ],
-    );
-  }
-}
-
-class _TodayPlanContent extends StatelessWidget {
-  const _TodayPlanContent({
-    super.key,
-    required this.selectedDay,
-    required this.isLoading,
-    required this.plans,
-    required this.onOpenPlan,
-    required this.onStartPlan,
-    required this.onCreatePlanForDay,
-  });
-
-  final int selectedDay;
-  final bool isLoading;
-  final List<CustomTrainingPlan> plans;
-  final ValueChanged<CustomTrainingPlan> onOpenPlan;
-  final Future<void> Function(CustomTrainingPlan plan) onStartPlan;
-  final ValueChanged<int> onCreatePlanForDay;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const SizedBox(
-        height: 112,
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
-      );
-    }
-
-    if (plans.isEmpty) {
-      return TrainingRestDayCard(
-        onCreatePlan: () => onCreatePlanForDay(selectedDay),
-      );
-    }
-
-    return Column(
-      children: [
-        for (final plan in plans)
-          Padding(
-            padding: EdgeInsets.only(bottom: plan == plans.last ? 0 : 12),
-            child: TrainingPlanCard(
-              plan: plan,
-              onOpen: () => onOpenPlan(plan),
-              onStart: () => onStartPlan(plan),
-            ),
-          ),
       ],
     );
   }
