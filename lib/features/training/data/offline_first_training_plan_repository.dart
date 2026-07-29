@@ -66,6 +66,17 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
   }
 
   @override
+  Future<CustomTrainingPlan?> getById(String id) async {
+    return _localDb.run((db) async {
+      final row = await _findRow(db, id);
+      if (row == null) return null;
+      final record = await TrainingPlanLocalMapper.fromDb(db, row);
+      if (record == null || record.isDeleted) return null;
+      return record.plan;
+    });
+  }
+
+  @override
   Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     final localPlan = plan.id.isEmpty

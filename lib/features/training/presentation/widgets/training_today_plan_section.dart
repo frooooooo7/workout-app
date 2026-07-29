@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
 import 'training_day_hero.dart';
 import 'training_day_status.dart';
@@ -15,6 +16,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
     required this.onOpenPlan,
     required this.onStartPlan,
     required this.onCreatePlanForDay,
+    this.completedWeekdays = const {},
   });
 
   final int selectedDay;
@@ -22,10 +24,9 @@ class TrainingTodayPlanSection extends StatelessWidget {
   final bool isLoading;
   final ValueChanged<int> onDaySelected;
   final ValueChanged<CustomTrainingPlan> onOpenPlan;
-  /// Kept for parent API parity; session start lives in plan details, not hero.
-  // ignore: unused_field
   final Future<void> Function(CustomTrainingPlan plan) onStartPlan;
   final ValueChanged<int> onCreatePlanForDay;
+  final Set<int> completedWeekdays;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +34,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
         .where((plan) => plan.selectedDays.contains(selectedDay))
         .toList();
     final scheduledPlan = scheduledPlans.isEmpty ? null : scheduledPlans.first;
+    final workoutDays = plans.expand((plan) => plan.selectedDays).toSet();
     final today = DateTime.now();
     final selectedDate =
         startOfWeekContaining(today).add(Duration(days: selectedDay - 1));
@@ -60,10 +62,34 @@ class TrainingTodayPlanSection extends StatelessWidget {
             }
           },
         ),
+        if (!isLoading && scheduledPlan != null) ...[
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const ValueKey('start-workout-button'),
+              onPressed: () => onStartPlan(scheduledPlan),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text(
+                'Rozpocznij',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         TrainingWeekStrip(
           selectedDay: selectedDay,
           onDaySelected: onDaySelected,
+          scheduledWeekdays: workoutDays,
+          completedWeekdays: completedWeekdays,
         ),
       ],
     );

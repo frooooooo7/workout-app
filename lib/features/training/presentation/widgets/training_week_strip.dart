@@ -3,18 +3,30 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'training_day_status.dart';
 
+enum WeekDayMarker { empty, scheduled, completed }
+
 class TrainingWeekStrip extends StatelessWidget {
   const TrainingWeekStrip({
     super.key,
     required this.selectedDay,
     required this.onDaySelected,
+    this.scheduledWeekdays = const {},
+    this.completedWeekdays = const {},
     this.today,
   });
 
   /// 1 = Monday … 7 = Sunday.
   final int selectedDay;
   final ValueChanged<int> onDaySelected;
+  final Set<int> scheduledWeekdays;
+  final Set<int> completedWeekdays;
   final DateTime? today;
+
+  WeekDayMarker _markerFor(int weekday) {
+    if (completedWeekdays.contains(weekday)) return WeekDayMarker.completed;
+    if (scheduledWeekdays.contains(weekday)) return WeekDayMarker.scheduled;
+    return WeekDayMarker.empty;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,16 +38,7 @@ class TrainingWeekStrip extends StatelessWidget {
         final weekday = i + 1;
         final date = weekStart.add(Duration(days: i));
         final isSelected = weekday == selectedDay;
-        final isPast = isCalendarDateBefore(date, now);
-
-        final String indicatorSuffix;
-        if (isSelected) {
-          indicatorSuffix = 'selected';
-        } else if (isPast) {
-          indicatorSuffix = 'past';
-        } else {
-          indicatorSuffix = 'future';
-        }
+        final marker = _markerFor(weekday);
 
         return Expanded(
           child: Padding(
@@ -45,8 +48,10 @@ class TrainingWeekStrip extends StatelessWidget {
               label: kTrainingWeekdayShortLabels[i],
               dayNumber: date.day,
               isSelected: isSelected,
-              indicatorKey: ValueKey('week-indicator-$weekday-$indicatorSuffix'),
-              isPast: isPast && !isSelected,
+              marker: marker,
+              indicatorKey: ValueKey(
+                'week-indicator-$weekday-${marker.name}',
+              ),
               onTap: () => onDaySelected(weekday),
             ),
           ),
@@ -62,16 +67,16 @@ class _WeekDayCard extends StatelessWidget {
     required this.label,
     required this.dayNumber,
     required this.isSelected,
+    required this.marker,
     required this.indicatorKey,
-    required this.isPast,
     required this.onTap,
   });
 
   final String label;
   final int dayNumber;
   final bool isSelected;
+  final WeekDayMarker marker;
   final Key indicatorKey;
-  final bool isPast;
   final VoidCallback onTap;
 
   @override
@@ -117,8 +122,7 @@ class _WeekDayCard extends StatelessWidget {
               const SizedBox(height: 8),
               _DayIndicator(
                 key: indicatorKey,
-                isSelected: isSelected,
-                isPast: isPast,
+                marker: marker,
               ),
             ],
           ),
@@ -131,41 +135,34 @@ class _WeekDayCard extends StatelessWidget {
 class _DayIndicator extends StatelessWidget {
   const _DayIndicator({
     super.key,
-    required this.isSelected,
-    required this.isPast,
+    required this.marker,
   });
 
-  final bool isSelected;
-  final bool isPast;
+  final WeekDayMarker marker;
 
   @override
   Widget build(BuildContext context) {
-    if (isSelected) {
-      return Container(
-        width: 6,
-        height: 6,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-        ),
-      );
+    switch (marker) {
+      case WeekDayMarker.completed:
+        return Container(
+          width: 7,
+          height: 7,
+          decoration: const BoxDecoration(
+            color: AppColors.primary,
+            shape: BoxShape.circle,
+          ),
+        );
+      case WeekDayMarker.scheduled:
+        return Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.primary, width: 1.5),
+          ),
+        );
+      case WeekDayMarker.empty:
+        return const SizedBox(width: 7, height: 7);
     }
-
-    if (isPast) {
-      return const Icon(
-        Icons.check,
-        size: 14,
-        color: Colors.white,
-      );
-    }
-
-    return Container(
-      width: 6,
-      height: 6,
-      decoration: const BoxDecoration(
-        color: AppColors.textMuted,
-        shape: BoxShape.circle,
-      ),
-    );
   }
 }

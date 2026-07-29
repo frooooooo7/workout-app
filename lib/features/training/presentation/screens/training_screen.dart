@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../bloc/training_history_cubit.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
 import '../widgets/training_header.dart';
@@ -15,9 +16,17 @@ class TrainingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) =>
-          TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) =>
+              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+        ),
+        BlocProvider(
+          create: (_) =>
+              TrainingHistoryCubit(ServiceLocator.trainingHistoryRepository),
+        ),
+      ],
       child: const _TrainingShellContent(),
     );
   }
@@ -50,6 +59,7 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
     if (path == '/app/training') {
       context.read<TrainingSessionCubit>().refresh();
       context.read<TrainingPlansCubit>().refresh();
+      context.read<TrainingHistoryCubit>().refresh();
     }
   }
 
@@ -77,8 +87,8 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                     onActiveTap: active == null
                         ? null
                         : () {
-                            final cubit = context
-                                .read<TrainingSessionCubit>();
+                            final cubit =
+                                context.read<TrainingSessionCubit>();
                             context
                                 .push(
                                   '/app/training/ongoing-workout',
@@ -88,7 +98,12 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                                   ),
                                 )
                                 .then((_) {
-                                  if (context.mounted) cubit.refresh();
+                                  if (context.mounted) {
+                                    cubit.refresh();
+                                    context
+                                        .read<TrainingHistoryCubit>()
+                                        .refresh();
+                                  }
                                 });
                           },
                     onLibraryTap: () {

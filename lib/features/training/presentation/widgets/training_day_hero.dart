@@ -63,58 +63,68 @@ class TrainingDayHero extends StatelessWidget {
                   )
                 : Padding(
                     key: ValueKey('hero-content-$isRestDay-$title-$subtitle'),
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              label,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (isRestDay)
+                              Image.asset(
+                                'assets/images/monk_rest.png',
+                                key: const ValueKey('monk-rest-icon'),
+                                height: 64,
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                              )
+                            else
+                              const Icon(
+                                Icons.fitness_center_rounded,
+                                key: ValueKey('training-day-icon'),
+                                size: 36,
+                                color: AppColors.textSecondary,
+                              ),
+                            const SizedBox(height: 6),
+                            Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                                height: 1.15,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        if (isRestDay)
-                          Image.asset(
-                            'assets/images/monk_rest.png',
-                            key: const ValueKey('monk-rest-icon'),
-                            height: 78,
-                            fit: BoxFit.contain,
-                          )
-                        else
-                          Icon(
-                            Icons.fitness_center_rounded,
-                            key: const ValueKey('training-day-icon'),
-                            size: 44,
-                            color: AppColors.textSecondary,
-                          ),
-                        const SizedBox(height: 12),
-                        Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          subtitle,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
           ),

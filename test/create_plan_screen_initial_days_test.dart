@@ -33,6 +33,9 @@ class _FakeTrainingPlanRepository implements TrainingPlanRepository {
   Future<List<CustomTrainingPlan>> getAll() async => const [];
 
   @override
+  Future<CustomTrainingPlan?> getById(String id) async => null;
+
+  @override
   Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async => plan;
 
   @override

@@ -1,7 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/domain/models/auth_models.dart';
 import '../domain/models/recent_activity.dart';
-import '../../home/presentation/widgets/recent_activities_card.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_activity.dart';
 import '../domain/models/profile_activity_stat.dart';
@@ -210,13 +209,34 @@ class MockProfileRepository implements ProfileRepository {
     return _slice(_mockFollowers, limit, offset);
   }
 
+  static const _mockRecentActivities = [
+    (
+      title: 'Push — klatka i barki',
+      date: 'Dziś',
+      duration: '58 min',
+      detail: '6 ćwiczeń',
+    ),
+    (
+      title: 'Pull — plecy i biceps',
+      date: 'Wczoraj',
+      duration: '52 min',
+      detail: '5 ćwiczeń',
+    ),
+    (
+      title: 'Trening nóg',
+      date: '29 kwi',
+      duration: '1 godz 12 min',
+      detail: '7 ćwiczeń',
+    ),
+  ];
+
   @override
   Future<List<ProfileActivity>> getRecentActivities({
     int limit = 5,
     String? userId,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    return RecentActivitiesCard.mockActivities
+    return _mockRecentActivities
         .asMap()
         .entries
         .map((e) => _mapActivity(e.value, index: e.key))
@@ -244,10 +264,10 @@ class MockProfileRepository implements ProfileRepository {
     return list.sublist(offset, end);
   }
 
-  ProfileActivity _mapActivity(RecentActivity activity, {int index = 0}) {
+  ProfileActivity _mapActivity(_MockActivity activity, {int index = 0}) {
     final stats = _statsFor(activity);
     return ProfileActivity(
-      kind: activity.kind,
+      kind: RecentActivityKind.strength,
       title: activity.title,
       date: activity.date,
       duration: activity.duration,
@@ -261,11 +281,18 @@ class MockProfileRepository implements ProfileRepository {
 
   static const _timeLabels = ['18:32', '07:15', '19:48', '12:05', '16:20'];
 
-  List<ProfileActivityStat> _statsFor(RecentActivity activity) {
+  List<ProfileActivityStat> _statsFor(_MockActivity activity) {
     return [
       ProfileActivityStat(label: 'Czas', value: activity.duration),
-      ProfileActivityStat(label: 'Ćwiczenia', value: activity.detail ?? '—'),
+      ProfileActivityStat(label: 'Ćwiczenia', value: activity.detail),
       const ProfileActivityStat(label: 'Objętość', value: '6 450 kg'),
     ];
   }
 }
+
+typedef _MockActivity = ({
+  String title,
+  String date,
+  String duration,
+  String detail,
+});

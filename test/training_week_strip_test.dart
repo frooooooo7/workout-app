@@ -11,7 +11,7 @@ void main() {
         home: Scaffold(
           body: TrainingWeekStrip(
             selectedDay: 3,
-            today: DateTime(2026, 7, 29), // Środa
+            today: DateTime(2026, 7, 29),
             onDaySelected: (day) => selected = day,
           ),
         ),
@@ -21,30 +21,47 @@ void main() {
     expect(find.text('Pon'), findsOneWidget);
     expect(find.text('Śr'), findsOneWidget);
     expect(find.text('Ndz'), findsOneWidget);
-    expect(find.text('29'), findsOneWidget); // dziś
+    expect(find.text('29'), findsOneWidget);
 
     await tester.tap(find.text('Czw'));
     await tester.pump();
     expect(selected, 4);
   });
 
-  testWidgets('past days show check, future show grey marker key', (tester) async {
+  testWidgets('shows completed, scheduled and empty markers', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingWeekStrip(
             selectedDay: 3,
             today: DateTime(2026, 7, 29),
+            scheduledWeekdays: const {1, 2, 4},
+            completedWeekdays: const {1},
             onDaySelected: (_) {},
           ),
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('week-indicator-1-past')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-indicator-2-past')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-indicator-3-selected')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-indicator-4-future')), findsOneWidget);
-    expect(find.byKey(const ValueKey('week-indicator-7-future')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('week-indicator-1-completed')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('week-indicator-2-scheduled')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('week-indicator-3-empty')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('week-indicator-4-scheduled')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('week-indicator-5-empty')),
+      findsOneWidget,
+    );
   });
 }

@@ -1,4 +1,6 @@
-enum TrainingSessionStatus { completed, cancelled, active }
+import 'training_session.dart';
+
+export 'training_session.dart' show TrainingSessionStatus;
 
 enum TrainingProgressHighlightType {
   weightIncrease,

@@ -32,6 +32,42 @@ void main() {
       await cubit.close();
     });
 
+    test('derives current week markers from a dedicated range query', () async {
+      final weekSession = _session('week', startedAt: DateTime.now());
+      final repository = _FakeTrainingHistoryRepository(
+        firstPage: TrainingSessionPage(
+          items: [_session('s1')],
+          nextCursor: null,
+          hasMore: false,
+          isFromCache: false,
+        ),
+        secondPage: TrainingSessionPage(
+          items: const [],
+          nextCursor: null,
+          hasMore: false,
+          isFromCache: false,
+        ),
+        rangePage: TrainingSessionPage(
+          items: [weekSession],
+          nextCursor: null,
+          hasMore: false,
+          isFromCache: false,
+        ),
+      );
+
+      final cubit = TrainingHistoryCubit(repository);
+      await cubit.refresh();
+      await Future.delayed(Duration.zero);
+
+      expect(
+        cubit.state.weekCompletedWeekdays,
+        {weekSession.startedAt.toLocal().weekday},
+      );
+      expect(repository.lastRangeFrom, isNotNull);
+
+      await cubit.close();
+    });
+
     test('handles viewMode toggling and calendar session loading', () async {
       final repository = _FakeTrainingHistoryRepository(
         firstPage: TrainingSessionPage(
@@ -72,11 +108,12 @@ void main() {
   });
 }
 
-TrainingSessionListItem _session(String id) {
+TrainingSessionListItem _session(String id, {DateTime? startedAt}) {
+  final start = startedAt ?? DateTime.utc(2026, 5, 14, 10);
   return TrainingSessionListItem(
     id: id,
-    startedAt: DateTime.utc(2026, 5, 14, 10),
-    endedAt: DateTime.utc(2026, 5, 14, 11),
+    startedAt: start,
+    endedAt: start.add(const Duration(hours: 1)),
     durationSec: 3600,
     status: TrainingSessionStatus.completed,
     plan: const TrainingPlanSummary(id: 'plan1', name: 'Plan A'),
@@ -95,10 +132,14 @@ class _FakeTrainingHistoryRepository implements TrainingHistoryRepository {
   _FakeTrainingHistoryRepository({
     required this.firstPage,
     required this.secondPage,
+    this.rangePage,
   });
 
   final TrainingSessionPage firstPage;
   final TrainingSessionPage secondPage;
+  final TrainingSessionPage? rangePage;
+
+  DateTime? lastRangeFrom;
 
   @override
   Future<TrainingSessionDetail> getSessionDetail(String sessionId) {
@@ -115,6 +156,10 @@ class _FakeTrainingHistoryRepository implements TrainingHistoryRepository {
     DateTime? from,
     DateTime? to,
   }) async {
+    if (from != null) {
+      lastRangeFrom = from;
+      if (rangePage != null) return rangePage!;
+    }
     return cursor == null ? firstPage : secondPage;
   }
 }

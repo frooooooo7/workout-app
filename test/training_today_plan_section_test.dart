@@ -43,15 +43,19 @@ void main() {
     expect(find.byKey(const ValueKey('monk-rest-icon')), findsOneWidget);
     expect(find.text('Dzień odpoczynku'), findsOneWidget);
     expect(find.text('Regeneracja to postęp.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('start-workout-button')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('monk-rest-icon')));
+    await tester.tap(find.text('Dzień odpoczynku'));
     await tester.pump();
     expect(requestedDay, 2);
   });
 
-  testWidgets('training day: opens plan on tap, no play button', (tester) async {
+  testWidgets('training day: opens plan on hero tap and starts from button', (
+    tester,
+  ) async {
     final scheduled = plan('Push Power', const [1, 3]);
     CustomTrainingPlan? opened;
+    CustomTrainingPlan? started;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -62,7 +66,7 @@ void main() {
             isLoading: false,
             onDaySelected: (_) {},
             onOpenPlan: (p) => opened = p,
-            onStartPlan: (_) async {},
+            onStartPlan: (p) async => started = p,
             onCreatePlanForDay: (_) {},
           ),
         ),
@@ -71,11 +75,15 @@ void main() {
 
     expect(find.text('Dzień treningowy'), findsOneWidget);
     expect(find.text('Push Power'), findsOneWidget);
-    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
+    expect(find.byKey(const ValueKey('start-workout-button')), findsOneWidget);
 
     await tester.tap(find.text('Dzień treningowy'));
     await tester.pump();
     expect(opened, same(scheduled));
+
+    await tester.tap(find.byKey(const ValueKey('start-workout-button')));
+    await tester.pump();
+    expect(started, same(scheduled));
   });
 
   testWidgets('summarizes additional plans with +N', (tester) async {
@@ -121,7 +129,7 @@ void main() {
     );
 
     expect(find.byType(TrainingWeekStrip), findsOneWidget);
-    await tester.tap(find.text('Czw'));
+    await tester.tap(find.byKey(const ValueKey('week-day-4')));
     await tester.pump();
     expect(selected, 4);
   });
@@ -145,5 +153,6 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.byKey(const ValueKey('monk-rest-icon')), findsNothing);
+    expect(find.byKey(const ValueKey('start-workout-button')), findsNothing);
   });
 }

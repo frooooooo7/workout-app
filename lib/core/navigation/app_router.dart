@@ -137,7 +137,7 @@ GoRouter buildRouter({
                   GoRoute(
                     name: 'training-plans',
                     path: 'plans',
-                    redirect: (_, __) => '/app/plans',
+                    redirect: (_, _) => '/app/plans',
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,

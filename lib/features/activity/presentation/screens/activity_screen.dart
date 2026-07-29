@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../home/presentation/widgets/home_activity_summary_card.dart';
-import '../../../home/presentation/widgets/last_activity_card.dart';
-import '../../../home/presentation/widgets/recent_activities_card.dart';
+import '../widgets/activity_summary_card.dart';
+import '../widgets/last_activity_card.dart';
+import '../widgets/recent_activities_card.dart';
 
 class ActivityScreen extends StatelessWidget {
   const ActivityScreen({super.key});
@@ -35,7 +35,7 @@ class ActivityScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const HomeActivitySummaryCard(
+              const ActivitySummaryCard(
                 workouts: 14,
                 volumeKg: 86400,
                 caloriesKcal: 6752,
