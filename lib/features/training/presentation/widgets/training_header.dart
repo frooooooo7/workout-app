@@ -9,7 +9,6 @@ class TrainingHeader extends StatelessWidget {
     this.addTooltip = 'Dodaj trening',
     this.activePlanName,
     this.onActiveTap,
-    this.onPlansTap,
     this.onLibraryTap,
   });
 
@@ -17,7 +16,6 @@ class TrainingHeader extends StatelessWidget {
   final String addTooltip;
   final String? activePlanName;
   final VoidCallback? onActiveTap;
-  final VoidCallback? onPlansTap;
   final VoidCallback? onLibraryTap;
 
   @override
@@ -57,14 +55,6 @@ class TrainingHeader extends StatelessWidget {
           _ActiveSessionButton(
             planName: activePlanName!,
             onTap: onActiveTap ?? () {},
-          ),
-          const SizedBox(width: 10),
-        ],
-        if (onPlansTap != null) ...[
-          HeaderIconButton(
-            tooltip: 'Plany treningowe',
-            icon: Icons.format_list_bulleted_rounded,
-            onTap: onPlansTap!,
           ),
           const SizedBox(width: 10),
         ],

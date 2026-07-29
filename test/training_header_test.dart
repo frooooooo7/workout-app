@@ -21,17 +21,13 @@ void main() {
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });
 
-  testWidgets('shows plans and library buttons and delegates taps', (
-    tester,
-  ) async {
-    var plansTapped = false;
+  testWidgets('shows library button and delegates taps', (tester) async {
     var libraryTapped = false;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingHeader(
-            onPlansTap: () => plansTapped = true,
             onLibraryTap: () => libraryTapped = true,
             onAddTap: () {},
           ),
@@ -39,13 +35,8 @@ void main() {
       ),
     );
 
-    expect(find.byIcon(Icons.format_list_bulleted_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.format_list_bulleted_rounded), findsNothing);
     expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.format_list_bulleted_rounded));
-    await tester.pump();
-
-    expect(plansTapped, isTrue);
 
     await tester.tap(find.byIcon(Icons.menu_book_rounded));
     await tester.pump();

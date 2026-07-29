@@ -91,9 +91,6 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                                   if (context.mounted) cubit.refresh();
                                 });
                           },
-                    onPlansTap: () {
-                      context.push('/app/training/plans');
-                    },
                     onLibraryTap: () {
                       context.push('/app/training/library');
                     },
