@@ -7,20 +7,18 @@ class TrainingHeader extends StatelessWidget {
     super.key,
     this.onAddTap,
     this.addTooltip = 'Dodaj trening',
-    this.addLabel,
     this.activePlanName,
     this.onActiveTap,
-    this.onStatsTap,
-    this.statsTooltip = 'Statystyki',
+    this.onPlansTap,
+    this.onLibraryTap,
   });
 
   final VoidCallback? onAddTap;
   final String addTooltip;
-  final String? addLabel;
   final String? activePlanName;
   final VoidCallback? onActiveTap;
-  final VoidCallback? onStatsTap;
-  final String statsTooltip;
+  final VoidCallback? onPlansTap;
+  final VoidCallback? onLibraryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -62,17 +60,24 @@ class TrainingHeader extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        if (onStatsTap != null) ...[
-          _IconHeaderButton(
-            tooltip: statsTooltip,
-            icon: Icons.insert_chart_outlined_rounded,
-            onTap: onStatsTap!,
+        if (onPlansTap != null) ...[
+          HeaderIconButton(
+            tooltip: 'Plany treningowe',
+            icon: Icons.format_list_bulleted_rounded,
+            onTap: onPlansTap!,
+          ),
+          const SizedBox(width: 10),
+        ],
+        if (onLibraryTap != null) ...[
+          HeaderIconButton(
+            tooltip: 'Biblioteka ćwiczeń',
+            icon: Icons.menu_book_rounded,
+            onTap: onLibraryTap!,
           ),
           const SizedBox(width: 10),
         ],
         _AddButton(
           tooltip: addTooltip,
-          label: addLabel,
           onTap: onAddTap ?? () {},
         ),
       ],
@@ -150,15 +155,49 @@ class _ActiveSessionButton extends StatelessWidget {
   }
 }
 
-class _IconHeaderButton extends StatelessWidget {
-  const _IconHeaderButton({
+class HeaderIconButton extends StatelessWidget {
+  const HeaderIconButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.onTap,
+    this.isAccent = false,
   });
 
   final String tooltip;
   final IconData icon;
+  final VoidCallback onTap;
+  final bool isAccent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Ink(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: isAccent ? AppColors.primary : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: isAccent ? null : Border.all(color: AppColors.border),
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.tooltip, required this.onTap});
+
+  final String tooltip;
   final VoidCallback onTap;
 
   @override
@@ -174,65 +213,10 @@ class _IconHeaderButton extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.tooltip, required this.onTap, this.label});
-
-  final String tooltip;
-  final String? label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = label?.trim();
-    final hasLabel = text != null && text.isNotEmpty;
-
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Ink(
-            width: hasLabel ? null : 42,
-            height: 42,
-            padding: hasLabel
-                ? const EdgeInsets.symmetric(horizontal: 12)
-                : EdgeInsets.zero,
-            decoration: BoxDecoration(
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.add_rounded, color: Colors.white, size: 22),
-                if (hasLabel) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
           ),
         ),
       ),

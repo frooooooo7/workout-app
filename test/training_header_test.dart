@@ -3,15 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/presentation/widgets/training_header.dart';
 
 void main() {
-  testWidgets('allows the add button tooltip to match the active tab', (
-    tester,
-  ) async {
+  testWidgets('allows the add button tooltip to be customized', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingHeader(
-            addTooltip: 'Utworz plan',
-            addLabel: 'Dodaj plan',
+            addTooltip: 'Dodaj trening',
             onAddTap: () {},
           ),
         ),
@@ -20,29 +17,39 @@ void main() {
 
     final tooltip = tester.widget<Tooltip>(find.byType(Tooltip).last);
 
-    expect(tooltip.message, 'Utworz plan');
-    expect(find.text('Dodaj plan'), findsOneWidget);
+    expect(tooltip.message, 'Dodaj trening');
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });
 
-  testWidgets('shows stats button and delegates taps', (tester) async {
-    var tapped = false;
+  testWidgets('shows plans and library buttons and delegates taps', (
+    tester,
+  ) async {
+    var plansTapped = false;
+    var libraryTapped = false;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingHeader(
-            onStatsTap: () => tapped = true,
+            onPlansTap: () => plansTapped = true,
+            onLibraryTap: () => libraryTapped = true,
             onAddTap: () {},
           ),
         ),
       ),
     );
 
-    expect(find.byIcon(Icons.insert_chart_outlined_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.format_list_bulleted_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.insert_chart_outlined_rounded));
+    await tester.tap(find.byIcon(Icons.format_list_bulleted_rounded));
     await tester.pump();
 
-    expect(tapped, isTrue);
+    expect(plansTapped, isTrue);
+
+    await tester.tap(find.byIcon(Icons.menu_book_rounded));
+    await tester.pump();
+
+    expect(libraryTapped, isTrue);
   });
 }

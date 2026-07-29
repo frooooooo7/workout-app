@@ -8,12 +8,14 @@ class LibraryHeader extends StatelessWidget {
     required this.onSearchChanged,
     required this.onFilterTap,
     required this.onAddTap,
+    required this.onBackTap,
   });
 
   final TextEditingController searchController;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onFilterTap;
   final VoidCallback onAddTap;
+  final VoidCallback onBackTap;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +25,31 @@ class LibraryHeader extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            Tooltip(
+              message: 'Wstecz',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onBackTap,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Ink(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

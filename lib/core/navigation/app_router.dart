@@ -11,7 +11,9 @@ import '../../features/training/presentation/screens/ongoing_workout_screen.dart
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
+import '../../features/training/presentation/screens/history_screen.dart';
 import '../../features/training/presentation/screens/plan_details_screen.dart';
+import '../../features/training/presentation/screens/plans_screen.dart';
 import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/training/presentation/screens/training_stats_screen.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
@@ -126,6 +128,18 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
+                    name: 'training-plans',
+                    path: 'plans',
+                    builder: (_, s) => const PlansScreen(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'training-library',
+                    path: 'library',
+                    builder: (_, s) => const LibraryScreen(),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
                     name: 'create-plan',
                     path: 'create-plan',
                     builder: (context, state) {
@@ -189,8 +203,8 @@ GoRouter buildRouter({
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/app/library',
-                builder: (_, s) => const LibraryScreen(),
+                path: '/app/history',
+                builder: (_, s) => const HistoryScreen(),
               ),
             ],
           ),

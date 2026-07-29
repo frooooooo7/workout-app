@@ -7,13 +7,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
 import '../widgets/training_header.dart';
-import '../widgets/training_history_tab.dart';
-import '../widgets/training_plans_tab.dart';
 import '../widgets/training_session_tab.dart';
-import 'create_plan_screen.dart';
 import 'ongoing_workout_screen.dart';
-
-enum _TrainingTab { sesja, plany, historia }
 
 class TrainingScreen extends StatelessWidget {
   const TrainingScreen({super.key});
@@ -44,7 +39,6 @@ class _TrainingShellContent extends StatefulWidget {
 }
 
 class _TrainingShellContentState extends State<_TrainingShellContent> {
-  _TrainingTab _activeTab = _TrainingTab.sesja;
   GoRouter? _router;
 
   @override
@@ -63,6 +57,7 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
     final path = _router?.state.uri.path;
     if (path == '/app/training') {
       context.read<TrainingSessionCubit>().refresh();
+      context.read<TrainingPlansCubit>().refresh();
     }
   }
 
@@ -82,149 +77,46 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
-                    builder: (context, sessionState) {
-                      final active = sessionState.activeSession;
-                      return TrainingHeader(
-                        activePlanName: active?.planName,
-                        addTooltip: _activeTab == _TrainingTab.plany
-                            ? 'Utworz plan'
-                            : 'Dodaj trening',
-                        addLabel: _activeTab == _TrainingTab.plany
-                            ? 'Dodaj plan'
-                            : null,
-                        onActiveTap: active == null
-                            ? null
-                            : () {
-                                final cubit = context
-                                    .read<TrainingSessionCubit>();
-                                context
-                                    .push(
-                                      '/app/training/ongoing-workout',
-                                      extra: OngoingWorkoutArgs(
-                                        initialSession: active,
-                                        sessionCubit: cubit,
-                                      ),
-                                    )
-                                    .then((_) {
-                                      if (context.mounted) cubit.refresh();
-                                    });
-                              },
-                        onStatsTap: () {
-                          context.push('/app/training/stats');
-                        },
-                        onAddTap: () {
-                          if (_activeTab == _TrainingTab.plany) {
-                            context.push(
-                              '/app/training/create-plan',
-                              extra: CreatePlanArgs(
-                                cubit: context.read<TrainingPlansCubit>(),
-                              ),
-                            );
-                            return;
-                          }
-
-                          context.push('/app/training/pick-activity-type');
-                        },
-                      );
+              child: BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+                builder: (context, sessionState) {
+                  final active = sessionState.activeSession;
+                  return TrainingHeader(
+                    activePlanName: active?.planName,
+                    onActiveTap: active == null
+                        ? null
+                        : () {
+                            final cubit = context
+                                .read<TrainingSessionCubit>();
+                            context
+                                .push(
+                                  '/app/training/ongoing-workout',
+                                  extra: OngoingWorkoutArgs(
+                                    initialSession: active,
+                                    sessionCubit: cubit,
+                                  ),
+                                )
+                                .then((_) {
+                                  if (context.mounted) cubit.refresh();
+                                });
+                          },
+                    onPlansTap: () {
+                      context.push('/app/training/plans');
                     },
-                  ),
-                  const SizedBox(height: 20),
-                  _TrainingTabBar(
-                    active: _activeTab,
-                    onTabSelected: (tab) => setState(() => _activeTab = tab),
-                  ),
-                ],
+                    onLibraryTap: () {
+                      context.push('/app/training/library');
+                    },
+                    onAddTap: () {
+                      context.push('/app/training/pick-activity-type');
+                    },
+                  );
+                },
               ),
             ),
             const SizedBox(height: 20),
-            Expanded(
-              child: switch (_activeTab) {
-                _TrainingTab.sesja => const TrainingSessionTab(),
-                _TrainingTab.plany => const TrainingPlansTab(),
-                _TrainingTab.historia => const TrainingHistoryTab(),
-              },
+            const Expanded(
+              child: TrainingSessionTab(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TrainingTabBar extends StatelessWidget {
-  const _TrainingTabBar({required this.active, required this.onTabSelected});
-
-  final _TrainingTab active;
-  final ValueChanged<_TrainingTab> onTabSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: _TrainingTab.values
-            .map(
-              (tab) => _TrainingTabItem(
-                tab: tab,
-                isActive: tab == active,
-                onTap: () => onTabSelected(tab),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _TrainingTabItem extends StatelessWidget {
-  const _TrainingTabItem({
-    required this.tab,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final _TrainingTab tab;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  String get _label => switch (tab) {
-    _TrainingTab.sesja => 'Sesja',
-    _TrainingTab.plany => 'Plany',
-    _TrainingTab.historia => 'Historia',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.surfaceVariant : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          alignment: Alignment.center,
-          child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 200),
-            style: TextStyle(
-              color: isActive ? Colors.white : AppColors.textSecondary,
-              fontSize: 13,
-              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-            ),
-            child: Text(_label),
-          ),
         ),
       ),
     );

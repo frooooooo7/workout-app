@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -57,6 +58,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           searchController: _searchController,
                           onSearchChanged: cubit.setQuery,
                           onFilterTap: () {},
+                          onBackTap: () {
+                            if (context.canPop()) {
+                              context.pop();
+                              return;
+                            }
+                            context.go('/app/training');
+                          },
                           onAddTap: () async {
                             final created = await showLibraryAddExerciseSheet(
                               context,
