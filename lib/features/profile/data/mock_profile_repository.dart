@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../auth/domain/models/auth_models.dart';
-import '../../home/domain/models/recent_activity.dart';
+import '../domain/models/recent_activity.dart';
 import '../../home/presentation/widgets/recent_activities_card.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_activity.dart';

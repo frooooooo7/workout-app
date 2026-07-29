@@ -9,6 +9,7 @@ import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   Future<void> setDesktopViewport(WidgetTester tester) async {
@@ -81,6 +82,141 @@ void main() {
     expect(resolveCalls, 1);
     expect(ServiceLocator.currentUser.value, user);
     expect(router.routeInformationProvider.value.uri.path, '/app/activity');
+  });
+
+  testWidgets('redirects legacy /app/training/plans to /app/plans', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+
+    final user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+    ServiceLocator.currentUser.value = user;
+
+    final router = buildRouter(
+      initialLocation: '/app/training/plans',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/app/plans');
+    expect(find.text('Plany treningowe'), findsOneWidget);
+  });
+
+  testWidgets('shows bottom nav destinations and navigates on tap', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+
+    final user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+    ServiceLocator.currentUser.value = user;
+
+    final router = buildRouter(
+      initialLocation: '/app/training',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Historia'), findsOneWidget);
+    expect(find.text('Plany'), findsWidgets);
+    expect(find.text('Aktywność'), findsOneWidget);
+    expect(find.text('Profil'), findsOneWidget);
+
+    await tester.tap(find.text('Historia'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(router.routeInformationProvider.value.uri.path, '/app/history');
+
+    await tester.tap(find.text('Plany').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(router.routeInformationProvider.value.uri.path, '/app/plans');
+  });
+
+  testWidgets('center tap without active session switches to training branch',
+      (tester) async {
+    await setDesktopViewport(tester);
+
+    final user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+    ServiceLocator.currentUser.value = user;
+
+    final router = buildRouter(
+      initialLocation: '/app/history',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byKey(const Key('app-bottom-nav-center')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/app/training');
+  });
+
+  testWidgets('center tap with active session opens ongoing workout', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await setDesktopViewport(tester);
+
+    final user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+    ServiceLocator.currentUser.value = user;
+    ServiceLocator.debugSetUserScopedRepositories(
+      trainingPlanRepository: _FakeTrainingPlanRepository(),
+      trainingHistoryRepository: _FakeTrainingHistoryRepository(),
+      trainingSessionRepository: _FakeTrainingSessionRepository(
+        active: TrainingSession(
+          planName: 'Push',
+          startedAt: DateTime.now().toUtc(),
+          exercises: const [],
+        ),
+      ),
+    );
+
+    final router = buildRouter(
+      initialLocation: '/app/history',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('app-bottom-nav-active-dot')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('app-bottom-nav-center')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
   });
 }
 

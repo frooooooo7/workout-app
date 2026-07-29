@@ -25,14 +25,6 @@ class PlansScreen extends StatelessWidget {
 class _PlansScreenContent extends StatelessWidget {
   const _PlansScreenContent();
 
-  void _handleBack(BuildContext context) {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    context.go('/app/training');
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,12 +38,6 @@ class _PlansScreenContent extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  HeaderIconButton(
-                    tooltip: 'Wstecz',
-                    icon: Icons.arrow_back_rounded,
-                    onTap: () => _handleBack(context),
-                  ),
-                  const SizedBox(width: 14),
                   const Expanded(
                     child: Text(
                       'Plany treningowe',

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gym/features/home/domain/models/recent_activity.dart';
+import 'package:gym/features/profile/domain/models/recent_activity.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/models/profile_activity.dart';
 import 'package:gym/features/profile/domain/models/profile_activity_stat.dart';

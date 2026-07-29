@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../home/domain/models/recent_activity.dart';
+import '../../domain/models/recent_activity.dart';
 import '../../domain/models/profile_activity.dart';
 import '../../domain/models/profile_activity_stat.dart';
 

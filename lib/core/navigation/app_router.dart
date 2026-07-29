@@ -5,7 +5,6 @@ import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/auth/presentation/screens/login_form_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
-import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
@@ -95,12 +94,16 @@ GoRouter buildRouter({
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/app/home',
-                builder: (_, s) {
-                  final user = ServiceLocator.currentUser.value;
-                  if (user == null) return const _LoadingScreen();
-                  return HomeScreen(user: user);
-                },
+                path: '/app/history',
+                builder: (_, s) => const HistoryScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/app/plans',
+                builder: (_, s) => const PlansScreen(),
               ),
             ],
           ),
@@ -132,10 +135,9 @@ GoRouter buildRouter({
                     builder: (_, s) => const PickTrainingPlanScreen(),
                   ),
                   GoRoute(
-                    parentNavigatorKey: appRootNavigatorKey,
                     name: 'training-plans',
                     path: 'plans',
-                    builder: (_, s) => const PlansScreen(),
+                    redirect: (_, __) => '/app/plans',
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
@@ -202,14 +204,6 @@ GoRouter buildRouter({
               GoRoute(
                 path: '/app/activity',
                 builder: (_, s) => const ActivityScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/app/history',
-                builder: (_, s) => const HistoryScreen(),
               ),
             ],
           ),
@@ -314,7 +308,7 @@ class _SplashRouteState extends State<_SplashRoute> {
     if (!mounted) return;
     if (user != null) {
       ServiceLocator.currentUser.value = user;
-      context.go('/app/home');
+      context.go('/app/training');
     } else {
       context.go('/login');
     }

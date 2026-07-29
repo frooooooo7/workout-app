@@ -1,5 +1,5 @@
 import '../../../core/network/api_client.dart';
-import '../../home/domain/models/recent_activity.dart';
+import '../domain/models/recent_activity.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_activity.dart';
 import '../domain/models/profile_activity_stat.dart';

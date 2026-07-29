@@ -1,4 +1,4 @@
-import '../../../home/domain/models/recent_activity.dart';
+import 'recent_activity.dart';
 import 'profile_activity_stat.dart';
 
 class ProfileActivity {

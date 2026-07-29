@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../features/auth/domain/models/auth_models.dart';
-import '../../core/theme/app_colors.dart';
+import '../../features/training/presentation/bloc/training_session_cubit.dart';
+import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../theme/app_colors.dart';
+import 'app_bottom_nav.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({
@@ -9,6 +14,9 @@ class AppShell extends StatelessWidget {
     required this.navigationShell,
     required this.user,
   });
+
+  /// Branch index of the center "Trening" tab.
+  static const int trainingBranchIndex = 2;
 
   final StatefulNavigationShell navigationShell;
   final AuthUser user;
@@ -20,51 +28,43 @@ class AppShell extends StatelessWidget {
     );
   }
 
+  void _handleCenterTap(
+    BuildContext context,
+    TrainingSessionState sessionState,
+  ) {
+    final active = sessionState.activeSession;
+    if (active == null) {
+      _onDestinationSelected(trainingBranchIndex);
+      return;
+    }
+    final cubit = context.read<TrainingSessionCubit>();
+    context
+        .push(
+          '/app/training/ongoing-workout',
+          extra: OngoingWorkoutArgs(
+            initialSession: active,
+            sessionCubit: cubit,
+          ),
+        )
+        .then((_) => cubit.refresh());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: navigationShell,
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 1,
-            color: AppColors.border,
+      bottomNavigationBar:
+          BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+            builder: (context, sessionState) {
+              return AppBottomNav(
+                currentIndex: navigationShell.currentIndex,
+                hasActiveSession: sessionState.activeSession != null,
+                onDestinationSelected: _onDestinationSelected,
+                onCenterTap: () => _handleCenterTap(context, sessionState),
+              );
+            },
           ),
-          NavigationBar(
-            selectedIndex: navigationShell.currentIndex,
-            onDestinationSelected: _onDestinationSelected,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Główna',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.fitness_center_outlined),
-                selectedIcon: Icon(Icons.fitness_center_rounded),
-                label: 'Trening',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.timeline_outlined),
-                selectedIcon: Icon(Icons.timeline_rounded),
-                label: 'Aktywność',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.history_outlined),
-                selectedIcon: Icon(Icons.history_rounded),
-                label: 'Historia',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'Profil',
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

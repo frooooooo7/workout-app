@@ -60,7 +60,7 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
       ServiceLocator.currentUser.value = result.user;
 
       if (!mounted) return;
-      context.go('/app/home');
+      context.go('/app/training');
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
