@@ -1,149 +1,170 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-
-const List<String> _trainingWeekdayShortLabels = [
-  'Pon',
-  'Wt',
-  'Sr',
-  'Czw',
-  'Pt',
-  'Sob',
-  'Ndz',
-];
+import 'training_day_status.dart';
 
 class TrainingWeekStrip extends StatelessWidget {
   const TrainingWeekStrip({
     super.key,
     required this.selectedDay,
-    required this.workoutDays,
     required this.onDaySelected,
+    this.today,
   });
 
+  /// 1 = Monday … 7 = Sunday.
   final int selectedDay;
-  final Set<int> workoutDays;
   final ValueChanged<int> onDaySelected;
+  final DateTime? today;
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now().weekday;
-    final startOfWeek = DateTime.now().subtract(Duration(days: today - 1));
+    final now = today ?? DateTime.now();
+    final weekStart = startOfWeekContaining(now);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(7, (i) {
-          final weekday = i + 1;
-          final date = startOfWeek.add(Duration(days: i));
-          final isToday = weekday == today;
-          final isSelected = weekday == selectedDay;
-          final hasWorkout = workoutDays.contains(weekday);
+    return Row(
+      children: List.generate(7, (i) {
+        final weekday = i + 1;
+        final date = weekStart.add(Duration(days: i));
+        final isSelected = weekday == selectedDay;
+        final isPast = isCalendarDateBefore(date, now);
 
-          return TrainingWeekDayChip(
-            key: ValueKey(
-              'week-day-$weekday-${hasWorkout ? 'has-workout' : 'rest'}',
+        final String indicatorSuffix;
+        if (isSelected) {
+          indicatorSuffix = 'selected';
+        } else if (isPast) {
+          indicatorSuffix = 'past';
+        } else {
+          indicatorSuffix = 'future';
+        }
+
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: _WeekDayCard(
+              key: ValueKey('week-day-$weekday'),
+              label: kTrainingWeekdayShortLabels[i],
+              dayNumber: date.day,
+              isSelected: isSelected,
+              indicatorKey: ValueKey('week-indicator-$weekday-$indicatorSuffix'),
+              isPast: isPast && !isSelected,
+              onTap: () => onDaySelected(weekday),
             ),
-            label: _trainingWeekdayShortLabels[i],
-            day: date.day,
-            isToday: isToday,
-            isSelected: isSelected,
-            hasWorkout: hasWorkout,
-            onTap: () => onDaySelected(weekday),
-          );
-        }),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _WeekDayCard extends StatelessWidget {
+  const _WeekDayCard({
+    super.key,
+    required this.label,
+    required this.dayNumber,
+    required this.isSelected,
+    required this.indicatorKey,
+    required this.isPast,
+    required this.onTap,
+  });
+
+  final String label;
+  final int dayNumber;
+  final bool isSelected;
+  final Key indicatorKey;
+  final bool isPast;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label $dayNumber',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceVariant.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$dayNumber',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _DayIndicator(
+                key: indicatorKey,
+                isSelected: isSelected,
+                isPast: isPast,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class TrainingWeekDayChip extends StatelessWidget {
-  const TrainingWeekDayChip({
+class _DayIndicator extends StatelessWidget {
+  const _DayIndicator({
     super.key,
-    required this.label,
-    required this.day,
-    required this.isToday,
     required this.isSelected,
-    required this.hasWorkout,
-    required this.onTap,
+    required this.isPast,
   });
 
-  final String label;
-  final int day;
-  final bool isToday;
   final bool isSelected;
-  final bool hasWorkout;
-  final VoidCallback onTap;
+  final bool isPast;
 
   @override
   Widget build(BuildContext context) {
-    final highlighted = isSelected || isToday;
+    if (isSelected) {
+      return Container(
+        width: 6,
+        height: 6,
+        decoration: const BoxDecoration(
+          color: AppColors.primary,
+          shape: BoxShape.circle,
+        ),
+      );
+    }
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: highlighted ? Colors.white : AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: highlighted ? FontWeight.w700 : FontWeight.w400,
-            ),
-          ),
-          const SizedBox(height: 6),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? AppColors.primary
-                  : isToday
-                      ? AppColors.primary.withValues(alpha: 0.2)
-                      : Colors.transparent,
-              shape: BoxShape.circle,
-              border: isToday && !isSelected
-                  ? Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.5),
-                      width: 1.5,
-                    )
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '$day',
-              style: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : highlighted
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(height: 5),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(
-              color: hasWorkout
-                  ? (isSelected ? Colors.white : AppColors.primary)
-                  : Colors.transparent,
-              shape: BoxShape.circle,
-            ),
-          ),
-        ],
+    if (isPast) {
+      return const Icon(
+        Icons.check,
+        size: 14,
+        color: Colors.white,
+      );
+    }
+
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: const BoxDecoration(
+        color: AppColors.textMuted,
+        shape: BoxShape.circle,
       ),
     );
   }
