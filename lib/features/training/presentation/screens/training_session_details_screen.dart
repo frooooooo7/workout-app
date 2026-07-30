@@ -31,6 +31,8 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
       _TrainingSessionDetailsScreenState();
 }
 
+enum _SessionHeaderAction { edit, repeat, delete }
+
 class _TrainingSessionDetailsScreenState
     extends State<TrainingSessionDetailsScreen> {
   TrainingSessionDetail? _detail;
@@ -64,6 +66,117 @@ class _TrainingSessionDetailsScreenState
     }
   }
 
+  void _onSharePressed() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Udostępnianie treningu – wkrótce dostępne'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _onMenuActionSelected(_SessionHeaderAction action) {
+    final message = switch (action) {
+      _SessionHeaderAction.edit => 'Edycja treningu – wkrótce dostępna',
+      _SessionHeaderAction.repeat => 'Powtórzenie treningu – wkrótce dostępne',
+      _SessionHeaderAction.delete => 'Usuwanie treningu – wkrótce dostępne',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  void _showMoreMenu(BuildContext context, RenderBox button) async {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(
+          button.size.bottomRight(Offset.zero),
+          ancestor: overlay,
+        ),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final selected = await showMenu<_SessionHeaderAction>(
+      context: context,
+      position: position,
+      color: AppColors.surface,
+      elevation: 10,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: AppColors.border.withValues(alpha: 0.8),
+          width: 1.0,
+        ),
+      ),
+      items: [
+        const PopupMenuItem(
+          value: _SessionHeaderAction.edit,
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Edytuj',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: _SessionHeaderAction.repeat,
+          child: Row(
+            children: [
+              Icon(Icons.replay_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Text(
+                'Powtórz trening',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _SessionHeaderAction.delete,
+          child: Row(
+            children: [
+              Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.strengthWeak,
+                size: 18,
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Usuń',
+                style: TextStyle(
+                  color: AppColors.strengthWeak,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (selected != null && mounted) {
+      _onMenuActionSelected(selected);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -74,6 +187,23 @@ class _TrainingSessionDetailsScreenState
             AppHeader(
               title: 'Szczegóły sesji',
               onBack: () => Navigator.of(context).maybePop(),
+              actions: [
+                AppHeaderIconButton(
+                  icon: Icons.ios_share_rounded,
+                  onTap: _onSharePressed,
+                ),
+                Builder(
+                  builder: (btnContext) {
+                    return AppHeaderIconButton(
+                      icon: Icons.more_vert_rounded,
+                      onTap: () {
+                        final box = btnContext.findRenderObject() as RenderBox;
+                        _showMoreMenu(context, box);
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
             Expanded(
               child: _loading
