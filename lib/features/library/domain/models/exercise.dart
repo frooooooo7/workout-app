@@ -2,8 +2,38 @@
 // Enums
 // ──────────────────────────────────────────────
 
+/// Partia ciała grupująca [MuscleGroup] — używana do filtrów i sekcji
+/// w pickerze mięśni, żeby granularna lista nie wysypała się jako płaski ciąg.
+enum MuscleRegion {
+  chest,
+  back,
+  shoulders,
+  arms,
+  core,
+  legs;
+
+  String get label => switch (this) {
+        MuscleRegion.chest => 'Klatka',
+        MuscleRegion.back => 'Plecy',
+        MuscleRegion.shoulders => 'Barki',
+        MuscleRegion.arms => 'Ramiona',
+        MuscleRegion.core => 'Core',
+        MuscleRegion.legs => 'Nogi',
+      };
+}
+
+/// Grupy mięśniowe ćwiczenia.
+///
+/// Wartości [chest], [back], [legs], [shoulders], [biceps], [triceps], [abs]
+/// i [glutes] istnieją w bazie od pierwszego seeda i **nie wolno ich usuwać** —
+/// rozparsowanie zapisanych ćwiczeń i snapshotów sesji od nich zależy.
+/// Trzy z nich ([back], [legs], [shoulders]) są zbiorcze: na manekinie zapalają
+/// cały swój region przez [expanded], bo nie niosą informacji o konkretnym
+/// mięśniu. Nowe ćwiczenia warto tagować wartościami granularnymi.
 enum MuscleGroup {
   all,
+
+  // ── Istniejące w bazie (nie usuwać) ───────────
   chest,
   back,
   legs,
@@ -11,7 +41,22 @@ enum MuscleGroup {
   biceps,
   triceps,
   abs,
-  glutes;
+  glutes,
+
+  // ── Granularne ────────────────────────────────
+  traps,
+  lats,
+  rhomboids,
+  lowerBack,
+  frontDelts,
+  sideDelts,
+  rearDelts,
+  forearms,
+  obliques,
+  quads,
+  hamstrings,
+  calves,
+  adductors;
 
   String get label => switch (this) {
         MuscleGroup.all => 'Wszystkie',
@@ -23,7 +68,102 @@ enum MuscleGroup {
         MuscleGroup.triceps => 'Triceps',
         MuscleGroup.abs => 'Brzuch',
         MuscleGroup.glutes => 'Pośladki',
+        MuscleGroup.traps => 'Kaptury',
+        MuscleGroup.lats => 'Najszersze grzbietu',
+        MuscleGroup.rhomboids => 'Romboidalne',
+        MuscleGroup.lowerBack => 'Prostowniki grzbietu',
+        MuscleGroup.frontDelts => 'Przednie naramienne',
+        MuscleGroup.sideDelts => 'Boczne naramienne',
+        MuscleGroup.rearDelts => 'Tylne naramienne',
+        MuscleGroup.forearms => 'Przedramiona',
+        MuscleGroup.obliques => 'Skośne brzucha',
+        MuscleGroup.quads => 'Czworogłowe uda',
+        MuscleGroup.hamstrings => 'Dwugłowe uda',
+        MuscleGroup.calves => 'Łydki',
+        MuscleGroup.adductors => 'Przywodziciele',
       };
+
+  /// Skrócona etykieta pod wąskie miejsca (paski na mapie mięśni, chipy).
+  String get shortLabel => switch (this) {
+        MuscleGroup.chest => 'Klatka',
+        MuscleGroup.lats => 'Najszersze',
+        MuscleGroup.lowerBack => 'Prostowniki',
+        MuscleGroup.frontDelts => 'Przednie barki',
+        MuscleGroup.sideDelts => 'Boczne barki',
+        MuscleGroup.rearDelts => 'Tylne barki',
+        MuscleGroup.obliques => 'Skośne',
+        MuscleGroup.quads => 'Czworogłowe',
+        MuscleGroup.hamstrings => 'Dwugłowe',
+        _ => label,
+      };
+
+  /// Partia ciała, do której należy grupa. `null` tylko dla [all] (sentinel
+  /// filtra, nie jest realną grupą mięśniową).
+  MuscleRegion? get region => switch (this) {
+        MuscleGroup.all => null,
+        MuscleGroup.chest => MuscleRegion.chest,
+        MuscleGroup.back ||
+        MuscleGroup.traps ||
+        MuscleGroup.lats ||
+        MuscleGroup.rhomboids ||
+        MuscleGroup.lowerBack =>
+          MuscleRegion.back,
+        MuscleGroup.shoulders ||
+        MuscleGroup.frontDelts ||
+        MuscleGroup.sideDelts ||
+        MuscleGroup.rearDelts =>
+          MuscleRegion.shoulders,
+        MuscleGroup.biceps || MuscleGroup.triceps || MuscleGroup.forearms =>
+          MuscleRegion.arms,
+        MuscleGroup.abs || MuscleGroup.obliques => MuscleRegion.core,
+        MuscleGroup.legs ||
+        MuscleGroup.glutes ||
+        MuscleGroup.quads ||
+        MuscleGroup.hamstrings ||
+        MuscleGroup.calves ||
+        MuscleGroup.adductors =>
+          MuscleRegion.legs,
+      };
+
+  /// Grupa zbiorcza — nie wskazuje pojedynczego mięśnia, więc na manekinie
+  /// rozkłada się na wszystkie mięśnie swojego regionu.
+  bool get isCoarse =>
+      this == MuscleGroup.back ||
+      this == MuscleGroup.legs ||
+      this == MuscleGroup.shoulders;
+
+  /// Konkretne mięśnie, które ta grupa zapala na manekinie.
+  Set<MuscleGroup> get expanded => switch (this) {
+        MuscleGroup.all => const {},
+        MuscleGroup.back => const {
+            MuscleGroup.traps,
+            MuscleGroup.lats,
+            MuscleGroup.rhomboids,
+            MuscleGroup.lowerBack,
+          },
+        MuscleGroup.legs => const {
+            MuscleGroup.quads,
+            MuscleGroup.hamstrings,
+            MuscleGroup.calves,
+            MuscleGroup.adductors,
+          },
+        MuscleGroup.shoulders => const {
+            MuscleGroup.frontDelts,
+            MuscleGroup.sideDelts,
+            MuscleGroup.rearDelts,
+          },
+        _ => {this},
+      };
+
+  /// Parsuje nazwę enuma zapisaną w API/bazie. Zwraca `null` dla nieznanych
+  /// wartości, żeby starszy klient nie wywracał się na nowej grupie z serwera.
+  static MuscleGroup? tryParse(String? raw) {
+    if (raw == null) return null;
+    for (final value in MuscleGroup.values) {
+      if (value.name == raw) return value;
+    }
+    return null;
+  }
 }
 
 enum ExerciseDifficulty {

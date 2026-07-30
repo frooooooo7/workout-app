@@ -20,12 +20,10 @@ class ExerciseRemoteDataSource {
     id: j['id'] as String,
     name: j['name'] as String,
     muscles: (j['muscles'] as List)
-        .map(
-          (s) => MuscleGroup.values.firstWhere(
-            (m) => m.name == s,
-            orElse: () => MuscleGroup.abs, // unknown muscle → safe fallback
-          ),
-        )
+        // Nieznana grupa (np. nowsza wersja API) jest pomijana — wcześniej
+        // wpadała po cichu jako `abs` i fałszowała opis ćwiczenia.
+        .map((s) => MuscleGroup.tryParse(s as String?))
+        .whereType<MuscleGroup>()
         .toList(),
     category: ExerciseCategory.values.firstWhere(
       (c) => c.name == j['category'] as String,

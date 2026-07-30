@@ -139,7 +139,8 @@ class ExerciseDto {
         id: localId,
         name: name,
         muscles: (jsonDecode(muscles) as List)
-            .map((s) => MuscleGroup.values.firstWhere((m) => m.name == s))
+            .map((s) => MuscleGroup.tryParse(s as String?))
+            .whereType<MuscleGroup>()
             .toList(),
         category:
             ExerciseCategory.values.firstWhere((c) => c.name == category),

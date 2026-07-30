@@ -57,9 +57,14 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
   XFile? _pickedImage;
   Uint8List? _previewBytes;
 
-  static final List<MuscleGroup> _selectableMuscles = MuscleGroup.values
-      .where((m) => m != MuscleGroup.all)
-      .toList(growable: false);
+  /// Wybieralne mięśnie pogrupowane w partie ciała — płaska lista wszystkich
+  /// grup jest już na tyle długa, że bez nagłówków nie da się jej skanować.
+  static final Map<MuscleRegion, List<MuscleGroup>> _selectableMuscles = {
+    for (final region in MuscleRegion.values)
+      region: MuscleGroup.values
+          .where((m) => m.region == region)
+          .toList(growable: false),
+  };
 
   InputDecoration _fieldDecoration({required String hintText}) {
     return InputDecoration(
@@ -367,35 +372,52 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _selectableMuscles.map((m) {
-                    final selected = _selectedMuscles.contains(m);
-                    return FilterChip(
-                      label: Text(m.label),
-                      selected: selected,
-                      onSelected: _submitting ? null : (_) => _toggleMuscle(m),
-                      showCheckmark: false,
-                      selectedColor:
-                          AppColors.primary.withValues(alpha: 0.22),
-                      backgroundColor: AppColors.background,
-                      labelStyle: TextStyle(
-                        color:
-                            selected ? AppColors.primary : AppColors.textSecondary,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        fontSize: 13,
+                for (final entry in _selectableMuscles.entries) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, top: 2),
+                    child: Text(
+                      entry.key.label.toUpperCase(),
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
                       ),
-                      side: BorderSide(
-                        color:
-                            selected ? AppColors.primary : AppColors.border,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: entry.value.map((m) {
+                      final selected = _selectedMuscles.contains(m);
+                      return FilterChip(
+                        label: Text(m.shortLabel),
+                        selected: selected,
+                        onSelected: _submitting ? null : (_) => _toggleMuscle(m),
+                        showCheckmark: false,
+                        selectedColor:
+                            AppColors.primary.withValues(alpha: 0.22),
+                        backgroundColor: AppColors.background,
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                        side: BorderSide(
+                          color:
+                              selected ? AppColors.primary : AppColors.border,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 const SizedBox(height: 18),
                 const Text(
                   'Kategoria',

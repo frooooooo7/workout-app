@@ -1,4 +1,5 @@
 import '../../../core/network/api_client.dart';
+import '../../library/domain/models/exercise.dart';
 import '../domain/models/training_history_models.dart';
 
 class TrainingHistoryRemoteDataSource {
@@ -69,12 +70,15 @@ class TrainingHistoryRemoteDataSource {
         return {
           'exerciseId': exercise.exerciseId,
           'exerciseName': exercise.exerciseName,
+          'muscles': exercise.muscles.map((m) => m.name).toList(),
+          'imageUrl': exercise.imageUrl,
           'sets': exercise.sets.map((set) {
             return {
               'setIndex': set.setIndex,
               'planned': _metricsToJson(set.planned),
               'actual': _metricsToJson(set.actual),
               'completed': set.completed,
+              'completedAt': set.completedAt?.toUtc().toIso8601String(),
             };
           }).toList(),
         };
@@ -149,12 +153,19 @@ class TrainingHistoryRemoteDataSource {
         return TrainingExerciseDetail(
           exerciseId: exercise['exerciseId'] as String? ?? '',
           exerciseName: exercise['exerciseName'] as String? ?? 'Ćwiczenie',
+          muscles: (exercise['muscles'] as List? ?? const [])
+              .map((raw) => MuscleGroup.tryParse(raw as String?))
+              .whereType<MuscleGroup>()
+              .toList(growable: false),
+          imageUrl: exercise['imageUrl'] as String?,
           sets: setsRaw.cast<Map<String, dynamic>>().map((set) {
             return TrainingExerciseSetDetail(
               setIndex: (set['setIndex'] as num?)?.toInt() ?? 0,
               planned: _metricsFromJson(set['planned'] as Map<String, dynamic>?),
               actual: _metricsFromJson(set['actual'] as Map<String, dynamic>?),
               completed: set['completed'] as bool? ?? false,
+              completedAt:
+                  DateTime.tryParse(set['completedAt'] as String? ?? '')?.toUtc(),
             );
           }).toList(growable: false),
         );

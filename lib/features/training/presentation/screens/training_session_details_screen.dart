@@ -1,9 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/repositories/training_history_repository.dart';
+import '../widgets/session_details/session_exercise_card.dart';
+import '../widgets/session_details/session_muscle_map.dart';
+import '../widgets/session_details/session_summary_header.dart';
+import '../widgets/session_details/session_timeline.dart';
 
+/// Szczegóły zakończonej sesji, ułożone od ogółu do szczegółu:
+/// nagłówek z metrykami → mapa mięśni → oś czasu → karty ćwiczeń.
+///
+/// Metryki całej sesji pojawiają się **wyłącznie** w nagłówku; każda kolejna
+/// sekcja dokłada informację, której poprzednie nie niosą.
 class TrainingSessionDetailsScreen extends StatefulWidget {
   const TrainingSessionDetailsScreen({
     super.key,
@@ -70,188 +81,106 @@ class _TrainingSessionDetailsScreenState
   }
 }
 
-class _DetailContent extends StatelessWidget {
+class _DetailContent extends StatefulWidget {
   const _DetailContent({required this.detail});
 
   final TrainingSessionDetail detail;
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      children: [
-        _SummaryCard(detail: detail),
-        const SizedBox(height: 14),
-        ...detail.exercises.map(
-          (exercise) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _ExerciseCard(exercise: exercise),
-          ),
-        ),
-      ],
-    );
-  }
+  State<_DetailContent> createState() => _DetailContentState();
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.detail});
+class _DetailContentState extends State<_DetailContent> {
+  /// Klucze kart ćwiczeń — punkt zaczepienia dla skoku z osi czasu.
+  late List<GlobalKey> _exerciseKeys;
+  int? _highlightedIndex;
+  Timer? _highlightTimer;
 
-  final TrainingSessionDetail detail;
+  @override
+  void initState() {
+    super.initState();
+    _exerciseKeys = List.generate(
+      widget.detail.exercises.length,
+      (_) => GlobalKey(),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_DetailContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.detail.exercises.length != widget.detail.exercises.length) {
+      _exerciseKeys = List.generate(
+        widget.detail.exercises.length,
+        (_) => GlobalKey(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _jumpToExercise(int index) async {
+    final context = _exerciseKeys[index].currentContext;
+    if (context == null) return;
+
+    setState(() => _highlightedIndex = index);
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _highlightedIndex = null);
+    });
+
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            detail.plan.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _MetaChip(label: _formatStatus(detail.status)),
-              _MetaChip(label: _formatDuration(detail.durationSec)),
-              _MetaChip(label: _formatDate(detail.startedAt)),
-            ],
-          ),
-          if (detail.note != null && detail.note!.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              detail.note!,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                height: 1.45,
+    final exercises = widget.detail.exercises;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        SessionSummaryHeader(detail: widget.detail),
+        const SizedBox(height: 12),
+        SessionMuscleMap(detail: widget.detail),
+        const SizedBox(height: 12),
+        SessionTimeline(
+          detail: widget.detail,
+          onExerciseTap: _jumpToExercise,
+        ),
+        if (exercises.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          const Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              'Ćwiczenia',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
               ),
             ),
-          ],
+          ),
+          for (var i = 0; i < exercises.length; i++)
+            Padding(
+              key: _exerciseKeys[i],
+              padding: const EdgeInsets.only(bottom: 10),
+              child: SessionExerciseCard(
+                exercise: exercises[i],
+                index: i,
+                isHighlighted: _highlightedIndex == i,
+              ),
+            ),
         ],
-      ),
-    );
-  }
-}
-
-class _ExerciseCard extends StatelessWidget {
-  const _ExerciseCard({required this.exercise});
-
-  final TrainingExerciseDetail exercise;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            exercise.exerciseName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...exercise.sets.map(
-            (set) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _SetRow(set: set),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SetRow extends StatelessWidget {
-  const _SetRow({required this.set});
-
-  final TrainingExerciseSetDetail set;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            '${set.setIndex}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Plan: ${_formatMetrics(set.planned)}  •  Wykonanie: ${_formatMetrics(set.actual)}',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Icon(
-          set.completed ? Icons.check_circle_rounded : Icons.cancel_outlined,
-          color: set.completed ? AppColors.success : AppColors.textMuted,
-          size: 18,
-        ),
       ],
-    );
-  }
-}
-
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
     );
   }
 }
@@ -294,37 +223,4 @@ class _ErrorState extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatMetrics(TrainingSetMetrics? metrics) {
-  if (metrics == null) return '-';
-  final chunks = <String>[
-    if (metrics.weightKg != null) '${metrics.weightKg}kg',
-    if (metrics.reps != null) '${metrics.reps} powt',
-    if (metrics.rir != null) 'RIR ${metrics.rir}',
-    if (metrics.tempo != null && metrics.tempo!.isNotEmpty) metrics.tempo!,
-  ];
-  if (chunks.isEmpty) return '-';
-  return chunks.join(' · ');
-}
-
-String _formatDuration(int durationSec) {
-  final duration = Duration(seconds: durationSec);
-  final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60);
-  if (hours == 0) return '$minutes min';
-  return '${hours}h $minutes min';
-}
-
-String _formatStatus(TrainingSessionStatus status) {
-  return switch (status) {
-    TrainingSessionStatus.completed => 'Ukończony',
-    TrainingSessionStatus.cancelled => 'Anulowany',
-    TrainingSessionStatus.active => 'Aktywny',
-  };
-}
-
-String _formatDate(DateTime date) {
-  final local = date.toLocal();
-  return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}.${local.year}';
 }
