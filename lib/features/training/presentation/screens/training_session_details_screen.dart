@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_header.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../widgets/session_details/session_exercise_card.dart';
@@ -67,15 +68,26 @@ class _TrainingSessionDetailsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('SZCZEGÓŁY SESJI')),
       body: SafeArea(
-        child: _loading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              )
-            : _error != null
-            ? _ErrorState(message: _error!, onRetry: _load)
-            : _DetailContent(detail: _detail!),
+        child: Column(
+          children: [
+            AppHeader(
+              title: 'Szczegóły sesji',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : _error != null
+                  ? _ErrorState(message: _error!, onRetry: _load)
+                  : _DetailContent(detail: _detail!),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -151,10 +163,7 @@ class _DetailContentState extends State<_DetailContent> {
         const SizedBox(height: 12),
         SessionMuscleMap(detail: widget.detail),
         const SizedBox(height: 12),
-        SessionTimeline(
-          detail: widget.detail,
-          onExerciseTap: _jumpToExercise,
-        ),
+        SessionTimeline(detail: widget.detail, onExerciseTap: _jumpToExercise),
         if (exercises.isNotEmpty) ...[
           const SizedBox(height: 22),
           const Padding(
