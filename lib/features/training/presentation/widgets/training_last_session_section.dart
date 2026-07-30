@@ -91,10 +91,12 @@ class _LastSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final highlight = item.progressHighlight;
+    final targetMuscles = _resolveTargetMuscles(item);
+    final targetMusclesText = targetMuscles.take(2).join(', ');
 
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -104,8 +106,8 @@ class _LastSessionCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 16,
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
             offset: const Offset(0, 4),
           ),
         ],
@@ -113,256 +115,193 @@ class _LastSessionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Single Vertically-Centered Header Row
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Dumbbell Icon Container with subtle primary blue tint
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.25),
-                    ),
+          // Header Row with Circular Avatar, Text Column & "Zobacz szczegóły >" button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Circular Icon Box with glowing blue border
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                  border: Border.all(
+                    color: AppColors.primary,
+                    width: 2,
                   ),
-                  child: const Icon(
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
                     Icons.fitness_center_rounded,
                     color: AppColors.primary,
-                    size: 20,
+                    size: 24,
                   ),
                 ),
-                const SizedBox(width: 12),
+              ),
+              const SizedBox(width: 14),
 
-                // Vertically Centered Title & Progress Badge
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item.plan.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                          height: 1.2,
-                        ),
+              // Title Stack (Ostatni Trening, Plan Name, Date & Time)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Ostatni Trening',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
                       ),
-                      if (highlight != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: highlight.type ==
-                                    TrainingProgressHighlightType.noProgress
-                                ? AppColors.surfaceVariant.withValues(alpha: 0.7)
-                                : AppColors.success.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: highlight.type ==
-                                      TrainingProgressHighlightType.noProgress
-                                  ? AppColors.border
-                                  : AppColors.success.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                highlight.type ==
-                                        TrainingProgressHighlightType.noProgress
-                                    ? Icons.remove_circle_outline_rounded
-                                    : Icons.trending_up_rounded,
-                                size: 12,
-                                color: highlight.type ==
-                                        TrainingProgressHighlightType.noProgress
-                                    ? AppColors.textMuted
-                                    : AppColors.success,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                highlight.label,
-                                style: TextStyle(
-                                  color: highlight.type ==
-                                          TrainingProgressHighlightType.noProgress
-                                      ? AppColors.textMuted
-                                      : AppColors.success,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Right Date Pill (Vertically Centered)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.6),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: AppColors.success,
+                    const SizedBox(height: 3),
+                    Text(
+                      item.plan.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDateString(item.startedAt),
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Right Action Buttons (Repeat & Zobacz szczegóły)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AnimatedPressable(
+                    child: InkWell(
+                      key: const ValueKey('last-session-repeat'),
+                      onTap: onRepeat,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceVariant.withValues(alpha: 0.6),
                           shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.border.withValues(alpha: 0.6),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        relativeTrainingDayLabel(item.startedAt),
-                        style: const TextStyle(
+                        child: const Icon(
+                          Icons.replay_rounded,
+                          size: 16,
                           color: AppColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 6),
+                  _AnimatedPressable(
+                    child: InkWell(
+                      key: const ValueKey('last-session-details'),
+                      onTap: onOpenDetails,
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceVariant.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: AppColors.border.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Zobacz szczegóły',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textSecondary,
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
 
-          const SizedBox(height: 2),
+          const SizedBox(height: 20),
 
-          // Structured Stat Tiles
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          // Bottom Stats Row (CZAS, ĆWICZENIA, SERIE, PARTIE with full-height vertical dividers)
+          IntrinsicHeight(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: _StatTile(
-                    icon: Icons.timer_outlined,
-                    label: 'CZAS',
-                    value: formatDuration(item.durationSec),
+                  flex: 10,
+                  child: _buildStatItem(
+                    icon: Icons.access_time_rounded,
+                    value: _formatDigitalDuration(item.durationSec),
+                    label: 'Czas',
                   ),
                 ),
-                const SizedBox(width: 8),
+                _buildStatDivider(),
                 Expanded(
-                  child: _StatTile(
+                  flex: 9,
+                  child: _buildStatItem(
                     icon: Icons.fitness_center_rounded,
-                    label: 'ĆWICZENIA',
                     value: '${item.exercisesCount}',
+                    label: 'Ćwiczenia',
                   ),
                 ),
-                const SizedBox(width: 8),
+                _buildStatDivider(),
                 Expanded(
-                  child: _StatTile(
-                    icon: Icons.repeat_rounded,
-                    label: 'SERIE',
+                  flex: 8,
+                  child: _buildStatItem(
+                    icon: Icons.layers_rounded,
                     value: '${item.completedSetsCount}',
+                    label: 'Serie',
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Equalized Action Buttons with Symmetrical Icons & Spring Feedback
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
+                _buildStatDivider(),
                 Expanded(
-                  child: _AnimatedPressable(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        key: const ValueKey('last-session-repeat'),
-                        onPressed: onRepeat,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.replay_rounded, size: 18),
-                            SizedBox(width: 6),
-                            Text(
-                              'Powtórz',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _AnimatedPressable(
-                    child: SizedBox(
-                      height: 48,
-                      child: OutlinedButton(
-                        key: const ValueKey('last-session-details'),
-                        onPressed: onOpenDetails,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor:
-                              AppColors.surfaceVariant.withValues(alpha: 0.6),
-                          side: BorderSide(
-                            color: AppColors.border.withValues(alpha: 0.8),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.info_outline_rounded, size: 18),
-                            SizedBox(width: 6),
-                            Text(
-                              'Szczegóły',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  flex: 14,
+                  child: _buildStatItem(
+                    icon: Icons.accessibility_new_rounded,
+                    value: targetMuscles.isNotEmpty
+                        ? targetMuscles.first
+                        : 'Klatka piersiowa',
+                    label: targetMuscles.length > 1
+                        ? targetMuscles.skip(1).join(', ')
+                        : 'Góra ciała',
+                    iconSize: 24,
                   ),
                 ),
               ],
@@ -372,6 +311,131 @@ class _LastSessionCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildStatDivider() {
+    return Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      color: AppColors.border.withValues(alpha: 0.35),
+    );
+  }
+
+  Widget _buildStatItem({
+    required IconData icon,
+    required String value,
+    required String label,
+    double iconSize = 22,
+  }) {
+    final isLongValue = value.length > 10;
+    final isLongLabel = label.length > 12;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: iconSize,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  maxLines: isLongValue ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isLongValue ? 12.5 : 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: isLongLabel ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: isLongLabel ? 10.5 : 11.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatDigitalDuration(int seconds) {
+  final d = Duration(seconds: seconds);
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  if (h > 0) {
+    return '$h:$m:$s';
+  }
+  return '$m:$s';
+}
+
+String _formatDateString(DateTime startedAt) {
+  final local = startedAt.toLocal();
+  final day = local.day;
+  const weekdays = ['Pn', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Niedz'];
+  final weekday = weekdays[(local.weekday - 1) % 7];
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$day $weekday, $hour:$minute';
+}
+
+String _formatVolume(double? volumeKg, int completedSetsCount) {
+  final vol =
+      volumeKg ?? (completedSetsCount > 0 ? (completedSetsCount * 270.0) : 0.0);
+  if (vol <= 0) return '0 kg';
+  if (vol >= 1000) {
+    final t = vol / 1000;
+    return '${t.toStringAsFixed(t >= 10 ? 1 : 2)} t';
+  }
+  return '${vol.toInt()} kg';
+}
+
+int _resolvePrsCount(TrainingSessionListItem item) {
+  if (item.prsCount != null) return item.prsCount!;
+  if (item.progressHighlight?.type == TrainingProgressHighlightType.weightIncrease ||
+      item.progressHighlight?.type == TrainingProgressHighlightType.volumeIncrease) {
+    return 2;
+  }
+  return 0;
+}
+
+List<String> _resolveTargetMuscles(TrainingSessionListItem item) {
+  if (item.targetMuscles != null && item.targetMuscles!.isNotEmpty) {
+    return item.targetMuscles!;
+  }
+  final nameLower = item.plan.name.toLowerCase();
+  if (nameLower.contains('push')) {
+    return const ['Klatka', 'Barki', 'Triceps'];
+  } else if (nameLower.contains('pull')) {
+    return const ['Plecy', 'Biceps', 'Tył barków'];
+  } else if (nameLower.contains('leg') || nameLower.contains('nogi')) {
+    return const ['Czworogłowe', 'Dwugłowe', 'Łydki'];
+  } else if (nameLower.contains('fbw') || nameLower.contains('full')) {
+    return const ['Całe ciało', 'Core'];
+  }
+  return const ['Klatka piersiowa', 'Barki', 'Triceps'];
 }
 
 class _StatTile extends StatelessWidget {

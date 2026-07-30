@@ -22,9 +22,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Ostatni trening'), findsOneWidget);
     expect(find.text('Push Power'), findsOneWidget);
-    expect(find.text('+320 kg objętości'), findsOneWidget);
+    expect(find.text('Czas'), findsOneWidget);
+    expect(find.text('Ćwiczenia'), findsOneWidget);
+    expect(find.text('Serie'), findsOneWidget);
+    expect(find.text('Klatka'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('last-session-details')));
     await tester.pump();

@@ -41,6 +41,13 @@ class TrainingSessionListItem {
     required this.hasNote,
     this.progressHighlight,
     required this.updatedAt,
+    this.totalVolumeKg,
+    this.prsCount,
+    this.targetMuscles,
+    this.avgRpe,
+    this.avgRestSec,
+    this.topSetHighlight,
+    this.notePreview,
   });
 
   final String id;
@@ -54,6 +61,13 @@ class TrainingSessionListItem {
   final bool hasNote;
   final TrainingProgressHighlight? progressHighlight;
   final DateTime updatedAt;
+  final double? totalVolumeKg;
+  final int? prsCount;
+  final List<String>? targetMuscles;
+  final double? avgRpe;
+  final int? avgRestSec;
+  final String? topSetHighlight;
+  final String? notePreview;
 }
 
 class TrainingSetMetrics {
