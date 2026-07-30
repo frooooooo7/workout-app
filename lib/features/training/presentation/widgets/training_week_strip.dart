@@ -88,43 +88,62 @@ class _WeekDayCard extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : Colors.transparent,
-              width: 1.5,
+        child: AnimatedScale(
+          scale: isSelected ? 1.04 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.primary.withValues(alpha: 0.18)
+                  : AppColors.surfaceVariant.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.border.withValues(alpha: 0.3),
+                width: isSelected ? 1.6 : 1.0,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : [],
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '$dayNumber',
-                style: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                const SizedBox(height: 6),
+                Text(
+                  '$dayNumber',
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              _DayIndicator(
-                key: indicatorKey,
-                marker: marker,
-              ),
-            ],
+                const SizedBox(height: 8),
+                _DayIndicator(
+                  key: indicatorKey,
+                  marker: marker,
+                ),
+              ],
+            ),
           ),
         ),
       ),

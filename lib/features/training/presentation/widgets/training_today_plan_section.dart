@@ -66,20 +66,31 @@ class TrainingTodayPlanSection extends StatelessWidget {
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              key: const ValueKey('start-workout-button'),
-              onPressed: () => onStartPlan(scheduledPlan),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            height: 48,
+            child: _AnimatedPressable(
+              child: FilledButton(
+                key: const ValueKey('start-workout-button'),
+                onPressed: () => onStartPlan(scheduledPlan),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-              ),
-              child: const Text(
-                'Rozpocznij',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.play_arrow_rounded, size: 22),
+                    SizedBox(width: 6),
+                    Text(
+                      'Rozpocznij',
+                      style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -95,3 +106,55 @@ class TrainingTodayPlanSection extends StatelessWidget {
     );
   }
 }
+
+class _AnimatedPressable extends StatefulWidget {
+  const _AnimatedPressable({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AnimatedPressable> createState() => _AnimatedPressableState();
+}
+
+class _AnimatedPressableState extends State<_AnimatedPressable>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.96).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _controller.forward(),
+      onPointerUp: (_) => _controller.reverse(),
+      onPointerCancel: (_) => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (context, child) => Transform.scale(
+          scale: _scale.value,
+          child: child,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
