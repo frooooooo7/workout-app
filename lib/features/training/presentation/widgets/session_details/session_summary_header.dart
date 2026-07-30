@@ -145,11 +145,7 @@ class SessionSummaryHeader extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
+  const _Metric({required this.icon, required this.value, required this.label});
 
   final IconData icon;
   final String value;
@@ -160,35 +156,40 @@ class _Metric extends StatelessWidget {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, size: 16, color: AppColors.primary),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w500,
+            Icon(icon, size: 20, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -217,19 +218,19 @@ class _StatusChip extends StatelessWidget {
   final TrainingSessionStatus status;
 
   Color get _color => switch (status) {
-        TrainingSessionStatus.completed => AppColors.success,
-        TrainingSessionStatus.cancelled => AppColors.strengthWeak,
-        TrainingSessionStatus.active => AppColors.strengthMedium,
-      };
+    TrainingSessionStatus.completed => AppColors.primary,
+    TrainingSessionStatus.cancelled => AppColors.strengthWeak,
+    TrainingSessionStatus.active => AppColors.strengthMedium,
+  };
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.14),
+        color: _color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _color.withValues(alpha: 0.4)),
+        border: Border.all(color: _color.withValues(alpha: 0.35)),
       ),
       child: Text(
         formatSessionStatus(status),
@@ -237,6 +238,7 @@ class _StatusChip extends StatelessWidget {
           color: _color,
           fontSize: 11,
           fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
         ),
       ),
     );
