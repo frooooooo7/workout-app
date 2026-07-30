@@ -49,6 +49,7 @@ dependencies:
   flutter_timezone: ^5.0.2
   timezone: ^0.11.0
   shared_preferences: ^2.5.5
+  path_drawing: ^1.0.1
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +77,8 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - assets/body_data/
+    - assets/body_highlighter/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

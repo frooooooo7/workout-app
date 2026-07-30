@@ -1,0 +1,1 @@
+enum BodyGender { male, female }

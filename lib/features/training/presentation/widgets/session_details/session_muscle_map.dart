@@ -1,9 +1,10 @@
-import 'dart:math' as math;
-
-import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../body_highlighter/adapters/muscle_group_adapter.dart';
+import '../../../../body_highlighter/models/body_highlighter_style.dart';
+import '../../../../body_highlighter/models/body_view.dart' as bh_view;
+import '../../../../body_highlighter/widgets/muscle_body_highlighter.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
 import 'body_muscle_paths.dart';
@@ -58,8 +59,8 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
   }
 
   Map<MuscleGroup, double> get _intensityByMuscle => {
-        for (final load in _loads) load.muscle: load.intensity,
-      };
+    for (final load in _loads) load.muscle: load.intensity,
+  };
 
   void _toggleSelection(MuscleGroup? muscle) {
     setState(() => _selected = _selected == muscle ? null : muscle);
@@ -158,40 +159,28 @@ class _BodyFigure extends StatelessWidget {
   final double progress;
   final ValueChanged<MuscleGroup?> onMuscleTap;
 
-  static const _size = Size(84, 202);
-
-  void _handleTap(Offset localPosition) {
-    final fit = _BodyFit.of(_size);
-    final designPoint = fit.toDesign(localPosition);
-    for (final shape in bodyMuscleShapes(view).reversed) {
-      if (shape.path.contains(designPoint)) {
-        onMuscleTap(shape.muscle);
-        return;
-      }
-    }
-    onMuscleTap(null);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final highlights = toMuscleHighlights(intensities);
+    final bhView =
+        view == BodyView.front ? bh_view.BodyView.front : bh_view.BodyView.back;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => _handleTap(details.localPosition),
-          child: Semantics(
-            label: 'Sylwetka — widok ${view.label.toLowerCase()}. '
-                'Dotknij mięśnia, aby zobaczyć jego obciążenie.',
-            child: CustomPaint(
-              size: _size,
-              painter: _BodyPainter(
-                view: view,
-                intensities: intensities,
-                selected: selected,
-                progress: progress,
-              ),
-            ),
+        SizedBox(
+          width: 90,
+          height: 202,
+          child: MuscleBodyHighlighter(
+            view: bhView,
+            highlights: highlights,
+            style: const BodyHighlighterStyle.dark(),
+            onMuscleTap: (region) {
+              final matchedGroup = MuscleGroup.values
+                  .where((g) => g.bodyHighlighterSlug == region.slug)
+                  .firstOrNull;
+              onMuscleTap(matchedGroup);
+            },
           ),
         ),
         const SizedBox(height: 6),
@@ -208,97 +197,7 @@ class _BodyFigure extends StatelessWidget {
   }
 }
 
-/// Dopasowanie przestrzeni projektowej manekina do rozmiaru widgetu.
-/// Ta sama transformacja obsługuje rysowanie i trafianie w mięsień.
-class _BodyFit {
-  const _BodyFit(this.scale, this.offset);
 
-  final double scale;
-  final Offset offset;
-
-  factory _BodyFit.of(Size size) {
-    final scale = math.min(
-      size.width / bodyDesignSize.width,
-      size.height / bodyDesignSize.height,
-    );
-    return _BodyFit(
-      scale,
-      Offset(
-        (size.width - bodyDesignSize.width * scale) / 2,
-        (size.height - bodyDesignSize.height * scale) / 2,
-      ),
-    );
-  }
-
-  Offset toDesign(Offset local) => (local - offset) / scale;
-}
-
-class _BodyPainter extends CustomPainter {
-  const _BodyPainter({
-    required this.view,
-    required this.intensities,
-    required this.selected,
-    required this.progress,
-  });
-
-  final BodyView view;
-  final Map<MuscleGroup, double> intensities;
-  final MuscleGroup? selected;
-  final double progress;
-
-  Color _fillFor(double intensity) {
-    if (intensity <= 0) return AppColors.surfaceVariant;
-    final eased = Curves.easeOut.transform(intensity.clamp(0.0, 1.0));
-    return Color.lerp(
-      AppColors.primary.withValues(alpha: 0.32),
-      AppColors.primaryVariant,
-      eased,
-    )!;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final fit = _BodyFit.of(size);
-    canvas.save();
-    canvas.translate(fit.offset.dx, fit.offset.dy);
-    canvas.scale(fit.scale);
-
-    final outline = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1 / fit.scale
-      ..color = AppColors.background.withValues(alpha: 0.85);
-
-    canvas.drawPath(
-      bodySilhouette(view),
-      Paint()..color = AppColors.surfaceVariant,
-    );
-
-    for (final shape in bodyMuscleShapes(view)) {
-      final intensity = (intensities[shape.muscle] ?? 0) * progress;
-      canvas.drawPath(shape.path, Paint()..color = _fillFor(intensity));
-      canvas.drawPath(shape.path, outline);
-
-      if (selected == shape.muscle) {
-        canvas.drawPath(
-          shape.path,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2 / fit.scale
-            ..color = Colors.white,
-        );
-      }
-    }
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_BodyPainter old) =>
-      old.progress != progress ||
-      old.selected != selected ||
-      old.view != view ||
-      !mapEquals(old.intensities, intensities);
-}
 
 class _MuscleRanking extends StatelessWidget {
   const _MuscleRanking({
@@ -357,9 +256,8 @@ class _MuscleRanking extends StatelessWidget {
     if (count == 1) return 'kolejny mięsień';
     final lastDigit = count % 10;
     final lastTwo = count % 100;
-    final isFew = lastDigit >= 2 &&
-        lastDigit <= 4 &&
-        !(lastTwo >= 12 && lastTwo <= 14);
+    final isFew =
+        lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14);
     return isFew ? 'kolejne mięśnie' : 'kolejnych mięśni';
   }
 }
@@ -401,8 +299,9 @@ class _MuscleBar extends StatelessWidget {
                             ? Colors.white
                             : AppColors.textSecondary,
                         fontSize: 12,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -504,9 +403,8 @@ class _SelectedMuscleDetail extends StatelessWidget {
     if (count == 1) return 'seria';
     final lastDigit = count % 10;
     final lastTwo = count % 100;
-    final isFew = lastDigit >= 2 &&
-        lastDigit <= 4 &&
-        !(lastTwo >= 12 && lastTwo <= 14);
+    final isFew =
+        lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14);
     return isFew ? 'serie' : 'serii';
   }
 }
@@ -546,4 +444,3 @@ class _MuscleMapEmpty extends StatelessWidget {
     );
   }
 }
-
