@@ -53,17 +53,37 @@ void main() {
     // Verify Month Selector Bar
     expect(find.byType(MonthSelectorBar), findsOneWidget);
 
-    // Verify Stats Card
+    // Verify Stats Card — „Serie" pada też w wierszu sesji, więc finder musi
+    // być zawężony do karty.
     expect(find.byType(MonthlyStatsCard), findsOneWidget);
-    expect(find.text('Łączny czas'), findsOneWidget);
-    expect(find.text('Trening'), findsOneWidget);
-    expect(find.text('Ćwiczenia'), findsOneWidget);
-    expect(find.text('Serie'), findsOneWidget);
+    Finder inStatsCard(String text) => find.descendant(
+          of: find.byType(MonthlyStatsCard),
+          matching: find.text(text),
+        );
+    expect(inStatsCard('Łączny czas'), findsOneWidget);
+    expect(inStatsCard('Trening'), findsOneWidget);
+    expect(inStatsCard('Ćwiczenia'), findsOneWidget);
+    expect(inStatsCard('Serie'), findsOneWidget);
 
     // Verify Sessions List
     expect(find.byType(MonthlySessionsList), findsOneWidget);
-    expect(find.text('Ostatnie treningi'), findsOneWidget);
+    expect(find.text('Treningi w miesiącu'), findsOneWidget);
     expect(find.text('Plan Góra'), findsOneWidget);
+
+    // Verify per-session metrics row (czas / ćwiczenia / serie / objętość)
+    Finder inSessionsList(String text) => find.descendant(
+          of: find.byType(MonthlySessionsList),
+          matching: find.text(text),
+        );
+    expect(inSessionsList('Czas'), findsOneWidget);
+    expect(inSessionsList('Ćwiczeń'), findsOneWidget);
+    expect(inSessionsList('Serie'), findsOneWidget);
+    expect(inSessionsList('Objętość'), findsOneWidget);
+    expect(inSessionsList('1:00:00'), findsOneWidget); // 3600 s
+    expect(inSessionsList('5'), findsOneWidget); // exercisesCount
+    expect(inSessionsList('15'), findsOneWidget); // completedSetsCount
+    expect(inSessionsList('4,20 t'), findsOneWidget); // 4200 kg
+    expect(find.text('Zobacz wszystkie'), findsNothing);
   });
 }
 

@@ -220,7 +220,6 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
           MonthlySessionsList(
             sessions: sessions,
             selectedDay: state.selectedDay,
-            onResetDayFilter: () => cubit.clearDaySelection(),
           ),
 
           // 6. Monthly Summary Footer

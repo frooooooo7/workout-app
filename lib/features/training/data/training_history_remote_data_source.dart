@@ -120,6 +120,7 @@ class TrainingHistoryRemoteDataSource {
       ),
       exercisesCount: (json['exercisesCount'] as num?)?.toInt() ?? 0,
       completedSetsCount: (json['completedSetsCount'] as num?)?.toInt() ?? 0,
+      totalVolumeKg: (json['totalVolumeKg'] as num?)?.toDouble(),
       hasNote: json['hasNote'] as bool? ?? false,
       progressHighlight: progress == null
           ? null
@@ -185,6 +186,7 @@ class TrainingHistoryRemoteDataSource {
       'plan': {'id': item.plan.id, 'name': item.plan.name},
       'exercisesCount': item.exercisesCount,
       'completedSetsCount': item.completedSetsCount,
+      'totalVolumeKg': item.totalVolumeKg,
       'hasNote': item.hasNote,
       'progressHighlight': item.progressHighlight == null
           ? null

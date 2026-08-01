@@ -5,44 +5,17 @@ import 'package:gym/core/theme/app_colors.dart';
 import 'package:gym/core/widgets/app_pressable.dart';
 import '../../../domain/models/training_history_models.dart';
 
+/// Lista sesji wybranego miesiąca. Każdy wiersz niesie ikonę treningu, nazwę
+/// z datą oraz cztery metryki: czas, ćwiczenia, serie i objętość.
 class MonthlySessionsList extends StatelessWidget {
   const MonthlySessionsList({
     super.key,
     required this.sessions,
     this.selectedDay,
-    this.onResetDayFilter,
   });
 
   final List<TrainingSessionListItem> sessions;
   final DateTime? selectedDay;
-  final VoidCallback? onResetDayFilter;
-
-  String _formatDuration(int seconds) {
-    if (seconds <= 0) return '0m';
-    final hours = seconds ~/ 3600;
-    final mins = (seconds % 3600) ~/ 60;
-    if (hours > 0) {
-      return '${hours}h ${mins}m';
-    }
-    return '${mins}m';
-  }
-
-  String _formatDateTime(DateTime dt) {
-    final local = dt.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day.$month.${local.year}, $hour:$minute';
-  }
-
-  String _formatVolume(double? volumeKg) {
-    if (volumeKg == null || volumeKg <= 0) return '0 kg';
-    if (volumeKg >= 1000) {
-      return '${(volumeKg / 1000).toStringAsFixed(1)} t';
-    }
-    return '${volumeKg.round()} kg';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,37 +24,16 @@ class MonthlySessionsList extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Title + Action
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                selectedDay != null ? 'Treningi z wybranego dnia' : 'Ostatnie treningi',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              if (selectedDay != null && onResetDayFilter != null)
-                GestureDetector(
-                  onTap: onResetDayFilter,
-                  child: const Text(
-                    'Zobacz wszystkie',
-                    style: TextStyle(
-                      color: AppColors.primaryVariant,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
+          Text(
+            selectedDay != null ? 'Treningi z wybranego dnia' : 'Treningi w miesiącu',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
           ),
           const SizedBox(height: 12),
-
-          // List or Empty state
           if (sessions.isEmpty)
             _EmptySessionsState(selectedDay: selectedDay)
           else
@@ -99,139 +51,182 @@ class MonthlySessionsList extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: sessions.length,
                 separatorBuilder: (context, index) => Divider(
-                  color: AppColors.border.withValues(alpha: 0.4),
+                  color: AppColors.border.withValues(alpha: 0.9),
                   height: 1,
-                  thickness: 1,
+                  thickness: 1.25,
                   indent: 16,
                   endIndent: 16,
                 ),
-                itemBuilder: (context, index) {
-                  final session = sessions[index];
-                  final title = session.plan.name.trim().isNotEmpty
-                      ? session.plan.name
-                      : 'Trening siłowy';
-
-                  return AppPressable(
-                    onTap: () {
-                      context.push('/app/training/history/${session.id}');
-                    },
-                    pressedScale: 0.98,
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // Session Icon Container
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppColors.primary.withValues(alpha: 0.35),
-                                width: 1,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.fitness_center_rounded,
-                              color: AppColors.primaryVariant,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-
-                          // Session Main Info
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      _formatDateTime(session.startedAt),
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      width: 3,
-                                      height: 3,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      _formatDuration(session.durationSec),
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '${session.exercisesCount} ćwiczeń • ${session.completedSetsCount} serii',
-                                      style: const TextStyle(
-                                        color: AppColors.textMuted,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                    if (session.totalVolumeKg != null &&
-                                        session.totalVolumeKg! > 0) ...[
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '(${_formatVolume(session.totalVolumeKg)})',
-                                        style: const TextStyle(
-                                          color: AppColors.primaryVariant,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Chevron Trailing Icon
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppColors.textMuted,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                itemBuilder: (context, index) =>
+                    _SessionRow(session: sessions[index]),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _SessionRow extends StatelessWidget {
+  const _SessionRow({required this.session});
+
+  final TrainingSessionListItem session;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = session.plan.name.trim().isNotEmpty
+        ? session.plan.name.trim()
+        : 'Trening siłowy';
+
+    return AppPressable(
+      onTap: () => context.push('/app/training/history/${session.id}'),
+      pressedScale: 0.98,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.32),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.fitness_center_rounded,
+                    color: AppColors.primaryVariant,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _formatDateTime(session.startedAt),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                  size: 20,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _SessionMetricsRow(
+              entries: [
+                _Metric(_formatDuration(session.durationSec), 'Czas'),
+                _Metric('${session.exercisesCount}', 'Ćwiczeń'),
+                _Metric('${session.completedSetsCount}', 'Serie'),
+                _Metric(_formatVolume(session.totalVolumeKg), 'Objętość'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Metric {
+  const _Metric(this.value, this.label);
+
+  final String value;
+  final String label;
+}
+
+/// Cztery metryki w równych kolumnach, rozdzielone cienkimi separatorami —
+/// ten sam język wizualny co karta statystyk miesiąca.
+class _SessionMetricsRow extends StatelessWidget {
+  const _SessionMetricsRow({required this.entries});
+
+  final List<_Metric> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (var i = 0; i < entries.length; i++) {
+      if (i != 0) {
+        children.add(
+          Container(
+            width: 1,
+            height: 26,
+            color: AppColors.border.withValues(alpha: 0.35),
+          ),
+        );
+      }
+      children.add(Expanded(child: _MetricCell(metric: entries[i])));
+    }
+    return Row(children: children);
+  }
+}
+
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({required this.metric});
+
+  final _Metric metric;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          metric.value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.2,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          metric.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -278,4 +273,51 @@ class _EmptySessionsState extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Formatowanie
+// ---------------------------------------------------------------------------
+
+const _monthNamesShort = [
+  'sty',
+  'lut',
+  'mar',
+  'kwi',
+  'maj',
+  'cze',
+  'lip',
+  'sie',
+  'wrz',
+  'paź',
+  'lis',
+  'gru',
+];
+
+String _formatDateTime(DateTime dt) {
+  final local = dt.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '${local.day} ${_monthNamesShort[local.month - 1]} ${local.year} · $hour:$minute';
+}
+
+/// `mm:ss` poniżej godziny, `h:mm:ss` powyżej.
+String _formatDuration(int seconds) {
+  if (seconds <= 0) return '—';
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final secs = seconds % 60;
+  final mm = minutes.toString().padLeft(2, '0');
+  final ss = secs.toString().padLeft(2, '0');
+  return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
+}
+
+/// Tony z przecinkiem dziesiętnym od 1000 kg w górę, niżej pełne kilogramy.
+String _formatVolume(double? volumeKg) {
+  if (volumeKg == null || volumeKg <= 0) return '—';
+  if (volumeKg >= 1000) {
+    final tons = (volumeKg / 1000).toStringAsFixed(2).replaceAll('.', ',');
+    return '$tons t';
+  }
+  return '${volumeKg.round()} kg';
 }

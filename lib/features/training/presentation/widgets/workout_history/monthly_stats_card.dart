@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:gym/core/theme/app_colors.dart';
 import '../../../domain/models/monthly_training_history.dart';
 
-/// Kompaktowe podsumowanie wybranego miesiąca: nazwa miesiąca u góry i do
-/// czterech kluczowych statystyk w jednym rzędzie (siatka 2x2, gdy się nie
-/// mieszczą). Statystyki pochodzą wyłącznie z [MonthlyTrainingStats] —
-/// objętość treningowa jest pomijana, bo lista sesji nigdy jej nie zwraca
-/// (zob. `TrainingHistoryRemoteDataSource`), więc
-/// [MonthlyTrainingStats.totalVolumeKg] jest zawsze zerem.
+/// Kompaktowe podsumowanie wybranego miesiąca: nazwa miesiąca u góry i cztery
+/// kluczowe statystyki w jednym rzędzie (siatka 2x2, gdy się nie mieszczą).
+/// Statystyki pochodzą z [MonthlyTrainingStats]. Objętość jest tu świadomie
+/// pominięta — pokazujemy ją per sesja na liście treningów, żeby karta została
+/// przy czterech kafelkach; [MonthlyTrainingStats.totalVolumeKg] jest policzona
+/// i gotowa, gdyby miała trafić także tutaj.
 class MonthlyStatsCard extends StatelessWidget {
   const MonthlyStatsCard({
     super.key,
