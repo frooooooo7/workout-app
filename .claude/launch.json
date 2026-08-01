@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gym-flutter",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "chrome"],
+      "port": 5000
+    }
+  ]
+}
