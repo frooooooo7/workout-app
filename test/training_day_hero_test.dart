@@ -13,7 +13,7 @@ void main() {
             isLoading: false,
             isRestDay: true,
             title: 'Dzień odpoczynku',
-            subtitle: 'Regeneracja to postęp.',
+            subtitle: 'Regeneracja',
             onTap: () => tapped = true,
           ),
         ),
@@ -22,7 +22,7 @@ void main() {
 
     expect(find.text('Na dziś'), findsOneWidget);
     expect(find.text('Dzień odpoczynku'), findsOneWidget);
-    expect(find.text('Regeneracja to postęp.'), findsOneWidget);
+    expect(find.text('Regeneracja'), findsOneWidget);
     expect(find.byKey(const ValueKey('monk-rest-icon')), findsOneWidget);
 
     await tester.tap(find.byType(TrainingDayHero));

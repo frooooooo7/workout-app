@@ -42,7 +42,7 @@ void main() {
 
     expect(find.byKey(const ValueKey('monk-rest-icon')), findsOneWidget);
     expect(find.text('Dzień odpoczynku'), findsOneWidget);
-    expect(find.text('Regeneracja to postęp.'), findsOneWidget);
+    expect(find.text('Regeneracja'), findsOneWidget);
     expect(find.byKey(const ValueKey('start-workout-button')), findsNothing);
 
     await tester.tap(find.text('Dzień odpoczynku'));

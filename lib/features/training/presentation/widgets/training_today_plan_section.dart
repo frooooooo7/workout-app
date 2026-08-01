@@ -40,7 +40,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
         startOfWeekContaining(today).add(Duration(days: selectedDay - 1));
     final isRest = scheduledPlan == null;
     final subtitle = isRest
-        ? 'Regeneracja to postęp.'
+        ? 'Regeneracja'
         : '${scheduledPlan.name}${scheduledPlans.length > 1 ? ' +${scheduledPlans.length - 1}' : ''}';
 
     return Column(
