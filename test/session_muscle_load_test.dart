@@ -21,8 +21,10 @@ void main() {
           MuscleGroup.lowerBack,
         },
       );
-      // Cały region pracował tak samo — wszystkie na 100%.
-      expect(loads.every((l) => l.percent == 100), isTrue);
+      // Cały region pracował tak samo — wszystkie na pełnej intensywności...
+      expect(loads.every((l) => l.intensity == 1), isTrue);
+      // ...i dzielą się po równo łączną objętością sesji (4 mięśnie -> 25%).
+      expect(loads.every((l) => l.percent == 25), isTrue);
     });
 
     test('mięsień wiodący dostaje dwa razy większy udział niż wspomagający', () {
@@ -40,8 +42,12 @@ void main() {
 
       expect(chest.volumeKg, 1000);
       expect(triceps.volumeKg, 500);
-      expect(chest.percent, 100);
-      expect(triceps.percent, 50);
+      // Intensywność (podświetlenie manekina) liczona względem lidera.
+      expect(chest.intensity, 1);
+      expect(triceps.intensity, 0.5);
+      // Procent w rankingu to udział w łącznej objętości sesji (1000+500=1500).
+      expect(chest.percent, 67);
+      expect(triceps.percent, 33);
     });
 
     test('pomija serie nieukończone przy liczeniu objętości', () {
@@ -79,8 +85,11 @@ void main() {
       final abs = loads.firstWhere((l) => l.muscle == MuscleGroup.abs);
       final calves = loads.firstWhere((l) => l.muscle == MuscleGroup.calves);
 
-      expect(abs.percent, 100);
-      expect(calves.percent, 50);
+      expect(abs.intensity, 1);
+      expect(calves.intensity, 0.5);
+      // Udział w łącznej liczbie serii sesji (4+2=6).
+      expect(abs.percent, 67);
+      expect(calves.percent, 33);
     });
 
     test('sesja bez ukończonych serii nie daje żadnego obciążenia', () {

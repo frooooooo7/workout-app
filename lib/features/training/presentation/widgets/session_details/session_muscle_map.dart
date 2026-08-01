@@ -66,6 +66,71 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
     setState(() => _selected = _selected == muscle ? null : muscle);
   }
 
+  void _showMethodologyDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Jak liczymy procenty',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MethodologyPoint(
+                title: 'Ranking i procenty',
+                body:
+                    'Pokazany % to udział danego mięśnia w łącznej objętości '
+                    'tej sesji (ciężar × powtórzenia × serie). Wszystkie '
+                    'wartości sumują się do 100% — to odpowiedź na pytanie '
+                    '„jak rozłożyła się dzisiejsza praca między partie".',
+              ),
+              SizedBox(height: 12),
+              _MethodologyPoint(
+                title: 'Podświetlenie na manekinie',
+                body:
+                    'Kolor na sylwetce liczony jest inaczej: względem '
+                    'najmocniej obciążonego mięśnia sesji, który zawsze '
+                    'świeci najintensywniej. Dzięki temu mapa czytelnie '
+                    'pokazuje, gdzie był największy nacisk, nawet jeśli '
+                    'trenowałeś wiele partii naraz.',
+              ),
+              SizedBox(height: 12),
+              _MethodologyPoint(
+                title: 'Ćwiczenia wielostawowe',
+                body:
+                    'Pierwszy mięsień z listy ćwiczenia liczony jest jako '
+                    'główny (pełna objętość), kolejne jako wspomagające '
+                    '(połowa objętości) — inaczej przysiad ważyłby tyle '
+                    'samo dla nóg, co przysiad dla pleców.',
+              ),
+              SizedBox(height: 12),
+              _MethodologyPoint(
+                title: 'Trening bez ciężaru',
+                body:
+                    'Jeśli sesja nie ma zalogowanych kilogramów (np. trening '
+                    'na masie własnej), zamiast objętości liczymy udział '
+                    'liczby ukończonych serii.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Rozumiem',
+              style: TextStyle(color: AppColors.primaryVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loads.isEmpty) return const _MuscleMapEmpty();
@@ -81,6 +146,7 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
     return SessionSectionCard(
       icon: Icons.accessibility_new_rounded,
       title: 'Mapa mięśni',
+      trailing: _InfoButton(onTap: () => _showMethodologyDialog(context)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -140,6 +206,65 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
           ],
         ],
       ),
+    );
+  }
+}
+
+class _InfoButton extends StatelessWidget {
+  const _InfoButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Jak liczymy procenty obciążenia',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: const Padding(
+          padding: EdgeInsets.all(4),
+          child: Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodologyPoint extends StatelessWidget {
+  const _MethodologyPoint({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          body,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12.5,
+            height: 1.4,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -320,7 +445,7 @@ class _MuscleBar extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(3),
                 child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: load.intensity),
+                  tween: Tween(begin: 0, end: load.share),
                   duration: const Duration(milliseconds: 620),
                   curve: Curves.easeOutCubic,
                   builder: (context, value, _) => LinearProgressIndicator(
