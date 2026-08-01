@@ -76,7 +76,7 @@ void main() {
           matching: find.text(text),
         );
     expect(inSessionsList('Czas'), findsOneWidget);
-    expect(inSessionsList('Ćwiczeń'), findsOneWidget);
+    expect(inSessionsList('Ćwiczenia'), findsOneWidget);
     expect(inSessionsList('Serie'), findsOneWidget);
     expect(inSessionsList('Objętość'), findsOneWidget);
     expect(inSessionsList('1:00:00'), findsOneWidget); // 3600 s

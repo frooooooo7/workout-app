@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../domain/models/training_history_models.dart';
 import 'session_details_formatters.dart';
+import 'session_metrics_row.dart';
+import 'session_status_chip.dart';
 
 /// Nagłówek sesji — **jedyne** miejsce z metrykami całego treningu.
 ///
@@ -72,39 +74,33 @@ class SessionSummaryHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _StatusChip(status: detail.status),
+              SessionStatusChip(status: detail.status),
             ],
           ),
           const SizedBox(height: 18),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Metric(
-                  icon: Icons.access_time_rounded,
-                  value: formatDigitalDuration(detail.durationSec),
-                  label: 'Czas',
-                ),
-                const _MetricDivider(),
-                _Metric(
-                  icon: Icons.fitness_center_rounded,
-                  value: '${detail.exercises.length}',
-                  label: 'Ćwiczenia',
-                ),
-                const _MetricDivider(),
-                _Metric(
-                  icon: Icons.layers_rounded,
-                  value: '${detail.completedSetsCount}',
-                  label: 'Serie',
-                ),
-                const _MetricDivider(),
-                _Metric(
-                  icon: Icons.monitor_weight_outlined,
-                  value: formatVolumeKg(detail.totalVolumeKg),
-                  label: 'Objętość',
-                ),
-              ],
-            ),
+          SessionMetricsRow(
+            entries: [
+              SessionMetricSpec(
+                icon: Icons.access_time_rounded,
+                value: formatDigitalDuration(detail.durationSec),
+                label: 'Czas',
+              ),
+              SessionMetricSpec(
+                icon: Icons.fitness_center_rounded,
+                value: '${detail.exercises.length}',
+                label: 'Ćwiczenia',
+              ),
+              SessionMetricSpec(
+                icon: Icons.layers_rounded,
+                value: '${detail.completedSetsCount}',
+                label: 'Serie',
+              ),
+              SessionMetricSpec(
+                icon: Icons.monitor_weight_outlined,
+                value: formatVolumeKg(detail.totalVolumeKg),
+                label: 'Objętość',
+              ),
+            ],
           ),
           if (note != null && note.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -144,103 +140,3 @@ class SessionSummaryHeader extends StatelessWidget {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({required this.icon, required this.value, required this.label});
-
-  final IconData icon;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: AppColors.primary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricDivider extends StatelessWidget {
-  const _MetricDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      color: AppColors.border.withValues(alpha: 0.35),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final TrainingSessionStatus status;
-
-  Color get _color => switch (status) {
-    TrainingSessionStatus.completed => AppColors.primary,
-    TrainingSessionStatus.cancelled => AppColors.strengthWeak,
-    TrainingSessionStatus.active => AppColors.strengthMedium,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        formatSessionStatus(status),
-        style: TextStyle(
-          color: _color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
