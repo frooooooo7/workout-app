@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/models/exercise.dart';
@@ -44,19 +45,33 @@ class LibraryState {
 }
 
 class LibraryCubit extends Cubit<LibraryState> {
-  LibraryCubit(this._repository) : super(const LibraryState());
+  /// [dataChanges] — sygnał synchronizacji; po pobraniu zmian z serwera lista
+  /// odświeża się sama (np. przy pierwszym logowaniu na nowym urządzeniu).
+  LibraryCubit(this._repository, {Listenable? dataChanges})
+    : _dataChanges = dataChanges,
+      super(const LibraryState()) {
+    _dataChanges?.addListener(_onDataChanged);
+  }
 
   final ExerciseRepository _repository;
+  final Listenable? _dataChanges;
 
   Timer? _queryDebounce;
 
   @override
   Future<void> close() async {
+    _dataChanges?.removeListener(_onDataChanged);
     _queryDebounce?.cancel();
     return super.close();
   }
 
+  void _onDataChanged() {
+    if (isClosed) return;
+    unawaited(refresh(showLoadingIndicator: false));
+  }
+
   Future<void> refresh({bool showLoadingIndicator = true}) async {
+    if (isClosed) return;
     if (showLoadingIndicator) {
       emit(state.copyWith(loading: true, clearError: true));
     } else {
@@ -68,6 +83,7 @@ class LibraryCubit extends Cubit<LibraryState> {
         muscleGroup: state.category,
         query: state.query,
       );
+      if (isClosed) return;
       emit(
         state.copyWith(
           exercises: result,
@@ -76,10 +92,11 @@ class LibraryCubit extends Cubit<LibraryState> {
         ),
       );
     } catch (_) {
+      if (isClosed) return;
       emit(
         state.copyWith(
           loading: false,
-          error: 'Nie można załadować ćwiczeń. Sprawdź połączenie.',
+          error: 'Nie można załadować ćwiczeń z pamięci telefonu.',
         ),
       );
     }

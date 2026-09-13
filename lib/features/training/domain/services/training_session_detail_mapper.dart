@@ -33,6 +33,30 @@ TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) 
   );
 }
 
+/// Pozycja listy historii dla sesji z lokalnej bazy — trening zakończony
+/// offline widać w historii, kalendarzu i statystykach, zanim dotrze na serwer.
+TrainingSessionListItem trainingSessionListItemFromSession(
+  TrainingSession session,
+) {
+  final detail = trainingSessionDetailFromSession(session);
+  final note = session.note?.trim();
+  final hasNote = note != null && note.isNotEmpty;
+  return TrainingSessionListItem(
+    id: detail.id,
+    startedAt: detail.startedAt,
+    endedAt: detail.endedAt,
+    durationSec: detail.durationSec,
+    status: detail.status,
+    plan: detail.plan,
+    exercisesCount: detail.exercises.length,
+    completedSetsCount: detail.completedSetsCount,
+    hasNote: hasNote,
+    updatedAt: detail.updatedAt,
+    totalVolumeKg: detail.totalVolumeKg,
+    notePreview: hasNote ? note : null,
+  );
+}
+
 TrainingExerciseDetail _exerciseDetailFromSession(
   TrainingSessionExercise exercise,
 ) {

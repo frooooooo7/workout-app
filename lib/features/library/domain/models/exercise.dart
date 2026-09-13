@@ -214,6 +214,7 @@ class Exercise {
     this.isMine = false,
     this.createdAt,
     this.isPendingSync = false,
+    this.clientId,
   });
 
   final String id;

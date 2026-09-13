@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/sync/sync_engine_base.dart';
+import '../../../../core/sync/sync_failure.dart';
 import '../../domain/models/exercise.dart';
 import '../exercise_database.dart';
 import '../exercise_dto.dart';
@@ -11,28 +14,20 @@ import '../exercise_remote_data_source.dart';
 
 /// Background sync: pushes pending local mutations and pulls server state.
 ///
-/// All [flush] / [pull] calls are serialized through an internal queue so
+/// All [flush] / [pull] calls are serialized through [SyncEngineBase] so
 /// concurrent bootstrap + UI triggers cannot interleave DB/network steps.
-class ExerciseSyncEngine {
+class ExerciseSyncEngine extends SyncEngineBase {
   ExerciseSyncEngine({
     required ExerciseRemoteDataSource remote,
     required ExerciseDatabase localDb,
-  })  : _remote = remote,
-        _localDb = localDb;
+    super.onDataChanged,
+  }) : _remote = remote,
+       _localDb = localDb;
 
   final ExerciseRemoteDataSource _remote;
   final ExerciseDatabase _localDb;
 
   static const _uuid = Uuid();
-
-  bool _stopped = false;
-
-  /// Ensures [flush] / [pull] never run concurrently.
-  Future<void> _queue = Future<void>.value();
-
-  bool get isStopped => _stopped;
-
-  void stop() => _stopped = true;
 
   /// Fire-and-forget initial flush + pull after login.
   void scheduleBootstrap() {
@@ -48,69 +43,61 @@ class ExerciseSyncEngine {
       await flush();
       await pull();
     } catch (_) {
-      /* offline — next user action retries */
+      /* offline — next trigger retries */
     }
   }
 
-  Future<void> _runExclusive(Future<void> Function() body) {
-    final done = Completer<void>();
-    _queue = _queue.then((_) async {
-      try {
-        await body();
-        if (!done.isCompleted) done.complete();
-      } catch (e, st) {
-        if (!done.isCompleted) done.completeError(e, st);
-      }
-    });
-    return done.future;
-  }
+  Future<void> flush() => runCoalesced('flush', _flushImpl);
 
-  Future<void> flush() => _runExclusive(_flushImpl);
+  Future<void> pull() => runCoalesced('pull', _pullImpl);
 
-  Future<void> pull() => _runExclusive(_pullImpl);
-
-  Future<void> _appendOutbox(
-    Database db, {
-    required String localId,
-    required String op,
-    String? lastError,
-    required int attempts,
-  }) async {
-    await db.insert(ExerciseDatabase.tableOutboxLog, {
-      'local_id': localId,
-      'op': op,
-      'attempts': attempts,
-      'last_error': lastError,
-      'created_at': DateTime.now().millisecondsSinceEpoch,
+  /// Pobiera stan serwera tylko wtedy, gdy ostatnia próba była dawniej niż
+  /// [maxAge] — zmiana filtra czy wyszukiwanie nie ciągną całej listy z sieci.
+  Future<void> pullIfDue({
+    Duration maxAge = SyncEngineBase.defaultPullMaxAge,
+  }) {
+    return runCoalesced('pull-if-due', () async {
+      if (isPullDue(maxAge)) await _pullImpl();
     });
   }
 
-  Future<void> _failureBackoff(
+  // ── Failures ──────────────────────────────────────────────────────────────
+
+  Future<void> _handleFailure(
     String localId,
     String op,
-    ApiException e,
+    ApiException error,
   ) async {
-    await _localDb.run((db) async {
-      final rows = await db.rawQuery(
-        '''
-        SELECT COALESCE(MAX(attempts), 0) AS m
-        FROM ${ExerciseDatabase.tableOutboxLog}
-        WHERE local_id = ? AND op = ?
-        ''',
-        [localId, op],
-      );
-      final maxPrev = (rows.first['m'] as int?) ?? 0;
-      final next = maxPrev + 1;
-      await _appendOutbox(
-        db,
+    await _localDb.recordSyncAttemptFailure(
+      localId: localId,
+      op: op,
+      message: error.message,
+    );
+    if (registerFailure(error) == SyncFailureKind.permanent) {
+      await _localDb.markSyncRejected(
+        table: ExerciseDatabase.tableExercises,
         localId: localId,
-        op: op,
-        lastError: e.message,
-        attempts: next,
+        reason: error.message,
       );
-    });
-    // Retry on the next sync trigger — no in-loop delay (avoids blocking flush).
+    }
   }
+
+  /// Wywołuje API; błąd zapisuje (i ewentualnie oznacza wiersz jako
+  /// odrzucony) i zwraca `null`.
+  Future<T?> _callRemote<T extends Object>(
+    String localId,
+    String op,
+    Future<T> Function() call,
+  ) async {
+    try {
+      return await call();
+    } on ApiException catch (e) {
+      await _handleFailure(localId, op, e);
+      return null;
+    }
+  }
+
+  // ── Flush ─────────────────────────────────────────────────────────────────
 
   int _pendingRank(Map<String, dynamic> m) {
     final op = m['pending_op'] as String?;
@@ -128,253 +115,336 @@ class ExerciseSyncEngine {
     return {for (final e in all) e.id: e.isFavourite};
   }
 
-  Future<void> _flushImpl() async {
-    if (_stopped) return;
+  Future<List<Map<String, dynamic>>?> _pendingRows() async {
     try {
-      final pendingMaps = await _localDb.run((db) async {
-        return db.query(
+      return await _localDb.run(
+        (db) => db.query(
           ExerciseDatabase.tableExercises,
-          where: '(pending_op IS NOT NULL) OR (is_favourite_dirty = 1)',
+          where:
+              '((pending_op IS NOT NULL) OR (is_favourite_dirty = 1)) '
+              'AND sync_error IS NULL',
+        ),
+      );
+    } on StateError {
+      return null; /* ExerciseDatabase closing */
+    }
+  }
+
+  Future<void> _flushImpl() async {
+    if (isStopped) return;
+    final pendingMaps = await _pendingRows();
+    if (pendingMaps == null || pendingMaps.isEmpty) return;
+
+    Map<String, bool>? favSnapshot;
+    final needsFavProbe = pendingMaps.any((m) {
+      final dirty = ((m['is_favourite_dirty'] as int?) ?? 0) == 1;
+      final op = m['pending_op'] as String?;
+      return dirty || op == 'create' || op == 'update';
+    });
+    if (needsFavProbe) {
+      try {
+        favSnapshot = await _fetchServerFavouritesSnapshot();
+      } on ApiException catch (e) {
+        registerFailure(e);
+        // Bez sieci żaden wiersz nie przejdzie — nie czekaj na timeout
+        // każdego z osobna.
+        if (isNetworkFailure(e)) return;
+        favSnapshot = null;
+      }
+    }
+
+    final sorted = [...pendingMaps]
+      ..sort((a, b) => _pendingRank(a).compareTo(_pendingRank(b)));
+
+    var changed = false;
+    for (final map in sorted) {
+      if (isStopped) return;
+      try {
+        if (await _flushRow(ExerciseDto.fromMap(map), favSnapshot)) {
+          changed = true;
+        }
+      } catch (error, stackTrace) {
+        if (isStopped) return;
+        // Jeden uszkodzony wiersz nie może zablokować wysyłki pozostałych.
+        logUnexpected(
+          'Exercise ${map['local_id']} sync failed',
+          error,
+          stackTrace,
         );
-      });
+      }
+    }
+    if (changed) notifyDataChanged();
+  }
 
-      if (pendingMaps.isEmpty) return;
+  /// Zwraca `true`, gdy coś zostało wysłane.
+  Future<bool> _flushRow(
+    ExerciseDto dto,
+    Map<String, bool>? favSnapshot,
+  ) async {
+    if (dto.pendingOp == 'delete') return _flushDelete(dto);
+    if (dto.pendingOp == 'create') return _flushCreate(dto, favSnapshot);
+    if (dto.pendingOp == 'update') return _flushUpdate(dto, favSnapshot);
+    if (dto.isFavouriteDirty && dto.serverId != null) {
+      return _flushFavouriteOnly(dto, favSnapshot);
+    }
+    return false;
+  }
 
-      Map<String, bool>? favSnapshot;
-      final needsFavProbe = pendingMaps.any((m) {
-        final dirty = ((m['is_favourite_dirty'] as int?) ?? 0) == 1;
-        final op = m['pending_op'] as String?;
-        return dirty || op == 'create' || op == 'update';
-      });
-      if (needsFavProbe) {
-        try {
-          favSnapshot = await _fetchServerFavouritesSnapshot();
-        } on ApiException {
-          favSnapshot = null;
+  Future<bool> _flushDelete(ExerciseDto dto) async {
+    final sid = dto.serverId;
+    if (sid != null) {
+      try {
+        await _remote.delete(sid);
+      } on ApiException catch (e) {
+        // 404 — ćwiczenia już nie ma na serwerze, cel usunięcia osiągnięty.
+        if (e.statusCode != 404) {
+          await _handleFailure(dto.localId, 'delete', e);
+          return false;
         }
       }
-
-      final sorted = [...pendingMaps]
-        ..sort((a, b) => _pendingRank(a).compareTo(_pendingRank(b)));
-
-      for (final map in sorted) {
-        if (_stopped) return;
-        final dto = ExerciseDto.fromMap(map);
-        await _flushRow(dto, favSnapshot);
-      }
-    } on StateError {
-      /* ExerciseDatabase closing */
     }
+    await _localDb.run(
+      (db) => db.delete(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+      ),
+    );
+    await _localDb.clearSyncAttempts(dto.localId);
+    return true;
   }
 
-  Future<void> _flushRow(
+  Future<bool> _flushCreate(
     ExerciseDto dto,
     Map<String, bool>? favSnapshot,
   ) async {
-    if (dto.pendingOp == 'delete') {
-      await _flushDelete(dto);
-      return;
-    }
-    if (dto.pendingOp == 'create') {
-      await _flushCreate(dto, favSnapshot);
-      return;
-    }
-    if (dto.pendingOp == 'update') {
-      await _flushUpdate(dto, favSnapshot);
-      return;
-    }
-    if (dto.isFavouriteDirty && dto.serverId != null) {
-      await _flushFavouriteOnly(dto, favSnapshot);
-    }
-  }
-
-  Future<void> _flushDelete(ExerciseDto dto) async {
-    final sid = dto.serverId;
-    if (sid == null) return;
-    try {
-      await _remote.delete(sid);
-      await _localDb.run((db) async {
-        await db.delete(
-          ExerciseDatabase.tableExercises,
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-      });
-    } on ApiException catch (e) {
-      await _failureBackoff(dto.localId, 'delete', e);
-    }
-  }
-
-  Future<void> _flushCreate(
-    ExerciseDto dto,
-    Map<String, bool>? favSnapshot,
-  ) async {
-    try {
-      final domain = dto.toDomain();
-      final created = await _remote.create(
+    final domain = dto.toDomain();
+    final created = await _callRemote(
+      dto.localId,
+      'create',
+      () => _remote.create(
         name: domain.name,
         muscles: domain.muscles,
         category: domain.category,
         description: domain.description,
         clientId: dto.localId,
+      ),
+    );
+    if (created == null) return false;
+
+    final rowStillExists = await _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+        limit: 1,
       );
+      await _adoptServerId(db, serverId: created.id, localId: dto.localId);
 
-      await _localDb.run((db) async {
-        await db.update(
-          ExerciseDatabase.tableExercises,
-          {
-            'server_id': created.id,
-            'pending_op': null,
-            'name': created.name,
-            'muscles': ExerciseDto.encodeMusclesToJson(created.muscles),
-            'category': created.category.name,
-            'description': created.description,
-            'image_url': created.imageUrl,
+      if (rows.isEmpty) {
+        // Usunięte, zanim serwer odpowiedział — nagrobek usunie je też
+        // z serwera przy następnej wysyłce.
+        await db.insert(ExerciseDatabase.tableExercises, {
+          ...ExerciseDto.fromPulledServer(created, dto.localId).toMap(),
+          'pending_op': 'delete',
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return false;
+      }
+
+      final current = ExerciseDto.fromMap(rows.first);
+      final values = <String, Object?>{'server_id': created.id};
+      if (_sameContent(current, dto)) {
+        values.addAll({
+          'pending_op': null,
+          'name': created.name,
+          'muscles': ExerciseDto.encodeMusclesToJson(created.muscles),
+          'category': created.category.name,
+          'description': created.description,
+          'image_url': created.imageUrl,
+          'is_mine': created.isMine ? 1 : 0,
+          // Ulubione zmienione w trakcie wysyłki wyśle _flushFavouriteOnly.
+          if (!current.isFavouriteDirty)
             'is_favourite': created.isFavourite ? 1 : 0,
-            'is_mine': created.isMine ? 1 : 0,
-            if (created.createdAt != null)
-              'created_at': created.createdAt!.millisecondsSinceEpoch,
-          },
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-      });
-
-      final bytes = dto.localImageBytes;
-      if (bytes != null &&
-          bytes.isNotEmpty &&
-          dto.localImageFilename != null &&
-          dto.localImageFilename!.isNotEmpty) {
-        try {
-          final uploaded = await _remote.uploadExerciseImage(
-            created.id,
-            bytes,
-            dto.localImageFilename!,
-          );
-          await _localDb.run((db) async {
-            await db.update(
-              ExerciseDatabase.tableExercises,
-              {
-                'image_url': uploaded.imageUrl,
-                'local_image_bytes': null,
-                'local_image_filename': null,
-              },
-              where: 'local_id = ?',
-              whereArgs: [dto.localId],
-            );
-          });
-        } on ApiException catch (e) {
-          await _failureBackoff(dto.localId, 'image', e);
-        }
+          if (created.createdAt != null)
+            'created_at': created.createdAt!.millisecondsSinceEpoch,
+        });
+      } else {
+        // Edytowane w trakcie wysyłki — nowsza wersja pójdzie jako update.
+        values['pending_op'] = 'update';
       }
+      await db.update(
+        ExerciseDatabase.tableExercises,
+        values,
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+      );
+      return true;
+    });
+    if (!rowStillExists) return false;
 
-      final refreshed = await _localDb.run((db) async {
-        final rows = await db.query(
-          ExerciseDatabase.tableExercises,
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-        return rows.isEmpty ? null : ExerciseDto.fromMap(rows.first);
-      });
-      if (refreshed != null &&
-          refreshed.isFavouriteDirty &&
-          refreshed.serverId != null) {
-        await _flushFavouriteOnly(refreshed, favSnapshot);
-      }
-    } on ApiException catch (e) {
-      await _failureBackoff(dto.localId, 'create', e);
-    }
+    await _finishServerWrite(dto.localId, created.id, favSnapshot);
+    return true;
   }
 
-  Future<void> _flushUpdate(
+  Future<bool> _flushUpdate(
     ExerciseDto dto,
     Map<String, bool>? favSnapshot,
   ) async {
     final sid = dto.serverId;
-    if (sid == null) return;
-    try {
-      final domain = dto.toDomain();
-      final updated = await _remote.update(
+    if (sid == null) return false;
+    final domain = dto.toDomain();
+    final updated = await _callRemote(
+      dto.localId,
+      'update',
+      () => _remote.update(
         id: sid,
         name: domain.name,
         muscles: domain.muscles,
         category: domain.category,
         description: domain.description,
-      );
-      await _localDb.run((db) async {
-        await db.update(
-          ExerciseDatabase.tableExercises,
-          {
-            'pending_op': null,
-            'name': updated.name,
-            'muscles': ExerciseDto.encodeMusclesToJson(updated.muscles),
-            'category': updated.category.name,
-            'description': updated.description,
-            'image_url': updated.imageUrl,
-            if (updated.createdAt != null)
-              'created_at': updated.createdAt!.millisecondsSinceEpoch,
-          },
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-      });
+      ),
+    );
+    if (updated == null) return false;
 
-      final refreshed = await _localDb.run((db) async {
-        final rows = await db.query(
-          ExerciseDatabase.tableExercises,
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-        return rows.isEmpty ? null : ExerciseDto.fromMap(rows.first);
-      });
-      if (refreshed != null &&
-          refreshed.isFavouriteDirty &&
-          refreshed.serverId != null) {
-        await _flushFavouriteOnly(refreshed, favSnapshot);
-      }
-    } on ApiException catch (e) {
-      await _failureBackoff(dto.localId, 'update', e);
-    }
+    await _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final current = ExerciseDto.fromMap(rows.first);
+      // Zmienione (albo usunięte) w trakcie wysyłki — zostaw na kolejny cykl.
+      if (current.pendingOp != 'update' || !_sameContent(current, dto)) return;
+      await db.update(
+        ExerciseDatabase.tableExercises,
+        {
+          'pending_op': null,
+          'name': updated.name,
+          'muscles': ExerciseDto.encodeMusclesToJson(updated.muscles),
+          'category': updated.category.name,
+          'description': updated.description,
+          'image_url': updated.imageUrl,
+          if (updated.createdAt != null)
+            'created_at': updated.createdAt!.millisecondsSinceEpoch,
+        },
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+      );
+    });
+
+    await _finishServerWrite(dto.localId, sid, favSnapshot);
+    return true;
   }
 
-  Future<void> _flushFavouriteOnly(
+  /// Wspólny ogon create/update: zdjęcie dodane offline i ulubione.
+  Future<void> _finishServerWrite(
+    String localId,
+    String serverId,
+    Map<String, bool>? favSnapshot,
+  ) async {
+    final imageUploaded = await _uploadPendingImage(localId, serverId);
+    if (!imageUploaded) {
+      // Zdjęcie nie doszło — zostaw wiersz w kolejce, żeby ponowić wysyłkę.
+      await _localDb.run(
+        (db) => db.update(
+          ExerciseDatabase.tableExercises,
+          {'pending_op': 'update'},
+          where: 'local_id = ? AND pending_op IS NULL',
+          whereArgs: [localId],
+        ),
+      );
+    }
+
+    final refreshed = await _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+      return rows.isEmpty ? null : ExerciseDto.fromMap(rows.first);
+    });
+    if (refreshed != null &&
+        refreshed.isFavouriteDirty &&
+        refreshed.serverId != null) {
+      await _flushFavouriteOnly(refreshed, favSnapshot);
+    }
+    if (imageUploaded) await _localDb.clearSyncAttempts(localId);
+  }
+
+  /// Wysyła zdjęcie zapisane offline. `true`, gdy nie było czego wysyłać
+  /// albo wysyłka się udała.
+  Future<bool> _uploadPendingImage(String localId, String serverId) async {
+    final row = await _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableExercises,
+        columns: ['local_image_bytes', 'local_image_filename'],
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+      return rows.isEmpty ? null : rows.first;
+    });
+    final bytes = row?['local_image_bytes'] as Uint8List?;
+    final filename = row?['local_image_filename'] as String?;
+    if (bytes == null || bytes.isEmpty || filename == null || filename.isEmpty) {
+      return true;
+    }
+
+    final uploaded = await _callRemote(
+      localId,
+      'image',
+      () => _remote.uploadExerciseImage(serverId, bytes, filename),
+    );
+    if (uploaded == null) return false;
+
+    await _localDb.run(
+      (db) => db.update(
+        ExerciseDatabase.tableExercises,
+        {
+          'image_url': uploaded.imageUrl,
+          'local_image_bytes': null,
+          'local_image_filename': null,
+        },
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      ),
+    );
+    return true;
+  }
+
+  Future<bool> _flushFavouriteOnly(
     ExerciseDto dto,
     Map<String, bool>? favSnapshot,
   ) async {
     final sid = dto.serverId;
-    if (sid == null) return;
+    if (sid == null) return false;
+
+    Future<void> clearDirty() => _localDb.run(
+      (db) => db.update(
+        ExerciseDatabase.tableExercises,
+        {'is_favourite_dirty': 0},
+        where: 'local_id = ?',
+        whereArgs: [dto.localId],
+      ),
+    );
 
     try {
-      final Map<String, bool> snapshot;
-      if (favSnapshot != null) {
-        snapshot = favSnapshot;
-      } else {
-        snapshot = await _fetchServerFavouritesSnapshot();
-      }
-
-      var serverFav = snapshot[sid];
+      final snapshot = favSnapshot ?? await _fetchServerFavouritesSnapshot();
+      final serverFav = snapshot[sid];
       if (serverFav == null) {
-        final full = await _remote.getAll();
-        for (final e in full) {
-          if (e.id == sid) {
-            serverFav = e.isFavourite;
-            break;
-          }
-        }
+        // Ćwiczenia nie ma już na serwerze — flaga nic nie znaczy, a pull
+        // usunie wiersz dopiero, gdy nie jest „brudny”.
+        await clearDirty();
+        return true;
       }
-      if (serverFav == null) return;
 
       final target = dto.isFavourite;
       if (serverFav == target) {
-        await _localDb.run((db) async {
-          await db.update(
-            ExerciseDatabase.tableExercises,
-            {'is_favourite_dirty': 0},
-            where: 'local_id = ?',
-            whereArgs: [dto.localId],
-          );
-        });
-        return;
+        await clearDirty();
+        return true;
       }
 
       var afterServer = await _remote.toggleFavourite(sid);
@@ -382,32 +452,80 @@ class ExerciseSyncEngine {
         afterServer = await _remote.toggleFavourite(sid);
       }
 
-      await _localDb.run((db) async {
-        await db.update(
+      await _localDb.run(
+        (db) => db.update(
           ExerciseDatabase.tableExercises,
-          {
-            'is_favourite': afterServer ? 1 : 0,
-            'is_favourite_dirty': 0,
-          },
-          where: 'local_id = ?',
-          whereArgs: [dto.localId],
-        );
-      });
+          {'is_favourite': afterServer ? 1 : 0, 'is_favourite_dirty': 0},
+          // Kliknięte ponownie w trakcie wysyłki — zostaw flagę na kolejny cykl.
+          where: 'local_id = ? AND is_favourite = ?',
+          whereArgs: [dto.localId, target ? 1 : 0],
+        ),
+      );
+      return true;
     } on ApiException catch (e) {
-      await _failureBackoff(dto.localId, 'favourite', e);
+      if (e.statusCode == 404) {
+        await clearDirty();
+        return true;
+      }
+      await _handleFailure(dto.localId, 'favourite', e);
+      return false;
     }
   }
 
+  bool _sameContent(ExerciseDto a, ExerciseDto b) =>
+      a.name == b.name &&
+      a.muscles == b.muscles &&
+      a.category == b.category &&
+      a.description == b.description;
+
+  /// Przed przypisaniem [serverId] do wiersza [localId] usuwa duplikat, który
+  /// mogło wstawić wcześniejsze pobranie (np. po zgubionej odpowiedzi na
+  /// create), i przepina na [localId] odwołania z planów i sesji.
+  Future<void> _adoptServerId(
+    Database db, {
+    required String serverId,
+    required String localId,
+  }) async {
+    final duplicates = await db.query(
+      ExerciseDatabase.tableExercises,
+      columns: ['local_id'],
+      where: 'server_id = ? AND local_id <> ?',
+      whereArgs: [serverId, localId],
+    );
+    for (final duplicate in duplicates) {
+      final duplicateId = duplicate['local_id'] as String;
+      await db.update(
+        ExerciseDatabase.tableTrainingPlanExercises,
+        {'exercise_local_id': localId},
+        where: 'exercise_local_id = ?',
+        whereArgs: [duplicateId],
+      );
+      await db.update(
+        ExerciseDatabase.tableTrainingSessionExercises,
+        {'exercise_local_id': localId},
+        where: 'exercise_local_id = ?',
+        whereArgs: [duplicateId],
+      );
+      await db.delete(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [duplicateId],
+      );
+    }
+  }
+
+  // ── Pull ──────────────────────────────────────────────────────────────────
+
   Future<void> _pullImpl() async {
-    if (_stopped) return;
+    if (isStopped) return;
+    markPullAttempt();
     try {
       final server = await _remote.getAll();
-      if (_stopped) return;
-      await _localDb.run((db) async {
-        await _reconcilePull(db, server);
-      });
-    } on ApiException {
-      /* offline */
+      if (isStopped) return;
+      await _localDb.run((db) => _reconcilePull(db, server));
+      notifyDataChanged();
+    } on ApiException catch (e) {
+      registerFailure(e);
     } on StateError {
       /* DB closing */
     }
@@ -417,11 +535,22 @@ class ExerciseSyncEngine {
     final serverIds = server.map((e) => e.id).toSet();
 
     for (final ex in server) {
-      final rows = await db.query(
+      var rows = await db.query(
         ExerciseDatabase.tableExercises,
         where: 'server_id = ? OR local_id = ?',
         whereArgs: [ex.id, ex.id],
+        limit: 1,
       );
+      final clientId = ex.clientId;
+      if (rows.isEmpty && clientId != null) {
+        // Utworzone offline na tym urządzeniu — serwer odsyła nasz local_id.
+        rows = await db.query(
+          ExerciseDatabase.tableExercises,
+          where: 'local_id = ?',
+          whereArgs: [clientId],
+          limit: 1,
+        );
+      }
 
       if (rows.isEmpty) {
         final dto = ExerciseDto.fromPulledServer(ex, _uuid.v4());
@@ -430,32 +559,49 @@ class ExerciseSyncEngine {
           dto.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
-      } else {
-        final row = rows.first;
-        final pending = row['pending_op'] as String?;
-        if (pending != null) continue;
-
-        final favDirty = ((row['is_favourite_dirty'] as int?) ?? 0) == 1;
-
-        final localId = row['local_id'] as String;
-        await db.update(
-          ExerciseDatabase.tableExercises,
-          {
-            'server_id': ex.id,
-            'name': ex.name,
-            'muscles': ExerciseDto.encodeMusclesToJson(ex.muscles),
-            'category': ex.category.name,
-            'description': ex.description,
-            'image_url': ex.imageUrl,
-            if (!favDirty) 'is_favourite': ex.isFavourite ? 1 : 0,
-            'is_mine': ex.isMine ? 1 : 0,
-            if (ex.createdAt != null)
-              'created_at': ex.createdAt!.millisecondsSinceEpoch,
-          },
-          where: 'local_id = ?',
-          whereArgs: [localId],
-        );
+        continue;
       }
+
+      final row = rows.first;
+      final localId = row['local_id'] as String;
+      final linkedToServer = row['server_id'] == ex.id;
+
+      if (row['pending_op'] != null) {
+        // Lokalne zmiany mają pierwszeństwo — zapamiętaj tylko, któremu
+        // rekordowi na serwerze odpowiada wiersz.
+        if (!linkedToServer) {
+          await _adoptServerId(db, serverId: ex.id, localId: localId);
+          await db.update(
+            ExerciseDatabase.tableExercises,
+            {'server_id': ex.id},
+            where: 'local_id = ?',
+            whereArgs: [localId],
+          );
+        }
+        continue;
+      }
+
+      final favDirty = ((row['is_favourite_dirty'] as int?) ?? 0) == 1;
+      if (!linkedToServer) {
+        await _adoptServerId(db, serverId: ex.id, localId: localId);
+      }
+      await db.update(
+        ExerciseDatabase.tableExercises,
+        {
+          'server_id': ex.id,
+          'name': ex.name,
+          'muscles': ExerciseDto.encodeMusclesToJson(ex.muscles),
+          'category': ex.category.name,
+          'description': ex.description,
+          'image_url': ex.imageUrl,
+          if (!favDirty) 'is_favourite': ex.isFavourite ? 1 : 0,
+          'is_mine': ex.isMine ? 1 : 0,
+          if (ex.createdAt != null)
+            'created_at': ex.createdAt!.millisecondsSinceEpoch,
+        },
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      );
     }
 
     final locals = await db.query(

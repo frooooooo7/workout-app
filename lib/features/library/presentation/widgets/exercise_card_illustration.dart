@@ -97,8 +97,8 @@ class ExerciseCardIllustration extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (resolved != null)
-              Image.network(
-                resolved.toString(),
+              Image(
+                image: exerciseImageProvider(exercise.imageUrl)!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,

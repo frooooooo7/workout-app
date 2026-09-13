@@ -63,6 +63,9 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     });
   }
 
+  /// Wysyła lokalne zmiany od razu, a stan serwera pobiera najwyżej raz na
+  /// [SyncEngineBase.defaultPullMaxAge] — każde kliknięcie filtra nie może
+  /// ściągać całej biblioteki.
   void _scheduleSync() {
     if (_sync.isStopped) return;
     unawaited(
@@ -71,7 +74,7 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
       }),
     );
     unawaited(
-      _sync.pull().catchError((_) {
+      _sync.pullIfDue().catchError((_) {
         /* background sync must never break the UI event loop */
       }),
     );
@@ -103,6 +106,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
         {
           'is_favourite': isFavourite ? 1 : 0,
           'is_favourite_dirty': 1,
+          // Nowa zmiana użytkownika — daj serwerowi kolejną szansę.
+          'sync_error': null,
         },
         where: 'local_id = ?',
         whereArgs: [localId],
@@ -182,6 +187,7 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
           'category': category.name,
           'description': description,
           'pending_op': nextPending,
+          'sync_error': null,
         },
         where: 'local_id = ?',
         whereArgs: [localId],
@@ -217,13 +223,13 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
           'attempts': 0,
           'last_error': null,
           'created_at': DateTime.now().millisecondsSinceEpoch,
-        });
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       }
 
       await db.update(
         ExerciseDatabase.tableExercises,
-        {'pending_op': 'delete'},
+        {'pending_op': 'delete', 'sync_error': null},
         where: 'local_id = ?',
         whereArgs: [localId],
       );

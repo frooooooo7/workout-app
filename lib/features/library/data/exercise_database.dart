@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 8;
+  static const _dbVersion = 9;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -37,6 +37,13 @@ class ExerciseDatabase {
   static const tableTrainingSessions = 'training_sessions';
   static const tableTrainingSessionExercises = 'training_session_exercises';
   static const tableTrainingSessionSets = 'training_session_sets';
+
+  /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
+  static const syncedTables = [
+    tableExercises,
+    tableTrainingPlans,
+    tableTrainingSessions,
+  ];
 
   static const _tmpV3Table = 'exercises_v3_tmp';
 
@@ -69,6 +76,107 @@ class ExerciseDatabase {
     }
   }
 
+  // ── Sync bookkeeping ──────────────────────────────────────────────────────
+
+  /// Zapisuje nieudaną próbę wysyłki: jeden wiersz na (`local_id`, `op`)
+  /// z licznikiem prób — wcześniej każda porażka dokładała nowy wiersz.
+  Future<void> recordSyncAttemptFailure({
+    required String localId,
+    required String op,
+    required String message,
+  }) {
+    return run((db) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final updated = await db.rawUpdate(
+        'UPDATE $tableOutboxLog '
+        'SET attempts = attempts + 1, last_error = ?, created_at = ? '
+        'WHERE local_id = ? AND op = ?',
+        [message, now, localId, op],
+      );
+      if (updated > 0) return;
+      await db.insert(tableOutboxLog, {
+        'local_id': localId,
+        'op': op,
+        'attempts': 1,
+        'last_error': message,
+        'created_at': now,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  /// Czyści historię porażek po udanej wysyłce wiersza.
+  Future<void> clearSyncAttempts(String localId) {
+    return run((db) async {
+      await db.delete(
+        tableOutboxLog,
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      );
+    });
+  }
+
+  /// Oznacza wiersz jako odrzucony przez serwer — automatyczne ponawianie go
+  /// pomija, dopóki użytkownik go nie zmieni albo nie wymusi synchronizacji.
+  Future<void> markSyncRejected({
+    required String table,
+    required String localId,
+    required String reason,
+  }) {
+    return run((db) async {
+      await db.update(
+        table,
+        {'sync_error': reason},
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      );
+    });
+  }
+
+  /// Przywraca odrzucone wiersze do kolejki (ręczne „Synchronizuj teraz”).
+  Future<void> clearSyncErrors() {
+    return run((db) async {
+      for (final table in syncedTables) {
+        await db.update(
+          table,
+          {'sync_error': null},
+          where: 'sync_error IS NOT NULL',
+        );
+      }
+    });
+  }
+
+  /// Ile zmian czeka na wysłanie i ile serwer odrzucił. Puste sesje nie są
+  /// wysyłane, więc ich nie liczymy.
+  Future<({int pending, int failed})> countSyncBacklog() {
+    return run((db) async {
+      final rows = await db.rawQuery('''
+        SELECT
+          (SELECT COUNT(*) FROM $tableExercises
+             WHERE (pending_op IS NOT NULL OR is_favourite_dirty = 1)
+               AND sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tableTrainingPlans
+             WHERE pending_op IS NOT NULL AND sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tableTrainingSessions s
+             WHERE s.pending_op IS NOT NULL AND s.sync_error IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM $tableTrainingSessionExercises e
+                 WHERE e.session_local_id = s.local_id
+               )) AS pending,
+          (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
+            AS failed
+      ''');
+      final row = rows.first;
+      return (
+        pending: (row['pending'] as int?) ?? 0,
+        failed: (row['failed'] as int?) ?? 0,
+      );
+    });
+  }
+
+  // ── Schema ────────────────────────────────────────────────────────────────
+
   Future<Database> _open() async {
     final dbPath = _directoryOverride ?? await getDatabasesPath();
     final path = p.join(dbPath, _dbName);
@@ -95,6 +203,14 @@ class ExerciseDatabase {
         created_at INTEGER NOT NULL
       )
     ''');
+    await _createOutboxLogIndex(db);
+  }
+
+  Future<void> _createOutboxLogIndex(Database db) async {
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS outbox_log_local_op_idx '
+      'ON $tableOutboxLog (local_id, op)',
+    );
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -113,7 +229,8 @@ class ExerciseDatabase {
         pending_op TEXT,
         is_favourite_dirty INTEGER NOT NULL DEFAULT 0,
         local_image_bytes BLOB,
-        local_image_filename TEXT
+        local_image_filename TEXT,
+        sync_error TEXT
       )
     ''');
     await _createOutboxLog(db);
@@ -133,7 +250,8 @@ class ExerciseDatabase {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         pending_op TEXT,
-        is_deleted INTEGER NOT NULL DEFAULT 0
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        sync_error TEXT
       )
     ''');
     await db.execute('''
@@ -194,7 +312,8 @@ class ExerciseDatabase {
         shared_to_profile INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        pending_op TEXT
+        pending_op TEXT,
+        sync_error TEXT
       )
     ''');
     await db.execute('''
@@ -312,10 +431,28 @@ class ExerciseDatabase {
         definition: 'INTEGER NOT NULL DEFAULT 0',
       );
     }
+    if (oldVersion < 9) {
+      for (final table in syncedTables) {
+        await _addColumnIfMissing(
+          db,
+          table: table,
+          column: 'sync_error',
+          definition: 'TEXT',
+        );
+      }
+      // Stare wersje dopisywały wiersz przy każdej porażce — zostaw ostatni.
+      await db.execute('''
+        DELETE FROM $tableOutboxLog
+        WHERE id NOT IN (
+          SELECT MAX(id) FROM $tableOutboxLog GROUP BY local_id, op
+        )
+      ''');
+      await _createOutboxLogIndex(db);
+    }
   }
 
   /// `ALTER TABLE ... ADD COLUMN` bez ryzyka duplikatu — tabela utworzona
-  /// w tej samej ścieżce upgrade'u (`oldVersion < 6`) ma już nową kolumnę.
+  /// w tej samej ścieżce upgrade'u (np. `oldVersion < 6`) ma już nową kolumnę.
   Future<void> _addColumnIfMissing(
     Database db, {
     required String table,

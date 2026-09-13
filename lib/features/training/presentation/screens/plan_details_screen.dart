@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../library/data/exercise_image_uri.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
@@ -271,14 +272,16 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                   decoration: BoxDecoration(
                     color: AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(10),
-                    image: planExercise.exercise.imageUrl != null
-                        ? DecorationImage(
-                            image: NetworkImage(
-                              planExercise.exercise.imageUrl!,
-                            ),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
+                    image: switch (exerciseImageProvider(
+                      planExercise.exercise.imageUrl,
+                    )) {
+                      final provider? => DecorationImage(
+                        image: provider,
+                        fit: BoxFit.cover,
+                        onError: (_, _) {},
+                      ),
+                      null => null,
+                    },
                   ),
                   child: planExercise.exercise.imageUrl == null
                       ? const Icon(

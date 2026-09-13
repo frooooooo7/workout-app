@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_status_indicator.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../widgets/training_header.dart';
 import '../widgets/training_plans_tab.dart';
@@ -15,8 +16,10 @@ class PlansScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) =>
-          TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+      create: (_) => TrainingPlansCubit(
+        ServiceLocator.trainingPlanRepository,
+        dataChanges: ServiceLocator.trainingPlanDataChanges,
+      ),
       child: const _PlansScreenContent(),
     );
   }
@@ -62,6 +65,8 @@ class _PlansScreenContent extends StatelessWidget {
                       );
                     },
                   ),
+                  const SizedBox(width: 10),
+                  const SyncStatusIndicator(),
                 ],
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/auth/domain/models/auth_models.dart';
+import '../images/offline_network_image.dart';
 import '../theme/app_colors.dart';
 
 enum UserAvatarSize { sm, md, lg }
@@ -66,8 +67,8 @@ class UserAvatar extends StatelessWidget {
     if (url != null && url.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(_radius),
-        child: Image.network(
-          url,
+        child: Image(
+          image: offlineNetworkImage(url),
           width: dimension,
           height: dimension,
           fit: BoxFit.cover,

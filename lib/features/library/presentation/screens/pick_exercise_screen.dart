@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../data/exercise_image_uri.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
@@ -31,7 +32,10 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) =>
-          LibraryCubit(ServiceLocator.exerciseRepository)..refresh(),
+          LibraryCubit(
+            ServiceLocator.exerciseRepository,
+            dataChanges: ServiceLocator.exerciseDataChanges,
+          )..refresh(),
       child: BlocBuilder<LibraryCubit, LibraryState>(
         builder: (context, state) {
           final cubit = context.read<LibraryCubit>();
@@ -126,12 +130,14 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
                                                   decoration: BoxDecoration(
                                                     color: AppColors.surfaceVariant,
                                                     borderRadius: BorderRadius.circular(12),
-                                                    image: exercise.imageUrl != null
-                                                        ? DecorationImage(
-                                                            image: NetworkImage(exercise.imageUrl!),
-                                                            fit: BoxFit.cover,
-                                                          )
-                                                        : null,
+                                                    image: switch (exerciseImageProvider(exercise.imageUrl)) {
+                                                      final provider? => DecorationImage(
+                                                        image: provider,
+                                                        fit: BoxFit.cover,
+                                                        onError: (_, _) {},
+                                                      ),
+                                                      null => null,
+                                                    },
                                                   ),
                                                   child: exercise.imageUrl == null
                                                       ? const Icon(Icons.fitness_center, color: AppColors.textMuted)

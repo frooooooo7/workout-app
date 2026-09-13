@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_status_indicator.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../domain/models/user_profile.dart';
 import 'profile_bio_section.dart';
@@ -41,18 +42,23 @@ class ProfileHeroHeader extends StatelessWidget {
           child: Column(
             children: [
               if (showSettings)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    onPressed: onSettingsTap,
-                    tooltip: 'Ustawienia profilu',
-                    icon: const Icon(Icons.settings_outlined),
-                    color: AppColors.textSecondary,
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(44, 44),
-                      backgroundColor: AppColors.surface.withValues(alpha: 0.5),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      onPressed: onSettingsTap,
+                      tooltip: 'Ustawienia profilu',
+                      icon: const Icon(Icons.settings_outlined),
+                      color: AppColors.textSecondary,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(44, 44),
+                        backgroundColor:
+                            AppColors.surface.withValues(alpha: 0.5),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    const SyncStatusIndicator(size: 44),
+                  ],
                 )
               else
                 const SizedBox(height: 44),

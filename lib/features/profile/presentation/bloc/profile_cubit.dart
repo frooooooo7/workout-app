@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/network/api_client.dart';
 import '../../domain/models/following_user.dart';
 import '../../domain/models/profile_activity.dart';
 import '../../domain/models/user_profile.dart';
@@ -15,6 +16,9 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> load() => _fetchProfile(isRefresh: false);
 
   Future<void> refresh() => _fetchProfile(isRefresh: true);
+
+  static bool _isOffline(Object error) =>
+      error is ApiException && error.statusCode == null;
 
   Future<void> _fetchProfile({required bool isRefresh}) async {
     if (isRefresh && state.refreshing) return;
@@ -37,6 +41,7 @@ class ProfileCubit extends Cubit<ProfileState> {
       final activities = results[1] as List<ProfileActivity>;
       final following = results[2] as List<FollowingUser>;
 
+      if (isClosed) return;
       emit(
         state.copyWith(
           profile: profile,
@@ -49,11 +54,16 @@ class ProfileCubit extends Cubit<ProfileState> {
         ),
       );
     } catch (e) {
+      if (isClosed) return;
       emit(
         state.copyWith(
           loading: false,
           refreshing: false,
-          error: e.toString(),
+          // Wcześniej trafiał tu surowy `ApiException(null): network_error`.
+          error: _isOffline(e)
+              ? 'Brak połączenia z internetem. Profil wczyta się, gdy wrócisz '
+                  'online — treningi możesz zapisywać bez przeszkód.'
+              : 'Nie udało się wczytać profilu. Spróbuj ponownie.',
         ),
       );
     }
@@ -65,9 +75,17 @@ class ProfileCubit extends Cubit<ProfileState> {
     _updatingBio = true;
     try {
       final updated = await _repository.updateBio(bio);
+      if (isClosed) return;
       emit(state.copyWith(profile: updated, clearError: true));
     } catch (e) {
-      emit(state.copyWith(error: e.toString()));
+      if (isClosed) return;
+      emit(
+        state.copyWith(
+          error: _isOffline(e)
+              ? 'Nie udało się zapisać opisu — brak połączenia z internetem.'
+              : 'Nie udało się zapisać opisu. Spróbuj ponownie.',
+        ),
+      );
     } finally {
       _updatingBio = false;
     }

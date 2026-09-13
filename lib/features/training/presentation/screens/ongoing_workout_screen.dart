@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../library/data/exercise_image_uri.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
@@ -876,12 +877,16 @@ class _SessionExerciseCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(10),
-                  image: exercise.exerciseImageUrl != null
-                      ? DecorationImage(
-                          image: NetworkImage(exercise.exerciseImageUrl!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
+                  image: switch (exerciseImageProvider(
+                    exercise.exerciseImageUrl,
+                  )) {
+                    final provider? => DecorationImage(
+                      image: provider,
+                      fit: BoxFit.cover,
+                      onError: (_, _) {},
+                    ),
+                    null => null,
+                  },
                 ),
                 child: exercise.exerciseImageUrl == null
                     ? const Icon(

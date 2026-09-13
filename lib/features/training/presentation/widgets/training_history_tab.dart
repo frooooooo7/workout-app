@@ -17,8 +17,10 @@ class TrainingHistoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) =>
-          TrainingHistoryCubit(ServiceLocator.trainingHistoryRepository),
+      create: (_) => TrainingHistoryCubit(
+        ServiceLocator.trainingHistoryRepository,
+        dataChanges: ServiceLocator.trainingSessionDataChanges,
+      ),
       child: const _TrainingHistoryView(),
     );
   }

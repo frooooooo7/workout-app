@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../library/data/exercise_image_uri.dart';
 import '../../domain/models/custom_training_plan.dart';
 import 'table_cell_input.dart';
 
@@ -67,12 +68,16 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
-                  image: planExercise.exercise.imageUrl != null
-                      ? DecorationImage(
-                          image: NetworkImage(planExercise.exercise.imageUrl!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
+                  image: switch (exerciseImageProvider(
+                    planExercise.exercise.imageUrl,
+                  )) {
+                    final provider? => DecorationImage(
+                      image: provider,
+                      fit: BoxFit.cover,
+                      onError: (_, _) {},
+                    ),
+                    null => null,
+                  },
                 ),
                 child: planExercise.exercise.imageUrl == null
                     ? const Icon(Icons.fitness_center, color: AppColors.textMuted, size: 24)

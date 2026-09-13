@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/models/custom_training_plan.dart';
@@ -24,16 +27,42 @@ class TrainingPlansState {
 }
 
 class TrainingPlansCubit extends Cubit<TrainingPlansState> {
-  TrainingPlansCubit(this._repository) : super(const TrainingPlansState()) {
+  /// [dataChanges] — sygnał synchronizacji; plany pobrane z serwera pojawiają
+  /// się bez ponownego wchodzenia na ekran.
+  TrainingPlansCubit(this._repository, {Listenable? dataChanges})
+    : _dataChanges = dataChanges,
+      super(const TrainingPlansState()) {
+    _dataChanges?.addListener(_onDataChanged);
     refresh();
   }
 
   final TrainingPlanRepository _repository;
+  final Listenable? _dataChanges;
 
-  Future<void> refresh() async {
-    emit(state.copyWith(isLoading: true));
-    final plans = await _repository.getAll();
-    emit(state.copyWith(isLoading: false, plans: plans));
+  @override
+  Future<void> close() {
+    _dataChanges?.removeListener(_onDataChanged);
+    return super.close();
+  }
+
+  void _onDataChanged() {
+    if (isClosed) return;
+    unawaited(refresh(silent: true));
+  }
+
+  Future<void> refresh({bool silent = false}) async {
+    if (isClosed) return;
+    if (!silent) emit(state.copyWith(isLoading: true));
+    try {
+      final plans = await _repository.getAll();
+      if (isClosed) return;
+      emit(state.copyWith(isLoading: false, plans: plans));
+    } catch (_) {
+      // Baza bywa chwilowo zamknięta (np. przy wylogowaniu) — nie zostawiaj
+      // wiecznego wskaźnika ładowania.
+      if (isClosed) return;
+      emit(state.copyWith(isLoading: false));
+    }
   }
 
   /// History items reference the server plan id, which never equals the local

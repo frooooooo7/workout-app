@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_status_indicator.dart';
 
 class LibraryHeader extends StatelessWidget {
   const LibraryHeader({
@@ -92,6 +93,8 @@ class LibraryHeader extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(width: 10),
+            const SyncStatusIndicator(),
           ],
         ),
         const SizedBox(height: 16),

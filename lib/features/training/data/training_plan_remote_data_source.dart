@@ -36,6 +36,7 @@ class TrainingPlanRemoteDataSource {
       note: json['note'] as String?,
       selectedDays: (json['selectedDays'] as List).cast<int>(),
       exercises: exercises,
+      clientId: json['clientId'] as String?,
     );
   }
 

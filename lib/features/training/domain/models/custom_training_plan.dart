@@ -73,6 +73,7 @@ class CustomTrainingPlan {
     this.note,
     this.exercises = const [],
     this.selectedDays = const [],
+    this.clientId,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -81,12 +82,18 @@ class CustomTrainingPlan {
   final List<PlanExercise> exercises;
   final List<int> selectedDays; // 1 = Poniedziałek, ..., 7 = Niedziela
 
+  /// Lokalny identyfikator, pod którym plan został utworzony offline. Serwer
+  /// odsyła go przy pobieraniu — dzięki temu synchronizacja paruje plan
+  /// z wierszem lokalnym nawet po zgubionej odpowiedzi na `POST`.
+  final String? clientId;
+
   CustomTrainingPlan copyWith({
     String? id,
     String? name,
     String? note,
     List<PlanExercise>? exercises,
     List<int>? selectedDays,
+    String? clientId,
     bool clearNote = false,
   }) {
     return CustomTrainingPlan(
@@ -95,6 +102,7 @@ class CustomTrainingPlan {
       note: clearNote ? null : (note ?? this.note),
       exercises: exercises ?? this.exercises,
       selectedDays: selectedDays ?? this.selectedDays,
+      clientId: clientId ?? this.clientId,
     );
   }
 }

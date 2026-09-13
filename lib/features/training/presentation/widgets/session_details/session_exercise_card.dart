@@ -201,8 +201,8 @@ class _ExerciseThumbnail extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: resolved == null
           ? _placeholder()
-          : Image.network(
-              resolved.toString(),
+          : Image(
+              image: exerciseImageProvider(exercise.imageUrl)!,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => _placeholder(),
               loadingBuilder: (context, child, progress) =>

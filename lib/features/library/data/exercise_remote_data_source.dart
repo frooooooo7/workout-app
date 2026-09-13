@@ -37,6 +37,7 @@ class ExerciseRemoteDataSource {
     isFavourite: (j['isFavourite'] as bool?) ?? false,
     isMine: (j['isMine'] as bool?) ?? true,
     isPendingSync: false,
+    clientId: j['clientId'] as String?,
   );
 
   /// Web clients often use filenames like `blob` without an extension — backend
@@ -93,21 +94,41 @@ class ExerciseRemoteDataSource {
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
+  /// Backend stronicuje `/exercises` (domyślnie 50, max 100 na stronę).
+  static const _pageSize = 100;
+
+  /// Bezpiecznik na wypadek serwera, który nigdy nie zwraca krótszej strony.
+  static const _maxPages = 50;
+
+  /// Zwraca **wszystkie** pasujące ćwiczenia. Synchronizacja traktuje brak
+  /// ćwiczenia na liście jako usunięcie po stronie serwera, więc pobranie
+  /// tylko pierwszej strony kasowało lokalnie ćwiczenia spoza niej.
   Future<List<Exercise>> getAll({
     MuscleGroup? muscleGroup,
     LibraryFilter? filter,
     String? query,
   }) async {
-    final path = _buildPath(
-      muscleGroup: muscleGroup,
-      filter: filter,
-      query: query,
+    final base = Uri.parse(
+      _buildPath(muscleGroup: muscleGroup, filter: filter, query: query),
     );
-    final data = await _api.get(path, auth: true);
-    return (data as List)
-        .cast<Map<String, dynamic>>()
-        .map(ExerciseRemoteDataSource.fromJson)
-        .toList();
+    final all = <Exercise>[];
+    for (var page = 0; page < _maxPages; page++) {
+      final path = base.replace(
+        queryParameters: {
+          ...base.queryParameters,
+          'limit': '$_pageSize',
+          'offset': '${page * _pageSize}',
+        },
+      ).toString();
+      final data = await _api.get(path, auth: true);
+      final items = (data as List)
+          .cast<Map<String, dynamic>>()
+          .map(ExerciseRemoteDataSource.fromJson)
+          .toList();
+      all.addAll(items);
+      if (items.length < _pageSize) break;
+    }
+    return all;
   }
 
   // ── Favourite toggle ──────────────────────────────────────────────────────

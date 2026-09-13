@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/models/training_history_models.dart';
@@ -86,11 +87,28 @@ class TrainingHistoryState {
 }
 
 class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
-  TrainingHistoryCubit(this._repository) : super(TrainingHistoryState()) {
+  /// [dataChanges] — sygnał synchronizacji sesji; trening wysłany na serwer
+  /// odświeża listę, znaczniki tygodnia i „ostatnią sesję”.
+  TrainingHistoryCubit(this._repository, {Listenable? dataChanges})
+    : _dataChanges = dataChanges,
+      super(TrainingHistoryState()) {
+    _dataChanges?.addListener(_onDataChanged);
     unawaited(refresh());
   }
 
   final TrainingHistoryRepository _repository;
+  final Listenable? _dataChanges;
+
+  @override
+  Future<void> close() {
+    _dataChanges?.removeListener(_onDataChanged);
+    return super.close();
+  }
+
+  void _onDataChanged() {
+    if (isClosed) return;
+    unawaited(refresh());
+  }
 
   Future<void> refresh() async {
     unawaited(_loadCurrentWeekCompletion());
@@ -283,4 +301,3 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
     }
   }
 }
-

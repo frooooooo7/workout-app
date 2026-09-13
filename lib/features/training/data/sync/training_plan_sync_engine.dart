@@ -4,6 +4,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/sync/sync_engine_base.dart';
+import '../../../../core/sync/sync_failure.dart';
 import '../../../library/data/exercise_database.dart';
 import '../../../library/data/exercise_dto.dart';
 import '../../../library/domain/models/exercise.dart';
@@ -11,24 +13,18 @@ import '../../domain/models/custom_training_plan.dart';
 import '../training_plan_local_mapper.dart';
 import '../training_plan_remote_data_source.dart';
 
-class TrainingPlanSyncEngine {
+class TrainingPlanSyncEngine extends SyncEngineBase {
   TrainingPlanSyncEngine({
     required TrainingPlanRemoteDataSource remote,
     required ExerciseDatabase localDb,
-  })  : _remote = remote,
-        _localDb = localDb;
+    super.onDataChanged,
+  }) : _remote = remote,
+       _localDb = localDb;
 
   final TrainingPlanRemoteDataSource _remote;
   final ExerciseDatabase _localDb;
 
   static const _uuid = Uuid();
-
-  bool _stopped = false;
-  Future<void> _queue = Future<void>.value();
-
-  bool get isStopped => _stopped;
-
-  void stop() => _stopped = true;
 
   void scheduleBootstrap() {
     unawaited(
@@ -47,49 +43,37 @@ class TrainingPlanSyncEngine {
     }
   }
 
-  Future<void> _runExclusive(Future<void> Function() body) {
-    final done = Completer<void>();
-    _queue = _queue.then((_) async {
-      try {
-        await body();
-        if (!done.isCompleted) done.complete();
-      } catch (e, st) {
-        if (!done.isCompleted) done.completeError(e, st);
-      }
+  Future<void> flush() => runCoalesced('flush', _flushImpl);
+
+  Future<void> pull() => runCoalesced('pull', _pullImpl);
+
+  /// Pobiera plany z serwera, gdy ostatnia próba była dawniej niż [maxAge].
+  Future<void> pullIfDue({
+    Duration maxAge = SyncEngineBase.defaultPullMaxAge,
+  }) {
+    return runCoalesced('pull-if-due', () async {
+      if (isPullDue(maxAge)) await _pullImpl();
     });
-    return done.future;
   }
 
-  Future<void> flush() => _runExclusive(_flushImpl);
-
-  Future<void> pull() => _runExclusive(_pullImpl);
-
-  Future<void> _logFailure(String localId, String op, ApiException e) async {
-    await _localDb.run((db) async {
-      final rows = await db.rawQuery(
-        '''
-        SELECT COALESCE(MAX(attempts), 0) AS m
-        FROM ${ExerciseDatabase.tableOutboxLog}
-        WHERE local_id = ? AND op = ?
-        ''',
-        [localId, op],
+  Future<void> _handleFailure(
+    String localId,
+    String op,
+    ApiException error,
+  ) async {
+    await _localDb.recordSyncAttemptFailure(
+      localId: localId,
+      op: op,
+      message: error.message,
+    );
+    if (registerFailure(error) == SyncFailureKind.permanent) {
+      await _localDb.markSyncRejected(
+        table: ExerciseDatabase.tableTrainingPlans,
+        localId: localId,
+        reason: error.message,
       );
-      final next = ((rows.first['m'] as int?) ?? 0) + 1;
-      await db.insert(ExerciseDatabase.tableOutboxLog, {
-        'local_id': localId,
-        'op': op,
-        'attempts': next,
-        'last_error': e.message,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      });
-    });
+    }
   }
-
-  Future<LocalTrainingPlanRecord?> _recordForRow(
-    Database db,
-    Map<String, dynamic> row,
-  ) =>
-      TrainingPlanLocalMapper.fromDb(db, row);
 
   Future<Map<String, String>?> _serverExerciseMap(
     Database db,
@@ -105,83 +89,140 @@ class TrainingPlanSyncEngine {
     return maybe.map((key, value) => MapEntry(key, value!));
   }
 
-  Future<void> _flushImpl() async {
-    if (_stopped) return;
+  // ── Flush ─────────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>?> _pendingRows() async {
     try {
-      final rows = await _localDb.run((db) {
-        return db.query(
+      return await _localDb.run(
+        (db) => db.query(
           ExerciseDatabase.tableTrainingPlans,
-          where: 'pending_op IS NOT NULL',
+          columns: ['local_id', 'server_id', 'pending_op'],
+          where: 'pending_op IS NOT NULL AND sync_error IS NULL',
           orderBy:
               "CASE pending_op WHEN 'create' THEN 0 WHEN 'update' THEN 1 ELSE 2 END",
-        );
-      });
-      for (final row in rows) {
-        if (_stopped) return;
-        final op = row['pending_op'] as String?;
-        if (op == 'delete') {
-          await _flushDelete(row);
-        } else if (op == 'create' || op == 'update') {
-          await _flushUpsert(row, op!);
+        ),
+      );
+    } on StateError {
+      return null; /* DB closing */
+    }
+  }
+
+  Future<void> _flushImpl() async {
+    if (isStopped) return;
+    final rows = await _pendingRows();
+    if (rows == null || rows.isEmpty) return;
+
+    var changed = false;
+    for (final row in rows) {
+      if (isStopped) return;
+      final localId = row['local_id'] as String;
+      try {
+        final synced = row['pending_op'] == 'delete'
+            ? await _flushDelete(localId, row['server_id'] as String?)
+            : await _flushUpsert(localId);
+        if (synced) changed = true;
+      } catch (error, stackTrace) {
+        if (isStopped) return;
+        // Jeden uszkodzony wiersz nie może zablokować wysyłki pozostałych.
+        logUnexpected('Training plan $localId sync failed', error, stackTrace);
+      }
+    }
+    if (changed) notifyDataChanged();
+  }
+
+  Future<bool> _flushDelete(String localId, String? serverId) async {
+    if (serverId != null) {
+      try {
+        await _remote.delete(serverId);
+      } on ApiException catch (e) {
+        // 404 — planu już nie ma na serwerze, cel usunięcia osiągnięty.
+        if (e.statusCode != 404) {
+          await _handleFailure(localId, 'delete_plan', e);
+          return false;
         }
       }
-    } on StateError {
-      /* DB closing */
     }
+    await _localDb.run(
+      (db) => db.delete(
+        ExerciseDatabase.tableTrainingPlans,
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      ),
+    );
+    await _localDb.clearSyncAttempts(localId);
+    return true;
   }
 
-  Future<void> _flushDelete(Map<String, dynamic> row) async {
-    final localId = row['local_id'] as String;
-    final serverId = row['server_id'] as String?;
-    if (serverId == null) return;
+  Future<bool> _flushUpsert(String localId) async {
+    // Świeży odczyt — wiersz mógł się zmienić od zapytania o kolejkę.
+    final payload = await _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableTrainingPlans,
+        where: 'local_id = ?',
+        whereArgs: [localId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final row = rows.first;
+      final op = row['pending_op'] as String?;
+      if (op != 'create' && op != 'update') return null;
+      final record = await TrainingPlanLocalMapper.fromDb(db, row);
+      if (record == null) return null;
+      // Ćwiczenie dodane offline nie ma jeszcze server_id — plan poczeka.
+      final exerciseMap = await _serverExerciseMap(db, record.plan);
+      if (exerciseMap == null) return null;
+      return _PlanPayload(
+        op: op!,
+        serverId: row['server_id'] as String?,
+        updatedAt: row['updated_at'] as int?,
+        plan: record.plan,
+        exerciseServerIds: exerciseMap,
+      );
+    });
+    if (payload == null) return false;
+
+    final saved = await _send(localId, payload);
+    if (saved == null) return false;
+
+    await _storePulledPlan(
+      saved,
+      localIdOverride: localId,
+      expectedUpdatedAt: payload.updatedAt,
+      sentOp: payload.op,
+    );
+    await _localDb.clearSyncAttempts(localId);
+    return true;
+  }
+
+  Future<CustomTrainingPlan?> _send(String localId, _PlanPayload payload) async {
+    final serverId = payload.serverId;
     try {
-      await _remote.delete(serverId);
-      await _localDb.run((db) async {
-        await db.delete(
-          ExerciseDatabase.tableTrainingPlans,
-          where: 'local_id = ?',
-          whereArgs: [localId],
+      // server_id == local_id to ślad starego błędu — create po clientId go naprawia.
+      if (payload.op == 'create' || serverId == null || serverId == localId) {
+        return await _remote.create(
+          payload.plan,
+          exerciseServerIdsByLocalId: payload.exerciseServerIds,
         );
-      });
+      }
+      return await _remote.update(
+        serverId,
+        payload.plan,
+        exerciseServerIdsByLocalId: payload.exerciseServerIds,
+      );
     } on ApiException catch (e) {
-      await _logFailure(localId, 'delete_plan', e);
+      await _handleFailure(localId, '${payload.op}_plan', e);
+      return null;
     }
   }
 
-  Future<void> _flushUpsert(Map<String, dynamic> row, String op) async {
-    final localId = row['local_id'] as String;
-    try {
-      final payload = await _localDb.run((db) async {
-        final record = await _recordForRow(db, row);
-        if (record == null) return null;
-        final exerciseMap = await _serverExerciseMap(db, record.plan);
-        if (exerciseMap == null) return null;
-        return (record, exerciseMap);
-      });
-      if (payload == null) return;
-      final (record, exerciseMap) = payload;
-      final serverId = row['server_id'] as String?;
-      final saved = op == 'create' || serverId == null || serverId == localId
-          ? await _remote.create(
-              record.plan,
-              exerciseServerIdsByLocalId: exerciseMap,
-            )
-          : await _remote.update(
-              serverId,
-              record.plan,
-              exerciseServerIdsByLocalId: exerciseMap,
-            );
-      await _storePulledPlan(saved, localIdOverride: localId);
-    } on ApiException catch (e) {
-      await _logFailure(localId, '${op}_plan', e);
-    }
-  }
+  // ── Pull ──────────────────────────────────────────────────────────────────
 
   Future<void> _pullImpl() async {
-    if (_stopped) return;
+    if (isStopped) return;
+    markPullAttempt();
     try {
       final serverPlans = await _remote.getAll();
-      if (_stopped) return;
+      if (isStopped) return;
       for (final plan in serverPlans) {
         await _storePulledPlan(plan);
       }
@@ -203,19 +244,30 @@ class TrainingPlanSyncEngine {
           }
         }
       });
-    } on ApiException {
-      /* offline */
+      notifyDataChanged();
+    } on ApiException catch (e) {
+      registerFailure(e);
     } on StateError {
       /* DB closing */
     }
   }
 
   Future<String> _ensureExerciseLocalRow(Database db, Exercise exercise) async {
-    final existing = await db.query(
+    var existing = await db.query(
       ExerciseDatabase.tableExercises,
       where: 'server_id = ? OR local_id = ?',
       whereArgs: [exercise.id, exercise.id],
+      limit: 1,
     );
+    final clientId = exercise.clientId;
+    if (existing.isEmpty && clientId != null) {
+      existing = await db.query(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [clientId],
+        limit: 1,
+      );
+    }
     if (existing.isNotEmpty) return existing.first['local_id'] as String;
     final localId = _uuid.v4();
     await db.insert(
@@ -226,19 +278,150 @@ class TrainingPlanSyncEngine {
     return localId;
   }
 
-  Future<void> _storePulledPlan(
+  Future<Map<String, dynamic>?> _findLocalRow(
+    Database db,
     CustomTrainingPlan plan, {
     String? localIdOverride,
   }) async {
-    await _localDb.run((db) async {
+    if (localIdOverride != null) {
       final rows = await db.query(
         ExerciseDatabase.tableTrainingPlans,
-        where: localIdOverride != null ? 'local_id = ?' : 'server_id = ?',
-        whereArgs: [localIdOverride ?? plan.id],
+        where: 'local_id = ?',
+        whereArgs: [localIdOverride],
+        limit: 1,
       );
-      final localId =
-          localIdOverride ?? (rows.isEmpty ? _uuid.v4() : rows.first['local_id'] as String);
+      return rows.isEmpty ? null : rows.first;
+    }
+    var rows = await db.query(
+      ExerciseDatabase.tableTrainingPlans,
+      where: 'server_id = ?',
+      whereArgs: [plan.id],
+      limit: 1,
+    );
+    final clientId = plan.clientId;
+    if (rows.isEmpty && clientId != null) {
+      // Plan utworzony offline na tym urządzeniu, którego odpowiedź na POST
+      // mogła się zgubić — bez tego pull wstawiłby jego duplikat.
+      rows = await db.query(
+        ExerciseDatabase.tableTrainingPlans,
+        where: 'local_id = ?',
+        whereArgs: [clientId],
+        limit: 1,
+      );
+    }
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Usuwa inne wiersze wskazujące ten sam plan na serwerze (duplikaty ze
+  /// starszych wersji synchronizacji) i przepina na [keepLocalId] sesje.
+  Future<void> _removeDuplicateServerRows(
+    Database db, {
+    required String serverId,
+    required String keepLocalId,
+  }) async {
+    final duplicates = await db.query(
+      ExerciseDatabase.tableTrainingPlans,
+      columns: ['local_id'],
+      where: 'server_id = ? AND local_id <> ?',
+      whereArgs: [serverId, keepLocalId],
+    );
+    for (final duplicate in duplicates) {
+      await db.update(
+        ExerciseDatabase.tableTrainingSessions,
+        {'plan_local_id': keepLocalId},
+        where: 'plan_local_id = ?',
+        whereArgs: [duplicate['local_id']],
+      );
+      await db.delete(
+        ExerciseDatabase.tableTrainingPlans,
+        where: 'local_id = ?',
+        whereArgs: [duplicate['local_id']],
+      );
+    }
+  }
+
+  /// Zapisuje plan z serwera lokalnie.
+  ///
+  /// * Z [localIdOverride] — odpowiedź na wysyłkę tego wiersza. Jeśli wiersz
+  ///   zmienił się w trakcie żądania ([expectedUpdatedAt]), zapamiętujemy
+  ///   tylko `server_id`, a nowsza wersja pójdzie w kolejnym cyklu.
+  /// * Bez niego — pobranie listy. Wiersz z niewysłanymi zmianami zostaje
+  ///   nietknięty; wcześniej pull nadpisywał edycje zrobione offline.
+  Future<void> _storePulledPlan(
+    CustomTrainingPlan plan, {
+    String? localIdOverride,
+    int? expectedUpdatedAt,
+    String? sentOp,
+  }) async {
+    await _localDb.run((db) async {
+      final existing = await _findLocalRow(
+        db,
+        plan,
+        localIdOverride: localIdOverride,
+      );
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+
+      if (localIdOverride != null && existing == null) {
+        // Usunięty lokalnie, zanim serwer odpowiedział — nagrobek usunie plan
+        // także z serwera przy następnej wysyłce.
+        await _removeDuplicateServerRows(
+          db,
+          serverId: plan.id,
+          keepLocalId: localIdOverride,
+        );
+        await db.insert(ExerciseDatabase.tableTrainingPlans, {
+          'local_id': localIdOverride,
+          'server_id': plan.id,
+          'name': plan.name,
+          'note': plan.note,
+          'selected_days': TrainingPlanLocalMapper.encodeDays(
+            plan.selectedDays,
+          ),
+          'created_at': now,
+          'updated_at': now,
+          'pending_op': 'delete',
+          'is_deleted': 1,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        return;
+      }
+
+      if (existing != null) {
+        final pending = existing['pending_op'] as String?;
+        final editedLocally = localIdOverride == null
+            ? pending != null
+            : expectedUpdatedAt != null &&
+                  existing['updated_at'] != expectedUpdatedAt;
+        if (editedLocally) {
+          final localId = existing['local_id'] as String;
+          await _removeDuplicateServerRows(
+            db,
+            serverId: plan.id,
+            keepLocalId: localId,
+          );
+          await db.update(
+            ExerciseDatabase.tableTrainingPlans,
+            {
+              'server_id': plan.id,
+              // Wysłana wersja jest już na serwerze; nowsza pójdzie jako update.
+              if (sentOp == 'create' && pending == 'create')
+                'pending_op': 'update',
+            },
+            where: 'local_id = ?',
+            whereArgs: [localId],
+          );
+          return;
+        }
+      }
+
+      final localId =
+          localIdOverride ??
+          (existing?['local_id'] as String?) ??
+          _uuid.v4();
+      await _removeDuplicateServerRows(
+        db,
+        serverId: plan.id,
+        keepLocalId: localId,
+      );
       await db.insert(
         ExerciseDatabase.tableTrainingPlans,
         {
@@ -246,11 +429,14 @@ class TrainingPlanSyncEngine {
           'server_id': plan.id,
           'name': plan.name,
           'note': plan.note,
-          'selected_days': TrainingPlanLocalMapper.encodeDays(plan.selectedDays),
-          'created_at': rows.isEmpty ? now : rows.first['created_at'],
+          'selected_days': TrainingPlanLocalMapper.encodeDays(
+            plan.selectedDays,
+          ),
+          'created_at': existing?['created_at'] ?? now,
           'updated_at': now,
           'pending_op': null,
           'is_deleted': 0,
+          'sync_error': null,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -261,16 +447,18 @@ class TrainingPlanSyncEngine {
         final localExerciseId = await _ensureExerciseLocalRow(db, pe.exercise);
         exerciseServerIds[localExerciseId] = pe.exercise.id;
         localPlanExercises.add(
-          pe.copyWith(exercise: Exercise(
-            id: localExerciseId,
-            name: pe.exercise.name,
-            muscles: pe.exercise.muscles,
-            category: pe.exercise.category,
-            description: pe.exercise.description,
-            imageUrl: pe.exercise.imageUrl,
-            isMine: pe.exercise.isMine,
-            createdAt: pe.exercise.createdAt,
-          )),
+          pe.copyWith(
+            exercise: Exercise(
+              id: localExerciseId,
+              name: pe.exercise.name,
+              muscles: pe.exercise.muscles,
+              category: pe.exercise.category,
+              description: pe.exercise.description,
+              imageUrl: pe.exercise.imageUrl,
+              isMine: pe.exercise.isMine,
+              createdAt: pe.exercise.createdAt,
+            ),
+          ),
         );
       }
 
@@ -287,4 +475,20 @@ class TrainingPlanSyncEngine {
       );
     });
   }
+}
+
+class _PlanPayload {
+  const _PlanPayload({
+    required this.op,
+    required this.serverId,
+    required this.updatedAt,
+    required this.plan,
+    required this.exerciseServerIds,
+  });
+
+  final String op;
+  final String? serverId;
+  final int? updatedAt;
+  final CustomTrainingPlan plan;
+  final Map<String, String> exerciseServerIds;
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_status_indicator.dart';
 import '../bloc/training_history_cubit.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
@@ -19,12 +20,16 @@ class TrainingScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (_) =>
-              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+          create: (_) => TrainingPlansCubit(
+            ServiceLocator.trainingPlanRepository,
+            dataChanges: ServiceLocator.trainingPlanDataChanges,
+          ),
         ),
         BlocProvider(
-          create: (_) =>
-              TrainingHistoryCubit(ServiceLocator.trainingHistoryRepository),
+          create: (_) => TrainingHistoryCubit(
+            ServiceLocator.trainingHistoryRepository,
+            dataChanges: ServiceLocator.trainingSessionDataChanges,
+          ),
         ),
       ],
       child: const _TrainingShellContent(),
@@ -79,41 +84,50 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
-                builder: (context, sessionState) {
-                  final active = sessionState.activeSession;
-                  return TrainingHeader(
-                    activePlanName: active?.planName,
-                    onActiveTap: active == null
-                        ? null
-                        : () {
-                            final cubit =
-                                context.read<TrainingSessionCubit>();
-                            context
-                                .push(
-                                  '/app/training/ongoing-workout',
-                                  extra: OngoingWorkoutArgs(
-                                    initialSession: active,
-                                    sessionCubit: cubit,
-                                  ),
-                                )
-                                .then((_) {
-                                  if (context.mounted) {
-                                    cubit.refresh();
-                                    context
-                                        .read<TrainingHistoryCubit>()
-                                        .refresh();
-                                  }
-                                });
+              child: Row(
+                children: [
+                  Expanded(
+                    child:
+                        BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+                          builder: (context, sessionState) {
+                            final active = sessionState.activeSession;
+                            return TrainingHeader(
+                              activePlanName: active?.planName,
+                              onActiveTap: active == null
+                                  ? null
+                                  : () {
+                                      final cubit = context
+                                          .read<TrainingSessionCubit>();
+                                      context
+                                          .push(
+                                            '/app/training/ongoing-workout',
+                                            extra: OngoingWorkoutArgs(
+                                              initialSession: active,
+                                              sessionCubit: cubit,
+                                            ),
+                                          )
+                                          .then((_) {
+                                            if (context.mounted) {
+                                              cubit.refresh();
+                                              context
+                                                  .read<TrainingHistoryCubit>()
+                                                  .refresh();
+                                            }
+                                          });
+                                    },
+                              onLibraryTap: () {
+                                context.push('/app/training/library');
+                              },
+                              onAddTap: () {
+                                context.push('/app/training/pick-activity-type');
+                              },
+                            );
                           },
-                    onLibraryTap: () {
-                      context.push('/app/training/library');
-                    },
-                    onAddTap: () {
-                      context.push('/app/training/pick-activity-type');
-                    },
-                  );
-                },
+                        ),
+                  ),
+                  const SizedBox(width: 10),
+                  const SyncStatusIndicator(),
+                ],
               ),
             ),
             const SizedBox(height: 20),

@@ -17,8 +17,10 @@ class PickTrainingPlanScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (_) =>
-              TrainingPlansCubit(ServiceLocator.trainingPlanRepository),
+          create: (_) => TrainingPlansCubit(
+            ServiceLocator.trainingPlanRepository,
+            dataChanges: ServiceLocator.trainingPlanDataChanges,
+          ),
         ),
         BlocProvider(
           create: (_) =>

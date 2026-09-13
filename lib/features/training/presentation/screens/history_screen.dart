@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_status_indicator.dart';
 import '../bloc/workout_history_cubit.dart';
 import '../widgets/training_header.dart';
 import '../widgets/workout_history/month_selector_bar.dart';
@@ -17,7 +18,10 @@ class HistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => WorkoutHistoryCubit(ServiceLocator.trainingHistoryRepository),
+      create: (_) => WorkoutHistoryCubit(
+        ServiceLocator.trainingHistoryRepository,
+        dataChanges: ServiceLocator.trainingSessionDataChanges,
+      ),
       child: const _WorkoutHistoryView(),
     );
   }
@@ -120,6 +124,8 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                         icon: Icons.calendar_today_rounded,
                         onTap: () => cubit.openMonthPicker(context),
                       ),
+                      const SizedBox(width: 10),
+                      const SyncStatusIndicator(),
                     ],
                   ),
                 ),

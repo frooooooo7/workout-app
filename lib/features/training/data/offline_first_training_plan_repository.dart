@@ -21,10 +21,17 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
 
   static const _uuid = Uuid();
 
+  /// Wysyła lokalne zmiany od razu, a plany z serwera pobiera najwyżej raz na
+  /// [SyncEngineBase.defaultPullMaxAge]. Pull nie nadpisuje niewysłanych edycji.
   void _scheduleSync() {
     if (_sync.isStopped) return;
     unawaited(
-      _sync.flush().then((_) => _sync.pull()).catchError((_) {
+      _sync.flush().catchError((_) {
+        /* background sync must never break the UI event loop */
+      }),
+    );
+    unawaited(
+      _sync.pullIfDue().catchError((_) {
         /* background sync must never break the UI event loop */
       }),
     );
@@ -135,6 +142,8 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
           'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
           'pending_op': nextPending,
           'is_deleted': 0,
+          // Nowa wersja od użytkownika — daj serwerowi kolejną szansę.
+          'sync_error': null,
         },
         where: 'local_id = ?',
         whereArgs: [localId],
@@ -186,7 +195,7 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
           'attempts': 0,
           'last_error': null,
           'created_at': DateTime.now().millisecondsSinceEpoch,
-        });
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
         return;
       }
       await db.update(
@@ -195,6 +204,7 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
           'pending_op': 'delete',
           'is_deleted': 1,
           'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'sync_error': null,
         },
         where: 'local_id = ?',
         whereArgs: [localId],

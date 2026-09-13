@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/polish_plural.dart';
 import '../../../auth/domain/models/auth_models.dart';
 
 class ProfileSettingsScreen extends StatelessWidget {
@@ -11,9 +12,62 @@ class ProfileSettingsScreen extends StatelessWidget {
   final AuthUser user;
 
   Future<void> _handleLogout(BuildContext context) async {
+    final unsynced = await ServiceLocator.countUnsyncedChanges();
+    if (!context.mounted) return;
+    if (unsynced > 0) {
+      final confirmed = await _confirmLogoutWithUnsyncedChanges(
+        context,
+        unsynced,
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+
     await ServiceLocator.tokenStorage.clear();
     if (!context.mounted) return;
     context.go('/login');
+    // Zamyka bazę i zatrzymuje synchronizację tego konta. Bez tego ochrona
+    // tras /app/* nadal przepuszczała, a dane poprzedniego konta były
+    // dostępne np. przyciskiem „wstecz” w przeglądarce.
+    ServiceLocator.currentUser.value = null;
+  }
+
+  Future<bool?> _confirmLogoutWithUnsyncedChanges(
+    BuildContext context,
+    int unsynced,
+  ) {
+    final noun = polishPlural(unsynced, 'zmianę', 'zmiany', 'zmian');
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Niewysłane zmiany',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Masz $unsynced $noun, których nie ma jeszcze na serwerze. '
+          'Zostaną na tym telefonie i wyślemy je, gdy znów zalogujesz się '
+          'na to konto.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Wyloguj',
+              style: TextStyle(color: AppColors.strengthWeak),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

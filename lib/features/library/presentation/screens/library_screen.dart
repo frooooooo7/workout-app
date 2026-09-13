@@ -38,7 +38,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) =>
-          LibraryCubit(ServiceLocator.exerciseRepository)..refresh(),
+          LibraryCubit(
+            ServiceLocator.exerciseRepository,
+            dataChanges: ServiceLocator.exerciseDataChanges,
+          )..refresh(),
       child: BlocBuilder<LibraryCubit, LibraryState>(
         builder: (context, state) {
           final cubit = context.read<LibraryCubit>();

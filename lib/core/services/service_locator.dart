@@ -1,10 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
 import '../network/api_client.dart';
 import '../storage/token_storage.dart';
+import '../sync/network_availability.dart';
+import '../sync/sync_coordinator.dart';
+import '../sync/sync_status.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/library/data/exercise_database.dart';
@@ -21,6 +22,7 @@ import '../../features/training/data/sync/training_session_sync_engine.dart';
 import '../../features/training/data/training_history_local_cache.dart';
 import '../../features/training/data/training_history_remote_data_source.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
+import '../../features/training/data/training_session_local_history.dart';
 import '../../features/training/data/training_session_remote_data_source.dart';
 import '../../features/training/domain/repositories/training_history_repository.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
@@ -52,11 +54,33 @@ class ServiceLocator {
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
   static TrainingSessionRepository? _trainingSessionRepository;
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
+  static SyncCoordinator? _syncCoordinator;
   static late final ProfileRepository profileRepository;
   static final profileRefreshTick = ValueNotifier(0);
 
   /// Serialized dispose/setup so DB close never races a new user open.
   static Future<void>? _exerciseScopeFuture;
+
+  /// Konto, dla którego istnieje (albo właśnie powstaje) scope bazy.
+  static String? _scopeUserId;
+
+  static final _syncStatus = ValueNotifier<SyncStatus>(const SyncStatus());
+  static final _exerciseDataChanges = ValueNotifier<int>(0);
+  static final _trainingPlanDataChanges = ValueNotifier<int>(0);
+  static final _trainingSessionDataChanges = ValueNotifier<int>(0);
+
+  /// Stan synchronizacji dla wskaźnika w nagłówkach. Przeżywa zmianę konta.
+  static ValueListenable<SyncStatus> get syncStatus => _syncStatus;
+
+  /// Sygnały „synchronizacja zmieniła dane lokalne” — ekrany odświeżają się
+  /// z bazy, zamiast czekać na ponowne wejście.
+  static Listenable get exerciseDataChanges => _exerciseDataChanges;
+  static Listenable get trainingPlanDataChanges => _trainingPlanDataChanges;
+
+  /// Tylko zakończone lub anulowane sesje — zapis w trakcie treningu nie
+  /// odświeża historii co serię.
+  static Listenable get trainingSessionDataChanges =>
+      _trainingSessionDataChanges;
 
   static ExerciseRepository get exerciseRepository {
     assert(
@@ -131,18 +155,29 @@ class ServiceLocator {
   }
 
   static void _onUserChanged() {
+    final requestedUserId = currentUser.value?.id;
+    // Odświeżone dane tego samego konta (np. `/auth/me` w tle zwraca nową
+    // instancję AuthUser) nie mogą zamykać bazy: ekrany trzymają już
+    // repozytoria z bieżącego scope'u, a ich synchronizacja by stanęła.
+    if (requestedUserId == _scopeUserId) return;
+    _scopeUserId = requestedUserId;
+
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((
       _,
     ) async {
+      // W międzyczasie konto zmieniło się jeszcze raz — obsłuży to nowsze
+      // wywołanie.
+      if (requestedUserId != _scopeUserId) return;
       await _disposeExerciseScoped();
-      final still = currentUser.value;
-      if (still != null) {
-        _setupExerciseScoped(still.id);
+      if (requestedUserId != null) {
+        _setupExerciseScoped(requestedUserId);
       }
     });
   }
 
   static Future<void> _disposeExerciseScoped() async {
+    _syncCoordinator?.stop();
+    _syncCoordinator = null;
     _exerciseSyncEngine?.stop();
     _trainingPlanSyncEngine?.stop();
     _trainingSessionSyncEngine?.stop();
@@ -155,46 +190,82 @@ class ServiceLocator {
     _exerciseRepository = null;
     await _exerciseDatabase?.close();
     _exerciseDatabase = null;
+    _syncStatus.value = const SyncStatus();
   }
 
   static void _setupExerciseScoped(String userId) {
-    _exerciseDatabase = ExerciseDatabase('gym_library_$userId.db');
-    _exerciseSyncEngine = ExerciseSyncEngine(
+    final database = ExerciseDatabase('gym_library_$userId.db');
+    _exerciseDatabase = database;
+
+    final exerciseSync = ExerciseSyncEngine(
       remote: _remoteDataSource,
-      localDb: _exerciseDatabase!,
+      localDb: database,
+      onDataChanged: () => _exerciseDataChanges.value++,
     );
-    _exerciseRepository = OfflineFirstExerciseRepository(
-      localDb: _exerciseDatabase!,
-      syncEngine: _exerciseSyncEngine!,
-    );
-    _trainingPlanSyncEngine = TrainingPlanSyncEngine(
+    final planSync = TrainingPlanSyncEngine(
       remote: _trainingPlanRemoteDataSource,
-      localDb: _exerciseDatabase!,
+      localDb: database,
+      onDataChanged: () => _trainingPlanDataChanges.value++,
+    );
+    final sessionSync = TrainingSessionSyncEngine(
+      remote: _trainingSessionRemoteDataSource,
+      localDb: database,
+      onDataChanged: () => _trainingSessionDataChanges.value++,
+    );
+    _exerciseSyncEngine = exerciseSync;
+    _trainingPlanSyncEngine = planSync;
+    _trainingSessionSyncEngine = sessionSync;
+
+    _exerciseRepository = OfflineFirstExerciseRepository(
+      localDb: database,
+      syncEngine: exerciseSync,
     );
     _trainingPlanRepository = OfflineFirstTrainingPlanRepository(
-      localDb: _exerciseDatabase!,
-      syncEngine: _trainingPlanSyncEngine!,
+      localDb: database,
+      syncEngine: planSync,
     );
     _trainingHistoryRepository = OfflineFirstTrainingHistoryRepository(
       remote: _trainingHistoryRemoteDataSource,
-      localCache: TrainingHistoryLocalCache(_exerciseDatabase!),
-    );
-    _trainingSessionSyncEngine = TrainingSessionSyncEngine(
-      remote: _trainingSessionRemoteDataSource,
-      localDb: _exerciseDatabase!,
+      localCache: TrainingHistoryLocalCache(database),
+      localSessions: TrainingSessionLocalHistory(database),
     );
     _trainingSessionRepository = OfflineFirstTrainingSessionRepository(
-      localDb: _exerciseDatabase!,
-      syncEngine: _trainingSessionSyncEngine!,
+      localDb: database,
+      syncEngine: sessionSync,
       remote: _trainingSessionRemoteDataSource,
     );
-    _exerciseSyncEngine!.scheduleBootstrap();
-    _trainingPlanSyncEngine!.scheduleBootstrap();
-    _trainingSessionSyncEngine!.scheduleBootstrap();
+
+    // Zastępuje osobne „bootstrapy” silników: pełny cykl w kolejności
+    // ćwiczenia → plany → sesje, sync po powrocie sieci i aplikacji,
+    // a ponawianie jako zabezpieczenie.
+    _syncCoordinator = SyncCoordinator(
+      localDb: database,
+      exercises: exerciseSync,
+      plans: planSync,
+      sessions: sessionSync,
+      status: _syncStatus,
+      networkAvailability: networkAvailabilityChanges(),
+    )..start();
   }
 
   static void requestProfileRefresh() {
     profileRefreshTick.value++;
+  }
+
+  /// Pełna synchronizacja od razu (np. „Synchronizuj teraz” we wskaźniku).
+  /// [retryRejected] ponawia także zmiany wcześniej odrzucone przez serwer.
+  static Future<void> requestSync({bool retryRejected = false}) async {
+    await _syncCoordinator?.syncNow(
+      retryRejected: retryRejected,
+      resetBackoff: true,
+    );
+  }
+
+  /// Niewysłane i odrzucone zmiany bieżącego konta.
+  static Future<int> countUnsyncedChanges() async {
+    final coordinator = _syncCoordinator;
+    if (coordinator == null) return 0;
+    return coordinator.countUnsyncedChanges();
   }
 
   static Future<void> flushTrainingSessionSync() async {

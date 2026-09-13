@@ -117,10 +117,10 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak 
 |-------|-----------|
 | Health | `GET /health`, `GET /ready` (publiczne) |
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Exercises | `GET/POST /exercises`, `PUT/DELETE /exercises/:id`, `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
+| Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
 | Pliki statyczne | `GET /uploads/exercise-images/*` |
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
-| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history` |
+| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history`. Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
 | Training history (odczyt) | `GET /api/v1/training-history`, `GET /api/v1/training-history/:sessionId` + aliasy `/api/v1/training-sessions[/:sessionId]`; paginacja kursorem, filtry, **ETag / If-None-Match → 304** |
 | Profile / social | `GET/PATCH /profile/me` (tylko `bio`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile`, `GET /users/:userId/activities` |
 
@@ -170,7 +170,7 @@ Brak CI (`.github/workflows` nie istnieje). Brak websocketów, maili, płatnośc
 | Token JWT | `flutter_secure_storage` |
 | Offline DB | **sqflite** (+ `sqflite_common_ffi_web` na weba, `sqflite_common_ffi` w testach) |
 | DI | własny statyczny `ServiceLocator` (nie get_it) |
-| Inne | image_picker, flutter_svg, uuid, shared_preferences, flutter_local_notifications + timezone (timer odpoczynku) |
+| Inne | image_picker, flutter_svg, uuid, shared_preferences, flutter_local_notifications + timezone (timer odpoczynku), connectivity_plus (sync po powrocie sieci) |
 | Lint | flutter_lints ^6 |
 
 Stack docelowy w `PROJECT.md` (push, Sentry) może się rozszerzać — **bez** map, GPS i aktywności cardio.
@@ -187,12 +187,15 @@ lib/
 │   ├── navigation/
 │   │   ├── app_router.dart         <- go_router + redirect auth
 │   │   └── app_shell.dart          <- bottom nav: Główna/Trening/Aktywność/Biblioteka/Profil
+│   ├── images/offline_network_image.dart <- obrazki z cache na dysku (offline)
 │   ├── network/api_client.dart     <- HTTP wrapper + Bearer token (timeout 15s/60s multipart)
-│   ├── services/service_locator.dart <- DI + repozytoria offline per-user
+│   ├── services/service_locator.dart <- DI + repozytoria offline per-user + syncStatus / *DataChanges
 │   ├── session/app_user_bootstrap.dart <- odtworzenie sesji (offline-first)
 │   ├── storage/token_storage.dart  <- secure storage: auth_token, auth_user
+│   ├── sync/                       <- SyncEngineBase, SyncCoordinator, SyncStatus, klasyfikacja błędów
 │   ├── theme/                      <- dark-only, fiolet #6C47FF na #0B0B14
-│   └── widgets/user_avatar.dart
+│   ├── utils/polish_plural.dart
+│   └── widgets/                    <- user_avatar, app_header, sync_status_indicator (ikonka synchronizacji)
 └── features/
     ├── auth/       <- login/register (data + domain models + presentation)
     ├── home/       <- dashboard (GŁÓWNIE MOCKI)
@@ -223,7 +226,14 @@ Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkown
 
 - **Base URL** (`core/constants/api_constants.dart`): web `http://localhost:3000`, mobilnie domyślnie `http://10.0.2.2:3000` (emulator Androida); nadpisywalne przez `--dart-define=API_BASE_URL=...`.
 - **Auth flow:** login/register → JWT do secure storage → `AppUserBootstrap` przy starcie: cached user od razu + weryfikacja `GET /auth/me` w tle; 401 czyści storage.
-- **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema v7) i startują silniki sync: `ExerciseSyncEngine`, `TrainingPlanSyncEngine`, `TrainingSessionSyncEngine`. Repozytoria `OfflineFirst*Repository` najpierw zapisują lokalnie, potem synchronizują (upsert po `clientId`).
+- **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v9**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
+  - Repozytoria `OfflineFirst*Repository` zapisują lokalnie i od razu wołają `flush`; odczyty wołają `pullIfDue` (najwyżej raz na 30 s).
+  - Silniki (`ExerciseSyncEngine`, `TrainingPlanSyncEngine`, `TrainingSessionSyncEngine`) dziedziczą po `core/sync/SyncEngineBase` (kolejka, zlewanie zdublowanych żądań, licznik aktywności). Pull **nie nadpisuje** wierszy z `pending_op`; rekordy utworzone offline są parowane po `clientId`; edycja w trakcie żądania zostaje jako `update`.
+  - Błędy 4xx (poza 401/408/409/425/429) oznaczają wiersz `sync_error` i nie są ponawiane w pętli; jeden zepsuty wiersz nie blokuje kolejki. Sesja czeka, aż ćwiczenie utworzone offline dostanie `server_id`.
+  - `core/sync/SyncCoordinator`: pełny cykl ćwiczenia → plany → sesje, sync ~2 s po powrocie sieci (`connectivity_plus` → `core/sync/network_availability.dart`), sync po `AppLifecycleState.resumed`, a jako zabezpieczenie (sieć jest, internet jeszcze nie) ponawianie z backoffem 15 s → 2 min, dopóki są zaległości. Stan (`SyncStatus`) → `ServiceLocator.syncStatus` → `SyncStatusIndicator` w prawym górnym rogu ekranów (Trening, Plany, Historia, Aktywność, Profil, Biblioteka); tap = szczegóły + „Synchronizuj teraz”.
+  - Po zmianach z synchronizacji cubity odświeżają się same (`ServiceLocator.*DataChanges`).
+  - Historia: serwer + cache, ale gdy serwer nie odpowie w 2,5 s, zwracany jest cache; treningi zakończone offline (niewysłane) są dokładane z lokalnej bazy (`TrainingSessionLocalHistory`), a bez sieci i cache pokazywane są same lokalne.
+  - Obrazki ćwiczeń i awatary: `core/images/offline_network_image.dart` (pliki na dysku, web → `NetworkImage`).
 - **Serializacja:** ręczne `fromJson` / mappery — **bez** json_serializable/freezed.
 
 ### 4.5 Modele domenowe (najważniejsze)
@@ -244,7 +254,7 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Platformy: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
-- Testy: 16 plików w `test/` (routing, cubity, sync offline, widgety). Brak `integration_test/`, brak CI.
+- Testy: 37 plików w `test/` (routing, cubity, sync offline, widgety). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
 - UI hardcoded po polsku; brak l10n (skill przygotowany, nieużyty).
 
 ---

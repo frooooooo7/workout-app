@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/network/api_client.dart';
 import '../../domain/models/monthly_training_history.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/repositories/training_history_repository.dart';
@@ -94,17 +95,35 @@ class _MonthSessions {
 }
 
 class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
-  WorkoutHistoryCubit(this._repository) : super(WorkoutHistoryState()) {
+  /// [dataChanges] — sygnał synchronizacji sesji; wysłany trening odświeża
+  /// widok miesiąca.
+  WorkoutHistoryCubit(this._repository, {Listenable? dataChanges})
+    : _dataChanges = dataChanges,
+      super(WorkoutHistoryState()) {
+    _dataChanges?.addListener(_onDataChanged);
     unawaited(loadMonthData(state.focusedMonth));
   }
 
   final TrainingHistoryRepository _repository;
+  final Listenable? _dataChanges;
 
   /// Ile stron maksymalnie ciągniemy na jeden miesiąc — zabezpieczenie przed
   /// pętlą, gdyby backend zwracał kursor w nieskończoność.
   static const int _maxPagesPerMonth = 6;
 
+  @override
+  Future<void> close() {
+    _dataChanges?.removeListener(_onDataChanged);
+    return super.close();
+  }
+
+  void _onDataChanged() {
+    if (isClosed) return;
+    unawaited(refresh());
+  }
+
   Future<void> loadMonthData(DateTime month, {bool showFullLoading = false}) async {
+    if (isClosed) return;
     final normalizedMonth = DateTime(month.year, month.month, 1);
     final from = normalizedMonth;
     final to = DateTime(month.year, month.month + 1, 0, 23, 59, 59, 999);
@@ -132,6 +151,12 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
         error: error,
         stackTrace: stackTrace,
       );
+      // Bez sieci druga próba (bez filtra dat) też nie przejdzie — nie każ
+      // użytkownikowi czekać drugi raz na ten sam timeout.
+      if (error is ApiException && error.statusCode == null) {
+        _emitLoadError();
+        return;
+      }
       try {
         // Fallback: fetch general sessions list and filter locally for target month
         final result = await _fetchAllPages();
@@ -142,23 +167,13 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
         }).toList();
         isFromCache = result.isFromCache;
       } on Object catch (error, stackTrace) {
-        // Both attempts failed — pokaż ekran błędu z „Spróbuj ponownie”
-        // zamiast pustego miesiąca udającego dane z cache'u.
         developer.log(
           'Training history load failed',
           name: 'WorkoutHistoryCubit',
           error: error,
           stackTrace: stackTrace,
         );
-        if (isClosed) return;
-        emit(state.copyWith(
-          isLoading: false,
-          isMonthChanging: false,
-          clearMonthlyHistory: true,
-          fromCache: false,
-          error: 'Nie udało się pobrać historii treningów. '
-              'Sprawdź połączenie i spróbuj ponownie.',
-        ));
+        _emitLoadError();
         return;
       }
     }
@@ -186,6 +201,20 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
       monthlyHistory: monthlyHistory,
       fromCache: isFromCache,
       clearError: true,
+    ));
+  }
+
+  /// Obie próby zawiodły — pokaż ekran błędu z „Spróbuj ponownie” zamiast
+  /// pustego miesiąca udającego dane z cache'u.
+  void _emitLoadError() {
+    if (isClosed) return;
+    emit(state.copyWith(
+      isLoading: false,
+      isMonthChanging: false,
+      clearMonthlyHistory: true,
+      fromCache: false,
+      error: 'Nie udało się pobrać historii treningów. '
+          'Sprawdź połączenie i spróbuj ponownie.',
     ));
   }
 
