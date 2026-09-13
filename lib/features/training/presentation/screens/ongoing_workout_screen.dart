@@ -122,6 +122,19 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     return '$minutes:$seconds';
   }
 
+  Widget _buildSessionFooter(BuildContext context) {
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) {
+      return const SizedBox.shrink();
+    }
+
+    return OngoingWorkoutFooter(
+      restLabel: 'Odpoczynek',
+      restActive: _restActive,
+      onRestTap: () => unawaited(_toggleRestTimer(context)),
+      onAddExerciseTap: () => _addExerciseToSession(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final args = widget.args;
@@ -203,12 +216,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                         remaining: _restTimeLabel,
                         onStop: _stopRestTimer,
                       ),
-                    OngoingWorkoutFooter(
-                      restLabel: 'Odpoczynek',
-                      restActive: _restActive,
-                      onRestTap: () => unawaited(_toggleRestTimer(context)),
-                      onAddExerciseTap: () => _addExerciseToSession(context),
-                    ),
+                    _buildSessionFooter(context),
                   ],
                 ),
               ),
@@ -318,12 +326,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                       remaining: _restTimeLabel,
                       onStop: _stopRestTimer,
                     ),
-                  OngoingWorkoutFooter(
-                    restLabel: 'Odpoczynek',
-                    restActive: _restActive,
-                    onRestTap: () => unawaited(_toggleRestTimer(context)),
-                    onAddExerciseTap: () => _addExerciseToSession(context),
-                  ),
+                  _buildSessionFooter(context),
                 ],
               ),
             ),

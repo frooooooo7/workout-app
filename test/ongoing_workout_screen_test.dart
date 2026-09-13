@@ -432,6 +432,55 @@ void main() {
     },
   );
 
+  testWidgets(
+    'hides rest and add-exercise buttons while the keyboard is open',
+    (tester) async {
+      final session = _session();
+      final cubit = TrainingSessionCubit(
+        _FakeTrainingSessionRepository(session),
+        autoRefresh: false,
+      );
+
+      Widget buildApp({required double keyboardBottom}) {
+        return MaterialApp(
+          builder: (context, child) {
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                viewInsets: EdgeInsets.only(bottom: keyboardBottom),
+              ),
+              child: child!,
+            );
+          },
+          home: OngoingWorkoutScreen(
+            args: OngoingWorkoutArgs(
+              initialSession: session,
+              sessionCubit: cubit,
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(buildApp(keyboardBottom: 0));
+
+      expect(find.text('Dodaj ćwiczenie'), findsOneWidget);
+      expect(find.text('Odpoczynek'), findsOneWidget);
+
+      await tester.pumpWidget(buildApp(keyboardBottom: 320));
+      await tester.pump();
+
+      expect(find.text('Dodaj ćwiczenie'), findsNothing);
+      expect(find.text('Odpoczynek'), findsNothing);
+
+      await tester.pumpWidget(buildApp(keyboardBottom: 0));
+      await tester.pump();
+
+      expect(find.text('Dodaj ćwiczenie'), findsOneWidget);
+      expect(find.text('Odpoczynek'), findsOneWidget);
+
+      await cubit.close();
+    },
+  );
+
   testWidgets('finish asks for confirmation before completing session', (
     tester,
   ) async {
