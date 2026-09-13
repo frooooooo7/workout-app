@@ -26,20 +26,30 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
 
   static const _uuid = Uuid();
 
+  /// Kolumny listy — bez BLOB-ów zdjęć, których lista i tak nie pokazuje.
+  static const _listColumns = [
+    'local_id',
+    'server_id',
+    'name',
+    'muscles',
+    'category',
+    'description',
+    'image_url',
+    'is_favourite',
+    'is_mine',
+    'created_at',
+    'pending_op',
+    'is_favourite_dirty',
+  ];
+
   Future<Map<String, dynamic>?> _findRow(Database db, String id) async {
-    final byLocal = await db.query(
-      ExerciseDatabase.tableExercises,
-      where: 'local_id = ?',
-      whereArgs: [id],
+    final rows = await db.rawQuery(
+      'SELECT * FROM ${ExerciseDatabase.tableExercises} '
+      'WHERE local_id = ? OR server_id = ? '
+      'ORDER BY CASE WHEN local_id = ? THEN 0 ELSE 1 END LIMIT 1',
+      [id, id, id],
     );
-    if (byLocal.isNotEmpty) return byLocal.first;
-    final byServer = await db.query(
-      ExerciseDatabase.tableExercises,
-      where: 'server_id = ?',
-      whereArgs: [id],
-    );
-    if (byServer.isNotEmpty) return byServer.first;
-    return null;
+    return rows.isEmpty ? null : rows.first;
   }
 
   Future<List<Exercise>> _localGetAll({
@@ -48,17 +58,33 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     String? query,
   }) async {
     return _localDb.run((db) async {
+      final where = <String>['(pending_op IS NULL OR pending_op <> ?)'];
+      final args = <Object?>['delete'];
+
+      if (filter == LibraryFilter.mine) {
+        where.add('is_mine = 1');
+      } else if (filter == LibraryFilter.favourite) {
+        where.add('is_favourite = 1');
+      } else if (filter == LibraryFilter.recent) {
+        final cutoff = DateTime.now()
+            .subtract(const Duration(days: ExerciseFilterUtils.recentDays));
+        where.add('created_at > ?');
+        args.add(cutoff.millisecondsSinceEpoch);
+      }
+
       final maps = await db.query(
         ExerciseDatabase.tableExercises,
-        where: '(pending_op IS NULL OR pending_op <> ?)',
-        whereArgs: ['delete'],
+        columns: _listColumns,
+        where: where.join(' AND '),
+        whereArgs: args,
       );
       final all = maps.map((m) => ExerciseDto.fromMap(m).toDomain()).toList();
+      // Partie mięśni są w JSON, a LOWER()/LIKE w SQLite zna tylko ASCII
+      // („Łydki” nie pasuje do „łyd”) — oba filtry zostają w Dart.
       return ExerciseFilterUtils.apply(
         all,
         muscleGroup: muscleGroup,
-        filter: filter,
-        query: query,
+        query: query?.trim(),
       );
     });
   }

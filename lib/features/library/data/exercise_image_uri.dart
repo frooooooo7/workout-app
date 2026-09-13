@@ -1,4 +1,4 @@
-import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/images/offline_network_image.dart';
@@ -17,7 +17,24 @@ Uri? exerciseImageResolvedUri(String? imageUrl) {
 /// Obrazek ćwiczenia zapisywany na dysku (widoczny także offline) albo
 /// `null`, gdy ćwiczenie nie ma zdjęcia. Rozwija ścieżki względne z API —
 /// surowy `NetworkImage('/uploads/…')` nigdy się nie wczytywał.
-ImageProvider? exerciseImageProvider(String? imageUrl) {
+///
+/// [cacheWidth] dekoduje miniaturę w docelowej szerokości pikseli, zamiast
+/// trzymać pełną rozdzielczość w [ImageCache].
+ImageProvider? exerciseImageProvider(String? imageUrl, {int? cacheWidth}) {
   final uri = exerciseImageResolvedUri(imageUrl);
-  return uri == null ? null : offlineNetworkImage(uri.toString());
+  if (uri == null) return null;
+  final base = offlineNetworkImage(uri.toString());
+  if (cacheWidth == null) return base;
+  return ResizeImage.resizeIfNeeded(cacheWidth, null, base);
+}
+
+/// Miniatura w logicznym rozmiarze widgetu — mnoży przez DPR i przycina
+/// do rozsądnego zakresu, żeby siatka ćwiczeń nie dekodowała pełnych zdjęć.
+ImageProvider? exerciseThumbProvider(
+  BuildContext context,
+  String? imageUrl, {
+  required double logicalSize,
+}) {
+  final px = (logicalSize * MediaQuery.devicePixelRatioOf(context)).round();
+  return exerciseImageProvider(imageUrl, cacheWidth: px.clamp(32, 512));
 }

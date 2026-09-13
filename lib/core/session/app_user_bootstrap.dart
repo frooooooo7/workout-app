@@ -11,10 +11,14 @@ class AppUserBootstrap {
   /// 1. Odczyt tokenu i cache użytkownika → natychmiastowe `currentUser`.
   /// 2. `GET /auth/me` w tle (gdy cache jest) albo na wejściu (bez cache).
   Future<AuthUser?> resolveInitialUser() async {
-    final token = await ServiceLocator.tokenStorage.readToken();
+    final results = await Future.wait([
+      ServiceLocator.tokenStorage.readToken(),
+      ServiceLocator.tokenStorage.readUser(),
+    ]);
+    final token = results[0] as String?;
     if (token == null || token.isEmpty) return null;
 
-    final cached = await ServiceLocator.tokenStorage.readUser();
+    final cached = results[1] as AuthUser?;
     if (cached != null) {
       ServiceLocator.currentUser.value = cached;
       _verifyInBackground();

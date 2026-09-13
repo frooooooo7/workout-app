@@ -98,7 +98,11 @@ class ExerciseCardIllustration extends StatelessWidget {
           children: [
             if (resolved != null)
               Image(
-                image: exerciseImageProvider(exercise.imageUrl)!,
+                image: exerciseThumbProvider(
+                  context,
+                  exercise.imageUrl,
+                  logicalSize: 400,
+                )!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,

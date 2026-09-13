@@ -20,29 +20,51 @@ class TrainingPlansTab extends StatelessWidget {
           );
         }
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _PlansDashboardHeader(plans: state.plans),
-                  const SizedBox(height: 18),
-                  if (state.plans.isEmpty)
-                    const _EmptyState()
-                  else
-                    ...state.plans.map(
-                      (plan) => Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: _TrainingPlanTile(plan: plan),
-                      ),
-                    ),
-                ],
+        return CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: _PlansDashboardHeader(plans: state.plans),
+                  ),
+                ),
               ),
             ),
-          ),
+            const SliverToBoxAdapter(child: SizedBox(height: 18)),
+            if (state.plans.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
+                sliver: SliverToBoxAdapter(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 620),
+                      child: const _EmptyState(),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
+                sliver: SliverList.builder(
+                  itemCount: state.plans.length,
+                  itemBuilder: (context, index) {
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 620),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: _TrainingPlanTile(plan: state.plans[index]),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         );
       },
     );

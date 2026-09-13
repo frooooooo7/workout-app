@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../body_highlighter/adapters/muscle_group_adapter.dart';
 import '../../../../body_highlighter/models/body_highlighter_style.dart';
 import '../../../../body_highlighter/models/body_view.dart' as bh_view;
+import '../../../../body_highlighter/models/muscle_highlight.dart';
 import '../../../../body_highlighter/widgets/muscle_body_highlighter.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
@@ -30,12 +31,13 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late List<MuscleLoad> _loads;
+  late Set<MuscleHighlight> _highlights;
   MuscleGroup? _selected;
 
   @override
   void initState() {
     super.initState();
-    _loads = computeMuscleLoads(widget.detail);
+    _recomputeLoads();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 620),
@@ -46,10 +48,17 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
   void didUpdateWidget(SessionMuscleMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.detail != widget.detail) {
-      _loads = computeMuscleLoads(widget.detail);
+      _recomputeLoads();
       _selected = null;
       _controller.forward(from: 0);
     }
+  }
+
+  void _recomputeLoads() {
+    _loads = computeMuscleLoads(widget.detail);
+    _highlights = toMuscleHighlights({
+      for (final load in _loads) load.muscle: load.intensity,
+    });
   }
 
   @override
@@ -57,10 +66,6 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
     _controller.dispose();
     super.dispose();
   }
-
-  Map<MuscleGroup, double> get _intensityByMuscle => {
-    for (final load in _loads) load.muscle: load.intensity,
-  };
 
   void _toggleSelection(MuscleGroup? muscle) {
     setState(() => _selected = _selected == muscle ? null : muscle);
@@ -135,7 +140,6 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
   Widget build(BuildContext context) {
     if (_loads.isEmpty) return const _MuscleMapEmpty();
 
-    final intensities = _intensityByMuscle;
     final selectedLoad = _selected == null
         ? null
         : _loads.firstWhere(
@@ -152,17 +156,15 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final figures = AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) => Row(
+              final figures = FadeTransition(
+                opacity: _controller,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final view in BodyView.values) ...[
                       _BodyFigure(
                         view: view,
-                        intensities: intensities,
-                        selected: _selected,
-                        progress: _controller.value,
+                        highlights: _highlights,
                         onMuscleTap: _toggleSelection,
                       ),
                       if (view != BodyView.values.last)
@@ -272,21 +274,16 @@ class _MethodologyPoint extends StatelessWidget {
 class _BodyFigure extends StatelessWidget {
   const _BodyFigure({
     required this.view,
-    required this.intensities,
-    required this.selected,
-    required this.progress,
+    required this.highlights,
     required this.onMuscleTap,
   });
 
   final BodyView view;
-  final Map<MuscleGroup, double> intensities;
-  final MuscleGroup? selected;
-  final double progress;
+  final Set<MuscleHighlight> highlights;
   final ValueChanged<MuscleGroup?> onMuscleTap;
 
   @override
   Widget build(BuildContext context) {
-    final highlights = toMuscleHighlights(intensities);
     final bhView =
         view == BodyView.front ? bh_view.BodyView.front : bh_view.BodyView.back;
 

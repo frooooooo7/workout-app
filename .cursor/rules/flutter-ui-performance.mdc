@@ -1,0 +1,35 @@
+---
+description: Wydajność warstwy UI Flutter (rebuildy, listy, animacje, obrazki) — reguły utrzymania płynności 60 fps
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Wydajność UI (Flutter)
+
+## Zakres rebuildów
+- `setState` **nigdy** na poziomie całego ekranu dla zmian cyklicznych (timer, tick animacji, klawiatura) ani dla pojedynczego pola tekstowego. Licznik czasu = własny mały `StatefulWidget` z własnym `Timer`em albo `ValueNotifier<Duration>` + `ValueListenableBuilder` wokół samego `Text`.
+- Edycja serii/komórek tabeli: stan draftu trzymaj w `ValueNotifier`/`ChangeNotifier` i przebudowuj tylko dotkniętą kartę; do rodzica wypychaj zmiany przez istniejący debounce (900 ms), nie per klawisz.
+- `MediaQuery.viewInsetsOf`/`MediaQuery.of` czytaj w najmniejszym widgetcie, który tego potrzebuje (np. w stopce), nie w `build` ekranu.
+- Każda klasa stanu Cubita **musi** mieć `==`/`hashCode` (ręcznie z `listEquals`/`setEquals` albo Equatable). `BlocBuilder` dostaje `buildWhen` albo używaj `BlocSelector`, gdy widget potrzebuje jednego pola (np. `activeSession != null` w dolnym pasku).
+- Nie emituj „pustych” stanów tylko po to, by coś wyzerować (`copyWith(clearError: true)` przed właściwym emitem) — jeden emit na jedną zmianę danych.
+- W `setQuery` emituj `query` dopiero po debounce, albo daj `buildWhen`, które ignoruje zmianę samego `query`.
+- `setState(() => _errorText = null)` w `onChanged` tylko gdy `_errorText != null`.
+
+## Listy
+- Ponad ~10 elementów lub nieznana liczba → `ListView.builder`/`SliverList.builder`/`GridView.builder`. `SingleChildScrollView` + `Column`/`.map()` tylko dla krótkich, stałych sekcji.
+- Zakaz `shrinkWrap: true` + `NeverScrollableScrollPhysics` w `Column` — użyj zwykłej `Column` z pętlą `for`, albo `CustomScrollView` ze sliverami.
+- Elementy list z animacją dotyku: jeden `AppPressable` na kartę jest OK; nie twórz `AnimationController` per komórka siatki 30+ elementów (heatmapa/kalendarz) — wspólny stan „wciśnięty indeks”.
+- Pracę O(n×m) (grupowanie sesji po dniu, `toLocal()`, `DateTime.now()`) rób raz przed pętlą po komórkach, nie w każdej komórce.
+
+## Animacje i malowanie
+- `AnimatedBuilder`/`AnimationController` tylko gdy coś faktycznie zależy od `controller.value`; przekazuj `child`, żeby poddrzewo nie było przebudowywane co klatkę.
+- Zamiast `Opacity(opacity: anim.value)` → `FadeTransition`; zamiast `Transform.scale` w builderze → `ScaleTransition`.
+- W `didUpdateWidget` porównuj kolekcje przez `setEquals`/`listEquals`, nie `!=` (identity) — inaczej każdy rebuild rodzica restartuje animację.
+- Widget, który animuje się w pętli (`repeat()`, spinner, rotacja) lub ciężki `CustomPaint` (mapa mięśni, heatmapa) → owinięty w `RepaintBoundary`.
+- Unikaj `ShaderMask`, `BackdropFilter`, `saveLayer` na przewijanej zawartości; efekt „zanikania krawędzi” = `Stack` + `DecoratedBox` z gradientem.
+- `CustomPainter` zawsze z sensownym `shouldRepaint`; `Path`y parsuj raz (cache), nie w `paint`.
+- Nie rób `Theme.of(context).copyWith(...)` w `build` — hoistuj do `static final` lub użyj parametrów widgetu (`ExpansionTile.shape`, `TextField.decoration`).
+
+## Obrazki
+- Każdy obrazek z sieci/dysku wyświetlany jako miniatura → dekoduj w rozmiarze docelowym: `ResizeImage.resizeIfNeeded(cacheWidth, null, provider)` z `logicalPx * devicePixelRatio`, a `Image.memory` z `cacheWidth`. Nigdy nie dekoduj 2048 px do 44 px kafelka.
+- `ImageProvider` twórz raz (pole/`late final`), nie w każdym `build`.

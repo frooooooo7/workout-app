@@ -22,6 +22,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   GoRouter? _router;
+  String? _lastPath;
 
   @override
   void initState() {
@@ -38,13 +39,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!identical(_router, router)) {
       _router?.routerDelegate.removeListener(_onRouteStackChanged);
       _router = router;
+      _lastPath = router.state.uri.path;
       _router!.routerDelegate.addListener(_onRouteStackChanged);
     }
   }
 
   void _onRouteStackChanged() {
     if (!mounted) return;
-    if (_router?.state.uri.path == '/app/profile') {
+    final path = _router?.state.uri.path;
+    if (path == null) return;
+    final previous = _lastPath;
+    _lastPath = path;
+    if (previous != '/app/profile' && path == '/app/profile') {
       _refreshIfLoaded();
     }
   }

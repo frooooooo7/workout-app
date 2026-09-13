@@ -1,7 +1,7 @@
 # GYM — kontekst projektu
 
 > Dokument orientacyjny dla agentów AI i developerów: co jest gdzie, z czego się składa, jakie technologie i jak to wszystko się łączy.
-> Data ostatniej aktualizacji: 2026-07-28 (zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
+> Data ostatniej aktualizacji: 2026-09-14 (zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
 >
 > **Utrzymanie:** ten plik musi być aktualizowany na bieżąco przy istotnych zmianach architektury, API, struktury katalogów, stacku lub infrastruktury — zgodnie z regułą `.cursor/rules/project-context.mdc`.
 
@@ -50,7 +50,7 @@ Każde z repo (`gym-backend`, `gym-flutter`) jest osobnym repozytorium git z wł
 | Baza | PostgreSQL 16 (obraz Docker PostGIS — rozszerzenie **nieużywane**, poza zakresem produktu) |
 | Dostęp do bazy | surowy `pg` (pool) — **bez ORM-a** |
 | Walidacja | Zod 4 |
-| Auth | JWT (`jsonwebtoken`) + bcryptjs (12 rund) |
+| Auth | JWT (`jsonwebtoken`) + bcryptjs (12 rund, hash/compare w `worker_threads`) |
 | Uploady | multer (dysk, `uploads/exercise-images/`, max 5 MB, jpg/png/webp) |
 | Bezpieczeństwo | helmet, cors, compression, express-rate-limit |
 | Testy | Vitest + supertest (testy obok modułów, `*.test.ts`) |
@@ -107,6 +107,7 @@ Start (`npm run dev` = `tsx watch src/index.ts`):
 | `POSTGRES_PASSWORD` | hasło (compose + .env) |
 | `JWT_SECRET` | klucz JWT — **wymagany w produkcji**, min. 32 znaki |
 | `CORS_ORIGIN` | whitelist originów po przecinku (wymagana w produkcji) |
+| `PG_POOL_MAX` | max połączeń puli `pg` (domyślnie 10) |
 | `POSTGRES_PORT` / `API_PORT` | porty hosta dla compose |
 
 ### 3.4 API — przegląd endpointów
@@ -118,9 +119,9 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak 
 | Health | `GET /health`, `GET /ready` (publiczne) |
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
 | Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
-| Pliki statyczne | `GET /uploads/exercise-images/*` |
+| Pliki statyczne | `GET /uploads/exercise-images/*` (`Cache-Control: 365d, immutable`) |
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
-| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history`. Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
+| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore }`). Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
 | Training history (odczyt) | `GET /api/v1/training-history`, `GET /api/v1/training-history/:sessionId` + aliasy `/api/v1/training-sessions[/:sessionId]`; paginacja kursorem, filtry, **ETag / If-None-Match → 304** |
 | Profile / social | `GET/PATCH /profile/me` (tylko `bio`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile`, `GET /users/:userId/activities` |
 
@@ -142,6 +143,7 @@ users ─┬─< exercises (created_by, SET NULL)
 - **Offline-first:** unikalne indeksy `(user_id, client_id)` na exercises/plans/sessions → klient robi upsert po `clientId`.
 - Seed: migracja `003` wstawia ~14 systemowych ćwiczeń (polskie nazwy, stałe UUID).
 - Handle użytkowników: generowany przy rejestracji (`profile.handle.ts`), migracja `009` backfilluje.
+- Migracja `011`: indeksy pod historię (`user_id, started_at DESC, id DESC`), FK (`plan_id`, `exercise_id`) oraz `pg_trgm` na `users.handle` / imię+nazwisko / `exercises.name`.
 
 ### 3.6 Skrypty npm
 
@@ -232,8 +234,9 @@ Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkown
   - Błędy 4xx (poza 401/408/409/425/429) oznaczają wiersz `sync_error` i nie są ponawiane w pętli; jeden zepsuty wiersz nie blokuje kolejki. Sesja czeka, aż ćwiczenie utworzone offline dostanie `server_id`.
   - `core/sync/SyncCoordinator`: pełny cykl ćwiczenia → plany → sesje, sync ~2 s po powrocie sieci (`connectivity_plus` → `core/sync/network_availability.dart`), sync po `AppLifecycleState.resumed`, a jako zabezpieczenie (sieć jest, internet jeszcze nie) ponawianie z backoffem 15 s → 2 min, dopóki są zaległości. Stan (`SyncStatus`) → `ServiceLocator.syncStatus` → `SyncStatusIndicator` w prawym górnym rogu ekranów (Trening, Plany, Historia, Aktywność, Profil, Biblioteka); tap = szczegóły + „Synchronizuj teraz”.
   - Po zmianach z synchronizacji cubity odświeżają się same (`ServiceLocator.*DataChanges`).
-  - Historia: serwer + cache, ale gdy serwer nie odpowie w 2,5 s, zwracany jest cache; treningi zakończone offline (niewysłane) są dokładane z lokalnej bazy (`TrainingSessionLocalHistory`), a bez sieci i cache pokazywane są same lokalne.
-  - Obrazki ćwiczeń i awatary: `core/images/offline_network_image.dart` (pliki na dysku, web → `NetworkImage`).
+  - Historia: serwer + cache (stale-while-revalidate: cache od razu, sieć w tle); treningi zakończone offline (niewysłane) są dokładane z lokalnej bazy (`TrainingSessionLocalHistory`), a bez sieci i cache pokazywane są same lokalne. Identyczne `getSessions` w locie są zlewane do jednego Future.
+  - Lokalna baza (sqflite, wersja 10): indeksy na dzieciach planów/sesji (`plan_local_id`, `session_local_id`, …), `pending_op` oraz `(status, started_at)`. Odczyt dzieci: `IN` + grupowanie, nie N+1. Zapis sesji/planu w jednej transakcji + Batch.
+  - Obrazki ćwiczeń i awatary: `core/images/offline_network_image.dart` (pliki na dysku, web → `NetworkImage`); miniatury dekodowane przez `ResizeImage` / `exerciseThumbProvider`.
 - **Serializacja:** ręczne `fromJson` / mappery — **bez** json_serializable/freezed.
 
 ### 4.5 Modele domenowe (najważniejsze)

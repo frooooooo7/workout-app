@@ -1,4 +1,6 @@
 import 'dart:math';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../data/body_highlighter_asset_loader.dart';
@@ -73,7 +75,7 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
 
     if (oldWidget.view != widget.view || oldWidget.gender != widget.gender) {
       _loadData();
-    } else if (oldWidget.highlights != widget.highlights ||
+    } else if (!setEquals(oldWidget.highlights, widget.highlights) ||
         oldWidget.style != widget.style) {
       _updateColorsWithAnimation();
     }
@@ -206,16 +208,18 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapUp: widget.onMuscleTap != null ? _handleTap : null,
-        child: CustomPaint(
-          size: Size(
-            widget.width ?? _modelData!.viewBox.width,
-            widget.height ?? _modelData!.viewBox.height,
-          ),
-          painter: BodyHighlighterPainter(
-            data: _modelData!,
-            animatedMuscleColors: _currentColors,
-            highlights: widget.highlights,
-            style: widget.style,
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: Size(
+              widget.width ?? _modelData!.viewBox.width,
+              widget.height ?? _modelData!.viewBox.height,
+            ),
+            painter: BodyHighlighterPainter(
+              data: _modelData!,
+              animatedMuscleColors: _currentColors,
+              highlights: widget.highlights,
+              style: widget.style,
+            ),
           ),
         ),
       ),

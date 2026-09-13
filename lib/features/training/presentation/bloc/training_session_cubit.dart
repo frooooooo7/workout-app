@@ -33,6 +33,18 @@ class TrainingSessionState {
           : (activeConflict ?? this.activeConflict),
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TrainingSessionState &&
+        other.activeSession == activeSession &&
+        other.isLoading == isLoading &&
+        other.activeConflict == activeConflict;
+  }
+
+  @override
+  int get hashCode => Object.hash(activeSession, isLoading, activeConflict);
 }
 
 class TrainingSessionCubit extends Cubit<TrainingSessionState> {

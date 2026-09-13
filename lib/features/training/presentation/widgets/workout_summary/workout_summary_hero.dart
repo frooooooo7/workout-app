@@ -91,67 +91,63 @@ class _SuccessBadgeState extends State<_SuccessBadge>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return SizedBox(
-          width: 132,
-          height: 132,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Opacity(
-                opacity: (1 - _halo.value) * 0.55,
-                child: Transform.scale(
-                  scale: 0.7 + _halo.value * 0.6,
-                  child: Container(
-                    width: 132,
-                    height: 132,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.success.withValues(alpha: 0.45),
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Transform.scale(
-                scale: _scale.value,
-                child: Container(
-                  width: 88,
-                  height: 88,
+    return RepaintBoundary(
+      child: SizedBox(
+        width: 132,
+        height: 132,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            FadeTransition(
+              opacity: Tween<double>(begin: 0.55, end: 0).animate(_halo),
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.7, end: 1.3).animate(_halo),
+                child: DecoratedBox(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.success,
-                        AppColors.success.withValues(alpha: 0.75),
-                      ],
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.45),
+                      width: 1.5,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.success.withValues(alpha: 0.35),
-                        blurRadius: 32,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 46,
-                  ),
+                  child: const SizedBox(width: 132, height: 132),
                 ),
               ),
-            ],
-          ),
-        );
-      },
+            ),
+            ScaleTransition(
+              scale: _scale,
+              child: Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.success,
+                      AppColors.success.withValues(alpha: 0.75),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.success.withValues(alpha: 0.35),
+                      blurRadius: 32,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 46,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

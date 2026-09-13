@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 9;
+  static const _dbVersion = 10;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -237,6 +237,45 @@ class ExerciseDatabase {
     await _createTrainingPlanTables(db);
     await _createTrainingHistoryTables(db);
     await _createTrainingSessionTables(db);
+    await _createPerformanceIndexes(db);
+  }
+
+  /// Indeksy pod odczyty historii / planów i kolejkę sync — bez nich
+  /// `WHERE session_local_id = ?` i `pending_op IS NOT NULL` skanują tabele.
+  Future<void> _createPerformanceIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tpe_plan_idx '
+      'ON $tableTrainingPlanExercises(plan_local_id, position)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tps_plan_ex_idx '
+      'ON $tableTrainingPlanSets(plan_exercise_local_id, position)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tse_session_idx '
+      'ON $tableTrainingSessionExercises(session_local_id, position)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tss_session_ex_idx '
+      'ON $tableTrainingSessionSets(session_exercise_local_id, position)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS ts_status_started_idx '
+      'ON $tableTrainingSessions(status, started_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS ts_pending_idx '
+      'ON $tableTrainingSessions(pending_op) WHERE pending_op IS NOT NULL',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tp_pending_idx '
+      'ON $tableTrainingPlans(pending_op) WHERE pending_op IS NOT NULL',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS ex_pending_idx '
+      'ON $tableExercises(pending_op, is_favourite_dirty) '
+      'WHERE pending_op IS NOT NULL OR is_favourite_dirty = 1',
+    );
   }
 
   Future<void> _createTrainingPlanTables(Database db) async {
@@ -448,6 +487,9 @@ class ExerciseDatabase {
         )
       ''');
       await _createOutboxLogIndex(db);
+    }
+    if (oldVersion < 10) {
+      await _createPerformanceIndexes(db);
     }
   }
 

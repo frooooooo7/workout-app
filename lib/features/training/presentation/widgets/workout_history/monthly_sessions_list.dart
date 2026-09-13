@@ -26,34 +26,46 @@ class MonthlySessionsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            selectedDay != null ? 'Treningi z wybranego dnia' : 'Treningi w miesiącu',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              selectedDay != null
+                  ? 'Treningi z wybranego dnia'
+                  : 'Treningi w miesiącu',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          if (sessions.isEmpty)
-            _EmptySessionsState(selectedDay: selectedDay)
-          else
-            Column(
-              children: [
-                for (var i = 0; i < sessions.length; i++) ...[
-                  if (i != 0) const SizedBox(height: 12),
-                  _SessionCard(session: sessions[i]),
-                ],
-              ],
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        if (sessions.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _EmptySessionsState(selectedDay: selectedDay),
             ),
-        ],
-      ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverList.builder(
+              itemCount: sessions.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 12),
+                  child: _SessionCard(session: sessions[index]),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 }

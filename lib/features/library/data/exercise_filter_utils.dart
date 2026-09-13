@@ -5,7 +5,7 @@ import '../domain/models/exercise.dart';
 /// Mirrors the server-side filter logic in `src/routes/exercises.ts` so that
 /// the offline (SQLite) fallback produces the same results as the online API.
 abstract final class ExerciseFilterUtils {
-  static const _recentDays = 30;
+  static const recentDays = 30;
 
   static List<Exercise> apply(
     List<Exercise> exercises, {
@@ -23,7 +23,7 @@ abstract final class ExerciseFilterUtils {
         result = result.where((e) => e.isFavourite).toList();
       case LibraryFilter.recent:
         final cutoff =
-            DateTime.now().subtract(const Duration(days: _recentDays));
+            DateTime.now().subtract(const Duration(days: recentDays));
         // Only include exercises with a known createdAt that is recent.
         result = result
             .where((e) => e.createdAt != null && e.createdAt!.isAfter(cutoff))

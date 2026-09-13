@@ -42,6 +42,12 @@ class TrainingSessionLocalHistory {
       if (!includeSynced) {
         where.add('(pending_op IS NOT NULL OR server_id IS NULL)');
       }
+      where.add(
+        'EXISTS ('
+        'SELECT 1 FROM ${ExerciseDatabase.tableTrainingSessionExercises} e '
+        'WHERE e.session_local_id = ${ExerciseDatabase.tableTrainingSessions}.local_id'
+        ')',
+      );
 
       final rows = await db.query(
         ExerciseDatabase.tableTrainingSessions,
@@ -50,14 +56,7 @@ class TrainingSessionLocalHistory {
         orderBy: 'started_at DESC',
         limit: _maxSessions,
       );
-      final sessions = <TrainingSession>[];
-      for (final row in rows) {
-        final session = await TrainingSessionLocalMapper.fromDb(db, row);
-        if (session != null && session.exercises.isNotEmpty) {
-          sessions.add(session);
-        }
-      }
-      return sessions;
+      return TrainingSessionLocalMapper.fromDbMany(db, rows);
     });
   }
 

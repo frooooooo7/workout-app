@@ -65,10 +65,17 @@ class UserAvatar extends StatelessWidget {
     final url = imageUrl;
 
     if (url != null && url.isNotEmpty) {
+      final px = (dimension * MediaQuery.devicePixelRatioOf(context))
+          .round()
+          .clamp(32, 512);
       return ClipRRect(
         borderRadius: BorderRadius.circular(_radius),
         child: Image(
-          image: offlineNetworkImage(url),
+          image: ResizeImage.resizeIfNeeded(
+            px,
+            null,
+            offlineNetworkImage(url),
+          ),
           width: dimension,
           height: dimension,
           fit: BoxFit.cover,

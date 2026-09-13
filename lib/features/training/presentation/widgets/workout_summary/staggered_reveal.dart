@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 /// Wejście sekcji podsumowania „z dołu, z wygaszenia" — kolejne elementy
 /// startują z lekkim opóźnieniem zależnym od [index], więc ekran buduje się
 /// od góry do dołu zamiast pojawić się w całości.
-class StaggeredReveal extends StatelessWidget {
+class StaggeredReveal extends StatefulWidget {
   const StaggeredReveal({
     super.key,
     required this.index,
@@ -22,22 +22,52 @@ class StaggeredReveal extends StatelessWidget {
   static const _maxStartFraction = 0.55;
 
   @override
-  Widget build(BuildContext context) {
-    final start = math.min(index * _stepFraction, _maxStartFraction);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: _totalDuration,
+  State<StaggeredReveal> createState() => _StaggeredRevealState();
+}
+
+class _StaggeredRevealState extends State<StaggeredReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    final start = math.min(
+      widget.index * StaggeredReveal._stepFraction,
+      StaggeredReveal._maxStartFraction,
+    );
+    _controller = AnimationController(
+      vsync: this,
+      duration: StaggeredReveal._totalDuration,
+    );
+    final curve = CurvedAnimation(
+      parent: _controller,
       curve: Interval(start, 1, curve: Curves.easeOutCubic),
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * offset),
-            child: child,
-          ),
-        );
-      },
-      child: child,
+    );
+    _fade = curve;
+    _slide = Tween<Offset>(
+      begin: Offset(0, widget.offset / 400),
+      end: Offset.zero,
+    ).animate(curve);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: widget.child,
+      ),
     );
   }
 }

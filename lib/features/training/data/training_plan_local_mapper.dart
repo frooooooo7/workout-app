@@ -24,68 +24,132 @@ class LocalTrainingPlanRecord {
 
 class TrainingPlanLocalMapper {
   static const _uuid = Uuid();
+  static const _inChunkSize = 900;
+  // `local_id IN (...) OR server_id IN (...)` — dwa razy tyle placeholderów.
+  static const _dualInChunkSize = 450;
 
   static String encodeDays(List<int> days) => jsonEncode(days);
 
   static List<int> decodeDays(String raw) =>
       (jsonDecode(raw) as List).map((d) => d as int).toList();
 
-  static Future<Exercise?> _exerciseForPlanRow(
-    Database db,
-    Map<String, dynamic> planExercise,
-  ) async {
-    final localId = planExercise['exercise_local_id'] as String;
-    final serverId = planExercise['exercise_server_id'] as String?;
-    var rows = await db.query(
-      ExerciseDatabase.tableExercises,
-      where: 'local_id = ?',
-      whereArgs: [localId],
-    );
-    if (rows.isEmpty && serverId != null) {
-      rows = await db.query(
-        ExerciseDatabase.tableExercises,
-        where: 'server_id = ?',
-        whereArgs: [serverId],
-      );
-    }
-    if (rows.isEmpty) return null;
-    return ExerciseDto.fromMap(rows.first).toDomain();
-  }
-
   static Future<LocalTrainingPlanRecord?> fromDb(
-    Database db,
+    DatabaseExecutor db,
     Map<String, dynamic> planRow,
   ) async {
-    final planExerciseRows = await db.query(
+    final mapped = await fromDbMany(db, [planRow]);
+    return mapped.isEmpty ? null : mapped.first;
+  }
+
+  /// Ładuje dzieci planów (ćwiczenia, serie, wiersze biblioteki) zapytaniami
+  /// `IN` — bez pętli `query` na każde ćwiczenie.
+  static Future<List<LocalTrainingPlanRecord>> fromDbMany(
+    DatabaseExecutor db,
+    List<Map<String, dynamic>> planRows,
+  ) async {
+    if (planRows.isEmpty) return const [];
+
+    final planIds = [for (final row in planRows) row['local_id'] as String];
+    final planExerciseRows = await _queryIn(
+      db,
       ExerciseDatabase.tableTrainingPlanExercises,
-      where: 'plan_local_id = ?',
-      whereArgs: [planRow['local_id']],
+      column: 'plan_local_id',
+      ids: planIds,
       orderBy: 'position ASC',
     );
 
+    final planExerciseIds = [
+      for (final row in planExerciseRows) row['local_id'] as String,
+    ];
+    final setRows = await _queryIn(
+      db,
+      ExerciseDatabase.tableTrainingPlanSets,
+      column: 'plan_exercise_local_id',
+      ids: planExerciseIds,
+      orderBy: 'position ASC',
+    );
+
+    final exerciseLookupIds = <String>{};
+    for (final row in planExerciseRows) {
+      exerciseLookupIds.add(row['exercise_local_id'] as String);
+      final serverId = row['exercise_server_id'] as String?;
+      if (serverId != null && serverId.isNotEmpty) {
+        exerciseLookupIds.add(serverId);
+      }
+    }
+    final exerciseRows = await _queryByLocalOrServerId(
+      db,
+      ExerciseDatabase.tableExercises,
+      ids: exerciseLookupIds.toList(),
+    );
+
+    final exerciseByLocalId = <String, Exercise>{};
+    final exerciseByServerId = <String, Exercise>{};
+    for (final row in exerciseRows) {
+      final exercise = ExerciseDto.fromMap(row).toDomain();
+      exerciseByLocalId[row['local_id'] as String] = exercise;
+      final serverId = row['server_id'] as String?;
+      if (serverId != null && serverId.isNotEmpty) {
+        exerciseByServerId[serverId] = exercise;
+      }
+    }
+
+    final planExercisesByPlan = <String, List<Map<String, dynamic>>>{};
+    for (final row in planExerciseRows) {
+      final planId = row['plan_local_id'] as String;
+      (planExercisesByPlan[planId] ??= []).add(row);
+    }
+    final setsByPlanExercise = <String, List<Map<String, dynamic>>>{};
+    for (final row in setRows) {
+      final planExerciseId = row['plan_exercise_local_id'] as String;
+      (setsByPlanExercise[planExerciseId] ??= []).add(row);
+    }
+
+    return [
+      for (final planRow in planRows)
+        _recordFromGrouped(
+          planRow: planRow,
+          planExerciseRows:
+              planExercisesByPlan[planRow['local_id'] as String] ?? const [],
+          setsByPlanExercise: setsByPlanExercise,
+          exerciseByLocalId: exerciseByLocalId,
+          exerciseByServerId: exerciseByServerId,
+        ),
+    ];
+  }
+
+  static LocalTrainingPlanRecord _recordFromGrouped({
+    required Map<String, dynamic> planRow,
+    required List<Map<String, dynamic>> planExerciseRows,
+    required Map<String, List<Map<String, dynamic>>> setsByPlanExercise,
+    required Map<String, Exercise> exerciseByLocalId,
+    required Map<String, Exercise> exerciseByServerId,
+  }) {
     final planExercises = <PlanExercise>[];
     for (final planExerciseRow in planExerciseRows) {
-      final exercise = await _exerciseForPlanRow(db, planExerciseRow);
+      final localId = planExerciseRow['exercise_local_id'] as String;
+      final serverId = planExerciseRow['exercise_server_id'] as String?;
+      final exercise =
+          exerciseByLocalId[localId] ??
+          (serverId != null ? exerciseByServerId[serverId] : null);
       if (exercise == null) continue;
-      final setRows = await db.query(
-        ExerciseDatabase.tableTrainingPlanSets,
-        where: 'plan_exercise_local_id = ?',
-        whereArgs: [planExerciseRow['local_id']],
-        orderBy: 'position ASC',
-      );
+      final setRows =
+          setsByPlanExercise[planExerciseRow['local_id'] as String] ??
+          const <Map<String, dynamic>>[];
       planExercises.add(
         PlanExercise(
           id: planExerciseRow['local_id'] as String,
           exercise: exercise,
-          sets: setRows
-              .map((set) => ExerciseSet(
-                    id: set['local_id'] as String,
-                    weight: set['weight'] as String?,
-                    reps: set['reps'] as String? ?? '',
-                    rir: set['rir'] as String?,
-                    tempo: set['tempo'] as String?,
-                  ))
-              .toList(),
+          sets: [
+            for (final set in setRows)
+              ExerciseSet(
+                id: set['local_id'] as String,
+                weight: set['weight'] as String?,
+                reps: set['reps'] as String? ?? '',
+                rir: set['rir'] as String?,
+                tempo: set['tempo'] as String?,
+              ),
+          ],
         ),
       );
     }
@@ -105,7 +169,26 @@ class TrainingPlanLocalMapper {
   }
 
   static Future<void> replacePlanChildren(
-    Database db,
+    DatabaseExecutor db,
+    CustomTrainingPlan plan, {
+    required Map<String, String?> exerciseServerIdsByLocalId,
+    Map<String, String>? planExerciseServerIdsByLocalId,
+    Map<String, String>? setServerIdsByLocalId,
+  }) {
+    return _inTransaction(
+      db,
+      (txn) => _replacePlanChildrenIn(
+        txn,
+        plan,
+        exerciseServerIdsByLocalId: exerciseServerIdsByLocalId,
+        planExerciseServerIdsByLocalId: planExerciseServerIdsByLocalId,
+        setServerIdsByLocalId: setServerIdsByLocalId,
+      ),
+    );
+  }
+
+  static Future<void> _replacePlanChildrenIn(
+    DatabaseExecutor db,
     CustomTrainingPlan plan, {
     required Map<String, String?> exerciseServerIdsByLocalId,
     Map<String, String>? planExerciseServerIdsByLocalId,
@@ -117,33 +200,53 @@ class TrainingPlanLocalMapper {
       where: 'plan_local_id = ?',
       whereArgs: [plan.id],
     );
-    for (final old in oldExercises) {
-      await db.delete(
-        ExerciseDatabase.tableTrainingPlanSets,
-        where: 'plan_exercise_local_id = ?',
-        whereArgs: [old['local_id']],
-      );
-    }
+    await _deleteIn(
+      db,
+      ExerciseDatabase.tableTrainingPlanSets,
+      column: 'plan_exercise_local_id',
+      ids: [
+        for (final old in oldExercises) old['local_id'] as String,
+      ],
+    );
     await db.delete(
       ExerciseDatabase.tableTrainingPlanExercises,
       where: 'plan_local_id = ?',
       whereArgs: [plan.id],
     );
 
-    final usedPlanExerciseIds = <String>{};
-    final usedSetIds = <String>{};
-    for (final entry in plan.exercises.asMap().entries) {
-      final pe = entry.value;
-      final planExerciseId = await _availableLocalId(
+    // Po skasowaniu dzieci tego planu pozostałe `local_id` należą do innych
+    // planów. Sprawdzamy tylko identyfikatory, które chcemy wstawić — bez
+    // czytania całych tabel przy każdym zapisie (i każdym planie w pull).
+    final takenPlanExerciseIds = {
+      for (final row in await _queryIn(
         db,
         ExerciseDatabase.tableTrainingPlanExercises,
-        pe.id,
-        usedPlanExerciseIds,
-        ownerColumn: 'plan_local_id',
-        ownerId: plan.id,
-      );
-      usedPlanExerciseIds.add(planExerciseId);
-      await db.insert(ExerciseDatabase.tableTrainingPlanExercises, {
+        column: 'local_id',
+        ids: [for (final pe in plan.exercises) pe.id],
+        columns: ['local_id'],
+      ))
+        row['local_id'] as String,
+    };
+    final takenSetIds = {
+      for (final row in await _queryIn(
+        db,
+        ExerciseDatabase.tableTrainingPlanSets,
+        column: 'local_id',
+        ids: [
+          for (final pe in plan.exercises)
+            for (final set in pe.sets) set.id,
+        ],
+        columns: ['local_id'],
+      ))
+        row['local_id'] as String,
+    };
+
+    final batch = db.batch();
+    for (final entry in plan.exercises.asMap().entries) {
+      final pe = entry.value;
+      final planExerciseId = _pickLocalId(pe.id, takenPlanExerciseIds);
+      takenPlanExerciseIds.add(planExerciseId);
+      batch.insert(ExerciseDatabase.tableTrainingPlanExercises, {
         'local_id': planExerciseId,
         'server_id': planExerciseServerIdsByLocalId?[pe.id],
         'plan_local_id': plan.id,
@@ -153,16 +256,9 @@ class TrainingPlanLocalMapper {
       });
       for (final setEntry in pe.sets.asMap().entries) {
         final set = setEntry.value;
-        final setId = await _availableLocalId(
-          db,
-          ExerciseDatabase.tableTrainingPlanSets,
-          set.id,
-          usedSetIds,
-          ownerColumn: 'plan_exercise_local_id',
-          ownerId: planExerciseId,
-        );
-        usedSetIds.add(setId);
-        await db.insert(ExerciseDatabase.tableTrainingPlanSets, {
+        final setId = _pickLocalId(set.id, takenSetIds);
+        takenSetIds.add(setId);
+        batch.insert(ExerciseDatabase.tableTrainingPlanSets, {
           'local_id': setId,
           'server_id': setServerIdsByLocalId?[set.id],
           'plan_exercise_local_id': planExerciseId,
@@ -174,50 +270,119 @@ class TrainingPlanLocalMapper {
         });
       }
     }
+    await batch.commit(noResult: true);
   }
 
-  static Future<String> _availableLocalId(
-    Database db,
-    String table,
-    String preferredId,
-    Set<String> usedIds, {
-    required String ownerColumn,
-    required String ownerId,
-  }) async {
-    if (usedIds.contains(preferredId)) {
-      return _uuid.v4();
-    }
-    final rows = await db.query(
-      table,
-      columns: [ownerColumn],
-      where: 'local_id = ?',
-      whereArgs: [preferredId],
-      limit: 1,
-    );
-    if (rows.isEmpty || rows.first[ownerColumn] == ownerId) {
-      return preferredId;
-    }
-    return _uuid.v4();
+  static String _pickLocalId(String preferredId, Set<String> usedIds) {
+    if (usedIds.contains(preferredId)) return _uuid.v4();
+    return preferredId;
   }
 
   static Future<Map<String, String?>> exerciseServerIdsByLocalId(
-    Database db,
+    DatabaseExecutor db,
     CustomTrainingPlan plan,
   ) async {
-    final result = <String, String?>{};
-    for (final pe in plan.exercises) {
-      final rows = await db.query(
-        ExerciseDatabase.tableExercises,
-        columns: ['local_id', 'server_id'],
-        where: 'local_id = ? OR server_id = ?',
-        whereArgs: [pe.exercise.id, pe.exercise.id],
-      );
-      if (rows.isEmpty) {
-        result[pe.exercise.id] = null;
-      } else {
-        result[pe.exercise.id] = rows.first['server_id'] as String?;
-      }
+    final ids = {for (final pe in plan.exercises) pe.exercise.id}.toList();
+    final result = <String, String?>{for (final id in ids) id: null};
+    if (ids.isEmpty) return result;
+
+    final rows = await _queryByLocalOrServerId(
+      db,
+      ExerciseDatabase.tableExercises,
+      ids: ids,
+      columns: ['local_id', 'server_id'],
+    );
+    final serverByKnownId = <String, String?>{};
+    for (final row in rows) {
+      final localId = row['local_id'] as String;
+      final serverId = row['server_id'] as String?;
+      serverByKnownId[localId] = serverId;
+      if (serverId != null) serverByKnownId[serverId] = serverId;
+    }
+    for (final id in ids) {
+      result[id] = serverByKnownId[id];
     }
     return result;
+  }
+
+  static Future<T> _inTransaction<T>(
+    DatabaseExecutor db,
+    Future<T> Function(DatabaseExecutor txn) action,
+  ) {
+    if (db is Transaction) return action(db);
+    if (db is Database) return db.transaction(action);
+    return action(db);
+  }
+
+  static Future<List<Map<String, dynamic>>> _queryIn(
+    DatabaseExecutor db,
+    String table, {
+    required String column,
+    required List<Object?> ids,
+    String? orderBy,
+    List<String>? columns,
+  }) async {
+    if (ids.isEmpty) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (var i = 0; i < ids.length; i += _inChunkSize) {
+      final end = i + _inChunkSize > ids.length ? ids.length : i + _inChunkSize;
+      final chunk = ids.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      out.addAll(
+        await db.query(
+          table,
+          columns: columns,
+          where: '$column IN ($placeholders)',
+          whereArgs: chunk,
+          orderBy: orderBy,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static Future<List<Map<String, dynamic>>> _queryByLocalOrServerId(
+    DatabaseExecutor db,
+    String table, {
+    required List<Object?> ids,
+    List<String>? columns,
+  }) async {
+    if (ids.isEmpty) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (var i = 0; i < ids.length; i += _dualInChunkSize) {
+      final end = i + _dualInChunkSize > ids.length
+          ? ids.length
+          : i + _dualInChunkSize;
+      final chunk = ids.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      out.addAll(
+        await db.query(
+          table,
+          columns: columns,
+          where: 'local_id IN ($placeholders) OR server_id IN ($placeholders)',
+          whereArgs: [...chunk, ...chunk],
+        ),
+      );
+    }
+    return out;
+  }
+
+  static Future<void> _deleteIn(
+    DatabaseExecutor db,
+    String table, {
+    required String column,
+    required List<Object?> ids,
+  }) async {
+    if (ids.isEmpty) return;
+    for (var i = 0; i < ids.length; i += _inChunkSize) {
+      final end = i + _inChunkSize > ids.length ? ids.length : i + _inChunkSize;
+      final chunk = ids.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      await db.delete(
+        table,
+        where: '$column IN ($placeholders)',
+        whereArgs: chunk,
+      );
+    }
   }
 }

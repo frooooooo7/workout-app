@@ -272,8 +272,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                   decoration: BoxDecoration(
                     color: AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(10),
-                    image: switch (exerciseImageProvider(
+                    image: switch (exerciseThumbProvider(
+                      context,
                       planExercise.exercise.imageUrl,
+                      logicalSize: 40,
                     )) {
                       final provider? => DecorationImage(
                         image: provider,

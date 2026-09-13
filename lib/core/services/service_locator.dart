@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
@@ -120,7 +122,7 @@ class ServiceLocator {
   static final currentUser = ValueNotifier<AuthUser?>(null);
 
   static void init() {
-    tokenStorage = const TokenStorage();
+    tokenStorage = TokenStorage();
     apiClient = ApiClient(
       baseUrl: kApiBaseUrl,
       getToken: tokenStorage.readToken,
@@ -228,6 +230,9 @@ class ServiceLocator {
       remote: _trainingHistoryRemoteDataSource,
       localCache: TrainingHistoryLocalCache(database),
       localSessions: TrainingSessionLocalHistory(database),
+      // Świeże dane pobrane w tle (inne niż cache) — ekrany historii
+      // czytają listę jeszcze raz.
+      onFreshData: () => _trainingSessionDataChanges.value++,
     );
     _trainingSessionRepository = OfflineFirstTrainingSessionRepository(
       localDb: database,
@@ -246,6 +251,8 @@ class ServiceLocator {
       status: _syncStatus,
       networkAvailability: networkAvailabilityChanges(),
     )..start();
+
+    unawaited(restTimerScheduler.warmUp());
   }
 
   static void requestProfileRefresh() {

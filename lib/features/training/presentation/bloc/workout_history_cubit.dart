@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -76,6 +77,32 @@ class WorkoutHistoryState {
     );
   }
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is WorkoutHistoryState &&
+        other.focusedMonth == focusedMonth &&
+        listEquals(other.availableMonths, availableMonths) &&
+        other.selectedDay == selectedDay &&
+        other.isLoading == isLoading &&
+        other.isMonthChanging == isMonthChanging &&
+        other.error == error &&
+        other.monthlyHistory == monthlyHistory &&
+        other.fromCache == fromCache;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    focusedMonth,
+    Object.hashAll(availableMonths),
+    selectedDay,
+    isLoading,
+    isMonthChanging,
+    error,
+    monthlyHistory,
+    fromCache,
+  );
+
   static List<DateTime> _generateAvailableMonths() {
     final now = DateTime.now();
     final months = <DateTime>[];
@@ -106,10 +133,14 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
 
   final TrainingHistoryRepository _repository;
   final Listenable? _dataChanges;
+  final _monthCache = <String, _CachedMonth>{};
 
   /// Ile stron maksymalnie ciągniemy na jeden miesiąc — zabezpieczenie przed
   /// pętlą, gdyby backend zwracał kursor w nieskończoność.
   static const int _maxPagesPerMonth = 6;
+
+  static String _monthKey(DateTime month) =>
+      '${month.year}-${month.month.toString().padLeft(2, '0')}';
 
   @override
   Future<void> close() {
@@ -119,12 +150,26 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
 
   void _onDataChanged() {
     if (isClosed) return;
+    _monthCache.clear();
     unawaited(refresh());
   }
 
   Future<void> loadMonthData(DateTime month, {bool showFullLoading = false}) async {
     if (isClosed) return;
     final normalizedMonth = DateTime(month.year, month.month, 1);
+    final cached = _monthCache[_monthKey(normalizedMonth)];
+    if (cached != null && !showFullLoading) {
+      emit(state.copyWith(
+        focusedMonth: normalizedMonth,
+        clearSelectedDay: true,
+        isLoading: false,
+        isMonthChanging: false,
+        monthlyHistory: cached.history,
+        fromCache: cached.fromCache,
+        clearError: true,
+      ));
+      return;
+    }
     final from = normalizedMonth;
     final to = DateTime(month.year, month.month + 1, 0, 23, 59, 59, 999);
 
@@ -193,6 +238,10 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
       stats: stats,
       trainingDays: trainingDays,
       sessions: sessions,
+    );
+    _monthCache[_monthKey(normalizedMonth)] = _CachedMonth(
+      history: monthlyHistory,
+      fromCache: isFromCache,
     );
 
     emit(state.copyWith(
@@ -298,6 +347,14 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
   }
 
   Future<void> refresh() async {
+    _monthCache.clear();
     await loadMonthData(state.focusedMonth, showFullLoading: false);
   }
+}
+
+class _CachedMonth {
+  const _CachedMonth({required this.history, required this.fromCache});
+
+  final MonthlyTrainingHistory history;
+  final bool fromCache;
 }

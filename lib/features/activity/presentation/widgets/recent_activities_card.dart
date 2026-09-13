@@ -82,14 +82,11 @@ class RecentActivitiesCard extends StatelessWidget {
             ),
           ),
           const Divider(height: 1, color: AppColors.border),
-          ListView.separated(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            itemCount: list.length,
-            separatorBuilder: (context, _) =>
-                const Divider(height: 1, color: AppColors.border, indent: 70),
-            itemBuilder: (_, i) => RecentActivityRow(activity: list[i]),
-          ),
+          for (var i = 0; i < list.length; i++) ...[
+            if (i != 0)
+              const Divider(height: 1, color: AppColors.border, indent: 70),
+            RecentActivityRow(activity: list[i]),
+          ],
         ],
       ),
     );

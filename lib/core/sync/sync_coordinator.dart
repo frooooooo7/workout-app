@@ -67,12 +67,13 @@ class SyncCoordinator {
   StreamSubscription<bool>? _networkSubscription;
   Timer? _retryTimer;
   Timer? _reconnectTimer;
+  Timer? _initialSyncTimer;
+  Timer? _evaluateDebounce;
   Duration _retryDelay;
   Future<void>? _running;
   DateTime? _lastPassFinishedAt;
   bool? _networkAvailable;
   bool _rerunRequested = false;
-  bool _evaluationScheduled = false;
   bool _passFinishedSinceEvaluation = false;
   bool _offline = false;
   int _evaluationSeq = 0;
@@ -89,6 +90,13 @@ class SyncCoordinator {
       _lifecycleListener = AppLifecycleListener(
         onResume: () => unawaited(syncNow(resetBackoff: true)),
       );
+      // Pierwsza klatka czyta bazę — sync startuje sekundę później.
+      _initialSyncTimer = Timer(const Duration(seconds: 1), () {
+        _initialSyncTimer = null;
+        if (!_stopped) unawaited(syncNow());
+      });
+    } else {
+      unawaited(syncNow());
     }
     _networkSubscription = _networkAvailability?.listen(
       _onNetworkAvailability,
@@ -102,7 +110,6 @@ class SyncCoordinator {
         );
       },
     );
-    unawaited(syncNow());
   }
 
   void stop() {
@@ -112,6 +119,10 @@ class SyncCoordinator {
     _retryTimer = null;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _initialSyncTimer?.cancel();
+    _initialSyncTimer = null;
+    _evaluateDebounce?.cancel();
+    _evaluateDebounce = null;
     unawaited(_networkSubscription?.cancel());
     _networkSubscription = null;
     _lifecycleListener?.dispose();
@@ -245,12 +256,12 @@ class SyncCoordinator {
       _engines.any((engine) => engine.activeRuns.value > 0);
 
   void _onEngineActivity() {
-    if (_stopped || _evaluationScheduled) return;
-    _evaluationScheduled = true;
-    // Licznik zmienia się także w trakcie budowania UI (np. odczyt listy
-    // w `initState`) — powiadomienia wysyłamy dopiero po bieżącej klatce.
-    scheduleMicrotask(() {
-      _evaluationScheduled = false;
+    if (_stopped) return;
+    _evaluateDebounce?.cancel();
+    // Zlewamy serię zmian silników (flush + pull) w jedno odświeżenie
+    // wskaźnika zamiast liczyć backlog po każdym microtasku.
+    _evaluateDebounce = Timer(const Duration(milliseconds: 180), () {
+      _evaluateDebounce = null;
       unawaited(_evaluate());
     });
   }

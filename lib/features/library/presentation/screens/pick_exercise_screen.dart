@@ -36,8 +36,8 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
             ServiceLocator.exerciseRepository,
             dataChanges: ServiceLocator.exerciseDataChanges,
           )..refresh(),
-      child: BlocBuilder<LibraryCubit, LibraryState>(
-        builder: (context, state) {
+      child: Builder(
+        builder: (context) {
           final cubit = context.read<LibraryCubit>();
 
           return Scaffold(
@@ -81,99 +81,141 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        LibraryFilterChips(
-                          selected: state.filter,
-                          onSelected: cubit.setFilter,
+                        BlocBuilder<LibraryCubit, LibraryState>(
+                          buildWhen: (previous, current) =>
+                              previous.filter != current.filter ||
+                              previous.category != current.category,
+                          builder: (context, state) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                LibraryFilterChips(
+                                  selected: state.filter,
+                                  onSelected: cubit.setFilter,
+                                ),
+                                const SizedBox(height: 14),
+                                LibraryCategoryTabs(
+                                  selected: state.category,
+                                  onSelected: cubit.setCategory,
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 14),
-                        LibraryCategoryTabs(
-                          selected: state.category,
-                          onSelected: cubit.setCategory,
+                        BlocBuilder<LibraryCubit, LibraryState>(
+                          buildWhen: (previous, current) =>
+                              previous.exercises != current.exercises ||
+                              previous.loading != current.loading ||
+                              previous.error != current.error,
+                          builder: (context, state) {
+                            return LibraryResultsBar(
+                              count: state.exercises.length,
+                            );
+                          },
                         ),
-                        const SizedBox(height: 14),
-                        LibraryResultsBar(count: state.exercises.length),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: state.loading
-                        ? const LibraryLoadingState()
-                        : state.error != null
-                            ? LibraryErrorState(message: state.error!)
-                            : state.exercises.isEmpty
-                                ? const LibraryEmptyState()
-                                : ListView.builder(
-                                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                                    itemCount: state.exercises.length,
-                                    itemBuilder: (context, index) {
-                                      final exercise = state.exercises[index];
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
-                                        child: InkWell(
-                                          onTap: () {
-                                            Navigator.of(context).pop(exercise);
-                                          },
-                                          borderRadius: BorderRadius.circular(16),
-                                          child: Container(
-                                            padding: const EdgeInsets.all(16),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.surface,
-                                              borderRadius: BorderRadius.circular(16),
-                                              border: Border.all(color: AppColors.border),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Container(
-                                                  width: 56,
-                                                  height: 56,
-                                                  decoration: BoxDecoration(
-                                                    color: AppColors.surfaceVariant,
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    image: switch (exerciseImageProvider(exercise.imageUrl)) {
-                                                      final provider? => DecorationImage(
-                                                        image: provider,
-                                                        fit: BoxFit.cover,
-                                                        onError: (_, _) {},
-                                                      ),
-                                                      null => null,
-                                                    },
-                                                  ),
-                                                  child: exercise.imageUrl == null
-                                                      ? const Icon(Icons.fitness_center, color: AppColors.textMuted)
-                                                      : null,
-                                                ),
-                                                const SizedBox(width: 16),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        exercise.name,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.w700,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        exercise.muscles.map((m) => m.label).join(', '),
-                                                        style: const TextStyle(
-                                                          color: AppColors.textSecondary,
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    },
+                    child: BlocBuilder<LibraryCubit, LibraryState>(
+                      buildWhen: (previous, current) =>
+                          previous.exercises != current.exercises ||
+                          previous.loading != current.loading ||
+                          previous.error != current.error,
+                      builder: (context, state) {
+                        if (state.loading) {
+                          return const LibraryLoadingState();
+                        }
+                        if (state.error != null) {
+                          return LibraryErrorState(message: state.error!);
+                        }
+                        if (state.exercises.isEmpty) {
+                          return const LibraryEmptyState();
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                          itemCount: state.exercises.length,
+                          itemBuilder: (context, index) {
+                            final exercise = state.exercises[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.of(context).pop(exercise);
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surface,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: AppColors.border),
                                   ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.surfaceVariant,
+                                          borderRadius: BorderRadius.circular(12),
+                                          image: switch (exerciseThumbProvider(
+                                            context,
+                                            exercise.imageUrl,
+                                            logicalSize: 40,
+                                          )) {
+                                            final provider? => DecorationImage(
+                                              image: provider,
+                                              fit: BoxFit.cover,
+                                              onError: (_, _) {},
+                                            ),
+                                            null => null,
+                                          },
+                                        ),
+                                        child: exercise.imageUrl == null
+                                            ? const Icon(
+                                                Icons.fitness_center,
+                                                color: AppColors.textMuted,
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              exercise.name,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              exercise.muscles
+                                                  .map((m) => m.label)
+                                                  .join(', '),
+                                              style: const TextStyle(
+                                                color: AppColors.textSecondary,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

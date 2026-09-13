@@ -108,7 +108,7 @@ class LibraryHeader extends StatelessWidget {
   }
 }
 
-class _SearchBar extends StatelessWidget {
+class _SearchBar extends StatefulWidget {
   const _SearchBar({
     required this.controller,
     required this.onChanged,
@@ -118,6 +118,24 @@ class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onFilterTap;
+
+  @override
+  State<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends State<_SearchBar> {
+  late ThemeData _fieldTheme;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fieldTheme = Theme.of(context).copyWith(
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: false,
+        fillColor: Colors.transparent,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -140,15 +158,10 @@ class _SearchBar extends StatelessWidget {
           ),
           Expanded(
             child: Theme(
-              data: Theme.of(context).copyWith(
-                inputDecorationTheme: const InputDecorationTheme(
-                  filled: false,
-                  fillColor: Colors.transparent,
-                ),
-              ),
+              data: _fieldTheme,
               child: TextField(
-                controller: controller,
-                onChanged: onChanged,
+                controller: widget.controller,
+                onChanged: widget.onChanged,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -172,7 +185,7 @@ class _SearchBar extends StatelessWidget {
             ),
           ),
           GestureDetector(
-            onTap: onFilterTap,
+            onTap: widget.onFilterTap,
             child: Container(
               width: 48,
               height: 48,

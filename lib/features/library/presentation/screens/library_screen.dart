@@ -42,8 +42,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ServiceLocator.exerciseRepository,
             dataChanges: ServiceLocator.exerciseDataChanges,
           )..refresh(),
-      child: BlocBuilder<LibraryCubit, LibraryState>(
-        builder: (context, state) {
+      child: Builder(
+        builder: (context) {
           final cubit = context.read<LibraryCubit>();
 
           return Scaffold(
@@ -104,50 +104,79 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           },
                         ),
                         const SizedBox(height: 14),
-                        LibraryFilterChips(
-                          selected: state.filter,
-                          onSelected: cubit.setFilter,
+                        BlocBuilder<LibraryCubit, LibraryState>(
+                          buildWhen: (previous, current) =>
+                              previous.filter != current.filter ||
+                              previous.category != current.category,
+                          builder: (context, state) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                LibraryFilterChips(
+                                  selected: state.filter,
+                                  onSelected: cubit.setFilter,
+                                ),
+                                const SizedBox(height: 14),
+                                LibraryCategoryTabs(
+                                  selected: state.category,
+                                  onSelected: cubit.setCategory,
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 14),
-                        LibraryCategoryTabs(
-                          selected: state.category,
-                          onSelected: cubit.setCategory,
+                        BlocBuilder<LibraryCubit, LibraryState>(
+                          buildWhen: (previous, current) =>
+                              previous.exercises != current.exercises ||
+                              previous.loading != current.loading ||
+                              previous.error != current.error,
+                          builder: (context, state) {
+                            return LibraryResultsBar(
+                              count: state.exercises.length,
+                            );
+                          },
                         ),
-                        const SizedBox(height: 14),
-                        LibraryResultsBar(count: state.exercises.length),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: state.loading
-                        ? const LibraryLoadingState()
-                        : state.error != null
-                            ? LibraryErrorState(message: state.error!)
-                            : state.exercises.isEmpty
-                                ? const LibraryEmptyState()
-                                : LibraryExerciseGrid(
-                                    exercises: state.exercises,
-                                    onFavouriteTap: (exercise) async {
-                                      try {
-                                        await cubit.toggleFavourite(
-                                          exercise,
-                                        );
-                                      } catch (_) {
-                                        if (!context.mounted) return;
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Nie udało się zaktualizować ulubionych.',
-                                            ),
-                                            behavior:
-                                                SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                      }
-                                    },
+                    child: BlocBuilder<LibraryCubit, LibraryState>(
+                      buildWhen: (previous, current) =>
+                          previous.exercises != current.exercises ||
+                          previous.loading != current.loading ||
+                          previous.error != current.error,
+                      builder: (context, state) {
+                        if (state.loading) {
+                          return const LibraryLoadingState();
+                        }
+                        if (state.error != null) {
+                          return LibraryErrorState(message: state.error!);
+                        }
+                        if (state.exercises.isEmpty) {
+                          return const LibraryEmptyState();
+                        }
+                        return LibraryExerciseGrid(
+                          exercises: state.exercises,
+                          onFavouriteTap: (exercise) async {
+                            try {
+                              await cubit.toggleFavourite(exercise);
+                            } catch (_) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Nie udało się zaktualizować ulubionych.',
                                   ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

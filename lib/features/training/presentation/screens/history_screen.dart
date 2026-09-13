@@ -175,66 +175,65 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     final stats = history?.stats;
     final sessions = state.filteredSessions;
 
-    return SingleChildScrollView(
+    return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (state.fromCache)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
-              child: Text(
-                'Tryb offline: pokazujemy zapisane dane z pamięci podręcznej.',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-
-          // Subtitle indicator if month changing in background
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 150),
-            child: state.isMonthChanging
-                ? const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primary,
-                        ),
-                      ),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state.fromCache)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  child: Text(
+                    'Tryb offline: pokazujemy zapisane dane z pamięci podręcznej.',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
                     ),
-                  )
-                : const SizedBox.shrink(),
+                  ),
+                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: state.isMonthChanging
+                    ? const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              if (stats != null) ...[
+                MonthlyStatsCard(
+                  focusedMonth: state.focusedMonth,
+                  stats: stats,
+                ),
+                const SizedBox(height: 16),
+              ],
+            ],
           ),
-
-          // 3. Monthly Stats Card
-          if (stats != null) ...[
-            MonthlyStatsCard(
-              focusedMonth: state.focusedMonth,
-              stats: stats,
+        ),
+        MonthlySessionsList(
+          sessions: sessions,
+          selectedDay: state.selectedDay,
+        ),
+        if (stats != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: MonthlySummaryFooter(stats: stats),
             ),
-            const SizedBox(height: 16),
-          ],
-
-          // 5. Recent Sessions List
-          MonthlySessionsList(
-            sessions: sessions,
-            selectedDay: state.selectedDay,
           ),
-
-          // 6. Monthly Summary Footer
-          if (stats != null) ...[
-            const SizedBox(height: 20),
-            MonthlySummaryFooter(stats: stats),
-          ],
-        ],
-      ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
     );
   }
 }

@@ -29,8 +29,10 @@ void main() {
   late _HistoryRemote remote;
   late OfflineFirstTrainingHistoryRepository history;
   late OfflineFirstTrainingSessionRepository sessions;
+  var freshNotices = 0;
 
   setUp(() async {
+    freshNotices = 0;
     dir = await Directory.systemTemp.createTemp('gym_history_repo');
     db = ExerciseDatabase('history.db', directoryOverride: dir.path);
     remote = _HistoryRemote();
@@ -38,7 +40,8 @@ void main() {
       remote: remote,
       localCache: TrainingHistoryLocalCache(db),
       localSessions: TrainingSessionLocalHistory(db),
-      cacheGracePeriod: const Duration(milliseconds: 50),
+      onFreshData: () => freshNotices++,
+      freshDataDebounce: Duration.zero,
     );
     final sessionApi = TrainingSessionRemoteDataSource(_offlineApi());
     sessions = OfflineFirstTrainingSessionRepository(
@@ -117,14 +120,36 @@ void main() {
     expect(page.isFromCache, isTrue);
     expect(page.items.single.id, 'cached');
 
-    // Spóźniona odpowiedź odświeża cache w tle — następny odczyt ją zobaczy.
+    // Spóźniona odpowiedź odświeża cache w tle i każe ekranom przeczytać
+    // dane jeszcze raz. Powiadomienie idzie po zapisie cache, więc po nim
+    // następny odczyt widzi już świeżą stronę.
     slow.complete(_page([_serverItem('fresh', DateTime.utc(2022))]));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    for (var i = 0; i < 200 && freshNotices == 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(freshNotices, 1, reason: 'screens re-read after fresh data');
     remote.onGetSessions = () async => throw const ApiException('network_error');
     final afterRefresh = await history.getSessions(
       status: TrainingSessionStatus.completed,
     );
     expect(afterRefresh.items.single.id, 'fresh');
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(freshNotices, 1);
+  });
+
+  test('unchanged server response does not ask screens to reload', () async {
+    remote.onGetSessions = () async => _page([
+      _serverItem('same', DateTime.utc(2021)),
+    ]);
+    await history.getSessions(status: TrainingSessionStatus.completed);
+
+    final cachedRead = await history.getSessions(
+      status: TrainingSessionStatus.completed,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    expect(cachedRead.isFromCache, isTrue);
+    expect(freshNotices, 0);
   });
 }
 

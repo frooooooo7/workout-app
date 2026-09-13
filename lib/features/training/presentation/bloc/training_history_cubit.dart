@@ -84,6 +84,46 @@ class TrainingHistoryState {
           weekCompletedWeekdays ?? this.weekCompletedWeekdays,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TrainingHistoryState &&
+        listEquals(other.items, items) &&
+        other.loading == loading &&
+        other.loadingMore == loadingMore &&
+        other.refreshing == refreshing &&
+        other.error == error &&
+        other.nextCursor == nextCursor &&
+        other.hasMore == hasMore &&
+        other.planFilter == planFilter &&
+        other.query == query &&
+        other.fromCache == fromCache &&
+        other.viewMode == viewMode &&
+        other.focusedMonth == focusedMonth &&
+        listEquals(other.calendarSessions, calendarSessions) &&
+        other.isCalendarLoading == isCalendarLoading &&
+        setEquals(other.weekCompletedWeekdays, weekCompletedWeekdays);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(items),
+    loading,
+    loadingMore,
+    refreshing,
+    error,
+    nextCursor,
+    hasMore,
+    planFilter,
+    query,
+    fromCache,
+    viewMode,
+    focusedMonth,
+    Object.hashAll(calendarSessions),
+    isCalendarLoading,
+    Object.hashAll(weekCompletedWeekdays),
+  );
 }
 
 class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {

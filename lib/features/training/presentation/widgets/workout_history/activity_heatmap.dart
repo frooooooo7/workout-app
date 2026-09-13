@@ -82,8 +82,7 @@ class ActivityHeatmap extends StatelessWidget {
   }
 
   bool _isTrainingDay(DateTime date) {
-    return trainingDays.any((d) =>
-        d.year == date.year && d.month == date.month && d.day == date.day);
+    return trainingDays.contains(DateTime(date.year, date.month, date.day));
   }
 
   bool _isToday(DateTime date) {

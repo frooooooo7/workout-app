@@ -24,6 +24,17 @@ class TrainingPlansState {
       isLoading: isLoading ?? this.isLoading,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TrainingPlansState &&
+        listEquals(other.plans, plans) &&
+        other.isLoading == isLoading;
+  }
+
+  @override
+  int get hashCode => Object.hash(Object.hashAll(plans), isLoading);
 }
 
 class TrainingPlansCubit extends Cubit<TrainingPlansState> {

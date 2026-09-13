@@ -131,6 +131,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
     final rows = await _pendingRows();
     if (rows == null || rows.isEmpty) return;
 
+    final networkMark = networkFailureMark;
     var finishedSessionSynced = false;
     for (final row in rows) {
       if (isStopped) return;
@@ -149,6 +150,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
           stackTrace,
         );
       }
+      if (networkFailedSince(networkMark)) break;
     }
     // Historia interesuje się tylko zakończonymi sesjami — zapis w trakcie
     // treningu nie powinien co chwilę odświeżać list.

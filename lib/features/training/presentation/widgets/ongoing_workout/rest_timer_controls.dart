@@ -9,6 +9,36 @@ String formatRestDurationOption(Duration duration) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
+String formatRestRemaining(Duration remaining) {
+  final minutes = remaining.inMinutes.toString().padLeft(2, '0');
+  final seconds = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+/// Baner odpoczynku napędzany [ValueNotifier] — tyknięcie nie woła setState
+/// na całym ekranie sesji.
+class RestTimerBannerHost extends StatelessWidget {
+  const RestTimerBannerHost({
+    super.key,
+    required this.remaining,
+    required this.onStop,
+  });
+
+  final ValueNotifier<Duration> remaining;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<Duration>(
+      valueListenable: remaining,
+      builder: (context, value, _) => RestTimerBanner(
+        remaining: formatRestRemaining(value),
+        onStop: onStop,
+      ),
+    );
+  }
+}
+
 class RestTimerBanner extends StatelessWidget {
   const RestTimerBanner({
     super.key,

@@ -1,8 +1,11 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_pressable.dart';
 import '../../domain/models/training_history_models.dart';
 import '../bloc/training_history_cubit.dart';
 
@@ -143,7 +146,7 @@ class _UnifiedLastSessionCardState extends State<UnifiedLastSessionCard> {
   void didUpdateWidget(covariant UnifiedLastSessionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.id != widget.item.id ||
-        oldWidget.exercises != widget.exercises) {
+        !listEquals(oldWidget.exercises, widget.exercises)) {
       _resolveExercises();
     }
   }
@@ -281,73 +284,67 @@ class _UnifiedLastSessionCardState extends State<UnifiedLastSessionCard> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _AnimatedPressable(
-                          child: InkWell(
-                            key: const ValueKey('last-session-repeat'),
-                            onTap: widget.onRepeat,
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant.withValues(
+                        AppPressable(
+                          key: const ValueKey('last-session-repeat'),
+                          onTap: widget.onRepeat,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceVariant.withValues(
+                                alpha: 0.6,
+                              ),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.border.withValues(
                                   alpha: 0.6,
                                 ),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.border.withValues(
-                                    alpha: 0.6,
-                                  ),
-                                ),
                               ),
-                              child: const Icon(
-                                Icons.replay_rounded,
-                                size: 16,
-                                color: AppColors.textSecondary,
-                              ),
+                            ),
+                            child: const Icon(
+                              Icons.replay_rounded,
+                              size: 16,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ),
                         const SizedBox(width: 6),
-                        _AnimatedPressable(
-                          child: InkWell(
-                            key: const ValueKey('last-session-details'),
-                            onTap: widget.onOpenDetails,
-                            borderRadius: BorderRadius.circular(18),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 7,
+                        AppPressable(
+                          key: const ValueKey('last-session-details'),
+                          onTap: widget.onOpenDetails,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(
+                                alpha: 0.15,
                               ),
-                              decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
                                 color: AppColors.primary.withValues(
-                                  alpha: 0.15,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.4,
-                                  ),
+                                  alpha: 0.4,
                                 ),
                               ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Szczegóły',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  SizedBox(width: 3),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Szczegóły',
+                                  style: TextStyle(
                                     color: AppColors.primary,
-                                    size: 16,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                ],
-                              ),
+                                ),
+                                SizedBox(width: 3),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.primary,
+                                  size: 16,
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -529,29 +526,28 @@ class _UnifiedLastSessionCardState extends State<UnifiedLastSessionCard> {
               ),
             )
           else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: exercises.length,
-              separatorBuilder: (context, index) => Divider(
-                height: 1,
-                indent: 64,
-                endIndent: 18,
-                color: AppColors.border.withValues(alpha: 0.25),
-              ),
-              itemBuilder: (context, index) {
-                final exercise = exercises[index];
-                return _ExerciseRowItem(
-                  exercise: exercise,
-                  onTap: () {
-                    if (widget.onOpenExerciseDetails != null) {
-                      widget.onOpenExerciseDetails!(exercise);
-                    } else {
-                      widget.onOpenDetails();
-                    }
-                  },
-                );
-              },
+            Column(
+              children: [
+                for (var i = 0; i < exercises.length; i++) ...[
+                  if (i != 0)
+                    Divider(
+                      height: 1,
+                      indent: 64,
+                      endIndent: 18,
+                      color: AppColors.border.withValues(alpha: 0.25),
+                    ),
+                  _ExerciseRowItem(
+                    exercise: exercises[i],
+                    onTap: () {
+                      if (widget.onOpenExerciseDetails != null) {
+                        widget.onOpenExerciseDetails!(exercises[i]);
+                      } else {
+                        widget.onOpenDetails();
+                      }
+                    },
+                  ),
+                ],
+              ],
             ),
 
           const SizedBox(height: 10),
@@ -681,10 +677,9 @@ class _ExerciseRowItem extends StatelessWidget {
     final setsCount = exercise.completedSetsCount;
     final setsText = '$setsCount ${_setsLabel(setsCount)}';
 
-    return _AnimatedPressable(
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
+    return AppPressable(
+      onTap: onTap,
+      child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           child: Row(
             children: [
@@ -744,7 +739,6 @@ class _ExerciseRowItem extends StatelessWidget {
               ),
             ],
           ),
-        ),
       ),
     );
   }
@@ -809,56 +803,6 @@ List<String> _resolveTargetMuscles(TrainingSessionListItem item) {
   return const ['Klatka piersiowa', 'Barki', 'Triceps'];
 }
 
-class _AnimatedPressable extends StatefulWidget {
-  const _AnimatedPressable({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_AnimatedPressable> createState() => _AnimatedPressableState();
-}
-
-class _AnimatedPressableState extends State<_AnimatedPressable>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-      reverseDuration: const Duration(milliseconds: 150),
-    );
-    _scale = Tween<double>(
-      begin: 1.0,
-      end: 0.96,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => _controller.forward(),
-      onPointerUp: (_) => _controller.reverse(),
-      onPointerCancel: (_) => _controller.reverse(),
-      child: AnimatedBuilder(
-        animation: _scale,
-        builder: (context, child) =>
-            Transform.scale(scale: _scale.value, child: child),
-        child: widget.child,
-      ),
-    );
-  }
-}
-
 class _LastSessionSkeleton extends StatefulWidget {
   const _LastSessionSkeleton();
 
@@ -892,22 +836,17 @@ class _LastSessionSkeletonState extends State<_LastSessionSkeleton>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Opacity(
-          opacity: _animation.value,
-          child: Container(
-            height: 240,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppColors.border),
-            ),
-          ),
-        );
-      },
+    return FadeTransition(
+      opacity: _animation,
+      child: Container(
+        height: 240,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+      ),
     );
   }
 }

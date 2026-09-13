@@ -132,6 +132,9 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reorderTheme = Theme.of(context).copyWith(
+      canvasColor: Colors.transparent,
+    );
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -347,9 +350,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
             const SizedBox(height: 12),
             Expanded(
               child: Theme(
-                data: Theme.of(context).copyWith(
-                  canvasColor: Colors.transparent,
-                ),
+                data: reorderTheme,
                 child: ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
                   itemCount: _exercises.length,
@@ -364,9 +365,11 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                         index: index,
                         planExercise: planExercise,
                         onChanged: (newExercise) {
-                          setState(() {
-                            _exercises[index] = newExercise;
-                          });
+                          final previous = _exercises[index];
+                          _exercises[index] = newExercise;
+                          if (previous.sets.length != newExercise.sets.length) {
+                            setState(() {});
+                          }
                         },
                         onRemove: () => _removeExercise(index),
                       ),

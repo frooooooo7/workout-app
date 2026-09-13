@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/models/following_user.dart';
 import '../../domain/models/profile_activity.dart';
 import '../../domain/models/user_profile.dart';
@@ -43,4 +45,28 @@ class ProfileState {
       error: clearError ? null : (error ?? this.error),
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ProfileState &&
+        other.profile == profile &&
+        listEquals(other.following, following) &&
+        other.highlightActivity == highlightActivity &&
+        listEquals(other.recentActivities, recentActivities) &&
+        other.loading == loading &&
+        other.refreshing == refreshing &&
+        other.error == error;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    profile,
+    Object.hashAll(following),
+    highlightActivity,
+    Object.hashAll(recentActivities),
+    loading,
+    refreshing,
+    error,
+  );
 }

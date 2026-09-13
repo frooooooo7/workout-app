@@ -28,6 +28,7 @@ abstract class SyncEngineBase {
   Future<void> _queue = Future<void>.value();
   DateTime? _lastPullAttemptAt;
   ApiException? _lastTransientFailure;
+  int _networkFailureCount = 0;
 
   bool get isStopped => _stopped;
 
@@ -95,8 +96,19 @@ abstract class SyncEngineBase {
   SyncFailureKind registerFailure(ApiException error) {
     final kind = classifySyncFailure(error);
     if (kind == SyncFailureKind.transient) _lastTransientFailure = error;
+    if (isNetworkFailure(error)) _networkFailureCount++;
     return kind;
   }
+
+  /// Znacznik dla [networkFailedSince] — pobierany na starcie wysyłki.
+  @protected
+  int get networkFailureMark => _networkFailureCount;
+
+  /// Czy od [mark] wystąpił brak sieci — flush przerywa wtedy pętlę zamiast
+  /// czekać na timeout każdego kolejnego wiersza. Błąd sprzed znacznika
+  /// (np. nieudany pull offline) nie blokuje wysyłki po powrocie sieci.
+  @protected
+  bool networkFailedSince(int mark) => _networkFailureCount != mark;
 
   @protected
   void logUnexpected(String message, Object error, StackTrace stackTrace) {

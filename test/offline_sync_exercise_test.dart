@@ -182,6 +182,110 @@ void main() {
     await edb.close();
     await dir.delete(recursive: true);
   });
+
+  test('library search matches Polish letters regardless of case', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_search');
+    final edb = ExerciseDatabase('search.db', directoryOverride: dir.path);
+    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)
+      ..stop();
+    final repo = OfflineFirstExerciseRepository(localDb: edb, syncEngine: sync);
+
+    await repo.create(
+      name: 'Łydki stojąc',
+      muscles: const [MuscleGroup.chest],
+      category: ExerciseCategory.isolation,
+      description: '',
+    );
+    await repo.create(
+      name: 'Ściąganie drążka',
+      muscles: const [MuscleGroup.back],
+      category: ExerciseCategory.compound,
+      description: '',
+    );
+
+    final lower = await repo.getAll(query: 'łyd');
+    final upper = await repo.getAll(query: 'ŚCIĄG');
+
+    expect(lower.map((e) => e.name), ['Łydki stojąc']);
+    expect(upper.map((e) => e.name), ['Ściąganie drążka']);
+
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
+
+  test('flush after a failed offline pull still sends every pending row', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_stale_net');
+    final edb = ExerciseDatabase('stale.db', directoryOverride: dir.path);
+
+    await edb.run((db) async {
+      for (final localId in [
+        '11111111-1111-4111-8111-000000000001',
+        '11111111-1111-4111-8111-000000000002',
+      ]) {
+        final dto = ExerciseDto.fromDomain(
+          Exercise(
+            id: localId,
+            name: 'Offline $localId',
+            muscles: const [MuscleGroup.biceps],
+            category: ExerciseCategory.isolation,
+            description: '',
+            isMine: true,
+            createdAt: DateTime.utc(2024),
+          ),
+          pendingOp: 'create',
+        );
+        await db.insert(ExerciseDatabase.tableExercises, dto.toMap());
+      }
+    });
+
+    final remote = _OfflinePullRemote();
+    final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
+
+    // Pull bez sieci zapamiętuje błąd — nie może on przerwać późniejszej
+    // wysyłki, która już przechodzi.
+    await sync.pull();
+    await sync.flush();
+
+    expect(remote.log.where((entry) => entry == 'create'), hasLength(2));
+
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
+}
+
+class _OfflinePullRemote extends _SeqRemote {
+  var _created = 0;
+
+  @override
+  Future<List<Exercise>> getAll({
+    MuscleGroup? muscleGroup,
+    LibraryFilter? filter,
+    String? query,
+  }) async {
+    log.add('getAll');
+    throw const ApiException('network_error');
+  }
+
+  @override
+  Future<Exercise> create({
+    required String name,
+    required List<MuscleGroup> muscles,
+    required ExerciseCategory category,
+    required String description,
+    String? clientId,
+  }) async {
+    log.add('create');
+    _created++;
+    return Exercise(
+      id: 'aaaaaaaa-bbbb-4ccc-bddd-00000000000$_created',
+      name: name,
+      muscles: muscles,
+      category: category,
+      description: description,
+      isMine: true,
+      createdAt: DateTime.utc(2024),
+    );
+  }
 }
 
 class _SpyExerciseRemote extends ExerciseRemoteDataSource {

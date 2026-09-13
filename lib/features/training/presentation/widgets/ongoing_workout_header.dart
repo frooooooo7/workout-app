@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -5,13 +7,13 @@ import '../../../../core/theme/app_colors.dart';
 class OngoingWorkoutHeader extends StatelessWidget {
   const OngoingWorkoutHeader({
     super.key,
-    required this.elapsed,
+    required this.startedAt,
     required this.onBack,
     this.onFinish,
     this.onCancel,
   });
 
-  final String elapsed;
+  final DateTime startedAt;
   final VoidCallback? onFinish;
   final VoidCallback onBack;
   final VoidCallback? onCancel;
@@ -68,15 +70,7 @@ class OngoingWorkoutHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    elapsed,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  _ElapsedClock(startedAt: startedAt),
                 ],
               ),
             ],
@@ -93,6 +87,7 @@ class OngoingWorkoutHeader extends StatelessWidget {
                   child: AbsorbPointer(
                     absorbing: onFinish == null,
                     child: InkWell(
+                      key: const Key('finish-workout-button'),
                       onTap: onFinish,
                       child: Opacity(
                         opacity: onFinish == null ? 0.4 : 1,
@@ -101,7 +96,7 @@ class OngoingWorkoutHeader extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           alignment: Alignment.center,
                           child: Text(
-                            'Zakoncz',
+                            'Zakończ',
                             style: TextStyle(
                               color: onFinish == null
                                   ? AppColors.textSecondary
@@ -143,6 +138,64 @@ class OngoingWorkoutHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Licznik czasu sesji — własny [Timer], żeby sekunda nie przebudowywała
+/// całego ekranu treningu.
+class _ElapsedClock extends StatefulWidget {
+  const _ElapsedClock({required this.startedAt});
+
+  final DateTime startedAt;
+
+  @override
+  State<_ElapsedClock> createState() => _ElapsedClockState();
+}
+
+class _ElapsedClockState extends State<_ElapsedClock> {
+  Timer? _timer;
+  late Duration _elapsed;
+
+  @override
+  void initState() {
+    super.initState();
+    _elapsed = DateTime.now().toUtc().difference(widget.startedAt);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _elapsed = DateTime.now().toUtc().difference(widget.startedAt);
+      });
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ElapsedClock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.startedAt != widget.startedAt) {
+      _elapsed = DateTime.now().toUtc().difference(widget.startedAt);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = _elapsed.inHours.toString().padLeft(2, '0');
+    final minutes = (_elapsed.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (_elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    return Text(
+      '$hours:$minutes:$seconds',
+      style: const TextStyle(
+        color: AppColors.textSecondary,
+        fontSize: 13,
+        fontFeatures: [FontFeature.tabularFigures()],
+        fontWeight: FontWeight.w500,
       ),
     );
   }

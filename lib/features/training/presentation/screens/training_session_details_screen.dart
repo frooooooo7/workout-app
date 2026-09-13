@@ -24,6 +24,7 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
     required this.sessionId,
     required this.repository,
     this.sessionRepository,
+    this.dataChanges,
   });
 
   final String sessionId;
@@ -31,6 +32,10 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
 
   /// Test seam; domyślnie [ServiceLocator.trainingSessionRepository].
   final TrainingSessionRepository? sessionRepository;
+
+  /// Sygnał świeżych danych historii; domyślnie
+  /// [ServiceLocator.trainingSessionDataChanges].
+  final Listenable? dataChanges;
 
   @override
   State<TrainingSessionDetailsScreen> createState() =>
@@ -46,6 +51,7 @@ class _TrainingSessionDetailsScreenState
   bool _shareSaving = false;
   bool _sharedToProfile = false;
   String? _error;
+  late final Listenable _dataChanges;
 
   TrainingSessionRepository? get _sessionRepository {
     if (widget.sessionRepository != null) return widget.sessionRepository;
@@ -59,25 +65,52 @@ class _TrainingSessionDetailsScreenState
   @override
   void initState() {
     super.initState();
+    _dataChanges =
+        widget.dataChanges ?? ServiceLocator.trainingSessionDataChanges;
+    _dataChanges.addListener(_onDataChanged);
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _dataChanges.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  /// Szczegóły odświeżone w tle albo zsynchronizowana sesja — przeładuj
+  /// bez spinnera.
+  void _onDataChanged() {
+    if (!mounted || _loading || _shareSaving) return;
+    unawaited(_load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final detail = await widget.repository.getSessionDetail(widget.sessionId);
       final local = await _sessionRepository?.getById(widget.sessionId);
       if (!mounted) return;
+      final current = _detail;
+      // Ciche przeładowanie może trafić na starszy cache — pokazujemy tylko
+      // nowszą wersję (i nie restartujemy animacji bez potrzeby).
+      if (silent &&
+          current != null &&
+          !detail.updatedAt.isAfter(current.updatedAt)) {
+        return;
+      }
       setState(() {
         _detail = detail;
         _sharedToProfile = local?.sharedToProfile ?? detail.sharedToProfile;
         _loading = false;
+        _error = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = 'Nie udało się pobrać szczegółów sesji.';

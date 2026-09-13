@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
@@ -498,7 +500,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Zakoncz'));
+    await tester.tap(find.byKey(const Key('finish-workout-button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Zakończyć trening?'), findsOneWidget);
@@ -535,9 +537,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Zakoncz'));
+    await tester.tap(find.byKey(const Key('finish-workout-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Zakończ'));
+    await tester.tap(find.widgetWithText(TextButton, 'Zakończ'));
     await tester.pumpAndSettle();
 
     expect(repository.session.status, TrainingSessionStatus.completed);
@@ -548,6 +550,60 @@ void main() {
 
     await cubit.close();
   });
+
+  testWidgets('edit made while a draft save is in flight is still saved', (
+    tester,
+  ) async {
+    final repository = _GatedTrainingSessionRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+          ),
+        ),
+      ),
+    );
+
+    // Pierwsza zmiana — debounce startuje zapis, który jeszcze trwa.
+    repository.gate = Completer<void>();
+    await tester.enterText(find.byType(TextField).at(0), '100');
+    await tester.pump(const Duration(milliseconds: 950));
+    expect(repository.saveCalls, 1);
+
+    // Druga zmiana w trakcie tego zapisu.
+    await tester.enterText(find.byType(TextField).at(1), '5');
+    await tester.pump();
+
+    repository.gate!.complete();
+    repository.gate = null;
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    final set = repository.session.exercises.first.sets.first;
+    expect(set.actualWeight, '100');
+    expect(set.actualReps, '5');
+
+    await cubit.close();
+  });
+}
+
+class _GatedTrainingSessionRepository extends _FakeTrainingSessionRepository {
+  _GatedTrainingSessionRepository(super.session);
+
+  Completer<void>? gate;
+  int saveCalls = 0;
+
+  @override
+  Future<TrainingSession> save(TrainingSession session) async {
+    saveCalls++;
+    final pending = gate;
+    if (pending != null) await pending.future;
+    return super.save(session);
+  }
 }
 
 TrainingSession _session({TrainingSessionSet? firstSet}) {
@@ -641,4 +697,7 @@ class _FakeRestTimerScheduler implements RestTimerScheduler {
   Future<void> cancelRestFinished() async {
     cancelCount += 1;
   }
+
+  @override
+  Future<void> warmUp() async {}
 }

@@ -202,7 +202,11 @@ class _ExerciseThumbnail extends StatelessWidget {
       child: resolved == null
           ? _placeholder()
           : Image(
-              image: exerciseImageProvider(exercise.imageUrl)!,
+              image: exerciseThumbProvider(
+                context,
+                exercise.imageUrl,
+                logicalSize: _size,
+              )!,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => _placeholder(),
               loadingBuilder: (context, child, progress) =>

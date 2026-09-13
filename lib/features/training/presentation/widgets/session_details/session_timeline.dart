@@ -51,51 +51,66 @@ class SessionTimeline extends StatelessWidget {
       icon: Icons.timeline_rounded,
       title: 'Oś czasu treningu',
       padding: const EdgeInsets.fromLTRB(16, 14, 0, 16),
-      child: ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Colors.white, Colors.white, Colors.transparent],
-          stops: [0.0, 0.92, 1.0],
-        ).createShader(bounds),
-        blendMode: BlendMode.dstIn,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(right: 20),
-          physics: const BouncingScrollPhysics(),
-          child: Stack(
-            children: [
-              Positioned(
-                top: _lineY,
-                left: _lineLeadingInset,
-                right: _lineTrailingInset,
-                child: Container(
-                  height: 1.5,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(1),
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(right: 20),
+            physics: const BouncingScrollPhysics(),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: _lineY,
+                  left: _lineLeadingInset,
+                  right: _lineTrailingInset,
+                  child: Container(
+                    height: 1.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DateBadge(date: detail.startedAt),
+                    const SizedBox(width: _dateToStartGap),
+                    const _StartDot(),
+                    for (var i = 0; i < exercises.length; i++) ...[
+                      const SizedBox(width: _nodeGap),
+                      _TimelineNode(
+                        exercise: exercises[i],
+                        showClock: hasClock,
+                        onTap: () => onExerciseTap(i),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 28,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      AppColors.surface.withValues(alpha: 0),
+                      AppColors.surface,
+                    ],
                   ),
                 ),
               ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DateBadge(date: detail.startedAt),
-                  const SizedBox(width: _dateToStartGap),
-                  const _StartDot(),
-                  for (var i = 0; i < exercises.length; i++) ...[
-                    const SizedBox(width: _nodeGap),
-                    _TimelineNode(
-                      exercise: exercises[i],
-                      showClock: hasClock,
-                      onTap: () => onExerciseTap(i),
-                    ),
-                  ],
-                ],
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

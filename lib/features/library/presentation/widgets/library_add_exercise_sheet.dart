@@ -281,7 +281,11 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                   cursorColor: AppColors.primary,
                   decoration: _fieldDecoration(hintText: 'Nazwa ćwiczenia'),
-                  onChanged: (_) => setState(() => _errorText = null),
+                  onChanged: (_) {
+                    if (_errorText != null) {
+                      setState(() => _errorText = null);
+                    }
+                  },
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -297,7 +301,11 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                     hintText:
                         'Opis (technika, tempo, uwagi — opcjonalnie)',
                   ),
-                  onChanged: (_) => setState(() => _errorText = null),
+                  onChanged: (_) {
+                    if (_errorText != null) {
+                      setState(() => _errorText = null);
+                    }
+                  },
                 ),
                 const SizedBox(height: 14),
                 const Text(
@@ -335,6 +343,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                               width: 72,
                               height: 72,
                               fit: BoxFit.cover,
+                              cacheWidth: 144,
                             ),
                           ),
                           Positioned(

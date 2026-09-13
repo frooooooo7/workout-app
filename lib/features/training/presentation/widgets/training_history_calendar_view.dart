@@ -97,90 +97,41 @@ class TrainingHistoryCalendarView extends StatelessWidget {
               ),
             )
           else ...[
-            // Days grid
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: totalCells,
-              itemBuilder: (context, index) {
-                if (index < emptyCells) {
-                  return const SizedBox.shrink();
-                }
-
-                final dayNumber = index - emptyCells + 1;
-                final date = DateTime(year, month, dayNumber);
-                final today = DateTime.now();
-                final isToday = date.year == today.year &&
-                    date.month == today.month &&
-                    date.day == today.day;
-
-                // Find sessions for this day
-                final sessionsForDay = state.calendarSessions.where((s) {
-                  final sLocal = s.startedAt.toLocal();
-                  return sLocal.year == year &&
-                      sLocal.month == month &&
-                      sLocal.day == dayNumber;
-                }).toList();
-
-                final hasWorkout = sessionsForDay.isNotEmpty;
-
-                return GestureDetector(
-                  onTap: () {
-                    if (hasWorkout) {
-                      _showDaySessionsBottomSheet(context, date, sessionsForDay);
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isToday
-                            ? AppColors.primaryVariant
-                            : AppColors.border,
-                        width: isToday ? 1.5 : 1.0,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '$dayNumber',
-                          style: TextStyle(
-                            color: hasWorkout ? Colors.white : AppColors.textSecondary,
-                            fontSize: 15,
-                            fontWeight: isToday || hasWorkout
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        if (hasWorkout) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: AppColors.primary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
+            _CalendarMonthGrid(
+              year: year,
+              month: month,
+              emptyCells: emptyCells,
+              totalCells: totalCells,
+              sessionsByDay: _sessionsByDay(state.calendarSessions, year, month),
+              todayDay: _todayDay(year, month),
+              onDayTap: (date, sessions) {
+                _showDaySessionsBottomSheet(context, date, sessions);
               },
             ),
           ],
         ],
       ),
     );
+  }
+
+  static Map<int, List<TrainingSessionListItem>> _sessionsByDay(
+    List<TrainingSessionListItem> sessions,
+    int year,
+    int month,
+  ) {
+    final grouped = <int, List<TrainingSessionListItem>>{};
+    for (final session in sessions) {
+      final local = session.startedAt.toLocal();
+      if (local.year != year || local.month != month) continue;
+      grouped.putIfAbsent(local.day, () => []).add(session);
+    }
+    return grouped;
+  }
+
+  static int? _todayDay(int year, int month) {
+    final today = DateTime.now();
+    if (today.year == year && today.month == month) return today.day;
+    return null;
   }
 
   void _showDaySessionsBottomSheet(
@@ -265,6 +216,106 @@ class TrainingHistoryCalendarView extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _CalendarMonthGrid extends StatelessWidget {
+  const _CalendarMonthGrid({
+    required this.year,
+    required this.month,
+    required this.emptyCells,
+    required this.totalCells,
+    required this.sessionsByDay,
+    required this.todayDay,
+    required this.onDayTap,
+  });
+
+  final int year;
+  final int month;
+  final int emptyCells;
+  final int totalCells;
+  final Map<int, List<TrainingSessionListItem>> sessionsByDay;
+  final int? todayDay;
+  final void Function(DateTime date, List<TrainingSessionListItem> sessions)
+      onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final weekCount = (totalCells + 6) ~/ 7;
+    return Column(
+      children: [
+        for (var week = 0; week < weekCount; week++) ...[
+          if (week != 0) const SizedBox(height: 8),
+          Row(
+            children: [
+              for (var col = 0; col < 7; col++) ...[
+                if (col != 0) const SizedBox(width: 8),
+                Expanded(
+                  child: _dayCell(week * 7 + col),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _dayCell(int index) {
+    if (index >= totalCells || index < emptyCells) {
+      return const AspectRatio(aspectRatio: 1, child: SizedBox.shrink());
+    }
+
+    final dayNumber = index - emptyCells + 1;
+    final date = DateTime(year, month, dayNumber);
+    final sessionsForDay = sessionsByDay[dayNumber] ?? const [];
+    final hasWorkout = sessionsForDay.isNotEmpty;
+    final isToday = todayDay == dayNumber;
+
+    return AspectRatio(
+      aspectRatio: 1,
+      child: GestureDetector(
+        onTap: hasWorkout
+            ? () => onDayTap(date, sessionsForDay)
+            : null,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isToday ? AppColors.primaryVariant : AppColors.border,
+              width: isToday ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '$dayNumber',
+                style: TextStyle(
+                  color: hasWorkout ? Colors.white : AppColors.textSecondary,
+                  fontSize: 15,
+                  fontWeight: isToday || hasWorkout
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (hasWorkout) ...[
+                const SizedBox(height: 4),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

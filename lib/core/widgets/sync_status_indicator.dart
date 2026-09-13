@@ -297,17 +297,18 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
       button: true,
       child: Tooltip(
         message: spec.tooltip,
-        child: Material(
-          color: AppColors.surface,
-          borderRadius: radius,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: widget.onTap,
-            child: AnimatedContainer(
-              duration: duration,
-              curve: Curves.easeOut,
-              width: widget.size,
-              height: widget.size,
+        child: RepaintBoundary(
+          child: Material(
+            color: AppColors.surface,
+            borderRadius: radius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: widget.onTap,
+              child: AnimatedContainer(
+                duration: duration,
+                curve: Curves.easeOut,
+                width: widget.size,
+                height: widget.size,
               decoration: BoxDecoration(
                 color: spec.highlight
                     ? spec.color.withValues(alpha: 0.14)
@@ -363,6 +364,7 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
               ),
             ),
           ),
+        ),
         ),
       ),
     );

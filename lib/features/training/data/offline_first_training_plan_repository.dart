@@ -38,19 +38,13 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
   }
 
   Future<Map<String, dynamic>?> _findRow(Database db, String id) async {
-    final byLocal = await db.query(
-      ExerciseDatabase.tableTrainingPlans,
-      where: 'local_id = ?',
-      whereArgs: [id],
+    final rows = await db.rawQuery(
+      'SELECT * FROM ${ExerciseDatabase.tableTrainingPlans} '
+      'WHERE local_id = ? OR server_id = ? '
+      'ORDER BY CASE WHEN local_id = ? THEN 0 ELSE 1 END LIMIT 1',
+      [id, id, id],
     );
-    if (byLocal.isNotEmpty) return byLocal.first;
-    final byServer = await db.query(
-      ExerciseDatabase.tableTrainingPlans,
-      where: 'server_id = ?',
-      whereArgs: [id],
-    );
-    if (byServer.isNotEmpty) return byServer.first;
-    return null;
+    return rows.isEmpty ? null : rows.first;
   }
 
   @override
@@ -61,12 +55,11 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
         where: 'is_deleted = 0',
         orderBy: 'updated_at DESC',
       );
-      final records = <CustomTrainingPlan>[];
-      for (final row in rows) {
-        final record = await TrainingPlanLocalMapper.fromDb(db, row);
-        if (record != null && !record.isDeleted) records.add(record.plan);
-      }
-      return records;
+      final records = await TrainingPlanLocalMapper.fromDbMany(db, rows);
+      return [
+        for (final record in records)
+          if (!record.isDeleted) record.plan,
+      ];
     });
     _scheduleSync();
     return plans;

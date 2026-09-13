@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/data/latest_10y.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../domain/services/rest_timer_scheduler.dart';
@@ -58,6 +58,12 @@ class RestTimerNotificationScheduler implements RestTimerScheduler {
   Future<void> cancelRestFinished() async {
     if (kIsWeb) return;
     await _notifications.cancel(id: _notificationId);
+  }
+
+  @override
+  Future<void> warmUp() async {
+    if (kIsWeb) return;
+    await _ensureInitialized();
   }
 
   Future<void> _ensureInitialized() async {

@@ -112,6 +112,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     final rows = await _pendingRows();
     if (rows == null || rows.isEmpty) return;
 
+    final networkMark = networkFailureMark;
     var changed = false;
     for (final row in rows) {
       if (isStopped) return;
@@ -126,6 +127,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
         // Jeden uszkodzony wiersz nie może zablokować wysyłki pozostałych.
         logUnexpected('Training plan $localId sync failed', error, stackTrace);
       }
+      if (networkFailedSince(networkMark)) break;
     }
     if (changed) notifyDataChanged();
   }
@@ -223,26 +225,37 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     try {
       final serverPlans = await _remote.getAll();
       if (isStopped) return;
-      for (final plan in serverPlans) {
-        await _storePulledPlan(plan);
-      }
       await _localDb.run((db) async {
-        final serverIds = serverPlans.map((p) => p.id).toSet();
-        final rows = await db.query(
-          ExerciseDatabase.tableTrainingPlans,
-          columns: ['local_id', 'server_id', 'pending_op'],
-        );
-        for (final row in rows) {
-          if (row['pending_op'] != null) continue;
-          final sid = row['server_id'] as String?;
-          if (sid != null && !serverIds.contains(sid)) {
-            await db.delete(
+        await db.transaction((txn) async {
+          for (final plan in serverPlans) {
+            await _storePulledPlanOn(txn, plan);
+          }
+          final serverIds = serverPlans.map((p) => p.id).toSet();
+          final rows = await txn.query(
+            ExerciseDatabase.tableTrainingPlans,
+            columns: ['local_id', 'server_id', 'pending_op'],
+          );
+          final orphanIds = <String>[
+            for (final row in rows)
+              if (row['pending_op'] == null &&
+                  row['server_id'] != null &&
+                  !serverIds.contains(row['server_id']))
+                row['local_id'] as String,
+          ];
+          const chunkSize = 900;
+          for (var i = 0; i < orphanIds.length; i += chunkSize) {
+            final end = i + chunkSize > orphanIds.length
+                ? orphanIds.length
+                : i + chunkSize;
+            final chunk = orphanIds.sublist(i, end);
+            final placeholders = List.filled(chunk.length, '?').join(', ');
+            await txn.delete(
               ExerciseDatabase.tableTrainingPlans,
-              where: 'local_id = ?',
-              whereArgs: [row['local_id']],
+              where: 'local_id IN ($placeholders)',
+              whereArgs: chunk,
             );
           }
-        }
+        });
       });
       notifyDataChanged();
     } on ApiException catch (e) {
@@ -252,7 +265,10 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     }
   }
 
-  Future<String> _ensureExerciseLocalRow(Database db, Exercise exercise) async {
+  Future<String> _ensureExerciseLocalRow(
+    DatabaseExecutor db,
+    Exercise exercise,
+  ) async {
     var existing = await db.query(
       ExerciseDatabase.tableExercises,
       where: 'server_id = ? OR local_id = ?',
@@ -279,7 +295,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
   }
 
   Future<Map<String, dynamic>?> _findLocalRow(
-    Database db,
+    DatabaseExecutor db,
     CustomTrainingPlan plan, {
     String? localIdOverride,
   }) async {
@@ -315,7 +331,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
   /// Usuwa inne wiersze wskazujące ten sam plan na serwerze (duplikaty ze
   /// starszych wersji synchronizacji) i przepina na [keepLocalId] sesje.
   Future<void> _removeDuplicateServerRows(
-    Database db, {
+    DatabaseExecutor db, {
     required String serverId,
     required String keepLocalId,
   }) async {
@@ -352,8 +368,25 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     String? localIdOverride,
     int? expectedUpdatedAt,
     String? sentOp,
+  }) {
+    return _localDb.run(
+      (db) => _storePulledPlanOn(
+        db,
+        plan,
+        localIdOverride: localIdOverride,
+        expectedUpdatedAt: expectedUpdatedAt,
+        sentOp: sentOp,
+      ),
+    );
+  }
+
+  Future<void> _storePulledPlanOn(
+    DatabaseExecutor db,
+    CustomTrainingPlan plan, {
+    String? localIdOverride,
+    int? expectedUpdatedAt,
+    String? sentOp,
   }) async {
-    await _localDb.run((db) async {
       final existing = await _findLocalRow(
         db,
         plan,
@@ -473,7 +506,6 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
         ),
         exerciseServerIdsByLocalId: exerciseServerIds,
       );
-    });
   }
 }
 

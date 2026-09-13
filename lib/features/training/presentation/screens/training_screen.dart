@@ -46,6 +46,7 @@ class _TrainingShellContent extends StatefulWidget {
 
 class _TrainingShellContentState extends State<_TrainingShellContent> {
   GoRouter? _router;
+  String? _lastPath;
 
   @override
   void didChangeDependencies() {
@@ -54,6 +55,7 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
     if (!identical(_router, router)) {
       _router?.routerDelegate.removeListener(_onRouteStackChanged);
       _router = router;
+      _lastPath = router.state.uri.path;
       _router!.routerDelegate.addListener(_onRouteStackChanged);
     }
   }
@@ -61,7 +63,10 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
   void _onRouteStackChanged() {
     if (!mounted) return;
     final path = _router?.state.uri.path;
-    if (path == '/app/training') {
+    if (path == null) return;
+    final previous = _lastPath;
+    _lastPath = path;
+    if (previous != '/app/training' && path == '/app/training') {
       context.read<TrainingSessionCubit>().refresh();
       context.read<TrainingPlansCubit>().refresh();
       context.read<TrainingHistoryCubit>().refresh();
@@ -98,22 +103,13 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                                   : () {
                                       final cubit = context
                                           .read<TrainingSessionCubit>();
-                                      context
-                                          .push(
-                                            '/app/training/ongoing-workout',
-                                            extra: OngoingWorkoutArgs(
-                                              initialSession: active,
-                                              sessionCubit: cubit,
-                                            ),
-                                          )
-                                          .then((_) {
-                                            if (context.mounted) {
-                                              cubit.refresh();
-                                              context
-                                                  .read<TrainingHistoryCubit>()
-                                                  .refresh();
-                                            }
-                                          });
+                                      context.push(
+                                        '/app/training/ongoing-workout',
+                                        extra: OngoingWorkoutArgs(
+                                          initialSession: active,
+                                          sessionCubit: cubit,
+                                        ),
+                                      );
                                     },
                               onLibraryTap: () {
                                 context.push('/app/training/library');

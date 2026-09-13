@@ -1,0 +1,39 @@
+---
+description: Wydajność warstwy danych Flutter (sqflite, sync, sieć, cubity) — brak blokowania wątku UI i zbędnych zapytań
+globs: lib/**/data/**/*.dart, lib/**/domain/**/*.dart, lib/**/bloc/**/*.dart, lib/core/**/*.dart
+alwaysApply: false
+---
+
+# Wydajność danych (Flutter)
+
+## SQLite (sqflite)
+- Każda kolumna używana w `WHERE`/`JOIN`/`ORDER BY` ma indeks — w szczególności klucze „obce” tabel dzieci (`plan_local_id`, `plan_exercise_local_id`, `session_local_id`, `session_exercise_local_id`) oraz `pending_op`, `status`, `started_at`. Nowa tabela = nowy indeks w tej samej migracji (`_dbVersion++`, `_onCreate` + `_onUpgrade`).
+- **Zakaz N+1**: nigdy `query` w pętli `for`. Rodzic → dzieci → wnuki ładuj trzema zapytaniami `WHERE x IN (...)` (chunk po 900 parametrów) i grupuj w Dart (`fromDbMany`).
+- Wiele zapisów = jedna `db.transaction` i/lub `Batch`. Delete‑and‑reinsert dzieci przy każdym zapisie draftu jest zabroniony poza transakcją; preferuj `UPDATE ... WHERE local_id = ?` zmienionego wiersza.
+- `SELECT *` zabroniony na tabelach z BLOB/JSON (`exercises.local_image_bytes`) — zawsze `columns: [...]`.
+- Filtrowanie (`is_favourite`, `is_mine`, zakres dat) i sortowanie w SQL, nie w Dart po pobraniu całej tabeli. **Wyjątek: wyszukiwanie tekstowe** — `LOWER()`/`LIKE` w SQLite zna tylko ASCII (`'Łydki' LIKE '%łyd%'` = 0), więc nazwy porównuj w Dart (`toLowerCase()`) na wyniku zapytania bez BLOB-ów.
+- Zapis draftu z debounce: flagę „niezapisane” zeruj **przed** `await save`, a przed zakończeniem/wyjściem poczekaj na zapis w toku — edycja wpisana w trakcie zapisu nie może zginąć.
+- `_findRow` po `local_id` lub `server_id` = jedno zapytanie `WHERE local_id = ? OR server_id = ? LIMIT 1`.
+- Usuwanie sierot: jeden `DELETE ... WHERE server_id NOT IN (...)`, nie `delete` per wiersz.
+
+## Sync
+- Reconcile pull (ćwiczenia, plany) w jednej transakcji; wcześniej jeden `SELECT local_id, server_id, pending_op` do mapy, potem `Batch`.
+- Nie pobieraj pełnego katalogu, gdy wystarczy delta: `updatedSince`/`If-None-Match`; snapshot ulubionych = `GET /exercises/:id` dla dotkniętych wierszy, nie cała biblioteka.
+- W pętli flush po błędzie sieci → `break` (koordynator ma backoff). Nie czekaj 15 s timeoutu per wiersz. Liczy się tylko błąd **z bieżącego przebiegu** (`networkFailureMark` na starcie + `networkFailedSince`) — stary błąd (np. nieudany pull offline) nie może przerywać wysyłki po powrocie sieci.
+- Stale-while-revalidate (cache od razu, sieć w tle): gdy odpowiedź z tła różni się od cache, powiadom ekrany (`onFreshData` → `*DataChanges`, z debounce). Bez tego pull-to-refresh pokazuje dane o jeden odczyt w tyle. Porównuj payload — powiadomienie przy identycznej odpowiedzi zapętla odświeżanie.
+- Pierwszy `syncNow()` po zalogowaniu odłóż o 1–2 s, żeby pierwszy frame czytał lokalną bazę bez konkurencji o połączenie.
+- `onDataChanged` raz na batch (tak jest) — nie zmieniaj tego na per wiersz.
+- Nowy listener `*DataChanges` = sprawdź, czy ten sam ekran/cubit nie istnieje już w innej gałęzi `IndexedStack`. Jedno źródło danych na typ (shared cubit na poziomie shella lub cache w repozytorium z TTL kilku sekund).
+
+## Sieć / start
+- Token trzymaj w pamięci po pierwszym odczycie — `FlutterSecureStorage.read` (platform channel + Keystore) nie może lecieć przy każdym requeście.
+- Niezależne `await` → `Future.wait` (np. `readToken` + `readUser`, 3 requesty profilu).
+- Ciężki `jsonDecode`/`jsonEncode` (strony historii, katalog) → rozważ `compute`/`Isolate.run`; nie dekoduj cache, gdy odpowiedź sieci już przyszła.
+- `tz.initializeTimeZones()` i inne ciężkie inicjalizacje uruchamiaj wcześnie w tle (`unawaited`) lub w `Isolate.run`, nie w reakcji na tap użytkownika. Preferuj `timezone/data/latest_10y.dart`.
+
+## Cubity
+- `refresh()` wywołany przez listener routera tylko przy **wejściu** na trasę (porównaj poprzednią ścieżkę), nie na każdą zmianę stosu; nie duplikuj go w `.then()` po `push`.
+- Ciche odświeżenie w tle = `refresh(silent: true)` bez `isLoading: true` (żaden spinner nie ma migać przy powrocie na tab).
+- Każde `setQuery`/`setFilter` wywołujące sieć/DB ma debounce ≥ 250 ms.
+- Wyniki per miesiąc/okres memoizuj w cubicie i inwaliduj tylko na `dataChanges`.
+- `copyWith` jest czystą kopią: żadnych `DateTime.now()` ani generowania list w konstruktorze stanu.

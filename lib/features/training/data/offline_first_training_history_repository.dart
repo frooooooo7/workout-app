@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/models/training_history_models.dart';
@@ -12,28 +15,34 @@ import 'training_session_local_history.dart';
 /// Historia treningów: serwer jest źródłem prawdy, ale użytkownik nigdy nie
 /// czeka na niego bez potrzeby.
 ///
-/// * Słaby zasięg — gdy jest cache, a serwer nie odpowie w
-///   [cacheGracePeriod], od razu zwracamy cache (żądanie kończy się w tle
-///   i odświeża cache na następny raz).
-/// * Brak sieci, błąd serwera — cache, a bez cache: lokalne sesje.
+/// * Jest cache — oddajemy go od razu (stale-while-revalidate), a sieć
+///   odświeża zapis w tle. Gdy odpowiedź różni się od cache, [onFreshData]
+///   daje znać ekranom, żeby przeczytały dane jeszcze raz.
+/// * Brak cache — czekamy na sieć. Błąd: lokalne sesje, a bez nich wyjątek.
 /// * Treningi zakończone offline (jeszcze niewysłane) są dokładane do
 ///   pierwszej strony wyników, więc od razu widać je w historii.
 class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository {
-  const OfflineFirstTrainingHistoryRepository({
+  OfflineFirstTrainingHistoryRepository({
     required TrainingHistoryRemoteDataSource remote,
     required TrainingHistoryLocalCache localCache,
     TrainingSessionLocalHistory? localSessions,
-    this.cacheGracePeriod = const Duration(milliseconds: 2500),
+    VoidCallback? onFreshData,
+    this.freshDataDebounce = const Duration(milliseconds: 300),
   })  : _remote = remote,
         _localCache = localCache,
-        _localSessions = localSessions;
+        _localSessions = localSessions,
+        _onFreshData = onFreshData;
 
   final TrainingHistoryRemoteDataSource _remote;
   final TrainingHistoryLocalCache _localCache;
   final TrainingSessionLocalHistory? _localSessions;
+  final VoidCallback? _onFreshData;
+  final _inFlightLists = <String, Future<TrainingSessionPage>>{};
 
-  /// Ile czekamy na serwer, zanim pokażemy zapisany cache.
-  final Duration cacheGracePeriod;
+  /// Kilka odpowiedzi odświeżonych w tle naraz (np. wszystkie strony
+  /// miesiąca) daje jedno powiadomienie zamiast serii przeładowań ekranów.
+  final Duration freshDataDebounce;
+  Timer? _freshDataTimer;
 
   @override
   Future<TrainingSessionPage> getSessions({
@@ -44,7 +53,7 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
     String? query,
     DateTime? from,
     DateTime? to,
-  }) async {
+  }) {
     final cacheKey = _buildListCacheKey(
       cursor: cursor,
       limit: limit,
@@ -54,6 +63,37 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       from: from,
       to: to,
     );
+    final inFlight = _inFlightLists[cacheKey];
+    if (inFlight != null) return inFlight;
+
+    final future = _getSessionsForKey(
+      cacheKey: cacheKey,
+      cursor: cursor,
+      limit: limit,
+      status: status,
+      planId: planId,
+      query: query,
+      from: from,
+      to: to,
+    );
+    _inFlightLists[cacheKey] = future;
+    return future.whenComplete(() {
+      if (identical(_inFlightLists[cacheKey], future)) {
+        _inFlightLists.remove(cacheKey);
+      }
+    });
+  }
+
+  Future<TrainingSessionPage> _getSessionsForKey({
+    required String cacheKey,
+    String? cursor,
+    required int limit,
+    TrainingSessionStatus? status,
+    String? planId,
+    String? query,
+    DateTime? from,
+    DateTime? to,
+  }) async {
     final isFirstPage = cursor == null || cursor.isEmpty;
 
     try {
@@ -68,17 +108,16 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
             from: from,
             to: to,
           );
+          final payload = _remote.pageToCachedJson(fresh);
           await _localCache.saveListResponse(
             cacheKey: cacheKey,
-            payload: _remote.pageToCachedJson(fresh),
+            payload: payload,
             updatedAt: DateTime.now().toUtc(),
           );
-          return fresh;
+          return (fresh, payload);
         },
-        readCache: () async {
-          final cached = await _localCache.readListResponse(cacheKey);
-          return cached == null ? null : _remote.pageFromCachedJson(cached);
-        },
+        readCache: () => _localCache.readListResponse(cacheKey),
+        decodeCache: _remote.pageFromCachedJson,
       );
       if (!isFirstPage) return page;
       return await _withLocalSessions(
@@ -115,17 +154,16 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       return await _preferFresh<TrainingSessionDetail>(
         fetch: () async {
           final detail = await _remote.getSessionDetail(sessionId);
+          final payload = _remote.detailToCachedJson(detail);
           await _localCache.saveSessionDetail(
             sessionId: sessionId,
-            payload: _remote.detailToCachedJson(detail),
+            payload: payload,
             updatedAt: detail.updatedAt,
           );
-          return detail;
+          return (detail, payload);
         },
-        readCache: () async {
-          final cached = await _localCache.readSessionDetail(sessionId);
-          return cached == null ? null : _remote.detailFromCachedJson(cached);
-        },
+        readCache: () => _localCache.readSessionDetail(sessionId),
+        decodeCache: _remote.detailFromCachedJson,
       );
     } on ApiException catch (error) {
       if (local != null && _isRecoverable(error)) {
@@ -147,50 +185,58 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
         status == 429;
   }
 
+  /// [fetch] pobiera dane i zapisuje je w cache, zwracając też zapisany
+  /// payload — po nim poznajemy, czy serwer odesłał coś nowego.
   Future<T> _preferFresh<T extends Object>({
-    required Future<T> Function() fetch,
-    required Future<T?> Function() readCache,
+    required Future<(T, Map<String, dynamic>)> Function() fetch,
+    required Future<Map<String, dynamic>?> Function() readCache,
+    required T Function(Map<String, dynamic> payload) decodeCache,
   }) async {
+    // Cache najpierw — inaczej szybki mock zapisze odpowiedź, a my
+    // odczytalibyśmy ją jako „stary” cache w tym samym wywołaniu.
+    final cachedPayload = await _readSafely(readCache);
+    final cached = cachedPayload == null
+        ? null
+        : _decodeSafely(() => decodeCache(cachedPayload));
     final remote = fetch();
-    // Błąd żądania, na które już nie czekamy, nie może wyciec jako nieobsłużony.
-    unawaited(remote.then<void>((_) {}, onError: (Object _) {}));
-
-    final cached = await _readSafely(readCache);
-    if (cached == null) return remote;
-
-    final completer = Completer<_FetchOutcome<T>>();
-    final timer = Timer(cacheGracePeriod, () {
-      if (!completer.isCompleted) completer.complete(_FetchOutcome<T>.timedOut());
-    });
+    if (cachedPayload == null || cached == null) {
+      final (fresh, _) = await remote;
+      return fresh;
+    }
     unawaited(
       remote.then<void>(
-        (value) {
-          if (!completer.isCompleted) {
-            completer.complete(_FetchOutcome<T>.fresh(value));
+        (result) {
+          final (_, freshPayload) = result;
+          if (!_samePayload(cachedPayload, freshPayload)) {
+            _scheduleFreshDataNotice();
           }
         },
-        onError: (Object error, StackTrace stackTrace) {
-          if (!completer.isCompleted) {
-            completer.complete(_FetchOutcome<T>.failed(error, stackTrace));
-          }
-        },
+        onError: (Object _) {},
       ),
     );
+    return cached;
+  }
 
-    final outcome = await completer.future;
-    timer.cancel();
+  bool _samePayload(Map<String, dynamic> a, Map<String, dynamic> b) =>
+      jsonEncode(a) == jsonEncode(b);
 
-    final value = outcome.value;
-    if (value != null) return value;
-    final error = outcome.error;
-    if (error == null) return cached; // serwer nie zdążył
-    if (error is ApiException && _isRecoverable(error)) return cached;
-    Error.throwWithStackTrace(error, outcome.stackTrace ?? StackTrace.current);
+  void _scheduleFreshDataNotice() {
+    final notify = _onFreshData;
+    if (notify == null || (_freshDataTimer?.isActive ?? false)) return;
+    _freshDataTimer = Timer(freshDataDebounce, notify);
   }
 
   Future<T?> _readSafely<T extends Object>(Future<T?> Function() read) async {
     try {
       return await read();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  T? _decodeSafely<T extends Object>(T Function() decode) {
+    try {
+      return decode();
     } catch (_) {
       return null;
     }
@@ -347,19 +393,4 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       'to=${to?.toUtc().toIso8601String() ?? ''}',
     ].join('&');
   }
-}
-
-class _FetchOutcome<T extends Object> {
-  _FetchOutcome._({this.value, this.error, this.stackTrace});
-
-  factory _FetchOutcome.fresh(T value) => _FetchOutcome._(value: value);
-
-  factory _FetchOutcome.failed(Object error, StackTrace stackTrace) =>
-      _FetchOutcome._(error: error, stackTrace: stackTrace);
-
-  factory _FetchOutcome.timedOut() => _FetchOutcome._();
-
-  final T? value;
-  final Object? error;
-  final StackTrace? stackTrace;
 }

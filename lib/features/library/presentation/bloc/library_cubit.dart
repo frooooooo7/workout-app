@@ -41,6 +41,28 @@ class LibraryState {
       error: clearError ? null : (error ?? this.error),
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is LibraryState &&
+        other.filter == filter &&
+        other.category == category &&
+        other.query == query &&
+        listEquals(other.exercises, exercises) &&
+        other.loading == loading &&
+        other.error == error;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    filter,
+    category,
+    query,
+    Object.hashAll(exercises),
+    loading,
+    error,
+  );
 }
 
 class LibraryCubit extends Cubit<LibraryState> {
@@ -73,8 +95,6 @@ class LibraryCubit extends Cubit<LibraryState> {
     if (isClosed) return;
     if (showLoadingIndicator) {
       emit(state.copyWith(loading: true, clearError: true));
-    } else {
-      emit(state.copyWith(clearError: true));
     }
     try {
       final result = await _repository.getAll(
