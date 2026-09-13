@@ -92,9 +92,12 @@ class TrainingSessionCubit extends Cubit<TrainingSessionState> {
     _emitIfOpen(state.copyWith(activeSession: saved));
   }
 
-  Future<void> finish(String sessionId) async {
-    await _repository.finish(sessionId);
+  /// Kończy sesję i zwraca jej ukończoną migawkę — z niej korzysta ekran
+  /// podsumowania, zanim historia zostanie odświeżona z serwera.
+  Future<TrainingSession> finish(String sessionId) async {
+    final finished = await _repository.finish(sessionId);
     _emitIfOpen(state.copyWith(clearActiveSession: true));
+    return finished;
   }
 
   Future<void> cancel(String sessionId) async {

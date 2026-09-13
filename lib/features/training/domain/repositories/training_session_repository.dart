@@ -15,4 +15,7 @@ abstract interface class TrainingSessionRepository {
   Future<TrainingSession> finish(String sessionId);
 
   Future<TrainingSession> cancel(String sessionId);
+
+  /// Włącza/wyłącza widoczność ukończonej sesji w aktywności na profilu.
+  Future<TrainingSession> setSharedToProfile(String sessionId, bool shared);
 }

@@ -15,6 +15,7 @@ import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/training/presentation/screens/plans_screen.dart';
 import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/training/presentation/screens/training_stats_screen.dart';
+import '../../features/training/presentation/screens/workout_summary_screen.dart';
 import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
@@ -126,6 +127,15 @@ GoRouter buildRouter({
                     builder: (_, s) {
                       final args = s.extra as OngoingWorkoutArgs?;
                       return OngoingWorkoutScreen(args: args);
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'workout-summary',
+                    path: 'workout-summary',
+                    builder: (_, s) {
+                      final args = s.extra as WorkoutSummaryArgs?;
+                      return WorkoutSummaryScreen(args: args);
                     },
                   ),
                   GoRoute(

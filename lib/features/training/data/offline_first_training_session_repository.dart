@@ -171,7 +171,26 @@ class OfflineFirstTrainingSessionRepository
   Future<TrainingSession> finish(String sessionId) async {
     final row = await _findRow(sessionId);
     if (row == null) throw StateError('Training session not found');
-    return _updateActiveStatus(row, TrainingSessionStatus.completed);
+    return _updateSession(
+      row,
+      (current) => current.copyWith(
+        status: TrainingSessionStatus.completed,
+        finishedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  @override
+  Future<TrainingSession> setSharedToProfile(
+    String sessionId,
+    bool shared,
+  ) async {
+    final row = await _findRow(sessionId);
+    if (row == null) throw StateError('Training session not found');
+    return _updateSession(
+      row,
+      (current) => current.copyWith(sharedToProfile: shared),
+    );
   }
 
   @override
@@ -219,9 +238,11 @@ class OfflineFirstTrainingSessionRepository
     return snapshot;
   }
 
-  Future<TrainingSession> _updateActiveStatus(
+  /// Odczytuje sesję z [row], nakłada [mutate] i zapisuje ją z właściwym
+  /// `pending_op`, a potem planuje synchronizację.
+  Future<TrainingSession> _updateSession(
     Map<String, dynamic> row,
-    TrainingSessionStatus status,
+    TrainingSession Function(TrainingSession current) mutate,
   ) async {
     late TrainingSession updated;
     await _localDb.run((db) async {
@@ -237,13 +258,7 @@ class OfflineFirstTrainingSessionRepository
         storedPendingOp: pending,
       );
 
-      updated = current.copyWith(
-        status: status,
-        finishedAt: status == TrainingSessionStatus.completed
-            ? DateTime.now().toUtc()
-            : current.finishedAt,
-        pendingOp: nextPending,
-      );
+      updated = mutate(current).copyWith(pendingOp: nextPending);
 
       await TrainingSessionLocalMapper.upsert(
         db,

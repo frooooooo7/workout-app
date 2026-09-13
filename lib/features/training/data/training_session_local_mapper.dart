@@ -89,6 +89,8 @@ class TrainingSessionLocalMapper {
       note: sessionRow['note'] as String?,
       startedAt: decodeDate(sessionRow['started_at'])!,
       finishedAt: decodeDate(sessionRow['finished_at']),
+      sharedToProfile:
+          ((sessionRow['shared_to_profile'] as int?) ?? 0) == 1,
       exercises: exercises,
       pendingOp: sessionRow['pending_op'] as String?,
     );
@@ -120,6 +122,7 @@ class TrainingSessionLocalMapper {
         'note': session.note,
         'started_at': encodeDate(session.startedAt),
         'finished_at': encodeDate(session.finishedAt),
+        'shared_to_profile': session.sharedToProfile ? 1 : 0,
         'created_at': old.isEmpty ? now : old.first['created_at'],
         'updated_at': now,
         'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),

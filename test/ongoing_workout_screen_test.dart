@@ -7,6 +7,7 @@ import 'package:gym/features/training/domain/repositories/training_session_repos
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/presentation/bloc/training_session_cubit.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
+import 'package:gym/features/training/presentation/screens/workout_summary_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -467,6 +468,37 @@ void main() {
 
     await cubit.close();
   });
+
+  testWidgets('finish opens the workout summary instead of leaving', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Zakoncz'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Zakończ'));
+    await tester.pumpAndSettle();
+
+    expect(repository.session.status, TrainingSessionStatus.completed);
+    expect(cubit.state.activeSession, isNull);
+    expect(find.byType(WorkoutSummaryScreen), findsOneWidget);
+    expect(find.text('Trening ukończony!'), findsOneWidget);
+    expect(find.byType(OngoingWorkoutScreen), findsNothing);
+
+    await cubit.close();
+  });
 }
 
 TrainingSession _session({TrainingSessionSet? firstSet}) {
@@ -521,12 +553,26 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   }
 
   @override
-  Future<TrainingSession> finish(String sessionId) async =>
-      session.copyWith(status: TrainingSessionStatus.completed);
+  Future<TrainingSession> finish(String sessionId) async {
+    session = session.copyWith(
+      status: TrainingSessionStatus.completed,
+      finishedAt: DateTime.now().toUtc(),
+    );
+    return session;
+  }
 
   @override
   Future<TrainingSession> cancel(String sessionId) async =>
       session.copyWith(status: TrainingSessionStatus.cancelled);
+
+  @override
+  Future<TrainingSession> setSharedToProfile(
+    String sessionId,
+    bool shared,
+  ) async {
+    session = session.copyWith(sharedToProfile: shared);
+    return session;
+  }
 }
 
 class _FakeRestTimerScheduler implements RestTimerScheduler {

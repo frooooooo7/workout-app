@@ -61,6 +61,7 @@ class TrainingSessionRemoteDataSource {
       finishedAt: json['finishedAt'] != null
           ? DateTime.tryParse(json['finishedAt'] as String)?.toUtc()
           : null,
+      sharedToProfile: (json['sharedToProfile'] as bool?) ?? false,
       exercises: exercises,
     );
   }
@@ -78,6 +79,7 @@ class TrainingSessionRemoteDataSource {
       'note': session.note,
       'startedAt': session.startedAt.toUtc().toIso8601String(),
       'finishedAt': session.finishedAt?.toUtc().toIso8601String(),
+      'sharedToProfile': session.sharedToProfile,
       'exercises': session.exercises.asMap().entries.map((entry) {
         final exercise = entry.value;
         final serverExerciseId =

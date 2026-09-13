@@ -155,6 +155,82 @@ void main() {
     await fixture.dispose();
   });
 
+  test('finish returns finishedAt and leaves session unshared', () async {
+    final fixture = await _Fixture.create();
+    final repo = fixture.stoppedRepo();
+    final session = await repo.startFromPlan(_plan());
+
+    final finished = await repo.finish(session.id);
+
+    expect(finished.finishedAt, isNotNull);
+    expect(finished.sharedToProfile, isFalse);
+    await fixture.db.run((db) async {
+      final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+      expect(rows.single['shared_to_profile'], 0);
+    });
+
+    await fixture.dispose();
+  });
+
+  test('setSharedToProfile persists flag and schedules sync', () async {
+    final fixture = await _Fixture.create();
+    final repo = fixture.stoppedRepo();
+    final session = await repo.startFromPlan(_plan());
+    await repo.finish(session.id);
+
+    final shared = await repo.setSharedToProfile(session.id, true);
+
+    expect(shared.id, session.id);
+    expect(shared.sharedToProfile, isTrue);
+    expect(shared.status, TrainingSessionStatus.completed);
+    await fixture.db.run((db) async {
+      final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+      expect(rows.single['shared_to_profile'], 1);
+      expect(rows.single['status'], 'completed');
+      expect(rows.single['pending_op'], 'create');
+    });
+
+    final unshared = await repo.setSharedToProfile(session.id, false);
+    expect(unshared.sharedToProfile, isFalse);
+    await fixture.db.run((db) async {
+      final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
+      expect(rows.single['shared_to_profile'], 0);
+    });
+
+    await fixture.dispose();
+  });
+
+  test('flush sends sharedToProfile flag to the API', () async {
+    final fixture = await _Fixture.create();
+    final remote = _SpyTrainingSessionRemote();
+    final repo = OfflineFirstTrainingSessionRepository(
+      localDb: fixture.db,
+      syncEngine: TrainingSessionSyncEngine(
+        remote: remote,
+        localDb: fixture.db,
+      )..stop(),
+    );
+    final session = await repo.startFromPlan(_plan());
+    await repo.finish(session.id);
+    await repo.setSharedToProfile(session.id, true);
+
+    await TrainingSessionSyncEngine(
+      remote: remote,
+      localDb: fixture.db,
+    ).flush();
+
+    expect(remote.createdSessions.single.sharedToProfile, isTrue);
+    expect(
+      remote.toBody(
+        remote.createdSessions.single,
+        exerciseServerIdsByLocalId: const {},
+      )['sharedToProfile'],
+      isTrue,
+    );
+
+    await fixture.dispose();
+  });
+
   test(
     'flush sends active local session once and clears pending state',
     () async {
@@ -294,6 +370,7 @@ class _SpyTrainingSessionRemote extends TrainingSessionRemoteDataSource {
     : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => ''));
 
   final List<String> log = [];
+  final List<TrainingSession> createdSessions = [];
   final Future<void> Function(TrainingSession session)? onCreate;
 
   @override
@@ -302,6 +379,7 @@ class _SpyTrainingSessionRemote extends TrainingSessionRemoteDataSource {
     required Map<String, String?> exerciseServerIdsByLocalId,
   }) async {
     log.add('create');
+    createdSessions.add(session);
     await onCreate?.call(session);
     return session.copyWith(serverId: _serverSessionId);
   }

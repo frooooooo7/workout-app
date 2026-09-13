@@ -294,4 +294,9 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   Future<TrainingSession> cancel(String sessionId) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<TrainingSession> setSharedToProfile(String sessionId, bool shared) {
+    throw UnimplementedError();
+  }
 }

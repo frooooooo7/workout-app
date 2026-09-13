@@ -118,6 +118,7 @@ class TrainingSession {
     this.note,
     DateTime? startedAt,
     this.finishedAt,
+    this.sharedToProfile = false,
     required this.exercises,
     this.pendingOp,
   }) : id = id ?? const Uuid().v4(),
@@ -132,6 +133,10 @@ class TrainingSession {
   final String? note;
   final DateTime startedAt;
   final DateTime? finishedAt;
+
+  /// Czy ukończona sesja jest widoczna w aktywności na profilu użytkownika.
+  /// Domyślnie `false` — użytkownik decyduje o tym na ekranie podsumowania.
+  final bool sharedToProfile;
   final List<TrainingSessionExercise> exercises;
   final String? pendingOp;
 
@@ -147,6 +152,7 @@ class TrainingSession {
     String? note,
     DateTime? startedAt,
     DateTime? finishedAt,
+    bool? sharedToProfile,
     List<TrainingSessionExercise>? exercises,
     String? pendingOp,
     bool clearFinishedAt = false,
@@ -162,6 +168,7 @@ class TrainingSession {
       note: note ?? this.note,
       startedAt: startedAt ?? this.startedAt,
       finishedAt: clearFinishedAt ? null : (finishedAt ?? this.finishedAt),
+      sharedToProfile: sharedToProfile ?? this.sharedToProfile,
       exercises: exercises ?? this.exercises,
       pendingOp: clearPendingOp ? null : (pendingOp ?? this.pendingOp),
     );

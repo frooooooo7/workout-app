@@ -17,6 +17,7 @@ import '../widgets/ongoing_workout/rest_timer_controls.dart';
 import '../widgets/ongoing_workout_footer.dart';
 import '../widgets/ongoing_workout_header.dart';
 import '../widgets/table_cell_input.dart';
+import 'workout_summary_screen.dart';
 
 class OngoingWorkoutArgs {
   const OngoingWorkoutArgs({
@@ -379,12 +380,31 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
-    await cubit.finish(session.id);
-    await ServiceLocator.flushTrainingSessionSync();
-    ServiceLocator.requestProfileRefresh();
+    final finished = await cubit.finish(session.id);
     if (!context.mounted) return;
+    _openSummary(context, finished);
+  }
+
+  /// Zamienia ekran treningu na podsumowanie. Pod go_routerem najpierw
+  /// zdejmujemy tę trasę (żeby `await push(...)` u wołającego się domknął
+  /// i odświeżył listy), a dopiero potem wypychamy podsumowanie — obie
+  /// operacje trafiają do jednej klatki, więc dla użytkownika to jedna
+  /// płynna zamiana ekranów.
+  void _openSummary(BuildContext context, TrainingSession finished) {
+    final args = WorkoutSummaryArgs(session: finished);
     setState(() => _allowPop = true);
-    context.pop();
+
+    final router = GoRouter.maybeOf(context);
+    if (router == null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => WorkoutSummaryScreen(args: args),
+        ),
+      );
+      return;
+    }
+    router.pop();
+    router.push(WorkoutSummaryScreen.routePath, extra: args);
   }
 
   Future<void> _leaveWorkout(BuildContext context) async {

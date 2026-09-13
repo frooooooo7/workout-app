@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 7;
+  static const _dbVersion = 8;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -191,6 +191,7 @@ class ExerciseDatabase {
         note TEXT,
         started_at INTEGER NOT NULL,
         finished_at INTEGER,
+        shared_to_profile INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         pending_op TEXT
@@ -303,6 +304,28 @@ class ExerciseDatabase {
     if (oldVersion == 6) {
       await _createTrainingHistoryTables(db);
     }
+    if (oldVersion < 8) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessions,
+        column: 'shared_to_profile',
+        definition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  /// `ALTER TABLE ... ADD COLUMN` bez ryzyka duplikatu — tabela utworzona
+  /// w tej samej ścieżce upgrade'u (`oldVersion < 6`) ma już nową kolumnę.
+  Future<void> _addColumnIfMissing(
+    Database db, {
+    required String table,
+    required String column,
+    required String definition,
+  }) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = columns.any((row) => row['name'] == column);
+    if (exists) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   Future<void> close() async {
