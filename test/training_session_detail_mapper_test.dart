@@ -52,6 +52,7 @@ void main() {
     expect(detail.durationSec, 3665);
     expect(detail.plan.name, 'FBW');
     expect(detail.status, TrainingSessionStatus.completed);
+    expect(detail.sharedToProfile, isFalse);
     expect(detail.exercises, hasLength(1));
 
     final exercise = detail.exercises.single;
@@ -68,6 +69,17 @@ void main() {
     final loads = computeMuscleLoads(detail);
     expect(loads, isNotEmpty);
     expect(loads.first.intensity, 1);
+  });
+
+  test('maps sharedToProfile from the live session', () {
+    final session = TrainingSession(
+      planName: 'FBW',
+      status: TrainingSessionStatus.completed,
+      sharedToProfile: true,
+      exercises: const [],
+    );
+
+    expect(trainingSessionDetailFromSession(session).sharedToProfile, isTrue);
   });
 
   test('handles active session without finishedAt', () {

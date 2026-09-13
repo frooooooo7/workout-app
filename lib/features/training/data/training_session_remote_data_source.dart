@@ -139,4 +139,18 @@ class TrainingSessionRemoteDataSource {
     );
     return _fromJson(data as Map<String, dynamic>);
   }
+
+  /// Aktualizacja samej flagi — używana, gdy sesji nie ma w lokalnej bazie
+  /// (np. historia pobrana po reinstalacji).
+  Future<TrainingSession> setSharedToProfile(
+    String serverId,
+    bool shared,
+  ) async {
+    final data = await _api.patch(
+      '/training-sessions/$serverId/shared-to-profile',
+      {'sharedToProfile': shared},
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
 }

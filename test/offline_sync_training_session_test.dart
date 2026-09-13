@@ -172,6 +172,31 @@ void main() {
     await fixture.dispose();
   });
 
+  test('getById finds session by local id and server id', () async {
+    final fixture = await _Fixture.create();
+    final repo = fixture.stoppedRepo();
+    final session = await repo.startFromPlan(_plan());
+
+    expect((await repo.getById(session.id))?.id, session.id);
+    expect(await repo.getById('missing'), isNull);
+
+    await repo.finish(session.id);
+    await fixture.db.run((db) async {
+      await db.update(
+        ExerciseDatabase.tableTrainingSessions,
+        {'server_id': 'server-session-1'},
+        where: 'local_id = ?',
+        whereArgs: [session.id],
+      );
+    });
+
+    final byServer = await repo.getById('server-session-1');
+    expect(byServer?.id, session.id);
+    expect(byServer?.sharedToProfile, isFalse);
+
+    await fixture.dispose();
+  });
+
   test('setSharedToProfile persists flag and schedules sync', () async {
     final fixture = await _Fixture.create();
     final repo = fixture.stoppedRepo();
@@ -196,6 +221,26 @@ void main() {
       final rows = await db.query(ExerciseDatabase.tableTrainingSessions);
       expect(rows.single['shared_to_profile'], 0);
     });
+
+    await fixture.dispose();
+  });
+
+  test('setSharedToProfile falls back to remote when session is only on server', () async {
+    final fixture = await _Fixture.create();
+    final remote = _SpyTrainingSessionRemote();
+    final repo = OfflineFirstTrainingSessionRepository(
+      localDb: fixture.db,
+      syncEngine: TrainingSessionSyncEngine(
+        remote: remote,
+        localDb: fixture.db,
+      )..stop(),
+      remote: remote,
+    );
+
+    final shared = await repo.setSharedToProfile(_serverSessionId, true);
+
+    expect(shared.sharedToProfile, isTrue);
+    expect(remote.log, ['share:$_serverSessionId:true']);
 
     await fixture.dispose();
   });
@@ -392,5 +437,21 @@ class _SpyTrainingSessionRemote extends TrainingSessionRemoteDataSource {
   }) async {
     log.add('update:$serverId');
     return session.copyWith(serverId: serverId);
+  }
+
+  @override
+  Future<TrainingSession> setSharedToProfile(
+    String serverId,
+    bool shared,
+  ) async {
+    log.add('share:$serverId:$shared');
+    return TrainingSession(
+      id: serverId,
+      serverId: serverId,
+      planName: 'Remote',
+      status: TrainingSessionStatus.completed,
+      sharedToProfile: shared,
+      exercises: const [],
+    );
   }
 }

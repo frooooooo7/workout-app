@@ -7,6 +7,7 @@ import '../domain/models/training_session.dart';
 import '../domain/repositories/training_session_repository.dart';
 import 'sync/training_session_sync_engine.dart';
 import 'training_session_local_mapper.dart';
+import 'training_session_remote_data_source.dart';
 
 class ActiveTrainingSessionException implements Exception {
   const ActiveTrainingSessionException(this.session);
@@ -23,11 +24,14 @@ class OfflineFirstTrainingSessionRepository
   OfflineFirstTrainingSessionRepository({
     required ExerciseDatabase localDb,
     required TrainingSessionSyncEngine syncEngine,
+    TrainingSessionRemoteDataSource? remote,
   }) : _localDb = localDb,
-       _sync = syncEngine;
+       _sync = syncEngine,
+       _remote = remote;
 
   final ExerciseDatabase _localDb;
   final TrainingSessionSyncEngine _sync;
+  final TrainingSessionRemoteDataSource? _remote;
 
   void _scheduleSync() {
     if (_sync.isStopped) return;
@@ -75,6 +79,13 @@ class OfflineFirstTrainingSessionRepository
       return storedPendingOp == 'create' ? 'create' : 'update';
     }
     return 'create';
+  }
+
+  @override
+  Future<TrainingSession?> getById(String sessionId) async {
+    final row = await _findRow(sessionId);
+    if (row == null) return null;
+    return _localDb.run((db) => TrainingSessionLocalMapper.fromDb(db, row));
   }
 
   @override
@@ -186,11 +197,15 @@ class OfflineFirstTrainingSessionRepository
     bool shared,
   ) async {
     final row = await _findRow(sessionId);
-    if (row == null) throw StateError('Training session not found');
-    return _updateSession(
-      row,
-      (current) => current.copyWith(sharedToProfile: shared),
-    );
+    if (row != null) {
+      return _updateSession(
+        row,
+        (current) => current.copyWith(sharedToProfile: shared),
+      );
+    }
+    final remote = _remote;
+    if (remote == null) throw StateError('Training session not found');
+    return remote.setSharedToProfile(sessionId, shared);
   }
 
   @override

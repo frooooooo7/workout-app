@@ -202,6 +202,8 @@ GoRouter buildRouter({
                       return TrainingSessionDetailsScreen(
                         sessionId: sessionId,
                         repository: ServiceLocator.trainingHistoryRepository,
+                        sessionRepository:
+                            ServiceLocator.trainingSessionRepository,
                       );
                     },
                   ),

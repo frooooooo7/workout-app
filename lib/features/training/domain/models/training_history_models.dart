@@ -185,6 +185,7 @@ class TrainingSessionDetail {
     required this.note,
     required this.exercises,
     required this.updatedAt,
+    this.sharedToProfile = false,
   });
 
   final String id;
@@ -196,6 +197,7 @@ class TrainingSessionDetail {
   final String? note;
   final List<TrainingExerciseDetail> exercises;
   final DateTime updatedAt;
+  final bool sharedToProfile;
 
   int get completedSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.completedSetsCount);

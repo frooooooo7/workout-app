@@ -142,12 +142,16 @@ class AppHeaderIconButton extends StatefulWidget {
     required this.onTap,
     this.iconColor,
     this.size = 38.0,
+    this.tooltip,
+    this.active = false,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final Color? iconColor;
   final double size;
+  final String? tooltip;
+  final bool active;
 
   @override
   State<AppHeaderIconButton> createState() => _AppHeaderIconButtonState();
@@ -183,7 +187,14 @@ class _AppHeaderIconButtonState extends State<AppHeaderIconButton>
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final accent = widget.active ? AppColors.success : AppColors.border;
+    final fill = widget.active
+        ? AppColors.success.withValues(alpha: 0.16)
+        : AppColors.surfaceVariant.withValues(alpha: 0.6);
+    final iconColor =
+        widget.iconColor ?? (widget.active ? AppColors.success : Colors.white);
+
+    final button = GestureDetector(
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
@@ -196,21 +207,26 @@ class _AppHeaderIconButtonState extends State<AppHeaderIconButton>
           height: widget.size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.surfaceVariant.withValues(alpha: 0.6),
+            color: fill,
             border: Border.all(
-              color: AppColors.border.withValues(alpha: 0.6),
+              color: accent.withValues(alpha: widget.active ? 0.7 : 0.6),
               width: 1.0,
             ),
           ),
           child: Center(
-            child: Icon(
-              widget.icon,
-              size: 19,
-              color: widget.iconColor ?? Colors.white,
-            ),
+            child: Icon(widget.icon, size: 19, color: iconColor),
           ),
         ),
       ),
     );
+
+    final labeled = Semantics(
+      button: true,
+      label: widget.tooltip,
+      child: button,
+    );
+
+    if (widget.tooltip == null) return labeled;
+    return Tooltip(message: widget.tooltip!, child: labeled);
   }
 }

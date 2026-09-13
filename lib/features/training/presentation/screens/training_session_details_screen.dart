@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/repositories/training_history_repository.dart';
+import '../../domain/repositories/training_session_repository.dart';
 import '../widgets/session_details/session_exercise_card.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
@@ -21,10 +23,14 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
     super.key,
     required this.sessionId,
     required this.repository,
+    this.sessionRepository,
   });
 
   final String sessionId;
   final TrainingHistoryRepository repository;
+
+  /// Test seam; domyślnie [ServiceLocator.trainingSessionRepository].
+  final TrainingSessionRepository? sessionRepository;
 
   @override
   State<TrainingSessionDetailsScreen> createState() =>
@@ -37,7 +43,18 @@ class _TrainingSessionDetailsScreenState
     extends State<TrainingSessionDetailsScreen> {
   TrainingSessionDetail? _detail;
   bool _loading = true;
+  bool _shareSaving = false;
+  bool _sharedToProfile = false;
   String? _error;
+
+  TrainingSessionRepository? get _sessionRepository {
+    if (widget.sessionRepository != null) return widget.sessionRepository;
+    try {
+      return ServiceLocator.trainingSessionRepository;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -52,9 +69,11 @@ class _TrainingSessionDetailsScreenState
     });
     try {
       final detail = await widget.repository.getSessionDetail(widget.sessionId);
+      final local = await _sessionRepository?.getById(widget.sessionId);
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _sharedToProfile = local?.sharedToProfile ?? detail.sharedToProfile;
         _loading = false;
       });
     } catch (_) {
@@ -66,13 +85,48 @@ class _TrainingSessionDetailsScreenState
     }
   }
 
-  void _onSharePressed() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Udostępnianie treningu – wkrótce dostępne'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  Future<void> _onSharePressed() async {
+    final repository = _sessionRepository;
+    if (repository == null || _detail == null || _shareSaving) return;
+
+    final nextShared = !_sharedToProfile;
+    setState(() => _shareSaving = true);
+    try {
+      final updated = await repository.setSharedToProfile(
+        widget.sessionId,
+        nextShared,
+      );
+      if (!mounted) return;
+      setState(() {
+        _sharedToProfile = updated.sharedToProfile;
+        _shareSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            updated.sharedToProfile
+                ? 'Trening pojawił się na Twoim profilu'
+                : 'Usunięto trening z profilu',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      unawaited(_syncAndRefreshProfile());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zapisać zmiany. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _syncAndRefreshProfile() async {
+    await ServiceLocator.flushTrainingSessionSync();
+    ServiceLocator.requestProfileRefresh();
   }
 
   void _onMenuActionSelected(_SessionHeaderAction action) {
@@ -189,7 +243,14 @@ class _TrainingSessionDetailsScreenState
               onBack: () => Navigator.of(context).maybePop(),
               actions: [
                 AppHeaderIconButton(
-                  icon: Icons.ios_share_rounded,
+                  key: const ValueKey('session-details-share-button'),
+                  icon: _sharedToProfile
+                      ? Icons.check_rounded
+                      : Icons.ios_share_rounded,
+                  active: _sharedToProfile,
+                  tooltip: _sharedToProfile
+                      ? 'Usuń trening z profilu'
+                      : 'Udostępnij trening na profilu',
                   onTap: _onSharePressed,
                 ),
                 Builder(

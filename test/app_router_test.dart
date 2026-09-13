@@ -271,6 +271,10 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   Future<TrainingSession?> getActive() async => active;
 
   @override
+  Future<TrainingSession?> getById(String sessionId) async =>
+      active?.id == sessionId ? active : null;
+
+  @override
   Future<TrainingSession> startFromPlan(CustomTrainingPlan plan) async {
     throw UnimplementedError();
   }

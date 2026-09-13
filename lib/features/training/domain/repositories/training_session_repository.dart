@@ -4,6 +4,9 @@ import '../models/training_session.dart';
 abstract interface class TrainingSessionRepository {
   Future<TrainingSession?> getActive();
 
+  /// Szuka po `local_id` albo `server_id` — historia podaje ten drugi.
+  Future<TrainingSession?> getById(String sessionId);
+
   Future<TrainingSession> startFromPlan(CustomTrainingPlan plan);
 
   Future<TrainingSession> startCustom({

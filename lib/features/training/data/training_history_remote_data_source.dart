@@ -84,6 +84,7 @@ class TrainingHistoryRemoteDataSource {
         };
       }).toList(),
       'updatedAt': detail.updatedAt.toUtc().toIso8601String(),
+      'sharedToProfile': detail.sharedToProfile,
     };
   }
 
@@ -173,6 +174,7 @@ class TrainingHistoryRemoteDataSource {
       }).toList(growable: false),
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
+      sharedToProfile: json['sharedToProfile'] as bool? ?? false,
     );
   }
 

@@ -29,6 +29,7 @@ TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) 
         .map(_exerciseDetailFromSession)
         .toList(growable: false),
     updatedAt: endedAt ?? session.startedAt,
+    sharedToProfile: session.sharedToProfile,
   );
 }
 

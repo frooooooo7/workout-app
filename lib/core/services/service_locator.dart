@@ -186,6 +186,7 @@ class ServiceLocator {
     _trainingSessionRepository = OfflineFirstTrainingSessionRepository(
       localDb: _exerciseDatabase!,
       syncEngine: _trainingSessionSyncEngine!,
+      remote: _trainingSessionRemoteDataSource,
     );
     _exerciseSyncEngine!.scheduleBootstrap();
     _trainingPlanSyncEngine!.scheduleBootstrap();
