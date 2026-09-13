@@ -45,7 +45,8 @@ class OfflineNetworkImage extends ImageProvider<OfflineNetworkImage> {
     try {
       final bytes = await OfflineImageStore.instance.load(key.url);
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      return decode(buffer);
+      // `await` — błąd dekodowania też ma trafić do catch poniżej.
+      return await decode(buffer);
     } catch (_) {
       // Jak NetworkImage: nieudany obrazek nie może utknąć w ImageCache —
       // po powrocie internetu ma się dać wczytać ponownie.

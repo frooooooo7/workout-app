@@ -77,11 +77,11 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     });
   }
 
+  /// `onReorderItem` podaje już [newIndex] po usunięciu elementu z [oldIndex]
+  /// — ręczne `newIndex -= 1` (potrzebne przy starym `onReorder`) przesuwałoby
+  /// ćwiczenie o jedną pozycję za wysoko.
   void _onReorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
       final item = _exercises.removeAt(oldIndex);
       _exercises.insert(newIndex, item);
     });
@@ -353,7 +353,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                 child: ReorderableListView.builder(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
                   itemCount: _exercises.length,
-                  onReorder: _onReorder,
+                  onReorderItem: _onReorder,
                   buildDefaultDragHandles: false, // Usunięcie domyślnego uchwytu
                   itemBuilder: (context, index) {
                     final planExercise = _exercises[index];

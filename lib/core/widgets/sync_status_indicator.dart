@@ -40,6 +40,7 @@ class SyncStatusIndicator extends StatelessWidget {
       builder: (context, value, _) {
         return _SyncStatusButton(
           status: value,
+          listenable: listenable,
           size: size,
           onTap: () => showSyncStatusSheet(
             context,
@@ -130,11 +131,16 @@ _Visual _visualForPhase(SyncPhase phase) => switch (phase) {
 class _SyncStatusButton extends StatefulWidget {
   const _SyncStatusButton({
     required this.status,
+    required this.listenable,
     required this.size,
     required this.onTap,
   });
 
   final SyncStatus status;
+
+  /// Źródło stanu. [status] dociera do widżetu dopiero z kolejną klatką,
+  /// więc timery sprawdzają bieżącą wartość tutaj.
+  final ValueListenable<SyncStatus> listenable;
   final double size;
   final VoidCallback onTap;
 
@@ -190,13 +196,19 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
   bool get _reduceMotion =>
       MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
+  SyncPhase get _currentPhase => widget.listenable.value.phase;
+
   void _onPhaseChanged(SyncPhase phase) {
     _timer?.cancel();
     _timer = null;
 
     if (phase == SyncPhase.syncing) {
       if (_visual != _Visual.syncing) {
-        _timer = Timer(_showSyncingAfter, () => _show(_Visual.syncing));
+        _timer = Timer(_showSyncingAfter, () {
+          // Synchronizacja mogła się już skończyć, zanim nowy stan dotarł
+          // do widżetu — nie zapalaj spinnera po fakcie.
+          if (_currentPhase == SyncPhase.syncing) _show(_Visual.syncing);
+        });
       }
       return;
     }
@@ -225,8 +237,15 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
     _show(target);
     if (target == _Visual.done) {
       _timer = Timer(_doneVisible, () {
-        final current = _visualForPhase(widget.status.phase);
-        _show(current == _Visual.syncing ? _Visual.idle : current);
+        _timer = null;
+        final phase = _currentPhase;
+        if (phase == SyncPhase.syncing) {
+          // Kolejna synchronizacja ruszyła, gdy świeciło „zsynchronizowano”.
+          _show(_Visual.idle);
+          _onPhaseChanged(phase);
+        } else {
+          _show(_visualForPhase(phase));
+        }
       });
     }
   }

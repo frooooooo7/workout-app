@@ -231,6 +231,10 @@ class Exercise {
   final DateTime? createdAt;
   /// Local row has outbound sync work (`pending_op` or dirty favourite).
   final bool isPendingSync;
+
+  /// Identyfikator nadany offline przez klienta (API zwraca go tylko dla
+  /// własnych ćwiczeń) — pozwala sparować rekord z serwera z lokalnym wierszem.
+  final String? clientId;
 }
 
 // ──────────────────────────────────────────────
