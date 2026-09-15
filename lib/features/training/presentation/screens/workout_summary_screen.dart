@@ -100,6 +100,8 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   Future<void> _syncAndRefreshProfile() async {
     await ServiceLocator.flushTrainingSessionSync();
     ServiceLocator.requestProfileRefresh();
+    // Udostępniony (albo schowany) trening pojawia się w feedzie.
+    ServiceLocator.requestFeedRefresh();
   }
 
   void _handleDone() {

@@ -1,6 +1,6 @@
 import '../../../core/network/api_client.dart';
-import '../../library/domain/models/exercise.dart';
 import '../domain/models/training_history_models.dart';
+import 'training_history_json.dart';
 
 class TrainingHistoryRemoteDataSource {
   const TrainingHistoryRemoteDataSource(this._api);
@@ -150,28 +150,10 @@ class TrainingHistoryRemoteDataSource {
         name: plan['name'] as String? ?? 'Bez planu',
       ),
       note: json['note'] as String?,
-      exercises: exercisesRaw.cast<Map<String, dynamic>>().map((exercise) {
-        final setsRaw = (exercise['sets'] as List? ?? const []);
-        return TrainingExerciseDetail(
-          exerciseId: exercise['exerciseId'] as String? ?? '',
-          exerciseName: exercise['exerciseName'] as String? ?? 'Ćwiczenie',
-          muscles: (exercise['muscles'] as List? ?? const [])
-              .map((raw) => MuscleGroup.tryParse(raw as String?))
-              .whereType<MuscleGroup>()
-              .toList(growable: false),
-          imageUrl: exercise['imageUrl'] as String?,
-          sets: setsRaw.cast<Map<String, dynamic>>().map((set) {
-            return TrainingExerciseSetDetail(
-              setIndex: (set['setIndex'] as num?)?.toInt() ?? 0,
-              planned: _metricsFromJson(set['planned'] as Map<String, dynamic>?),
-              actual: _metricsFromJson(set['actual'] as Map<String, dynamic>?),
-              completed: set['completed'] as bool? ?? false,
-              completedAt:
-                  DateTime.tryParse(set['completedAt'] as String? ?? '')?.toUtc(),
-            );
-          }).toList(growable: false),
-        );
-      }).toList(growable: false),
+      exercises: exercisesRaw
+          .whereType<Map<String, dynamic>>()
+          .map(trainingExerciseDetailFromJson)
+          .toList(growable: false),
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
       sharedToProfile: json['sharedToProfile'] as bool? ?? false,
@@ -198,16 +180,6 @@ class TrainingHistoryRemoteDataSource {
             },
       'updatedAt': item.updatedAt.toUtc().toIso8601String(),
     };
-  }
-
-  TrainingSetMetrics? _metricsFromJson(Map<String, dynamic>? json) {
-    if (json == null) return null;
-    return TrainingSetMetrics(
-      weightKg: (json['weightKg'] as num?)?.toDouble(),
-      reps: (json['reps'] as num?)?.toInt(),
-      rir: (json['rir'] as num?)?.toInt(),
-      tempo: json['tempo'] as String?,
-    );
   }
 
   Map<String, dynamic>? _metricsToJson(TrainingSetMetrics? metrics) {

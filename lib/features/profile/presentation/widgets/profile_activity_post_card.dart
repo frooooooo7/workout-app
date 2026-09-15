@@ -14,6 +14,7 @@ class ProfileActivityPostCard extends StatelessWidget {
     required this.authorLastName,
     this.authorAvatarUrl,
     this.onTap,
+    this.onCommentTap,
     this.isHighlighted = false,
   });
 
@@ -22,6 +23,9 @@ class ProfileActivityPostCard extends StatelessWidget {
   final String authorLastName;
   final String? authorAvatarUrl;
   final VoidCallback? onTap;
+
+  /// Przycisk komentarza; domyślnie [onTap].
+  final VoidCallback? onCommentTap;
   final bool isHighlighted;
 
   static ActivityVisual visualFor(RecentActivityKind kind) =>
@@ -159,15 +163,22 @@ class ProfileActivityPostCard extends StatelessWidget {
                 child: Row(
                   children: [
                     _SocialAction(
-                      icon: Icons.thumb_up_outlined,
+                      key: const ValueKey('profile-activity-kudos'),
+                      icon: activity.hasKudoed
+                          ? Icons.thumb_up_alt_rounded
+                          : Icons.thumb_up_outlined,
+                      color: activity.hasKudoed
+                          ? AppColors.primaryVariant
+                          : AppColors.textSecondary,
                       label: _formatCount(activity.kudosCount),
-                      onTap: () {},
+                      onTap: onTap ?? () {},
                     ),
                     const SizedBox(width: 4),
                     _SocialAction(
+                      key: const ValueKey('profile-activity-comments'),
                       icon: Icons.chat_bubble_outline_rounded,
                       label: _formatCount(activity.commentCount),
-                      onTap: () {},
+                      onTap: onCommentTap ?? onTap ?? () {},
                     ),
                     const Spacer(),
                     IconButton(
@@ -299,12 +310,15 @@ class _StatColumn extends StatelessWidget {
 
 class _SocialAction extends StatelessWidget {
   const _SocialAction({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.color = AppColors.textSecondary,
   });
 
   final IconData icon;
+  final Color color;
   final String label;
   final VoidCallback onTap;
 
@@ -320,13 +334,13 @@ class _SocialAction extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: AppColors.textSecondary),
+              Icon(icon, size: 18, color: color),
               if (label.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
+                  style: TextStyle(
+                    color: color,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],

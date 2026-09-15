@@ -276,6 +276,7 @@ class ApiProfileRepository implements ProfileRepository {
             stats: _statsFromJson(json['stats']),
             kudosCount: (json['kudosCount'] as num?)?.toInt() ?? 0,
             commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
+            hasKudoed: json['hasKudoed'] as bool? ?? false,
           ),
         )
         .toList(growable: false);

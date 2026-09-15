@@ -7,7 +7,9 @@ import '../images/offline_network_image.dart';
 import '../network/api_asset_uri.dart';
 import '../theme/app_colors.dart';
 
-enum UserAvatarSize { sm, md, lg }
+/// `xxs` — stos awatarów (kudosy), `xs` — komentarze, `sm`/`md` — listy
+/// i karty, `lg` — nagłówek profilu.
+enum UserAvatarSize { xxs, xs, sm, md, lg }
 
 /// Awatar użytkownika: zdjęcie z API (ścieżka względna `/uploads/avatars/…`
 /// albo pełny adres, cache na dysku) lub inicjały, gdy zdjęcia brak albo nie
@@ -43,18 +45,24 @@ class UserAvatar extends StatelessWidget {
   final Uint8List? imageBytes;
 
   double get _dimension => switch (size) {
+        UserAvatarSize.xxs => 24,
+        UserAvatarSize.xs => 36,
         UserAvatarSize.sm => 46,
         UserAvatarSize.md => 52,
         UserAvatarSize.lg => 88,
       };
 
   double get _fontSize => switch (size) {
+        UserAvatarSize.xxs => 9,
+        UserAvatarSize.xs => 13,
         UserAvatarSize.sm => 16,
         UserAvatarSize.md => 18,
         UserAvatarSize.lg => 32,
       };
 
   double get _radius => switch (size) {
+        UserAvatarSize.xxs => 8,
+        UserAvatarSize.xs => 11,
         UserAvatarSize.sm => 14,
         UserAvatarSize.md => 16,
         UserAvatarSize.lg => 44,
@@ -122,7 +130,11 @@ class UserAvatar extends StatelessWidget {
           color: AppColors.primary.withValues(
             alpha: size == UserAvatarSize.lg ? 0.4 : 0.35,
           ),
-          width: size == UserAvatarSize.lg ? 2 : 1.5,
+          width: switch (size) {
+            UserAvatarSize.lg => 2,
+            UserAvatarSize.xxs => 1,
+            _ => 1.5,
+          },
         ),
       ),
       alignment: Alignment.center,
@@ -132,7 +144,7 @@ class UserAvatar extends StatelessWidget {
           color: Colors.white,
           fontSize: _fontSize,
           fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
+          letterSpacing: size == UserAvatarSize.xxs ? 0 : 0.5,
         ),
       ),
     );

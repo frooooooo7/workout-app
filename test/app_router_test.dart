@@ -3,6 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/navigation/app_router.dart';
 import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
+import 'package:gym/features/feed/domain/models/cursor_page.dart';
+import 'package:gym/features/feed/domain/models/post_comment.dart';
+import 'package:gym/features/feed/domain/models/post_detail.dart';
+import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
+import 'package:gym/features/profile/domain/models/following_user.dart';
+import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
@@ -21,7 +27,16 @@ void main() {
     });
   }
 
+  setUpAll(() {
+    // Zakładka Aktywność tworzy FollowCubit (bez ServiceLocator.init()).
+    ServiceLocator.profileRepository = _FakeProfileRepository();
+  });
+
   setUp(() {
+    ServiceLocator.debugSetFeed(
+      repository: _FakeFeedRepository(),
+      cache: _NoFeedCache(),
+    );
     ServiceLocator.debugSetUserScopedRepositories(
       trainingPlanRepository: _FakeTrainingPlanRepository(),
       trainingHistoryRepository: _FakeTrainingHistoryRepository(),
@@ -30,6 +45,7 @@ void main() {
   });
 
   tearDown(() {
+    ServiceLocator.debugSetFeed();
     ServiceLocator.debugSetUserScopedRepositories();
     ServiceLocator.currentUser.value = null;
   });
@@ -82,6 +98,7 @@ void main() {
     expect(resolveCalls, 1);
     expect(ServiceLocator.currentUser.value, user);
     expect(router.routeInformationProvider.value.uri.path, '/app/activity');
+    expect(find.text('Twój feed jest pusty'), findsOneWidget);
   });
 
   testWidgets('redirects legacy /app/training/plans to /app/plans', (
@@ -218,6 +235,40 @@ void main() {
 
     expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
   });
+}
+
+class _FakeProfileRepository extends Fake implements ProfileRepository {}
+
+class _NoFeedCache implements FeedCache {
+  @override
+  Future<FeedPage?> read(String userId) async => null;
+
+  @override
+  Future<void> write(String userId, FeedPage page) async {}
+}
+
+class _FakeFeedRepository extends Fake implements FeedRepository {
+  @override
+  Future<FeedPage> getFeed({String? cursor, int limit = 20}) async =>
+      const FeedPage(items: []);
+
+  @override
+  Future<List<FollowingUser>> getSuggestedUsers({int limit = 10}) async =>
+      const [];
+
+  @override
+  Future<PostDetail> getPost(String postId) => throw UnimplementedError();
+
+  @override
+  Future<CommentsPage> getComments(
+    String postId, {
+    String? cursor,
+    int limit = 30,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<PostComment> addComment(String postId, String body) =>
+      throw UnimplementedError();
 }
 
 class _FakeTrainingPlanRepository implements TrainingPlanRepository {

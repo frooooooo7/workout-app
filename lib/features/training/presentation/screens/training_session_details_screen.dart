@@ -160,6 +160,8 @@ class _TrainingSessionDetailsScreenState
   Future<void> _syncAndRefreshProfile() async {
     await ServiceLocator.flushTrainingSessionSync();
     ServiceLocator.requestProfileRefresh();
+    // Udostępniony (albo schowany) trening pojawia się w feedzie.
+    ServiceLocator.requestFeedRefresh();
   }
 
   void _onMenuActionSelected(_SessionHeaderAction action) {

@@ -6,7 +6,7 @@ class TrainingActivitySummaryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      'Podsumowanie aktywnosci',
+      'Podsumowanie aktywności',
       style: TextStyle(
         color: Colors.white,
         fontSize: 16,

@@ -1,64 +1,75 @@
-enum ActivitySummaryPeriod {
-  week,
-  month,
-}
+enum ActivitySummaryPeriod { week, month }
 
-/// Mocked aggregates for the summary view until backend statistics are wired.
-class TrainingSummaryStats {
-  const TrainingSummaryStats({
-    required this.workouts,
-    required this.durationH,
-    required this.durationMin,
-    required this.sets,
-    required this.reps,
-    required this.volumeKg,
-    required this.exercisesCount,
-    required this.caloriesKcal,
+/// Zagregowane wyniki treningów w jednym okresie (liczone lokalnie).
+class TrainingPeriodStats {
+  const TrainingPeriodStats({
+    this.workouts = 0,
+    this.durationSec = 0,
+    this.completedSets = 0,
+    this.reps = 0,
+    this.volumeKg = 0,
+    this.distinctExercises = 0,
   });
 
   final int workouts;
-  final int durationH;
-  final int durationMin;
-  final int sets;
+  final int durationSec;
+  final int completedSets;
   final int reps;
-  final int volumeKg;
-  final int exercisesCount;
-  final int caloriesKcal;
+  final double volumeKg;
+  final int distinctExercises;
+
+  static const empty = TrainingPeriodStats();
+
+  @override
+  bool operator ==(Object other) =>
+      other is TrainingPeriodStats &&
+      other.workouts == workouts &&
+      other.durationSec == durationSec &&
+      other.completedSets == completedSets &&
+      other.reps == reps &&
+      other.volumeKg == volumeKg &&
+      other.distinctExercises == distinctExercises;
+
+  @override
+  int get hashCode => Object.hash(
+    workouts,
+    durationSec,
+    completedSets,
+    reps,
+    volumeKg,
+    distinctExercises,
+  );
+
+  @override
+  String toString() =>
+      'TrainingPeriodStats(workouts: $workouts, durationSec: $durationSec, '
+      'sets: $completedSets, reps: $reps, volumeKg: $volumeKg, '
+      'exercises: $distinctExercises)';
 }
 
-const TrainingSummaryStats kTrainingSummaryWeek = TrainingSummaryStats(
-  workouts: 3,
-  durationH: 3,
-  durationMin: 40,
-  sets: 48,
-  reps: 386,
-  volumeKg: 4720,
-  exercisesCount: 18,
-  caloriesKcal: 1840,
-);
+/// Bieżący tydzień (od poniedziałku 00:00) i bieżący miesiąc kalendarzowy.
+class TrainingSummary {
+  const TrainingSummary({required this.week, required this.month});
 
-const TrainingSummaryStats kTrainingSummaryMonth = TrainingSummaryStats(
-  workouts: 12,
-  durationH: 14,
-  durationMin: 55,
-  sets: 192,
-  reps: 1544,
-  volumeKg: 18960,
-  exercisesCount: 42,
-  caloriesKcal: 7360,
-);
+  final TrainingPeriodStats week;
+  final TrainingPeriodStats month;
 
+  static const empty = TrainingSummary(
+    week: TrainingPeriodStats.empty,
+    month: TrainingPeriodStats.empty,
+  );
+
+  TrainingPeriodStats of(ActivitySummaryPeriod period) =>
+      period == ActivitySummaryPeriod.week ? week : month;
+}
+
+/// `18 960` — separator tysięcy dla dużych liczb w kafelkach.
 String formatTrainingVolumeKg(int kg) {
-  if (kg >= 1000) {
-    final thousands = kg ~/ 1000;
-    final remainder = (kg % 1000).toString().padLeft(3, '0');
-    return '$thousands $remainder';
+  final digits = kg.abs().toString();
+  final buffer = StringBuffer(kg < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(' ');
+    buffer.write(digits[i]);
   }
-  return '$kg';
-}
-
-String workoutCountLabelPlural(int workouts) {
-  if (workouts == 1) return 'trening';
-  if (workouts <= 4) return 'treningi';
-  return 'treningow';
+  return buffer.toString();
 }

@@ -52,8 +52,8 @@ class _PeriodOptionChip extends StatelessWidget {
   final VoidCallback onTap;
 
   String get _label => switch (period) {
-        ActivitySummaryPeriod.week => 'Tydzien',
-        ActivitySummaryPeriod.month => 'Miesiac',
+        ActivitySummaryPeriod.week => 'Tydzień',
+        ActivitySummaryPeriod.month => 'Miesiąc',
       };
 
   @override

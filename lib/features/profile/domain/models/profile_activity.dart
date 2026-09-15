@@ -13,6 +13,7 @@ class ProfileActivity {
     this.stats = const [],
     this.kudosCount = 0,
     this.commentCount = 0,
+    this.hasKudoed = false,
   });
 
   final String? id;
@@ -25,6 +26,9 @@ class ProfileActivity {
   final List<ProfileActivityStat> stats;
   final int kudosCount;
   final int commentCount;
+
+  /// Zalogowany użytkownik dał kudosa tej aktywności.
+  final bool hasKudoed;
 
   String get timestampLabel {
     if (timeLabel != null && timeLabel!.isNotEmpty) {

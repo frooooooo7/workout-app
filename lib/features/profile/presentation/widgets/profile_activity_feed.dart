@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../feed/presentation/utils/feed_navigation.dart';
 import '../../domain/models/profile_activity.dart';
 import '../../domain/models/user_profile.dart';
 import 'profile_activity_post_card.dart';
 import 'profile_empty_state.dart';
 import 'profile_section_header.dart';
 
-void openProfileActivity(BuildContext context, ProfileActivity activity) {
-  if (activity.id != null) {
-    context.push('/app/training/history/${activity.id}');
-    return;
-  }
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Szczegóły aktywności wkrótce')),
-  );
+/// Aktywność na profilu to post w feedzie (id = id sesji) — szczegóły,
+/// kudosy i komentarze pod `/app/posts/:id`, własne i cudze.
+void openProfileActivity(
+  BuildContext context,
+  ProfileActivity activity, {
+  bool focusComment = false,
+}) {
+  final id = activity.id;
+  if (id == null || id.isEmpty) return;
+  openPostDetails(context, id, focusComment: focusComment);
 }
 
 class ProfileHighlightActivity extends StatelessWidget {
@@ -42,6 +45,8 @@ class ProfileHighlightActivity extends StatelessWidget {
             authorAvatarUrl: profile.avatarUrl,
             isHighlighted: true,
             onTap: () => openProfileActivity(context, activity),
+            onCommentTap: () =>
+                openProfileActivity(context, activity, focusComment: true),
           ),
         ),
       ],
@@ -84,6 +89,11 @@ class ProfileActivityFeed extends StatelessWidget {
               authorLastName: profile.lastName,
               authorAvatarUrl: profile.avatarUrl,
               onTap: () => openProfileActivity(context, activities[i]),
+              onCommentTap: () => openProfileActivity(
+                context,
+                activities[i],
+                focusComment: true,
+              ),
             ),
             if (i < activities.length - 1) const SizedBox(height: 14),
           ],

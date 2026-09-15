@@ -17,7 +17,12 @@ import '../../features/training/presentation/screens/training_session_details_sc
 import '../../features/training/presentation/screens/training_stats_screen.dart';
 import '../../features/training/presentation/screens/workout_summary_screen.dart';
 import '../../features/training/presentation/bloc/training_session_cubit.dart';
-import '../../features/activity/presentation/screens/activity_screen.dart';
+import '../../features/feed/domain/models/feed_author.dart';
+import '../../features/feed/presentation/bloc/feed_cubit.dart';
+import '../../features/feed/presentation/bloc/post_comments_cubit.dart';
+import '../../features/feed/presentation/bloc/post_details_cubit.dart';
+import '../../features/feed/presentation/screens/activity_feed_screen.dart';
+import '../../features/feed/presentation/screens/post_details_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/domain/models/user_profile.dart';
@@ -43,15 +48,30 @@ ProfileRepository _profileRepositoryForCurrentUser() {
 }
 
 /// Ekrany z przyciskiem obserwowania. Udana zmiana prosi własny profil
-/// o odświeżenie (licznik obserwowanych); po powrocie na `/app/profile`
-/// ProfileScreen i tak odświeża się sam.
+/// o odświeżenie (licznik obserwowanych) i feed o nowe posty; po powrocie
+/// na `/app/profile` ProfileScreen i tak odświeża się sam.
 Widget _withFollowCubit(Widget child) {
   return BlocProvider(
     create: (_) => FollowCubit(
       _profileRepositoryForCurrentUser(),
-      onFollowChanged: ServiceLocator.requestProfileRefresh,
+      onFollowChanged: () {
+        ServiceLocator.requestProfileRefresh();
+        ServiceLocator.requestFeedRefresh();
+      },
     ),
     child: child,
+  );
+}
+
+/// Zalogowany użytkownik jako autor — do optymistycznych kudosów
+/// i komentarzy (awatar dociąga się przy odświeżeniu z serwera).
+FeedAuthor? _currentFeedAuthor() {
+  final user = ServiceLocator.currentUser.value;
+  if (user == null) return null;
+  return FeedAuthor(
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
   );
 }
 
@@ -232,7 +252,25 @@ GoRouter buildRouter({
             routes: [
               GoRoute(
                 path: '/app/activity',
-                builder: (_, s) => const ActivityScreen(),
+                builder: (_, s) {
+                  final userId = ServiceLocator.currentUser.value?.id;
+                  return _withFollowCubit(
+                    BlocProvider(
+                      create: (_) => FeedCubit(
+                        repository: ServiceLocator.feedRepository,
+                        cache: ServiceLocator.feedCache,
+                        userId: userId,
+                        refreshSignal: ServiceLocator.feedRefreshSignal,
+                        events: ServiceLocator.feedPostEvents,
+                        currentUser: _currentFeedAuthor(),
+                      ),
+                      child: ActivityFeedScreen(
+                        repository: ServiceLocator.feedRepository,
+                        currentUserId: userId,
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -313,6 +351,45 @@ GoRouter buildRouter({
             ],
           ),
         ],
+      ),
+
+      // Szczegóły posta w feedzie — poza shellem, żeby działały z każdej
+      // zakładki (feed, profil, profil innego użytkownika).
+      GoRoute(
+        parentNavigatorKey: appRootNavigatorKey,
+        path: '/app/posts/:sessionId',
+        builder: (_, state) {
+          final postId = state.pathParameters['sessionId']!;
+          final repository = ServiceLocator.feedRepository;
+          return _withFollowCubit(
+            MultiBlocProvider(
+              providers: [
+                BlocProvider(
+                  create: (_) => PostDetailsCubit(
+                    repository: repository,
+                    postId: postId,
+                    events: ServiceLocator.feedPostEvents,
+                    currentUser: _currentFeedAuthor(),
+                  ),
+                ),
+                BlocProvider(
+                  create: (_) => PostCommentsCubit(
+                    repository: repository,
+                    postId: postId,
+                    events: ServiceLocator.feedPostEvents,
+                    currentUser: _currentFeedAuthor(),
+                  ),
+                ),
+              ],
+              child: PostDetailsScreen(
+                postId: postId,
+                repository: repository,
+                currentUserId: ServiceLocator.currentUser.value?.id,
+                focusComment: state.uri.queryParameters['comment'] == '1',
+              ),
+            ),
+          );
+        },
       ),
 
       GoRoute(

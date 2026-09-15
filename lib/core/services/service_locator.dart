@@ -15,6 +15,11 @@ import '../../features/library/data/exercise_remote_data_source.dart';
 import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
+import '../../features/feed/data/api_feed_repository.dart';
+import '../../features/feed/data/shared_preferences_feed_cache.dart';
+import '../../features/feed/domain/repositories/feed_repository.dart';
+import '../../features/feed/domain/services/feed_post_events.dart';
+import '../../features/training/data/local_training_stats_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
 import '../../features/training/data/offline_first_training_history_repository.dart';
 import '../../features/training/data/offline_first_training_session_repository.dart';
@@ -29,6 +34,7 @@ import '../../features/training/data/training_session_remote_data_source.dart';
 import '../../features/training/domain/repositories/training_history_repository.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 import '../../features/training/domain/repositories/training_session_repository.dart';
+import '../../features/training/domain/repositories/training_stats_repository.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
 import '../../features/profile/data/api_profile_repository.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
@@ -57,6 +63,15 @@ class ServiceLocator {
   static TrainingSessionRepository? _trainingSessionRepository;
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
   static SyncCoordinator? _syncCoordinator;
+  static TrainingStatsRepository? _trainingStatsRepository;
+
+  // Feed społecznościowy — oparty o API, nie zależy od bazy per-user.
+  static FeedRepository? _feedRepository;
+  static FeedCache _feedCache = const SharedPreferencesFeedCache();
+
+  /// Zmiany postów (kudosy, liczba komentarzy) przenoszone między ekranami.
+  static final feedPostEvents = FeedPostEvents();
+  static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
   static final profileRefreshTick = ValueNotifier(0);
 
@@ -110,6 +125,27 @@ class ServiceLocator {
     return _trainingHistoryRepository!;
   }
 
+  static TrainingStatsRepository get trainingStatsRepository {
+    assert(
+      _trainingStatsRepository != null,
+      'trainingStatsRepository is not initialized. Ensure the user is logged in.',
+    );
+    return _trainingStatsRepository!;
+  }
+
+  static FeedRepository get feedRepository {
+    assert(
+      _feedRepository != null,
+      'feedRepository is not initialized. Call ServiceLocator.init() first.',
+    );
+    return _feedRepository!;
+  }
+
+  static FeedCache get feedCache => _feedCache;
+
+  /// Prośba o odświeżenie feedu: udostępniony trening, zmiana obserwowania.
+  static Listenable get feedRefreshSignal => _feedRefreshTick;
+
   static TrainingSessionRepository get trainingSessionRepository {
     assert(
       _trainingSessionRepository != null,
@@ -137,6 +173,7 @@ class ServiceLocator {
       apiClient,
     );
     profileRepository = ApiProfileRepository(apiClient);
+    _feedRepository = ApiFeedRepository(apiClient);
     restTimerScheduler = RestTimerNotificationScheduler();
 
     currentUser.addListener(_onUserChanged);
@@ -149,11 +186,20 @@ class ServiceLocator {
     TrainingPlanRepository? trainingPlanRepository,
     TrainingHistoryRepository? trainingHistoryRepository,
     TrainingSessionRepository? trainingSessionRepository,
+    TrainingStatsRepository? trainingStatsRepository,
   }) {
     _exerciseRepository = exerciseRepository;
     _trainingPlanRepository = trainingPlanRepository;
     _trainingHistoryRepository = trainingHistoryRepository;
     _trainingSessionRepository = trainingSessionRepository;
+    _trainingStatsRepository = trainingStatsRepository;
+  }
+
+  /// Test seam: repozytorium feedu (i cache) bez `init()`.
+  @visibleForTesting
+  static void debugSetFeed({FeedRepository? repository, FeedCache? cache}) {
+    _feedRepository = repository;
+    _feedCache = cache ?? const SharedPreferencesFeedCache();
   }
 
   static void _onUserChanged() {
@@ -188,6 +234,7 @@ class ServiceLocator {
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
     _trainingHistoryRepository = null;
+    _trainingStatsRepository = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
     await _exerciseDatabase?.close();
@@ -226,10 +273,12 @@ class ServiceLocator {
       localDb: database,
       syncEngine: planSync,
     );
+    final localSessions = TrainingSessionLocalHistory(database);
+    _trainingStatsRepository = LocalTrainingStatsRepository(localSessions);
     _trainingHistoryRepository = OfflineFirstTrainingHistoryRepository(
       remote: _trainingHistoryRemoteDataSource,
       localCache: TrainingHistoryLocalCache(database),
-      localSessions: TrainingSessionLocalHistory(database),
+      localSessions: localSessions,
       // Świeże dane pobrane w tle (inne niż cache) — ekrany historii
       // czytają listę jeszcze raz.
       onFreshData: () => _trainingSessionDataChanges.value++,
@@ -257,6 +306,10 @@ class ServiceLocator {
 
   static void requestProfileRefresh() {
     profileRefreshTick.value++;
+  }
+
+  static void requestFeedRefresh() {
+    _feedRefreshTick.value++;
   }
 
   /// Nowe imię/nazwisko zalogowanego konta (po edycji profilu): zapis
