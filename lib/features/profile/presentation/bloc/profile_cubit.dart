@@ -11,7 +11,6 @@ class ProfileCubit extends Cubit<ProfileState> {
   ProfileCubit(this._repository) : super(const ProfileState());
 
   final ProfileRepository _repository;
-  bool _updatingBio = false;
 
   Future<void> load() => _fetchProfile(isRefresh: false);
 
@@ -69,25 +68,10 @@ class ProfileCubit extends Cubit<ProfileState> {
     }
   }
 
-  Future<void> updateBio(String bio) async {
-    if (_updatingBio || state.profile == null) return;
-
-    _updatingBio = true;
-    try {
-      final updated = await _repository.updateBio(bio);
-      if (isClosed) return;
-      emit(state.copyWith(profile: updated, clearError: true));
-    } catch (e) {
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          error: _isOffline(e)
-              ? 'Nie udało się zapisać opisu — brak połączenia z internetem.'
-              : 'Nie udało się zapisać opisu. Spróbuj ponownie.',
-        ),
-      );
-    } finally {
-      _updatingBio = false;
-    }
+  /// Profil zwrócony przez ekran edycji — widoczny od razu, bez czekania
+  /// na ponowne pobranie.
+  void applyProfile(UserProfile profile) {
+    if (isClosed) return;
+    emit(state.copyWith(profile: profile, clearError: true));
   }
 }

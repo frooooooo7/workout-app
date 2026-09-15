@@ -20,8 +20,12 @@ import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/activity/presentation/screens/activity_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
+import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
+import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
+import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
+import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
@@ -36,6 +40,19 @@ final appRootNavigatorKey = GlobalKey<NavigatorState>();
 
 ProfileRepository _profileRepositoryForCurrentUser() {
   return ServiceLocator.profileRepository;
+}
+
+/// Ekrany z przyciskiem obserwowania. Udana zmiana prosi własny profil
+/// o odświeżenie (licznik obserwowanych); po powrocie na `/app/profile`
+/// ProfileScreen i tak odświeża się sam.
+Widget _withFollowCubit(Widget child) {
+  return BlocProvider(
+    create: (_) => FollowCubit(
+      _profileRepositoryForCurrentUser(),
+      onFollowChanged: ServiceLocator.requestProfileRefresh,
+    ),
+    child: child,
+  );
 }
 
 GoRouter buildRouter({
@@ -243,23 +260,52 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
+                    path: 'edit',
+                    builder: (_, s) {
+                      final extra = s.extra;
+                      return BlocProvider(
+                        create: (_) => EditProfileCubit(
+                          _profileRepositoryForCurrentUser(),
+                          initialProfile: extra is UserProfile ? extra : null,
+                          onNamesChanged: (profile) =>
+                              ServiceLocator.updateCurrentUserNames(
+                                userId: profile.id,
+                                firstName: profile.firstName,
+                                lastName: profile.lastName,
+                              ),
+                        ),
+                        child: const EditProfileScreen(),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
                     path: 'following',
-                    builder: (_, s) => FollowingListScreen(
-                      repository: _profileRepositoryForCurrentUser(),
+                    builder: (_, s) => _withFollowCubit(
+                      FollowingListScreen(
+                        repository: _profileRepositoryForCurrentUser(),
+                        currentUserId: ServiceLocator.currentUser.value?.id,
+                      ),
                     ),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
                     path: 'followers',
-                    builder: (_, s) => FollowersListScreen(
-                      repository: _profileRepositoryForCurrentUser(),
+                    builder: (_, s) => _withFollowCubit(
+                      FollowersListScreen(
+                        repository: _profileRepositoryForCurrentUser(),
+                        currentUserId: ServiceLocator.currentUser.value?.id,
+                      ),
                     ),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
                     path: 'find-people',
-                    builder: (_, s) => FindPeopleScreen(
-                      repository: _profileRepositoryForCurrentUser(),
+                    builder: (_, s) => _withFollowCubit(
+                      FindPeopleScreen(
+                        repository: _profileRepositoryForCurrentUser(),
+                        currentUserId: ServiceLocator.currentUser.value?.id,
+                      ),
                     ),
                   ),
                 ],
@@ -274,11 +320,38 @@ GoRouter buildRouter({
         path: '/app/users/:userId',
         builder: (_, state) {
           final userId = state.pathParameters['userId']!;
-          return UserProfileScreen(
-            userId: userId,
-            repository: _profileRepositoryForCurrentUser(),
+          return _withFollowCubit(
+            UserProfileScreen(
+              userId: userId,
+              repository: _profileRepositoryForCurrentUser(),
+              currentUserId: ServiceLocator.currentUser.value?.id,
+            ),
           );
         },
+        routes: [
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'following',
+            builder: (_, state) => _withFollowCubit(
+              FollowingListScreen(
+                repository: _profileRepositoryForCurrentUser(),
+                userId: state.pathParameters['userId']!,
+                currentUserId: ServiceLocator.currentUser.value?.id,
+              ),
+            ),
+          ),
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'followers',
+            builder: (_, state) => _withFollowCubit(
+              FollowersListScreen(
+                repository: _profileRepositoryForCurrentUser(),
+                userId: state.pathParameters['userId']!,
+                currentUserId: ServiceLocator.currentUser.value?.id,
+              ),
+            ),
+          ),
+        ],
       ),
     ],
   );

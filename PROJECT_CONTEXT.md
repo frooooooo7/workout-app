@@ -123,7 +123,8 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak 
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
 | Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore }`). Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
 | Training history (odczyt) | `GET /api/v1/training-history`, `GET /api/v1/training-history/:sessionId` + aliasy `/api/v1/training-sessions[/:sessionId]`; paginacja kursorem, filtry, **ETag / If-None-Match → 304** |
-| Profile / social | `GET/PATCH /profile/me` (tylko `bio`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile`, `GET /users/:userId/activities` |
+| Profile / social | `GET/PATCH /profile/me` (`firstName`, `lastName` 1–50, `bio` ≤ 120, pusty → `null`), `POST/DELETE /profile/me/avatar` (multipart, pole `avatar`, jpg/png/webp ≤ 5 MB → profil; błędy `missing_image`, `invalid_file`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile` (+ `isFollowing`, `isFollowedBy`), `GET /users/:userId/following|followers` (`limit`, `offset`; pozycje z `isFollowing`), `POST/DELETE /users/:userId/follow` → `{ isFollowing, followersCount }` (`cannot_follow_self`, `user_not_found`, `429`), `GET /users/:userId/activities` |
+| Pliki statyczne (awatary) | `GET /uploads/avatars/*` — `avatarUrl` to ścieżka względna, klient dokleja base URL (`core/network/api_asset_uri.dart`) |
 
 ### 3.5 Baza danych
 
@@ -219,8 +220,11 @@ Konwencja w feature: `domain/models/` + `domain/repositories/` (kontrakty), `dat
 | `/app/training` (+ nested) | hub: Sesja / Plany / Historia; ongoing workout, create plan, stats, szczegóły sesji |
 | `/app/activity` | ActivityScreen (mock) |
 | `/app/library` | LibraryScreen, pick exercise |
-| `/app/profile` (+ nested) | profil, ustawienia, following/followers, find people |
-| `/app/users/:userId` | profil innego użytkownika |
+| `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar, imię, nazwisko, bio), `following` / `followers`, `find-people` |
+| `/app/users/:userId` | profil innego użytkownika (przycisk Obserwuj, „Obserwuje Cię”) |
+| `/app/users/:userId/following`, `/app/users/:userId/followers` | listy innego użytkownika (te same ekrany co własne, z `userId`) |
+
+Obserwowanie: `FollowCubit` (optymistyczny toggle + cofnięcie przy błędzie) dostarczany w routerze dla list, wyszukiwarki i profilu użytkownika; wspólny widget `FollowButton` / `FollowToggleButton`. Edycja profilu: `EditProfileCubit`; zmiana imienia/nazwiska aktualizuje `ServiceLocator.currentUser` + cache w `TokenStorage` (`ServiceLocator.updateCurrentUserNames`) — id się nie zmienia, więc baza per-user nie jest przebudowywana. `UserAvatar` wczytuje zdjęcie z API (cache offline) z fallbackiem na inicjały.
 
 Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkownika.
 
@@ -257,7 +261,7 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Platformy: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
-- Testy: 37 plików w `test/` (routing, cubity, sync offline, widgety). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
+- Testy: 41 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
 - UI hardcoded po polsku; brak l10n (skill przygotowany, nieużyty).
 
 ---
@@ -311,7 +315,7 @@ flutter run -d chrome           # web: API pod localhost:3000
 # fizyczne urządzenie: --dart-define=API_BASE_URL=http://<ip-kompa>:3000
 ```
 
-> Komendy Flutter/Dart uruchamia użytkownik (zgodnie z `PROJECT.md` — agent ich nie odpala).
+> Agent może sam uruchamiać komendy Flutter/Dart (analyze, test, pub) do weryfikacji zmian — zgodnie z `PROJECT.md`.
 
 ---
 
@@ -323,15 +327,14 @@ flutter run -d chrome           # web: API pod localhost:3000
 - plany treningowe (CRUD, sync),
 - sesje na żywo z timerem odpoczynku (lokalne powiadomienia),
 - historia treningów (timeline, filtry, paginacja, ETag),
-- profil social: bio, listy following/followers, search, feed aktywności (odczyt).
+- profil social: edycja profilu (imię, nazwisko, bio, awatar z uploadem), obserwowanie/odobserwowanie (listy własne i innych użytkowników, search, profil), feed aktywności (odczyt).
 
 **Mocki / placeholdery:**
 - Home i Activity (dashboardy) — dane zaszyte na sztywno (tylko trening siłowy),
 - `kudosCount` / `commentCount` w aktywnościach — hardcoded 0.
 
 **Braki (gap'e):**
-- brak endpointów zapisu follow/unfollow (tabela `user_follows` istnieje, nic nie zapisuje),
-- brak uploadu avatara (kolumna `avatar_url` jest),
+- listy obserwowanych/obserwujących ładują tylko pierwszą stronę (20), bez doładowywania,
 - brak websocketów, feed na żywo, wspólnych sesji, push, Sentry, CI,
 - nieujednolicone wersjonowanie API (`/api/v1` tylko dla training-history).
 

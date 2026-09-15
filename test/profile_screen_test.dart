@@ -156,7 +156,7 @@ class _FakeProfileCubit extends ProfileCubit {
   Future<void> load() async {}
 }
 
-class _NoOpRepository implements ProfileRepository {
+class _NoOpRepository extends Fake implements ProfileRepository {
   @override
   Future<List<FollowingUser>> getFollowers({int limit = 20, int offset = 0}) {
     throw UnimplementedError();

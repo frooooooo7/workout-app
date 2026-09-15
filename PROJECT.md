@@ -60,7 +60,7 @@ Nie dodawaj zależności map/GPS (`google_maps_flutter`, `geolocator`, itp.) bez
 3. Przy testach: odpowiednie skille `flutter-add-widget-test`, `flutter-add-integration-test`, `dart-add-unit-test`.
 4. **Nie rozszerzaj** produktu o cardio/GPS — trzymaj się dziennika treningowego siłowego + social.
 5. Po istotnych zmianach architektury zaktualizuj `PROJECT_CONTEXT.md` (reguła `.cursor/rules/project-context.mdc`).
-6. **Komendy Flutter/Dart uruchamia użytkownik.** Agent nie powinien sam wykonywać komend typu `flutter test`, `flutter analyze`, `flutter run`, `flutter pub ...`, `dart ...`. Jeśli weryfikacja jest potrzebna, podaj komendę użytkownikowi i poproś o output.
+6. **Agent może uruchamiać komendy Flutter/Dart** (`flutter analyze`, `flutter test`, `flutter pub get`, `dart format` itp.) w celu weryfikacji zmian. Przed zakończeniem pracy nad kodem Fluttera uruchom `flutter analyze` i testy dotyczące zmienionych obszarów. Długotrwałe/interaktywne komendy (`flutter run`) uruchamiaj tylko, gdy to potrzebne.
 
 ## Nazewnictwo
 

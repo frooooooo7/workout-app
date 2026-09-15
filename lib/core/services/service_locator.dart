@@ -259,6 +259,29 @@ class ServiceLocator {
     profileRefreshTick.value++;
   }
 
+  /// Nowe imię/nazwisko zalogowanego konta (po edycji profilu): zapis
+  /// w pamięci sesji i w secure storage, bez ponownego logowania. Id się nie
+  /// zmienia, więc [_onUserChanged] nie zamyka ani nie otwiera bazy.
+  static Future<void> updateCurrentUserNames({
+    required String userId,
+    required String firstName,
+    required String lastName,
+  }) async {
+    final current = currentUser.value;
+    if (current == null || current.id != userId) return;
+    if (current.firstName == firstName && current.lastName == lastName) {
+      return;
+    }
+    final updated = AuthUser(
+      id: current.id,
+      email: current.email,
+      firstName: firstName,
+      lastName: lastName,
+    );
+    currentUser.value = updated;
+    await tokenStorage.saveUser(updated);
+  }
+
   /// Pełna synchronizacja od razu (np. „Synchronizuj teraz” we wskaźniku).
   /// [retryRejected] ponawia także zmiany wcześniej odrzucone przez serwer.
   static Future<void> requestSync({bool retryRejected = false}) async {

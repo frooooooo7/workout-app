@@ -1,17 +1,25 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../../features/auth/domain/models/auth_models.dart';
 import '../images/offline_network_image.dart';
+import '../network/api_asset_uri.dart';
 import '../theme/app_colors.dart';
 
 enum UserAvatarSize { sm, md, lg }
 
+/// Awatar użytkownika: zdjęcie z API (ścieżka względna `/uploads/avatars/…`
+/// albo pełny adres, cache na dysku) lub inicjały, gdy zdjęcia brak albo nie
+/// da się go wczytać. [imageBytes] (np. świeżo wybrane zdjęcie) ma
+/// pierwszeństwo przed [imageUrl].
 class UserAvatar extends StatelessWidget {
   const UserAvatar({
     super.key,
     required AuthUser user,
     this.size = UserAvatarSize.md,
     this.imageUrl,
+    this.imageBytes,
   })  : _user = user,
         _firstName = null,
         _lastName = null;
@@ -22,6 +30,7 @@ class UserAvatar extends StatelessWidget {
     required String lastName,
     this.size = UserAvatarSize.md,
     this.imageUrl,
+    this.imageBytes,
   })  : _user = null,
         _firstName = firstName,
         _lastName = lastName;
@@ -31,6 +40,7 @@ class UserAvatar extends StatelessWidget {
   final String? _lastName;
   final UserAvatarSize size;
   final String? imageUrl;
+  final Uint8List? imageBytes;
 
   double get _dimension => switch (size) {
         UserAvatarSize.sm => 46,
@@ -59,26 +69,36 @@ class UserAvatar extends StatelessWidget {
     return combined.isEmpty ? '?' : combined;
   }
 
+  ImageProvider? _imageProvider() {
+    final bytes = imageBytes;
+    if (bytes != null && bytes.isNotEmpty) return MemoryImage(bytes);
+    final uri = apiAssetUri(imageUrl);
+    if (uri == null) return null;
+    return offlineNetworkImage(uri.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final dimension = _dimension;
-    final url = imageUrl;
+    final provider = _imageProvider();
 
-    if (url != null && url.isNotEmpty) {
+    if (provider != null) {
       final px = (dimension * MediaQuery.devicePixelRatioOf(context))
           .round()
           .clamp(32, 512);
       return ClipRRect(
         borderRadius: BorderRadius.circular(_radius),
         child: Image(
-          image: ResizeImage.resizeIfNeeded(
-            px,
-            null,
-            offlineNetworkImage(url),
-          ),
+          image: ResizeImage.resizeIfNeeded(px, null, provider),
           width: dimension,
           height: dimension,
           fit: BoxFit.cover,
+          gaplessPlayback: true,
+          frameBuilder: (_, child, frame, wasSynchronouslyLoaded) {
+            // Inicjały do czasu wczytania zdjęcia (np. pierwszy raz z sieci).
+            if (wasSynchronouslyLoaded || frame != null) return child;
+            return _buildFallback(dimension);
+          },
           errorBuilder: (_, _, _) => _buildFallback(dimension),
         ),
       );

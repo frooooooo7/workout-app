@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sync_status_indicator.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../domain/models/user_profile.dart';
+import 'follow_button.dart';
 import 'profile_bio_section.dart';
 
 class ProfileHeroHeader extends StatelessWidget {
@@ -13,12 +14,20 @@ class ProfileHeroHeader extends StatelessWidget {
     required this.onSettingsTap,
     this.showSettings = true,
     this.onBioEditTap,
+    this.onEditProfileTap,
+    this.followsYou = false,
   });
 
   final UserProfile profile;
   final VoidCallback onSettingsTap;
   final bool showSettings;
   final VoidCallback? onBioEditTap;
+
+  /// Przycisk „Edytuj profil” (tylko własny profil).
+  final VoidCallback? onEditProfileTap;
+
+  /// Znacznik „Obserwuje Cię” obok nazwy użytkownika.
+  final bool followsYou;
 
   @override
   Widget build(BuildContext context) {
@@ -78,19 +87,47 @@ class ProfileHeroHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                profile.displayHandle,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    profile.displayHandle,
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (followsYou) const FollowsYouChip(),
+                ],
               ),
               const SizedBox(height: 8),
               ProfileBioSection(
                 profile: profile,
                 onEditTap: profile.isOwnProfile ? onBioEditTap : null,
               ),
+              if (profile.isOwnProfile && onEditProfileTap != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: onEditProfileTap,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edytuj profil'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    backgroundColor: AppColors.surface.withValues(alpha: 0.5),
+                    side: const BorderSide(color: AppColors.border),
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

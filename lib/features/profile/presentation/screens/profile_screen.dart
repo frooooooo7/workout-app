@@ -6,9 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/user_profile.dart';
 import '../bloc/profile_cubit.dart';
 import '../bloc/profile_state.dart';
-import '../widgets/edit_profile_bio_sheet.dart';
 import '../widgets/profile_activity_feed.dart';
 import '../widgets/profile_hero_header.dart';
 import '../widgets/profile_section_header.dart';
@@ -76,11 +76,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _handleBioEdit(BuildContext context, ProfileState state) async {
-    final bio = state.profile?.bio ?? '';
-    final result = await showEditProfileBioSheet(context, initialBio: bio);
-    if (!context.mounted || result == null) return;
-    await context.read<ProfileCubit>().updateBio(result);
+  Future<void> _openEditProfile(BuildContext context, UserProfile profile) async {
+    final cubit = context.read<ProfileCubit>();
+    final updated = await context.push<UserProfile>(
+      '/app/profile/edit',
+      extra: profile,
+    );
+    if (!mounted || updated == null) return;
+    // Po powrocie na /app/profile i tak ruszy odświeżenie (liczniki itd.);
+    // nowe dane z edycji pokazujemy od razu.
+    cubit.applyProfile(updated);
   }
 
   @override
@@ -117,7 +122,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: ProfileHeroHeader(
                     profile: profile,
                     onSettingsTap: () => context.push('/app/profile/settings'),
-                    onBioEditTap: () => _handleBioEdit(context, state),
+                    onBioEditTap: () => _openEditProfile(context, profile),
+                    onEditProfileTap: () => _openEditProfile(context, profile),
                   ),
                 ),
                 SliverToBoxAdapter(

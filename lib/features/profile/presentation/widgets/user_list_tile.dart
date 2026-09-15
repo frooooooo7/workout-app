@@ -40,6 +40,8 @@ class UserListTile extends StatelessWidget {
                   children: [
                     Text(
                       user.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 15,
@@ -49,6 +51,8 @@ class UserListTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       user.displayHandle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -57,7 +61,10 @@ class UserListTile extends StatelessWidget {
                   ],
                 ),
               ),
-              ?trailing,
+              if (trailing != null) ...[
+                const SizedBox(width: 12),
+                trailing!,
+              ],
             ],
           ),
         ),

@@ -85,16 +85,38 @@ class ProfileSettingsScreen extends StatelessWidget {
             children: [
               const _SectionLabel(label: 'Konto'),
               const SizedBox(height: 12),
-              _InfoCard(
-                icon: Icons.person_outline_rounded,
-                label: 'Imię i nazwisko',
-                value: user.fullName,
+              // Imię i nazwisko mogą się zmienić na ekranie edycji profilu.
+              ValueListenableBuilder<AuthUser?>(
+                valueListenable: ServiceLocator.currentUser,
+                builder: (context, current, _) {
+                  final shown = current ?? user;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _InfoCard(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Imię i nazwisko',
+                        value: shown.fullName,
+                      ),
+                      const SizedBox(height: 10),
+                      _InfoCard(
+                        icon: Icons.mail_outline_rounded,
+                        label: 'Adres e-mail',
+                        value: shown.email,
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 10),
-              _InfoCard(
-                icon: Icons.mail_outline_rounded,
-                label: 'Adres e-mail',
-                value: user.email,
+              _MenuRow(
+                icon: Icons.edit_outlined,
+                label: 'Edytuj profil',
+                onTap: () => context.push('/app/profile/edit'),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
               ),
               const SizedBox(height: 32),
               const _SectionLabel(label: 'Ustawienia'),
