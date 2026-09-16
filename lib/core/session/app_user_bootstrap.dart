@@ -1,6 +1,7 @@
 import '../../features/auth/domain/models/auth_models.dart';
 import '../network/api_client.dart';
 import '../services/service_locator.dart';
+import 'session_manager.dart';
 
 /// Offline-first rozwiązanie użytkownika na starcie + weryfikacja tokenu w tle.
 class AppUserBootstrap {
@@ -32,7 +33,9 @@ class AppUserBootstrap {
       ServiceLocator.currentUser.value = user;
       return user;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) {
+      // `token_revoked` / `invalid_token` obsługuje centralnie SessionManager
+      // (wyczyszczenie sesji + komunikat na ekranie logowania).
+      if (e.statusCode == 401 && !isRevokedSessionError(e)) {
         await ServiceLocator.tokenStorage.clear();
       }
       return null;
@@ -48,7 +51,7 @@ class AppUserBootstrap {
       await ServiceLocator.tokenStorage.saveUser(fresh);
       ServiceLocator.currentUser.value = fresh;
     } on ApiException catch (e) {
-      if (e.statusCode == 401) {
+      if (e.statusCode == 401 && !isRevokedSessionError(e)) {
         await ServiceLocator.tokenStorage.clear();
         ServiceLocator.currentUser.value = null;
         onSessionInvalidated();

@@ -10,8 +10,6 @@ import '../widgets/auth_card.dart';
 import '../widgets/auth_error_banner.dart';
 import '../widgets/auth_form_top_bar.dart';
 import '../widgets/auth_glow_background.dart';
-import '../widgets/auth_social_buttons_row.dart';
-import '../widgets/auth_social_divider.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/login_form_header.dart';
 import '../widgets/login_form_register_link.dart';
@@ -161,10 +159,6 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
                                     )
                                   : const Text('Zaloguj się'),
                             ),
-                            const SizedBox(height: 24),
-                            const AuthSocialDivider(),
-                            const SizedBox(height: 20),
-                            const AuthSocialButtonsRow(),
                             const SizedBox(height: 28),
                             LoginFormRegisterLink(
                               onTap: _handleNavigateToRegister,

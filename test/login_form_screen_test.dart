@@ -11,6 +11,9 @@ void main() {
     expect(find.text('Witaj z powrotem'), findsOneWidget);
     expect(find.text('Zaloguj się'), findsOneWidget);
     expect(find.text('Zarejestruj się'), findsOneWidget);
-    expect(find.text('lub kontynuuj z'), findsOneWidget);
+    // Logowanie przez Apple/Google/Facebook nie działało — usunięte.
+    expect(find.text('lub kontynuuj z'), findsNothing);
+    expect(find.byIcon(Icons.apple), findsNothing);
+    expect(find.byIcon(Icons.facebook_rounded), findsNothing);
   });
 }

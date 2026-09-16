@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import 'auth_social_buttons_row.dart';
-import 'auth_social_divider.dart';
 import 'login_terms_footer.dart';
 
 class LoginWelcomeCard extends StatelessWidget {
@@ -97,10 +95,6 @@ class LoginWelcomeCard extends StatelessWidget {
           ),
           child: const Text('Utwórz konto'),
         ),
-        const SizedBox(height: 24),
-        const AuthSocialDivider(),
-        const SizedBox(height: 20),
-        const AuthSocialButtonsRow(),
         const SizedBox(height: 24),
         const LoginTermsFooter(),
       ],

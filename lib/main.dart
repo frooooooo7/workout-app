@@ -40,6 +40,8 @@ class _GymAppState extends State<GymApp> {
     _router = buildRouter(
       resolveUser: _bootstrap.resolveInitialUser,
     );
+    // Wymuszone wylogowanie (unieważniony token) i usunięcie konta.
+    ServiceLocator.sessionManager.onSessionEnded = () => _router.go('/login');
   }
 
   @override

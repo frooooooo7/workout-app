@@ -117,7 +117,7 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak 
 | Grupa | Endpointy |
 |-------|-----------|
 | Health | `GET /health`, `GET /ready` (publiczne) |
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/change-password` `{currentPassword, newPassword}` → `{token, user}` (`invalid_credentials`, `password_too_short`, `password_too_weak`, `password_unchanged`, `missing_fields`, `429`), `POST /auth/logout-all` → `{token, user}`, `POST /auth/delete-account` (alias `DELETE /auth/me`) `{password}` → 204 (`invalid_credentials`, `missing_fields`, `429`). Backend udostępnia też wszystko pod `/api/v1`, ale klient nadal używa ścieżek bez prefiksu. Po zmianie hasła / wylogowaniu wszędzie **wszystkie starsze tokeny są unieważnione** (także użyty do wywołania); każdy chroniony endpoint może zwrócić `401 token_revoked` / `invalid_token` |
 | Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
 | Pliki statyczne | `GET /uploads/exercise-images/*` (`Cache-Control: 365d, immutable`) |
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
@@ -195,13 +195,15 @@ lib/
 │   ├── network/api_client.dart     <- HTTP wrapper + Bearer token (timeout 15s/60s multipart)
 │   ├── services/service_locator.dart <- DI + repozytoria offline per-user + syncStatus / *DataChanges
 │   ├── session/app_user_bootstrap.dart <- odtworzenie sesji (offline-first)
+│   ├── session/session_manager.dart <- wymuszone wylogowanie (401 token_revoked/invalid_token), podmiana tokenu, koniec sesji po usunięciu konta
 │   ├── storage/token_storage.dart  <- secure storage: auth_token, auth_user
 │   ├── sync/                       <- SyncEngineBase, SyncCoordinator, SyncStatus, klasyfikacja błędów
 │   ├── theme/                      <- dark-only, fiolet #6C47FF na #0B0B14
 │   ├── utils/polish_plural.dart
 │   └── widgets/                    <- user_avatar (xxs…lg), app_header, sync_status_indicator (ikonka synchronizacji)
 └── features/
-    ├── auth/       <- login/register (data + domain models + presentation)
+    ├── auth/       <- login/register (data + domain models + presentation); bez logowania społecznościowego
+    ├── account/    <- zmiana hasła, wyloguj wszędzie, usunięcie konta, ustawienia powiadomień, pomoc (FAQ)
     ├── feed/       <- zakładka Aktywność: feed społecznościowy (posty, kudosy, komentarze, cache 1. strony)
     ├── library/    <- katalog ćwiczeń, offline-first + sync
     ├── training/   <- plany, sesja na żywo (timer), historia, statystyki
@@ -220,6 +222,10 @@ Konwencja w feature: `domain/models/` + `domain/repositories/` (kontrakty), `dat
 | `/app/activity` | ActivityFeedScreen — feed (pull-to-refresh, doładowanie kursorem, pusty stan z propozycjami osób) |
 | `/app/library` | LibraryScreen, pick exercise |
 | `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar, imię, nazwisko, bio), `following` / `followers`, `find-people` |
+| `/app/profile/settings/change-password` | ChangePasswordScreen (`ChangePasswordCubit`; walidacja jak przy rejestracji + powtórzenie + inne niż obecne) |
+| `/app/profile/settings/notifications` | NotificationSettingsScreen — przełącznik „Powiadomienie o końcu przerwy” (`shared_preferences`, klucz `rest_timer_notifications_enabled`) |
+| `/app/profile/settings/help` | HelpScreen — statyczne FAQ |
+| `/app/profile/settings/delete-account` | DeleteAccountScreen (`DeleteAccountCubit`: hasło + checkbox, ostrzeżenie o niewysłanych zmianach) |
 | `/app/users/:userId` | profil innego użytkownika (przycisk Obserwuj, „Obserwuje Cię”) |
 | `/app/users/:userId/following`, `/app/users/:userId/followers` | listy innego użytkownika (te same ekrany co własne, z `userId`) |
 | `/app/posts/:sessionId` (`?comment=1` → fokus na polu komentarza) | PostDetailsScreen — szczegóły posta (metryki, mapa mięśni, ćwiczenia z widgetów `session_details`), kudosy, komentarze; otwierane z feedu i z aktywności na profilach |
@@ -230,10 +236,16 @@ Obserwowanie: `FollowCubit` (optymistyczny toggle + cofnięcie przy błędzie) d
 
 Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkownika.
 
+Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtrasy ustawień rejestruje `buildAccountSettingsRoutes()`. Ustawienia: sekcje Konto / Bezpieczeństwo (zmiana hasła, „Wyloguj ze wszystkich urządzeń” z potwierdzeniem — `LogoutAllDevicesCubit`) / Ustawienia (powiadomienia, pomoc) oraz wydzielona „Strefa niebezpieczna” z „Usuń konto”. Operacje idą przez `AccountRepository` (`ServiceLocator.accountRepository`).
+
 ### 4.4 Komunikacja z backendem
 
 - **Base URL** (`core/constants/api_constants.dart`): web `http://localhost:3000`, mobilnie domyślnie `http://10.0.2.2:3000` (emulator Androida); nadpisywalne przez `--dart-define=API_BASE_URL=...`.
 - **Auth flow:** login/register → JWT do secure storage → `AppUserBootstrap` przy starcie: cached user od razu + weryfikacja `GET /auth/me` w tle; 401 czyści storage.
+- **Unieważniona sesja:** `ApiClient.onUnauthorized` zgłasza każdy `401` na żądanie z tokenem (z tokenem użytym w nagłówku) do `SessionManager.handleUnauthorized`. Tylko `token_revoked` / `invalid_token` i tylko gdy token żądania == bieżący token → **jedno** wymuszone wylogowanie (równoległe 401 są ignorowane): czyszczenie tokenu i cache użytkownika, `onSessionEnded` (w `main.dart` → `router.go('/login')`), `currentUser = null` (zamknięcie bazy, `SyncCoordinator.stop()` — bez pętli ponowień), komunikat `ServiceLocator.loginNotice` na ekranie logowania (czyszczony przy kolejnym zalogowaniu). Lokalna baza konta **zostaje** (niewysłane zmiany wyślą się po ponownym zalogowaniu). Logowanie/rejestracja (bez tokenu) i `invalid_credentials` nie wywołują wylogowania.
+- **Rotacja tokenu:** zmiana hasła i „wyloguj wszędzie” działają w `SessionManager.guardTokenRotation` — 401 na stary token przychodzące w trakcie są oceniane dopiero po zapisaniu nowego tokenu (`applyRefreshedSession`: `TokenStorage` + `currentUser` z tym samym id, bez przebudowy bazy).
+- **Usunięcie konta:** `POST /auth/delete-account` `{password}` (klient nie używa `DELETE` z treścią — proxy potrafią ją gubić) → po 204 koniec sesji (komunikat „Konto zostało usunięte.”), zamknięcie i usunięcie pliku `gym_library_<userId>.db` (ćwiczenia, plany, sesje, kolejka sync, cache historii) oraz kluczy `shared_preferences` z sufiksem `_<userId>` (cache feedu) — `LocalAccountDataCleaner`. Ustawienia urządzenia i wspólny cache obrazków zostają.
+- **Powiadomienie timera:** `ServiceLocator.restTimerScheduler` to `SettingsAwareRestTimerScheduler` — przy wyłączonym ustawieniu nie planuje powiadomienia (timer w aplikacji działa); wyłączenie odwołuje zaplanowane.
 - **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v9**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
   - Repozytoria `OfflineFirst*Repository` zapisują lokalnie i od razu wołają `flush`; odczyty wołają `pullIfDue` (najwyżej raz na 30 s).
   - Silniki (`ExerciseSyncEngine`, `TrainingPlanSyncEngine`, `TrainingSessionSyncEngine`) dziedziczą po `core/sync/SyncEngineBase` (kolejka, zlewanie zdublowanych żądań, licznik aktywności). Pull **nie nadpisuje** wierszy z `pending_op`; rekordy utworzone offline są parowane po `clientId`; edycja w trakcie żądania zostaje jako `update`.
@@ -266,7 +278,8 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Platformy: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
-- Testy: 41 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
+- Testy konta/sesji: `session_manager_test.dart`, `api_account_repository_test.dart`, `change_password_test.dart`, `delete_account_screen_test.dart`, `profile_settings_screen_test.dart`, `notification_settings_test.dart`, `local_account_data_cleaner_test.dart`.
+- Testy: 53 pliki w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
 - UI hardcoded po polsku; brak l10n (skill przygotowany, nieużyty).
 
 ---
@@ -330,7 +343,8 @@ flutter run -d chrome           # web: API pod localhost:3000
 - auth (register/login/me, JWT),
 - biblioteka ćwiczeń (CRUD, ulubione, upload obrazków, offline sync),
 - plany treningowe (CRUD, sync),
-- sesje na żywo z timerem odpoczynku (lokalne powiadomienia),
+- sesje na żywo z timerem odpoczynku (lokalne powiadomienia, wyłączalne w ustawieniach),
+- konto: zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta, globalna obsługa unieważnionej sesji, ekran pomocy,
 - historia treningów (timeline, filtry, paginacja, ETag),
 - profil social: edycja profilu (imię, nazwisko, bio, awatar z uploadem), obserwowanie/odobserwowanie (listy własne i innych użytkowników, search, profil),
 - feed społecznościowy (zakładka Aktywność): posty moje i obserwowanych, kudosy, komentarze, szczegóły posta, propozycje osób,

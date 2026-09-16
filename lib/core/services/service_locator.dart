@@ -4,10 +4,15 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
 import '../network/api_client.dart';
+import '../session/session_manager.dart';
 import '../storage/token_storage.dart';
 import '../sync/network_availability.dart';
 import '../sync/sync_coordinator.dart';
 import '../sync/sync_status.dart';
+import '../../features/account/data/account_remote_data_source.dart';
+import '../../features/account/data/api_account_repository.dart';
+import '../../features/account/data/local_account_data_cleaner.dart';
+import '../../features/account/domain/repositories/account_repository.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/library/data/exercise_database.dart';
@@ -24,6 +29,8 @@ import '../../features/training/data/offline_first_training_plan_repository.dart
 import '../../features/training/data/offline_first_training_history_repository.dart';
 import '../../features/training/data/offline_first_training_session_repository.dart';
 import '../../features/training/data/rest_timer_notification_scheduler.dart';
+import '../../features/training/data/settings_aware_rest_timer_scheduler.dart';
+import '../../features/training/data/shared_preferences_rest_timer_notification_settings.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
 import '../../features/training/data/sync/training_session_sync_engine.dart';
 import '../../features/training/data/training_history_local_cache.dart';
@@ -35,6 +42,7 @@ import '../../features/training/domain/repositories/training_history_repository.
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 import '../../features/training/domain/repositories/training_session_repository.dart';
 import '../../features/training/domain/repositories/training_stats_repository.dart';
+import '../../features/training/domain/services/rest_timer_notification_settings.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
 import '../../features/profile/data/api_profile_repository.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
@@ -52,6 +60,15 @@ class ServiceLocator {
   static late final TrainingSessionRemoteDataSource
   _trainingSessionRemoteDataSource;
   static late final RestTimerScheduler restTimerScheduler;
+  static late final RestTimerNotificationSettings restTimerNotificationSettings;
+
+  /// Wymuszone wylogowanie (unieważniony token), odświeżenie tokenu,
+  /// sprzątanie po usunięciu konta.
+  static late final SessionManager sessionManager;
+
+  /// Komunikat na ekranie logowania (wylogowanie wymuszone, usunięte konto).
+  static final loginNotice = ValueNotifier<String?>(null);
+  static late final AccountRepository accountRepository;
 
   // User-scoped repository: recreated on login/logout via [currentUser] listener.
   static ExerciseRepository? _exerciseRepository;
@@ -162,6 +179,20 @@ class ServiceLocator {
     apiClient = ApiClient(
       baseUrl: kApiBaseUrl,
       getToken: tokenStorage.readToken,
+      onUnauthorized: (error, tokenUsed) => unawaited(
+        sessionManager.handleUnauthorized(error, tokenUsed: tokenUsed),
+      ),
+    );
+    sessionManager = SessionManager(
+      tokenStorage: tokenStorage,
+      currentUser: currentUser,
+      closeUserScope: _closeUserScope,
+      wipeUserData: const LocalAccountDataCleaner().wipe,
+      loginNotice: loginNotice,
+    );
+    accountRepository = ApiAccountRepository(
+      remote: AccountRemoteDataSource(apiClient),
+      session: sessionManager,
     );
     authRepository = AuthRepository(apiClient);
     _remoteDataSource = ExerciseRemoteDataSource(apiClient);
@@ -174,7 +205,12 @@ class ServiceLocator {
     );
     profileRepository = ApiProfileRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
-    restTimerScheduler = RestTimerNotificationScheduler();
+    restTimerNotificationSettings =
+        const SharedPreferencesRestTimerNotificationSettings();
+    restTimerScheduler = SettingsAwareRestTimerScheduler(
+      inner: RestTimerNotificationScheduler(),
+      settings: restTimerNotificationSettings,
+    );
 
     currentUser.addListener(_onUserChanged);
   }
@@ -223,6 +259,13 @@ class ServiceLocator {
     });
   }
 
+  /// Wylogowanie z czekaniem, aż baza konta zostanie zamknięta (np. przed
+  /// usunięciem pliku bazy).
+  static Future<void> _closeUserScope() async {
+    currentUser.value = null;
+    await (_exerciseScopeFuture ?? Future<void>.value());
+  }
+
   static Future<void> _disposeExerciseScoped() async {
     _syncCoordinator?.stop();
     _syncCoordinator = null;
@@ -243,7 +286,9 @@ class ServiceLocator {
   }
 
   static void _setupExerciseScoped(String userId) {
-    final database = ExerciseDatabase('gym_library_$userId.db');
+    final database = ExerciseDatabase(
+      LocalAccountDataCleaner.databaseFileName(userId),
+    );
     _exerciseDatabase = database;
 
     final exerciseSync = ExerciseSyncEngine(
