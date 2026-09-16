@@ -57,12 +57,13 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
   XFile? _pickedImage;
   Uint8List? _previewBytes;
 
-  /// Wybieralne mięśnie pogrupowane w partie ciała — płaska lista wszystkich
-  /// grup jest już na tyle długa, że bez nagłówków nie da się jej skanować.
+  /// Wybieralne mięśnie pogrupowane w partie ciała. Tylko grupy, które
+  /// przyjmuje API ([MuscleGroup.isApiSupported]) — granularne wartości
+  /// serwer odrzucał, a ćwiczenie zostawało niezsynchronizowane.
   static final Map<MuscleRegion, List<MuscleGroup>> _selectableMuscles = {
     for (final region in MuscleRegion.values)
       region: MuscleGroup.values
-          .where((m) => m.region == region)
+          .where((m) => m.region == region && m.isApiSupported)
           .toList(growable: false),
   };
 

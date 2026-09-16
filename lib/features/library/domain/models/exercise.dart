@@ -155,6 +155,42 @@ enum MuscleGroup {
         _ => {this},
       };
 
+  /// Czy API przyjmuje tę wartość w `muscles` ćwiczenia. Backend
+  /// (`VALID_MUSCLES`) zna tylko 8 grup zapisanych od pierwszego seeda —
+  /// granularne wartości kończyły się `400` i odrzuconą synchronizacją.
+  bool get isApiSupported => this != MuscleGroup.all && apiGroup == this;
+
+  /// Wartość wysyłana do API: grupa granularna → jej grupa zbiorcza.
+  MuscleGroup get apiGroup => switch (this) {
+        MuscleGroup.traps ||
+        MuscleGroup.lats ||
+        MuscleGroup.rhomboids ||
+        MuscleGroup.lowerBack =>
+          MuscleGroup.back,
+        MuscleGroup.frontDelts ||
+        MuscleGroup.sideDelts ||
+        MuscleGroup.rearDelts =>
+          MuscleGroup.shoulders,
+        // Brak zbiorczej grupy „ramiona” w API — najbliższe są zginacze.
+        MuscleGroup.forearms => MuscleGroup.biceps,
+        MuscleGroup.obliques => MuscleGroup.abs,
+        MuscleGroup.quads ||
+        MuscleGroup.hamstrings ||
+        MuscleGroup.calves ||
+        MuscleGroup.adductors =>
+          MuscleGroup.legs,
+        _ => this,
+      };
+
+  /// `muscles` dla API: bez [all], zmapowane przez [apiGroup], bez
+  /// duplikatów, w kolejności wyboru.
+  static List<String> toApiList(Iterable<MuscleGroup> muscles) => [
+        ...{
+          for (final muscle in muscles)
+            if (muscle != MuscleGroup.all) muscle.apiGroup.name,
+        },
+      ];
+
   /// Parsuje nazwę enuma zapisaną w API/bazie. Zwraca `null` dla nieznanych
   /// wartości, żeby starszy klient nie wywracał się na nowej grupie z serwera.
   static MuscleGroup? tryParse(String? raw) {

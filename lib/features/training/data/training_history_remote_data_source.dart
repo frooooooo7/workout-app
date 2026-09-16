@@ -17,7 +17,7 @@ class TrainingHistoryRemoteDataSource {
     DateTime? to,
   }) async {
     final path = Uri(
-      path: '/api/v1/training-sessions',
+      path: '/training-sessions',
       queryParameters: {
         if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
         'limit': '$limit',
@@ -33,8 +33,9 @@ class TrainingHistoryRemoteDataSource {
   }
 
   Future<TrainingSessionDetail> getSessionDetail(String sessionId) async {
-    final data = await _api.get('/api/v1/training-sessions/$sessionId', auth: true)
-        as Map<String, dynamic>;
+    final data =
+        await _api.get('/training-sessions/$sessionId', auth: true)
+            as Map<String, dynamic>;
     return _detailFromJson(data);
   }
 
@@ -61,10 +62,7 @@ class TrainingHistoryRemoteDataSource {
       'endedAt': detail.endedAt?.toUtc().toIso8601String(),
       'durationSec': detail.durationSec,
       'status': _statusToApi(detail.status),
-      'plan': {
-        'id': detail.plan.id,
-        'name': detail.plan.name,
-      },
+      'plan': {'id': detail.plan.id, 'name': detail.plan.name},
       'note': detail.note,
       'exercises': detail.exercises.map((exercise) {
         return {
@@ -129,7 +127,8 @@ class TrainingHistoryRemoteDataSource {
               type: _progressTypeFromApi(progress['type'] as String?),
               label: progress['label'] as String? ?? '',
             ),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
     );
   }
@@ -154,7 +153,8 @@ class TrainingHistoryRemoteDataSource {
           .whereType<Map<String, dynamic>>()
           .map(trainingExerciseDetailFromJson)
           .toList(growable: false),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
       sharedToProfile: json['sharedToProfile'] as bool? ?? false,
     );
@@ -225,4 +225,3 @@ class TrainingHistoryRemoteDataSource {
     };
   }
 }
-

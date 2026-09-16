@@ -15,15 +15,31 @@ import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
 
 class ApiProfileRepository implements ProfileRepository {
-  const ApiProfileRepository(this._api);
+  ApiProfileRepository(this._api);
 
   final ApiClient _api;
+
+  /// Adresy awatarów własnego profilu widziane w tej sesji aplikacji
+  /// (per id konta) — po usunięciu konta ich pliki znikają z cache obrazków.
+  final Map<String, Set<String>> _ownAvatarUrls = {};
+
+  /// Ścieżki awatarów konta [userId] zwrócone przez `/profile/me*`.
+  Set<String> ownAvatarUrlsFor(String userId) =>
+      Set.unmodifiable(_ownAvatarUrls[userId] ?? const <String>{});
+
+  UserProfile _rememberOwn(UserProfile profile) {
+    final url = profile.avatarUrl;
+    if (url != null && url.isNotEmpty) {
+      (_ownAvatarUrls[profile.id] ??= <String>{}).add(url);
+    }
+    return profile;
+  }
 
   @override
   Future<UserProfile> getOwnProfile() async {
     final data =
         await _api.get('/profile/me', auth: true) as Map<String, dynamic>;
-    return userProfileFromJson(data);
+    return _rememberOwn(userProfileFromJson(data));
   }
 
   @override
@@ -40,7 +56,7 @@ class ApiProfileRepository implements ProfileRepository {
     final data =
         await _api.patch('/profile/me', body, auth: true)
             as Map<String, dynamic>;
-    return userProfileFromJson(data);
+    return _rememberOwn(userProfileFromJson(data));
   }
 
   @override
@@ -60,7 +76,7 @@ class ApiProfileRepository implements ProfileRepository {
       files: [file],
       auth: true,
     );
-    return userProfileFromJson(data as Map<String, dynamic>);
+    return _rememberOwn(userProfileFromJson(data as Map<String, dynamic>));
   }
 
   @override
@@ -68,13 +84,14 @@ class ApiProfileRepository implements ProfileRepository {
     final data = await _api.delete('/profile/me/avatar', auth: true);
     // 204 bez treści — dociągamy aktualny profil.
     if (data is! Map<String, dynamic>) return getOwnProfile();
-    return userProfileFromJson(data);
+    return _rememberOwn(userProfileFromJson(data));
   }
 
   @override
   Future<UserProfile> getUserProfile(String userId) async {
-    final data = await _api.get('/users/$userId/profile', auth: true)
-        as Map<String, dynamic>;
+    final data =
+        await _api.get('/users/$userId/profile', auth: true)
+            as Map<String, dynamic>;
     return userProfileFromJson(data);
   }
 
@@ -95,18 +112,12 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<List<FollowingUser>> getFollowing({
-    int limit = 20,
-    int offset = 0,
-  }) {
+  Future<List<FollowingUser>> getFollowing({int limit = 20, int offset = 0}) {
     return _getUserList('/profile/following', limit: limit, offset: offset);
   }
 
   @override
-  Future<List<FollowingUser>> getFollowers({
-    int limit = 20,
-    int offset = 0,
-  }) {
+  Future<List<FollowingUser>> getFollowers({int limit = 20, int offset = 0}) {
     return _getUserList('/profile/followers', limit: limit, offset: offset);
   }
 
@@ -157,10 +168,7 @@ class ApiProfileRepository implements ProfileRepository {
   Future<List<FollowingUser>> searchUsers(String query) async {
     final path = Uri(
       path: '/users/search',
-      queryParameters: {
-        'q': query.trim(),
-        'limit': '20',
-      },
+      queryParameters: {'q': query.trim(), 'limit': '20'},
     ).toString();
     return followingUsersFromJson(await _api.get(path, auth: true));
   }
@@ -172,10 +180,7 @@ class ApiProfileRepository implements ProfileRepository {
   }) async {
     final path = Uri(
       path: basePath,
-      queryParameters: {
-        'limit': '$limit',
-        'offset': '$offset',
-      },
+      queryParameters: {'limit': '$limit', 'offset': '$offset'},
     ).toString();
     return followingUsersFromJson(await _api.get(path, auth: true));
   }

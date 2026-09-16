@@ -36,12 +36,12 @@ Użytkownik:
 
 ## Backend — Node.js + PostgreSQL
 
-Backend w **`gym-backend/`** (osobne repo w workspace).
+Backend w **`gym_backend/`** (osobne repo w workspace), REST pod `/api/v1`.
 
 | Obszar | Technologia |
 |--------|-------------|
 | Runtime / API | **Node.js** + **Express** (REST, JWT). |
-| Baza | **PostgreSQL** (obraz Docker z PostGIS — rozszerzenie **nie jest używane** w produkcie; nie dodawaj funkcji geolokalizacji). |
+| Baza | **PostgreSQL 16** (obraz `postgres:16-alpine`; nie dodawaj funkcji geolokalizacji). |
 | Pliki | upload obrazków ćwiczeń (multer → dysk lokalny). |
 
 Reguły dostępu do danych społecznościowych implementuj w **warstwie API** (`requireAuth`, repozytoria per `user_id`).

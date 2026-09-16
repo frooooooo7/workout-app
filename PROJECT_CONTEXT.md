@@ -1,7 +1,7 @@
 # GYM — kontekst projektu
 
 > Dokument orientacyjny dla agentów AI i developerów: co jest gdzie, z czego się składa, jakie technologie i jak to wszystko się łączy.
-> Data ostatniej aktualizacji: 2026-09-16 (zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
+> Data ostatniej aktualizacji: 2026-09-16 (faza 5: API `/api/v1`, testy E2E z backendem, `integration_test`, CI; zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
 >
 > **Utrzymanie:** ten plik musi być aktualizowany na bieżąco przy istotnych zmianach architektury, API, struktury katalogów, stacku lub infrastruktury — zgodnie z regułą `.cursor/rules/project-context.mdc`.
 
@@ -26,19 +26,15 @@ Aplikacja nazywa się **Stronger** (tytuł w `MaterialApp`), pakiet pub: `gym`. 
 
 ```
 gym/                              <- root workspace (NIE jest osobnym repo)
-├── gym-backend/                  <- API REST (Node.js + Express + PostgreSQL)
-├── gym-flutter/                  <- aplikacja kliencka (Flutter)
-├── gym-backend.worktrees/        <- worktree'y agentów (np. agents-api-training-sessions-mvp-implementation)
-├── gym-flutter.worktrees/        <- worktree'y agentów (np. agents-ui-ux-training-history-plan)
-├── create-worktree.bat           <- skrypt tworzący worktree dla gym-flutter
-└── PROJECT_CONTEXT.md            <- ten plik
+├── gym_backend/                  <- API REST (Node.js + Express + PostgreSQL), własne CI
+└── gym_frontend/                 <- aplikacja kliencka (Flutter); ten plik: gym_frontend/PROJECT_CONTEXT.md
 ```
 
-Każde z repo (`gym-backend`, `gym-flutter`) jest osobnym repozytorium git z własnymi branchami.
+Każde z repo (`gym_backend`, `gym_frontend`) jest osobnym repozytorium git z własnymi branchami.
 
 ---
 
-## 3. Backend (`gym-backend`)
+## 3. Backend (`gym_backend`)
 
 ### 3.1 Stack
 
@@ -47,7 +43,7 @@ Każde z repo (`gym-backend`, `gym-flutter`) jest osobnym repozytorium git z wł
 | Język | TypeScript (ES2022, ESM `"type": "module"`, NodeNext) |
 | Runtime | Node.js >= 20 (Docker: Node 22 Alpine) |
 | Framework | Express 4 |
-| Baza | PostgreSQL 16 (obraz Docker PostGIS — rozszerzenie **nieużywane**, poza zakresem produktu) |
+| Baza | PostgreSQL 16 (obraz `postgres:16-alpine`; potrzebne tylko `pgcrypto` i `pg_trgm`) |
 | Dostęp do bazy | surowy `pg` (pool) — **bez ORM-a** |
 | Walidacja | Zod 4 |
 | Auth | JWT (`jsonwebtoken`) + bcryptjs (12 rund, hash/compare w `worker_threads`) |
@@ -59,7 +55,7 @@ Każde z repo (`gym-backend`, `gym-flutter`) jest osobnym repozytorium git z wł
 ### 3.2 Struktura katalogów
 
 ```
-gym-backend/
+gym_backend/
 ├── src/
 │   ├── index.ts                <- entry: migracje -> listen -> graceful shutdown
 │   ├── app.ts                  <- createApp(): middleware + montowanie routerów
@@ -83,9 +79,10 @@ gym-backend/
 │       └── training-history/   <- timeline odczyt (cursor, ETag) + openapi.yaml
 ├── uploads/exercise-images/    <- pliki z multera (gitignored)
 ├── Dockerfile                  <- multi-stage; USER node; port 3000
-├── docker-compose.yml          <- postgres (PostGIS) + api z healthcheckami
+├── docker-compose.yml          <- postgres:16-alpine + api z healthcheckami
 ├── .env.example
-└── README.md                   <- kontrakt API training-history
+├── .github/workflows/ci.yml    <- typecheck, Vitest, build, smoke E2E na Postgresie
+└── README.md                   <- przegląd API (tabela ścieżek /api/v1), kontrakt training-history
 ```
 
 **Konwencja modułu:** `*.routes.ts` → `*.controller.ts` → `*.service.ts` → `*.repository.ts` + `*.schemas.ts` (+ `*.test.ts`, opcjonalnie `*.openapi.yaml`).
@@ -112,17 +109,17 @@ Start (`npm run dev` = `tsx watch src/index.ts`):
 
 ### 3.4 API — przegląd endpointów
 
-Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak globalnego prefiksu `/api`** — wyjątek: training-history pod `/api/v1/`.
+Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Wszystkie endpointy są pod `/api/v1`** (w tabeli ścieżki bez prefiksu). Stare ścieżki bez prefiksu nadal działają, ale zwracają `Deprecation: true` + `Link: </api/v1/...>` — **klient używa wyłącznie `/api/v1`**. Pliki `/uploads/*` są serwowane bez prefiksu.
 
 | Grupa | Endpointy |
 |-------|-----------|
 | Health | `GET /health`, `GET /ready` (publiczne) |
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/change-password` `{currentPassword, newPassword}` → `{token, user}` (`invalid_credentials`, `password_too_short`, `password_too_weak`, `password_unchanged`, `missing_fields`, `429`), `POST /auth/logout-all` → `{token, user}`, `POST /auth/delete-account` (alias `DELETE /auth/me`) `{password}` → 204 (`invalid_credentials`, `missing_fields`, `429`). Backend udostępnia też wszystko pod `/api/v1`, ale klient nadal używa ścieżek bez prefiksu. Po zmianie hasła / wylogowaniu wszędzie **wszystkie starsze tokeny są unieważnione** (także użyty do wywołania); każdy chroniony endpoint może zwrócić `401 token_revoked` / `invalid_token` |
-| Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `POST /auth/change-password` `{currentPassword, newPassword}` → `{token, user}` (`invalid_credentials`, `password_too_short`, `password_too_weak`, `password_unchanged`, `missing_fields`, `429`), `POST /auth/logout-all` → `{token, user}`, `POST /auth/delete-account` (alias `DELETE /auth/me`) `{password}` → 204 (`invalid_credentials`, `missing_fields`, `429`). Po zmianie hasła / wylogowaniu wszędzie **wszystkie starsze tokeny są unieważnione** (także użyty do wywołania); każdy chroniony endpoint może zwrócić `401 token_revoked` / `invalid_token` |
+| Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń; `muscles` przyjmuje tylko 8 grup: `chest, back, legs, shoulders, biceps, triceps, abs, glutes` — klient mapuje grupy granularne przez `MuscleGroup.apiGroup`), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
 | Pliki statyczne | `GET /uploads/exercise-images/*` (`Cache-Control: 365d, immutable`) |
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
 | Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id` (także edycja zakończonej sesji), `DELETE /training-sessions/:id` i `DELETE /training-sessions/by-client-id/:clientId` (204, nagrobek), `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore, deleted[] }`; `deleted` tylko na 1. stronie z `updatedSince`). Zapis usuniętej sesji → **410 `session_deleted`**. Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
-| Training history (odczyt) | `GET /api/v1/training-history`, `GET /api/v1/training-history/:sessionId` + aliasy `/api/v1/training-sessions[/:sessionId]`; paginacja kursorem, filtry, **ETag / If-None-Match → 304** |
+| Training history (odczyt) | `GET /training-history`, `GET /training-history/:sessionId` + aliasy tylko w v1: `GET /api/v1/training-sessions[/:sessionId]` (router zapisu ma pierwszeństwo, więc `/training-sessions/history` i `/active` trafiają do zapisu); paginacja kursorem, filtry, ETag / If-None-Match → 304 (klient nie wysyła `If-None-Match` — ma własny cache SWR) |
 | Profile / social | `GET/PATCH /profile/me` (`firstName`, `lastName` 1–50, `bio` ≤ 120, pusty → `null`), `POST/DELETE /profile/me/avatar` (multipart, pole `avatar`, jpg/png/webp ≤ 5 MB → profil; błędy `missing_image`, `invalid_file`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile` (+ `isFollowing`, `isFollowedBy`), `GET /users/:userId/following|followers` (`limit`, `offset`; pozycje z `isFollowing`), `POST/DELETE /users/:userId/follow` → `{ isFollowing, followersCount }` (`cannot_follow_self`, `user_not_found`, `429`), `GET /users/:userId/activities` |
 | Feed / kudosy / komentarze | `GET /feed?limit&cursor` → `{ items: FeedPost[], nextCursor, hasMore }` (posty moje + obserwowanych, `invalid_cursor`), `GET /posts/:sessionId` (post + `exercises` jak w training-history, `post_not_found`), `POST/DELETE /posts/:id/kudos` → `{ hasKudoed, kudosCount }` (`cannot_kudo_own_post`), `GET /posts/:id/kudos?limit&offset` (lista jak obserwujący), `GET /posts/:id/comments?limit&cursor` (najstarsze najpierw), `POST /posts/:id/comments` `{ body }` (1–500 punktów kodowych, `invalid_comment_body`, `429`), `DELETE /posts/:id/comments/:commentId` → 204 (`forbidden`, `comment_not_found`), `GET /users/suggested?limit`. Aktywności profilu mają realne `kudosCount`, `commentCount`, `hasKudoed` (id = id sesji = id posta) |
 | Pliki statyczne (awatary) | `GET /uploads/avatars/*` — `avatarUrl` to ścieżka względna, klient dokleja base URL (`core/network/api_asset_uri.dart`) |
@@ -157,17 +154,17 @@ users ─┬─< exercises (created_by, SET NULL)
 | `npm run migrate` | ręczne migracje |
 | `npm test` | Vitest |
 
-Brak CI (`.github/workflows` nie istnieje). Brak websocketów, maili, płatności, kolejek, Redisa, S3.
+CI backendu: GitHub Actions (typecheck, Vitest, build, smoke E2E na Postgresie). Brak websocketów, maili, płatności, kolejek, Redisa, S3.
 
 ---
 
-## 4. Frontend (`gym-flutter`)
+## 4. Frontend (`gym_frontend`)
 
 ### 4.1 Stack
 
 | Obszar | Technologia |
 |--------|-------------|
-| Flutter / Dart | Flutter >= 3.38.4, Dart `^3.11.5` |
+| Flutter / Dart | Flutter 3.47.2 (przypięty w CI), Dart `^3.11.5` |
 | Stan | **flutter_bloc (Cubit)** — spójnie w całym projekcie |
 | Nawigacja | **go_router** (`StatefulShellRoute.indexedStack`) |
 | HTTP | `http` (własny wrapper `ApiClient`) — bez Dio |
@@ -187,12 +184,13 @@ Architektura **feature-first + warstwy** (`data` / `domain` / `presentation` w k
 lib/
 ├── main.dart                       <- entry: ServiceLocator.init() -> runApp(GymApp)
 ├── core/
-│   ├── constants/api_constants.dart<- base URL API
+│   ├── constants/api_constants.dart<- kApiOrigin (origin serwera) + kApiBaseUrl = <origin>/api/v1
 │   ├── navigation/
 │   │   ├── app_router.dart         <- go_router + redirect auth
 │   │   └── app_shell.dart          <- bottom nav: Główna/Trening/Aktywność/Biblioteka/Profil
 │   ├── images/offline_network_image.dart <- obrazki z cache na dysku (offline)
 │   ├── network/api_client.dart     <- HTTP wrapper + Bearer token (timeout 15s/60s multipart)
+│   ├── network/api_asset_uri.dart  <- /uploads/... → pełny adres względem kApiOrigin (bez /api/v1)
 │   ├── services/service_locator.dart <- DI + repozytoria offline per-user + syncStatus / *DataChanges
 │   ├── session/app_user_bootstrap.dart <- odtworzenie sesji (offline-first)
 │   ├── session/session_manager.dart <- wymuszone wylogowanie (401 token_revoked/invalid_token), podmiana tokenu, koniec sesji po usunięciu konta
@@ -240,11 +238,11 @@ Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtra
 
 ### 4.4 Komunikacja z backendem
 
-- **Base URL** (`core/constants/api_constants.dart`): web `http://localhost:3000`, mobilnie domyślnie `http://10.0.2.2:3000` (emulator Androida); nadpisywalne przez `--dart-define=API_BASE_URL=...`.
+- **Base URL** (`core/constants/api_constants.dart`): `API_BASE_URL` to **origin** serwera — web `http://localhost:3000`, mobilnie domyślnie `http://10.0.2.2:3000` (emulator Androida); nadpisywalne przez `--dart-define=API_BASE_URL=...`. `ApiClient` dostaje `kApiBaseUrl = <origin>/api/v1` (jedyne miejsce z prefiksem; ścieżki w data sources są bez prefiksu, np. `/training-sessions/history`). Obrazki i awatary (`/uploads/...`) rozwija `apiAssetUri` względem `kApiOrigin`.
 - **Auth flow:** login/register → JWT do secure storage → `AppUserBootstrap` przy starcie: cached user od razu + weryfikacja `GET /auth/me` w tle; 401 czyści storage.
 - **Unieważniona sesja:** `ApiClient.onUnauthorized` zgłasza każdy `401` na żądanie z tokenem (z tokenem użytym w nagłówku) do `SessionManager.handleUnauthorized`. Tylko `token_revoked` / `invalid_token` i tylko gdy token żądania == bieżący token → **jedno** wymuszone wylogowanie (równoległe 401 są ignorowane): czyszczenie tokenu i cache użytkownika, `onSessionEnded` (w `main.dart` → `router.go('/login')`), `currentUser = null` (zamknięcie bazy, `SyncCoordinator.stop()` — bez pętli ponowień), komunikat `ServiceLocator.loginNotice` na ekranie logowania (czyszczony przy kolejnym zalogowaniu). Lokalna baza konta **zostaje** (niewysłane zmiany wyślą się po ponownym zalogowaniu). Logowanie/rejestracja (bez tokenu) i `invalid_credentials` nie wywołują wylogowania.
 - **Rotacja tokenu:** zmiana hasła i „wyloguj wszędzie” działają w `SessionManager.guardTokenRotation` — 401 na stary token przychodzące w trakcie są oceniane dopiero po zapisaniu nowego tokenu (`applyRefreshedSession`: `TokenStorage` + `currentUser` z tym samym id, bez przebudowy bazy).
-- **Usunięcie konta:** `POST /auth/delete-account` `{password}` (klient nie używa `DELETE` z treścią — proxy potrafią ją gubić) → po 204 koniec sesji (komunikat „Konto zostało usunięte.”), zamknięcie i usunięcie pliku `gym_library_<userId>.db` (ćwiczenia, plany, sesje, kolejka sync, cache historii) oraz kluczy `shared_preferences` z sufiksem `_<userId>` (cache feedu) — `LocalAccountDataCleaner`. Ustawienia urządzenia i wspólny cache obrazków zostają.
+- **Usunięcie konta:** `POST /auth/delete-account` `{password}` (klient nie używa `DELETE` z treścią — proxy potrafią ją gubić) → po 204 koniec sesji (komunikat „Konto zostało usunięte.” — baner na `/login` i `/login/form`), zamknięcie i usunięcie pliku `gym_library_<userId>.db` (ćwiczenia, plany, sesje, kolejka sync, cache historii), kluczy `shared_preferences` z sufiksem `_<userId>` (cache feedu) oraz plików awatarów konta w cache obrazków (adresy zapamiętane w tej sesji aplikacji przez `ApiProfileRepository.ownAvatarUrlsFor`) — `LocalAccountDataCleaner`. Ustawienia urządzenia i pozostałe obrazki (ćwiczenia, inne osoby) zostają.
 - **Powiadomienie timera:** `ServiceLocator.restTimerScheduler` to `SettingsAwareRestTimerScheduler` — przy wyłączonym ustawieniu nie planuje powiadomienia (timer w aplikacji działa); wyłączenie odwołuje zaplanowane.
 - **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v11**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
   - Repozytoria `OfflineFirst*Repository` zapisują lokalnie i od razu wołają `flush`; odczyty wołają `pullIfDue` (najwyżej raz na 30 s).
@@ -254,7 +252,7 @@ Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtra
   - Po zmianach z synchronizacji cubity odświeżają się same (`ServiceLocator.*DataChanges`).
   - Statystyki (`/app/training/stats`): `TrainingSummaryCubit` + czysty `TrainingSummaryCalculator` (tydzień od poniedziałku 00:00, miesiąc kalendarzowy; treningi, czas, ukończone serie, powtórzenia, objętość, różne ćwiczenia — bez kalorii) liczone z lokalnej bazy przez `LocalTrainingStatsRepository` (niewysłane + pobrane z serwera sesje; odczyt woła `pullIfDue` sesji).
   - **Pull sesji** (`TrainingSessionSyncEngine.pull`, w cyklu koordynatora po `sessions.flush`, `pullIfDue` 30 s): `GET /training-sessions/history` stronami po 100. Pierwszy raz bez `updatedSince` = pełna historia + usunięcie lokalnych zsynchronizowanych sesji (bez `pending_op`), których serwer nie ma. Potem `updatedSince = znacznik − 30 s`; znacznik (`sync_state`, klucz `training_sessions.pull_high_water_mark`) = max `updatedAt`/`deletedAt` z odpowiedzi (zegar serwera), zapisywany po pobraniu wszystkich stron. Parowanie po `server_id`, potem `local_id = clientId`; wiersze z `pending_op` nie są nadpisywane; ta sama wersja (`server_updated_at`) jest pomijana. `deleted[]` (po `clientId`, potem id) usuwa wiersz także z niewysłaną edycją (spójnie z 410); wyjątek: aktywny trening.
-  - **Usuwanie sesji** (`TrainingSessionRepository.delete`): ćwiczenia/serie znikają od razu, wiersz sesji zostaje jako nagrobek `pending_op = 'delete'` (ukryty w historii, statystykach, `getById`; cache historii czyszczony). Pusta, nigdy niewysłana sesja jest kasowana od razu. Sesja znana tylko z serwera → minimalny nagrobek (`local_id = server_id = id`). Flush: `server_id` → `DELETE /:id` (404 → dodatkowo `by-client-id`), brak `server_id` → `by-client-id`; 400/404/410 = sukces. Usunięcie w trakcie POST zostaje usunięciem. `countSyncBacklog` liczy nagrobki.
+  - **Usuwanie sesji** (`TrainingSessionRepository.delete`): ćwiczenia/serie znikają od razu, wiersz sesji zostaje jako nagrobek `pending_op = 'delete'` (ukryty w historii, statystykach, `getById`; cache historii czyszczony). Pusta, nigdy niewysłana sesja jest kasowana od razu. Sesja znana tylko z serwera → minimalny nagrobek (`local_id = server_id = id`). Feed (`FeedCubit.hiddenPostIds`) i aktywności własnego profilu (`ProfileCubit.hiddenActivityIds`) ukrywają nagrobki od razu (`ServiceLocator.pendingDeletedSessionIds`) — także przy nieudanym odświeżeniu offline i w zapisanym cache feedu. Flush: `server_id` → `DELETE /:id` (404 → dodatkowo `by-client-id`), brak `server_id` → `by-client-id`; 400/404/410 = sukces. Usunięcie w trakcie POST zostaje usunięciem. `countSyncBacklog` liczy nagrobki.
   - **410 `session_deleted`** (`SyncFailureKind.gone`): create/update w kolejce → usunięcie lokalnej sesji bez `sync_error` i bez PUT→POST; bezpośredni PATCH udostępnienia → `TrainingSessionDeletedException` (szczegóły/podsumowanie pokazują „Ten trening został usunięty.”).
   - **Powtórz trening**: `buildRepeatedSession` (ćwiczenia i serie w kolejności, plan = poprzednie wykonanie lub plan, nieukończone; powiązanie z planem tylko gdy plan istnieje) → `TrainingSessionCubit.startFromSession`; przy trwającym treningu dialog „Wróć do treningu”.
   - **Edycja treningu**: `EditWorkoutCubit` + czyste `validateWorkoutEdit` / `applyWorkoutEdit` (`workout_edit.dart`; `finishedAt = start + minuty`, przesunięcie `completedAt`), zapis `save` → `pending_op = update` → `PUT`. Sesja spoza lokalnej bazy: `loadForEdit` = pull, a potem szukanie w pełnej historii (`fetchFromServer`). Po zmianach: `ServiceLocator.notifyTrainingSessionsChanged()`, flush, odświeżenie profilu i feedu.
@@ -284,7 +282,10 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
 - Testy konta/sesji: `session_manager_test.dart`, `api_account_repository_test.dart`, `change_password_test.dart`, `delete_account_screen_test.dart`, `profile_settings_screen_test.dart`, `notification_settings_test.dart`, `local_account_data_cleaner_test.dart`.
-- Testy: 56 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze; `offline_sync_training_session_delete_pull_test.dart` — usuwanie, 410, pull + `deleted[]`), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
+- **Testy E2E** (`test/e2e/`, pomijane bez `E2E_BASE_URL`): `api_contract_e2e_test.dart` — prawdziwy `ApiClient` + remote data sources / repozytoria API przeciw działającemu backendowi (rejestracja, ćwiczenia, plany, sesje, follow, feed, kudosy, komentarze, profil, search, historia, usuwanie + `deleted[]` + 410, uploady, zmiana hasła / `token_revoked`, logout-all, usunięcie konta); `offline_sync_e2e_test.dart` — dwa „urządzenia” (osobne bazy sqflite) z prawdziwymi silnikami sync. Uruchomienie: `flutter test test/e2e --dart-define=E2E_BASE_URL=http://localhost:3102` (backend na bazie `gym_smoke`; limit rejestracji 10/h na IP, każde uruchomienie tworzy 3 konta).
+- **Integracyjny UI** (`integration_test/workout_flow_test.dart`): prawdziwe drzewo aplikacji (router, ekrany, cubity, repozytoria offline-first na sqflite ffi) z podmienionym HTTP: logowanie → start treningu z planu → ukończenie serii → zakończenie → historia → menu szczegółów. `flutter test integration_test -d flutter-tester` (CI) albo `-d windows` (wymaga Visual Studio C++).
+- **CI** (`.github/workflows/ci.yml`): `analyze-test` (pub get, analyze, test, integration_test na flutter-tester), `build-web` (`flutter build web --release`), `e2e` tylko przy zmiennej repozytorium `E2E_BASE_URL`.
+- Testy: ~60 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze; `offline_sync_training_session_delete_pull_test.dart` — usuwanie, 410, pull + `deleted[]`), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`; API v1: `api_v1_wiring_test.dart`, `muscle_group_api_mapping_test.dart`.
 - UI hardcoded po polsku; brak l10n (skill przygotowany, nieużyty).
 
 ---
@@ -293,25 +294,25 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 
 ```mermaid
 flowchart LR
-  subgraph Flutter["gym-flutter (Stronger)"]
+  subgraph Flutter["gym_frontend (Stronger)"]
     UI[Screens + Cubits] --> Repos[OfflineFirst*Repository]
     Repos --> Local[(sqflite per-user)]
     Repos --> Sync[Sync engines]
     Sync --> ApiClient[ApiClient + Bearer JWT]
   end
-  ApiClient -->|HTTP/JSON| Express
-  subgraph Backend["gym-backend :3000"]
+  ApiClient -->|HTTP/JSON /api/v1| Express
+  subgraph Backend["gym_backend :3000"]
     Express[Express app] --> Modules[modules/*]
     Modules --> Repo[repositories - raw SQL]
-    Repo --> PG[(PostgreSQL 16 + PostGIS image)]
+    Repo --> PG[(PostgreSQL 16)]
     Express --> Uploads[/uploads/exercise-images]
   end
 ```
 
 - Auth: JWT 30 dni, Bearer w każdym requeście chronionym.
 - Sync: klient generuje `clientId` (uuid) → serwer upsertuje po `(user_id, client_id)`.
-- Historia: klient czyta z `/api/v1/training-sessions` (alias training-history), wspiera ETag/304 do cache'u offline.
-- **Znana niespójność:** zapis sesji idzie na `/training-sessions`, a odczyt historii na `/api/v1/training-sessions` — dwa style URL-i (backend ma aliasy, więc działa, ale konwencja nie jest ujednolicona).
+- Wszystkie żądania: `<origin>/api/v1/...`. Historia (timeline) czyta z `GET /api/v1/training-sessions[/:id]` (alias training-history), a synchronizacja sesji z `GET /api/v1/training-sessions/history` (router zapisu ma pierwszeństwo). Cache historii offline to stale-while-revalidate w sqflite (bez `If-None-Match`).
+- Kontrakt klient ↔ serwer weryfikują testy `test/e2e/` na prawdziwym backendzie.
 
 ---
 
@@ -320,8 +321,8 @@ flowchart LR
 ### Lokalny dev backendu
 
 ```bash
-cd gym-backend
-docker compose up -d postgres   # baza PostGIS na :5432 (gym/gym)
+cd gym_backend
+docker compose up -d postgres   # PostgreSQL 16 na :5432 (gym/gym)
 npm install
 npm run dev                     # API na :3000, migracje same się wykonają
 ```
@@ -331,12 +332,22 @@ Całość w kontenerach: `docker compose up -d` (postgres + api, healthchecki, `
 ### Frontend
 
 ```bash
-cd gym-flutter
+cd gym_frontend
 flutter pub get
 flutter run                     # mobile: API pod 10.0.2.2:3000 (emulator)
 flutter run -d chrome           # web: API pod localhost:3000
-# fizyczne urządzenie: --dart-define=API_BASE_URL=http://<ip-kompa>:3000
+# fizyczne urządzenie: --dart-define=API_BASE_URL=http://<ip-kompa>:3000  (origin, bez /api/v1)
 ```
+
+### Testy i CI
+
+```bash
+flutter analyze && flutter test                                          # E2E pomijane
+flutter test integration_test -d flutter-tester                          # przepływ UI
+flutter test test/e2e --dart-define=E2E_BASE_URL=http://localhost:3102   # z backendem
+```
+
+CI: `.github/workflows/ci.yml` (sekcja 4.6).
 
 > Agent może sam uruchamiać komendy Flutter/Dart (analyze, test, pub) do weryfikacji zmian — zgodnie z `PROJECT.md`.
 
@@ -345,37 +356,41 @@ flutter run -d chrome           # web: API pod localhost:3000
 ## 7. Stan implementacji vs plany
 
 **Działa (zaimplementowane):**
-- auth (register/login/me, JWT),
+- auth (register/login/me, JWT), wszystkie wywołania przez `/api/v1`,
 - biblioteka ćwiczeń (CRUD, ulubione, upload obrazków, offline sync),
 - plany treningowe (CRUD, sync),
 - sesje na żywo z timerem odpoczynku (lokalne powiadomienia, wyłączalne w ustawieniach),
-- konto: zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta, globalna obsługa unieważnionej sesji, ekran pomocy,
-- historia treningów (timeline, filtry, paginacja, ETag),
-- profil social: edycja profilu (imię, nazwisko, bio, awatar z uploadem), obserwowanie/odobserwowanie (listy własne i innych użytkowników, search, profil),
-- feed społecznościowy (zakładka Aktywność): posty moje i obserwowanych, kudosy, komentarze, szczegóły posta, propozycje osób,
-- statystyki tygodnia/miesiąca liczone lokalnie.
+- historia treningów (timeline, filtry, paginacja, cache offline) + statystyki tygodnia/miesiąca liczone lokalnie,
+- **faza 1** — profil social: edycja profilu (imię, nazwisko, bio, awatar z uploadem), obserwowanie (listy własne i innych użytkowników, wyszukiwarka, profil innej osoby),
+- **faza 2** — feed społecznościowy (zakładka Aktywność): posty moje i obserwowanych, kudosy, komentarze, szczegóły posta, propozycje osób,
+- **faza 3** — usuwanie, powtarzanie i edycja zakończonych treningów; pull sesji z serwera z nagrobkami (`deleted[]`, 410); usunięty offline trening znika od razu z historii, statystyk, feedu i aktywności profilu,
+- **faza 4** — konto: zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta (z czyszczeniem danych lokalnych i awatarów w cache), globalna obsługa unieważnionej sesji, ekran pomocy,
+- **faza 5** — jakość: migracja na `/api/v1`, testy kontraktowe E2E z prawdziwym backendem (`test/e2e/`), test integracyjny UI (`integration_test/`), CI (GitHub Actions), README.
 
 **Mocki / placeholdery:**
-- Brak dashboardów z danymi na sztywno (zakładka Aktywność i statystyki korzystają z realnych danych). Placeholder: przycisk „Udostępnij” na karcie aktywności profilu (bez akcji).
+- Placeholder: przycisk „Udostępnij” na karcie aktywności profilu (bez akcji), „Zapomniałeś hasła?” na ekranie logowania (bez akcji).
 
 **Braki (gap'e):**
 - listy obserwowanych/obserwujących i lista kudosów ładują tylko pierwszą stronę, bez doładowywania,
-- feed/profil po usunięciu treningu offline pokazują go do czasu wysłania usunięcia (dane z serwera),
-- brak websocketów, feed na żywo, wspólnych sesji, push, Sentry, CI,
-- nieujednolicone wersjonowanie API (`/api/v1` tylko dla training-history).
+- cache awatarów usuwanego konta obejmuje tylko adresy widziane w bieżącej sesji aplikacji (po restarcie — dopiero po wejściu na profil),
+- test integracyjny nie działa na webie (sqflite ffi) — web weryfikuje job `build-web`; Windows desktop wymaga Visual Studio,
+- job E2E w CI wymaga zewnętrznej instancji backendu (`E2E_BASE_URL`),
+- brak websocketów, feedu na żywo, wspólnych sesji, push, Sentry.
 
 ---
 
 ## 8. Skille, reguły agentskie i utrzymanie kontekstu
 
 - **`.cursor/rules/project-context.mdc`** — reguła Cursor: agent aktualizuje ten plik przy istotnych zmianach (moduły, API, stack, struktura, Docker, env).
-- `gym-flutter/.agents/skills/` — skille Flutter/Dart (routing, layout, testy, JSON, architektura, code-reviewer).
-- `gym-flutter/.cursor_backup/rules/` — backup reguł Cursor (warstwy, UI).
-- `gym-flutter/PROJECT.md` — opis produktu i stack dla agentów (dziennik treningowy + social).
-- Backend README — kontrakt training-history.
+- `gym_frontend/.agents/skills/` — skille Flutter/Dart (routing, layout, testy, JSON, architektura, code-reviewer).
+- `gym_frontend/.cursor_backup/rules/` — backup reguł Cursor (warstwy, UI).
+- `gym_frontend/PROJECT.md` — opis produktu i stack dla agentów (dziennik treningowy + social).
+- Backend README (`gym_backend/README.md`) — przegląd API `/api/v1`, kontrakt training-history.
+- Frontend README (`gym_frontend/README.md`) — uruchomienie, testy (unit, E2E, integracyjne), CI.
 
 ---
 
 ## 9. Uwagi porządkowe
 
-- `gym-*.worktrees/` — worktree'y z eksperymentów agentów; przed pracą sprawdź, czy nie zawierają niezmergowanych zmian.
+- Workspace zawiera tylko `gym_backend/` i `gym_frontend/`; worktree'y agentów (jeśli powstaną) sprawdź przed pracą pod kątem niezmergowanych zmian.
+- Testy E2E używają wyłącznie osobnej bazy (np. `gym_smoke`), nigdy deweloperskiej `gym`.

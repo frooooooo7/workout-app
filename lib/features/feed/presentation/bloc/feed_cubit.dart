@@ -12,6 +12,10 @@ import '../../domain/services/feed_post_events.dart';
 import 'feed_messages.dart';
 import 'feed_state.dart';
 
+/// Id postów (= id sesji), których feed nie pokazuje — np. treningi usunięte
+/// na tym urządzeniu, zanim usunięcie dotarło na serwer.
+typedef HiddenPostIds = Future<Set<String>> Function();
+
 /// Feed aktywności: cache pierwszej strony od razu (stale-while-revalidate),
 /// odświeżanie, doładowanie kursorem i optymistyczne kudosy.
 class FeedCubit extends Cubit<FeedState> {
@@ -22,8 +26,10 @@ class FeedCubit extends Cubit<FeedState> {
     Listenable? refreshSignal,
     FeedPostEvents? events,
     FeedAuthor? currentUser,
+    HiddenPostIds? hiddenPostIds,
     this.pageSize = 20,
   }) : _repository = repository,
+       _hiddenPostIds = hiddenPostIds,
        _cache = cache,
        _userId = userId,
        _refreshSignal = refreshSignal,
@@ -40,6 +46,7 @@ class FeedCubit extends Cubit<FeedState> {
   final Listenable? _refreshSignal;
   final FeedPostEvents? _events;
   final FeedAuthor? _currentUser;
+  final HiddenPostIds? _hiddenPostIds;
   final int pageSize;
 
   StreamSubscription<FeedPostEvent>? _eventsSubscription;
@@ -65,14 +72,19 @@ class FeedCubit extends Cubit<FeedState> {
     final userId = _userId;
     if (cache != null && userId != null) {
       final cached = await cache.read(userId);
+      final cachedItems = cached == null
+          ? const <FeedPost>[]
+          : await _visible(cached.items);
       if (isClosed) return;
-      if (cached != null && cached.items.isNotEmpty && _firstPageFuture == null) {
+      if (cached != null &&
+          cachedItems.isNotEmpty &&
+          _firstPageFuture == null) {
         _firstPageCursor = cached.nextCursor;
         _firstPageHasMore = cached.hasMore;
         emit(
           state.copyWith(
             status: FeedStatus.ready,
-            items: cached.items,
+            items: cachedItems,
             nextCursor: cached.nextCursor,
             clearNextCursor: cached.nextCursor == null,
             hasMore: cached.hasMore,
@@ -118,8 +130,8 @@ class FeedCubit extends Cubit<FeedState> {
 
     try {
       final page = await _repository.getFeed(limit: pageSize);
+      final items = _dedupe(await _visible(page.items));
       if (isClosed || generation != _generation) return;
-      final items = _dedupe(page.items);
       _firstPageCursor = page.nextCursor;
       _firstPageHasMore = page.hasMore;
       emit(
@@ -179,11 +191,12 @@ class FeedCubit extends Cubit<FeedState> {
     emit(state.copyWith(isLoadingMore: true, loadMoreFailed: false));
     try {
       final page = await _repository.getFeed(cursor: cursor, limit: pageSize);
+      final pageItems = await _visible(page.items);
       if (isClosed || generation != _generation) return;
       final known = {for (final post in state.items) post.id};
       final merged = [
         ...state.items,
-        ...page.items.where((post) => known.add(post.id)),
+        ...pageItems.where((post) => known.add(post.id)),
       ];
       emit(
         state.copyWith(
@@ -291,6 +304,9 @@ class FeedCubit extends Cubit<FeedState> {
 
   void _onRefreshSignal() {
     if (isClosed || state.status == FeedStatus.initial) return;
+    // Usunięty offline trening znika od razu — także gdy odświeżenie się nie
+    // uda i zostaje zapisany feed.
+    unawaited(_hideRemovedPosts());
     if (_firstPageFuture != null) {
       _refreshQueued = true;
       return;
@@ -314,6 +330,30 @@ class FeedCubit extends Cubit<FeedState> {
       case PostCommentCountChanged():
         _updatePost(event.postId, (post) => post.withCommentDelta(event.delta));
     }
+    unawaited(_persistFirstPage());
+  }
+
+  Future<List<FeedPost>> _visible(List<FeedPost> posts) async {
+    final hiddenPostIds = _hiddenPostIds;
+    if (hiddenPostIds == null || posts.isEmpty) return posts;
+    final Set<String> hidden;
+    try {
+      hidden = await hiddenPostIds();
+    } catch (_) {
+      return posts;
+    }
+    if (hidden.isEmpty) return posts;
+    return List.unmodifiable(posts.where((post) => !hidden.contains(post.id)));
+  }
+
+  Future<void> _hideRemovedPosts() async {
+    final before = state.items;
+    final visible = await _visible(before);
+    if (isClosed || visible.length == before.length) return;
+    final hidden = {for (final post in before) post.id}
+      ..removeAll(visible.map((post) => post.id));
+    final items = state.items.where((post) => !hidden.contains(post.id));
+    emit(state.copyWith(items: List.unmodifiable(items)));
     unawaited(_persistFirstPage());
   }
 

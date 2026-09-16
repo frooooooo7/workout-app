@@ -89,6 +89,18 @@ class OfflineImageStore {
     });
   }
 
+  /// Usuwa zapisany plik obrazka (np. awatar usuniętego konta). Na webie
+  /// obrazki cache'uje przeglądarka — nic do zrobienia.
+  Future<void> evict(String url) async {
+    if (kIsWeb) return;
+    try {
+      final file = await _fileFor(url);
+      if (file != null && await file.exists()) await file.delete();
+    } catch (_) {
+      /* cache jest opcjonalny */
+    }
+  }
+
   Future<Uint8List> _load(String url) async {
     final file = await _fileFor(url);
     if (file != null) {

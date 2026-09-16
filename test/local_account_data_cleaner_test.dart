@@ -54,4 +54,22 @@ void main() {
     expect(prefs.getBool('rest_timer_notifications_enabled'), isFalse);
     expect(prefs.getInt('last_custom_rest_duration'), 120);
   });
+
+  test('evicts cached avatar images of the deleted account', () async {
+    SharedPreferences.setMockInitialValues({});
+    final evicted = <String>[];
+
+    await LocalAccountDataCleaner(
+      databaseDirectory: dir.path,
+      ownImageUrls: (userId) => userId == 'user-1'
+          ? const ['/uploads/avatars/a.png', 'https://cdn.example/b.png']
+          : const ['/uploads/avatars/other.png'],
+      evictImage: (url) async => evicted.add(url),
+    ).wipe('user-1');
+
+    expect(evicted, hasLength(2));
+    expect(evicted.first, endsWith('/uploads/avatars/a.png'));
+    expect(evicted.first, isNot(contains('/api/v1')));
+    expect(evicted.last, 'https://cdn.example/b.png');
+  });
 }

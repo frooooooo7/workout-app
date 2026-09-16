@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Zgodne z `environment: sdk: ^3.11.5` (Dart 3.13.2). Aktualizuj razem z lokalnym SDK.
+  FLUTTER_VERSION: "3.47.2"
+
+jobs:
+  analyze-test:
+    name: Analyze, unit/widget tests, integration flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # sqflite_common_ffi (testy offline-first) potrzebuje natywnego SQLite.
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter analyze
+      # Testy E2E (test/e2e) są pomijane bez E2E_BASE_URL.
+      - run: flutter test
+      # Przepływ UI z integration_test uruchamiany bez urządzenia.
+      - run: flutter test integration_test -d flutter-tester
+
+  build-web:
+    name: Build web (release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build web --release
+
+  e2e:
+    name: API contract tests (real backend)
+    # Backend to osobne repozytorium — job działa tylko, gdy w ustawieniach
+    # repozytorium (Settings → Variables) jest zmienna E2E_BASE_URL wskazująca
+    # na dostępną instancję gym_backend. Bez niej job jest pomijany.
+    if: ${{ vars.E2E_BASE_URL != '' }}
+    needs: analyze-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install SQLite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - run: flutter pub get
+      - run: flutter test test/e2e --dart-define=E2E_BASE_URL=${{ vars.E2E_BASE_URL }}

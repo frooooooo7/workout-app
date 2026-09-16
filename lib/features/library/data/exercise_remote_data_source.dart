@@ -78,7 +78,7 @@ class ExerciseRemoteDataSource {
     if (query != null && query.isNotEmpty) params['q'] = query;
 
     if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      params['muscle'] = muscleGroup.name;
+      params['muscle'] = muscleGroup.apiGroup.name;
     }
 
     if (filter != null && filter != LibraryFilter.all) {
@@ -151,7 +151,7 @@ class ExerciseRemoteDataSource {
   }) async {
     final body = <String, dynamic>{
       'name': name,
-      'muscles': muscles.map((m) => m.name).toList(),
+      'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
     };
@@ -194,7 +194,7 @@ class ExerciseRemoteDataSource {
   }) async {
     final data = await _api.put('/exercises/$id', {
       'name': name,
-      'muscles': muscles.map((m) => m.name).toList(),
+      'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
     }, auth: true);

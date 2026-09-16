@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/constants/api_constants.dart';
 import 'package:gym/core/network/api_client.dart';
 import 'package:gym/core/session/session_manager.dart';
 import 'package:gym/features/account/data/account_remote_data_source.dart';
@@ -53,7 +54,7 @@ void main() {
     );
     client = http.runWithClient(
       () => ApiClient(
-        baseUrl: 'http://api',
+        baseUrl: apiBaseUrlFor('http://api'),
         getToken: storage.readToken,
         onUnauthorized: (error, token) =>
             session.handleUnauthorized(error, tokenUsed: token),
@@ -94,7 +95,7 @@ void main() {
 
     final request = requests.single;
     expect(request.method, 'POST');
-    expect(request.url.path, '/auth/change-password');
+    expect(request.url.path, '/api/v1/auth/change-password');
     expect(request.headers['Authorization'], 'Bearer old-token');
     expect(jsonDecode(request.body), {
       'currentPassword': 'OldPass1',
@@ -135,7 +136,7 @@ void main() {
 
     await repository.logoutAllDevices();
 
-    expect(requests.single.url.path, '/auth/logout-all');
+    expect(requests.single.url.path, '/api/v1/auth/logout-all');
     expect(storage.token, 'rotated');
     expect(currentUser.value, isNotNull);
   });
@@ -148,7 +149,7 @@ void main() {
 
     final request = requests.single;
     expect(request.method, 'POST');
-    expect(request.url.path, '/auth/delete-account');
+    expect(request.url.path, '/api/v1/auth/delete-account');
     expect(jsonDecode(request.body), {'password': 'Secret123'});
     expect(storage.token, isNull);
     expect(currentUser.value, isNull);

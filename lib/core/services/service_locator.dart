@@ -81,6 +81,7 @@ class ServiceLocator {
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
   static SyncCoordinator? _syncCoordinator;
   static TrainingStatsRepository? _trainingStatsRepository;
+  static TrainingSessionLocalHistory? _localSessionHistory;
 
   // Feed społecznościowy — oparty o API, nie zależy od bazy per-user.
   static FeedRepository? _feedRepository;
@@ -90,6 +91,7 @@ class ServiceLocator {
   static final feedPostEvents = FeedPostEvents();
   static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
+  static ApiProfileRepository? _apiProfileRepository;
   static final profileRefreshTick = ValueNotifier(0);
 
   /// Serialized dispose/setup so DB close never races a new user open.
@@ -187,7 +189,10 @@ class ServiceLocator {
       tokenStorage: tokenStorage,
       currentUser: currentUser,
       closeUserScope: _closeUserScope,
-      wipeUserData: const LocalAccountDataCleaner().wipe,
+      wipeUserData: LocalAccountDataCleaner(
+        ownImageUrls: (userId) =>
+            _apiProfileRepository?.ownAvatarUrlsFor(userId) ?? const {},
+      ).wipe,
       loginNotice: loginNotice,
     );
     accountRepository = ApiAccountRepository(
@@ -203,7 +208,9 @@ class ServiceLocator {
     _trainingSessionRemoteDataSource = TrainingSessionRemoteDataSource(
       apiClient,
     );
-    profileRepository = ApiProfileRepository(apiClient);
+    final apiProfileRepository = ApiProfileRepository(apiClient);
+    _apiProfileRepository = apiProfileRepository;
+    profileRepository = apiProfileRepository;
     _feedRepository = ApiFeedRepository(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
@@ -278,6 +285,7 @@ class ServiceLocator {
     _trainingPlanRepository = null;
     _trainingHistoryRepository = null;
     _trainingStatsRepository = null;
+    _localSessionHistory = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
     await _exerciseDatabase?.close();
@@ -319,6 +327,7 @@ class ServiceLocator {
       syncEngine: planSync,
     );
     final localSessions = TrainingSessionLocalHistory(database);
+    _localSessionHistory = localSessions;
     _trainingStatsRepository = LocalTrainingStatsRepository(
       localSessions,
       // Statystyki liczą się z lokalnej bazy — dociągamy treningi z innych
@@ -361,6 +370,19 @@ class ServiceLocator {
   /// i szczegóły czytają dane jeszcze raz, bez czekania na synchronizację.
   static void notifyTrainingSessionsChanged() {
     _trainingSessionDataChanges.value++;
+  }
+
+  /// Id (lokalne i serwerowe) treningów usuniętych na tym urządzeniu, których
+  /// usunięcie nie dotarło jeszcze na serwer. Feed i aktywności profilu je
+  /// ukrywają (id posta = id sesji na serwerze).
+  static Future<Set<String>> pendingDeletedSessionIds() async {
+    final history = _localSessionHistory;
+    if (history == null) return const {};
+    try {
+      return await history.pendingDeletionIds();
+    } catch (_) {
+      return const {};
+    }
   }
 
   static void requestProfileRefresh() {

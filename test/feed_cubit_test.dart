@@ -123,6 +123,7 @@ void main() {
   FeedCubit buildCubit({
     Listenable? refreshSignal,
     FeedPostEvents? events,
+    HiddenPostIds? hiddenPostIds,
   }) {
     return FeedCubit(
       repository: repo,
@@ -131,6 +132,7 @@ void main() {
       refreshSignal: refreshSignal,
       events: events,
       currentUser: _me,
+      hiddenPostIds: hiddenPostIds,
     );
   }
 
@@ -388,5 +390,44 @@ void main() {
 
     expect(cubit.state.items.single.commentCount, 2);
     await cubit.close();
+  });
+
+  group('workouts deleted offline (pending delete)', () {
+    test('are filtered from fetched pages and the cached page', () async {
+      cache.page = _page([_post('gone'), _post('cached')]);
+      final completer = Completer<FeedPage>();
+      repo.onGetFeed = (_) => completer.future;
+      final cubit = buildCubit(hiddenPostIds: () async => {'gone'});
+
+      final loading = cubit.load();
+      await _flush();
+      expect(cubit.state.items.map((p) => p.id), ['cached']);
+
+      completer.complete(_page([_post('gone'), _post('p1')]));
+      await loading;
+      expect(cubit.state.items.map((p) => p.id), ['p1']);
+      await cubit.close();
+    });
+
+    test('disappear on refresh signal even when offline', () async {
+      final signal = ValueNotifier(0);
+      final hidden = <String>{};
+      repo.onGetFeed = (_) async => _page([_post('p1'), _post('p2')]);
+      final cubit = buildCubit(
+        refreshSignal: signal,
+        hiddenPostIds: () async => hidden,
+      );
+      await cubit.load();
+
+      hidden.add('p1');
+      repo.onGetFeed = (_) async => throw const ApiException('network_error');
+      signal.value++;
+      await _flush();
+
+      expect(cubit.state.items.map((p) => p.id), ['p2']);
+      expect(cubit.state.staleMessage, isNotNull);
+      expect(cache.page!.items.map((p) => p.id), ['p2']);
+      await cubit.close();
+    });
   });
 }

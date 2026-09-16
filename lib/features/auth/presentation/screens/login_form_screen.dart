@@ -13,9 +13,15 @@ import '../widgets/auth_glow_background.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/login_form_header.dart';
 import '../widgets/login_form_register_link.dart';
+import '../widgets/login_notice_banner.dart';
 
 class LoginFormScreen extends StatefulWidget {
-  const LoginFormScreen({super.key});
+  const LoginFormScreen({super.key, this.notice});
+
+  /// Komunikat po zakończeniu sesji (wylogowanie na innym urządzeniu,
+  /// usunięte konto) — ten sam co na `/login`, żeby nie znikał po przejściu
+  /// do formularza.
+  final ValueNotifier<String?>? notice;
 
   @override
   State<LoginFormScreen> createState() => _LoginFormScreenState();
@@ -91,81 +97,88 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
                 child: Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-                    child: AuthCard(
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const LoginFormHeader(),
-                            const SizedBox(height: 32),
-                            AuthTextField(
-                              hint: 'E-mail',
-                              prefixIcon: Icons.mail_outline_rounded,
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              textInputAction: TextInputAction.next,
-                              validator: validateAuthEmail,
-                            ),
-                            const SizedBox(height: 12),
-                            AuthTextField(
-                              hint: 'Hasło',
-                              prefixIcon: Icons.lock_outline_rounded,
-                              controller: _passwordController,
-                              obscureText: !_passwordVisible,
-                              textInputAction: TextInputAction.done,
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _passwordVisible
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: AppColors.textMuted,
-                                  size: 20,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.notice != null)
+                          LoginNoticeBanner(notice: widget.notice!),
+                        AuthCard(
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const LoginFormHeader(),
+                                const SizedBox(height: 32),
+                                AuthTextField(
+                                  hint: 'E-mail',
+                                  prefixIcon: Icons.mail_outline_rounded,
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  validator: validateAuthEmail,
                                 ),
-                                onPressed: _handleTogglePasswordVisibility,
-                              ),
-                              validator: validateLoginPassword,
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: GestureDetector(
-                                onTap: () {},
-                                child: const Text(
-                                  'Zapomniałeś hasła?',
-                                  style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
+                                const SizedBox(height: 12),
+                                AuthTextField(
+                                  hint: 'Hasło',
+                                  prefixIcon: Icons.lock_outline_rounded,
+                                  controller: _passwordController,
+                                  obscureText: !_passwordVisible,
+                                  textInputAction: TextInputAction.done,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _passwordVisible
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: AppColors.textMuted,
+                                      size: 20,
+                                    ),
+                                    onPressed: _handleTogglePasswordVisibility,
+                                  ),
+                                  validator: validateLoginPassword,
+                                ),
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: () {},
+                                    child: const Text(
+                                      'Zapomniałeś hasła?',
+                                      style: TextStyle(
+                                        color: AppColors.primary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                if (_errorMessage != null) ...[
+                                  const SizedBox(height: 16),
+                                  AuthErrorBanner(message: _errorMessage!),
+                                ],
+                                const SizedBox(height: 28),
+                                ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleLogin,
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppColors.onPrimary,
+                                          ),
+                                        )
+                                      : const Text('Zaloguj się'),
+                                ),
+                                const SizedBox(height: 28),
+                                LoginFormRegisterLink(
+                                  onTap: _handleNavigateToRegister,
+                                ),
+                              ],
                             ),
-                            if (_errorMessage != null) ...[
-                              const SizedBox(height: 16),
-                              AuthErrorBanner(message: _errorMessage!),
-                            ],
-                            const SizedBox(height: 28),
-                            ElevatedButton(
-                              onPressed: _isLoading ? null : _handleLogin,
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.onPrimary,
-                                      ),
-                                    )
-                                  : const Text('Zaloguj się'),
-                            ),
-                            const SizedBox(height: 28),
-                            LoginFormRegisterLink(
-                              onTap: _handleNavigateToRegister,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

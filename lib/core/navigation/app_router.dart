@@ -105,17 +105,14 @@ GoRouter buildRouter({
       // Auth — unauthenticated zone
       GoRoute(
         path: '/login',
-        builder: (_, s) =>
-            LoginScreen(notice: ServiceLocator.loginNotice),
+        builder: (_, s) => LoginScreen(notice: ServiceLocator.loginNotice),
         routes: [
           GoRoute(
             path: 'form',
-            builder: (_, s) => const LoginFormScreen(),
+            builder: (_, s) =>
+                LoginFormScreen(notice: ServiceLocator.loginNotice),
           ),
-          GoRoute(
-            path: 'register',
-            builder: (_, s) => const RegisterScreen(),
-          ),
+          GoRoute(path: 'register', builder: (_, s) => const RegisterScreen()),
         ],
       ),
 
@@ -277,6 +274,7 @@ GoRouter buildRouter({
                         refreshSignal: ServiceLocator.feedRefreshSignal,
                         events: ServiceLocator.feedPostEvents,
                         currentUser: _currentFeedAuthor(),
+                        hiddenPostIds: ServiceLocator.pendingDeletedSessionIds,
                       ),
                       child: ActivityFeedScreen(
                         repository: ServiceLocator.feedRepository,
@@ -296,7 +294,11 @@ GoRouter buildRouter({
                   final user = ServiceLocator.currentUser.value;
                   if (user == null) return const _LoadingScreen();
                   return BlocProvider(
-                    create: (_) => ProfileCubit(_profileRepositoryForCurrentUser()),
+                    create: (_) => ProfileCubit(
+                      _profileRepositoryForCurrentUser(),
+                      hiddenActivityIds:
+                          ServiceLocator.pendingDeletedSessionIds,
+                    ),
                     child: const ProfileScreen(),
                   );
                 },
@@ -459,9 +461,7 @@ class _LoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      ),
+      body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
     );
   }
 }
@@ -498,9 +498,7 @@ class _SplashRouteState extends State<_SplashRoute> {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: AppColors.background,
-      body: Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      ),
+      body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
     );
   }
 }

@@ -217,4 +217,26 @@ void main() {
     expect(activities.first.hasKudoed, isTrue);
     expect(activities.last.hasKudoed, isFalse);
   });
+
+  test('remembers own avatar URLs per account, not other users', () async {
+    api.responses['GET /profile/me'] = _profileJson(
+      avatarUrl: '/uploads/avatars/old.jpg',
+    );
+    api.responses['MULTIPART /profile/me/avatar'] = _profileJson(
+      avatarUrl: '/uploads/avatars/new.jpg',
+    );
+    api.responses['GET /users/u1/profile'] = _profileJson(
+      avatarUrl: '/uploads/avatars/seen-as-other.jpg',
+    );
+
+    await repository.getOwnProfile();
+    await repository.uploadAvatar(Uint8List.fromList([1, 2, 3]), 'a.jpg');
+    await repository.getUserProfile('u1');
+
+    expect(repository.ownAvatarUrlsFor('u1'), {
+      '/uploads/avatars/old.jpg',
+      '/uploads/avatars/new.jpg',
+    });
+    expect(repository.ownAvatarUrlsFor('other'), isEmpty);
+  });
 }

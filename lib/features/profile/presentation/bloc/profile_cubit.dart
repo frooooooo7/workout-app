@@ -8,9 +8,14 @@ import '../../domain/repositories/profile_repository.dart';
 import 'profile_state.dart';
 
 class ProfileCubit extends Cubit<ProfileState> {
-  ProfileCubit(this._repository) : super(const ProfileState());
+  ProfileCubit(this._repository, {this.hiddenActivityIds})
+    : super(const ProfileState());
 
   final ProfileRepository _repository;
+
+  /// Id aktywności (= id sesji) ukrywanych na profilu — treningi usunięte na
+  /// tym urządzeniu, zanim usunięcie dotarło na serwer.
+  final Future<Set<String>> Function()? hiddenActivityIds;
 
   Future<void> load() => _fetchProfile(isRefresh: false);
 
@@ -21,6 +26,9 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   Future<void> _fetchProfile({required bool isRefresh}) async {
     if (isRefresh && state.refreshing) return;
+    // Bez sieci odświeżenie się nie uda — usunięty trening i tak ma zniknąć.
+    if (isRefresh) await _hideRemovedActivities();
+    if (isClosed) return;
 
     emit(
       state.copyWith(
@@ -37,7 +45,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         _repository.getFollowing(limit: 20),
       ]);
       final profile = results[0] as UserProfile;
-      final activities = results[1] as List<ProfileActivity>;
+      final activities = await _visible(results[1] as List<ProfileActivity>);
       final following = results[2] as List<FollowingUser>;
 
       if (isClosed) return;
@@ -46,8 +54,10 @@ class ProfileCubit extends Cubit<ProfileState> {
           profile: profile,
           following: following,
           highlightActivity: activities.isNotEmpty ? activities.first : null,
-          recentActivities:
-              activities.length > 1 ? activities.sublist(1) : const [],
+          clearHighlight: activities.isEmpty,
+          recentActivities: activities.length > 1
+              ? activities.sublist(1)
+              : const [],
           loading: false,
           refreshing: false,
         ),
@@ -61,11 +71,42 @@ class ProfileCubit extends Cubit<ProfileState> {
           // Wcześniej trafiał tu surowy `ApiException(null): network_error`.
           error: _isOffline(e)
               ? 'Brak połączenia z internetem. Profil wczyta się, gdy wrócisz '
-                  'online — treningi możesz zapisywać bez przeszkód.'
+                    'online — treningi możesz zapisywać bez przeszkód.'
               : 'Nie udało się wczytać profilu. Spróbuj ponownie.',
         ),
       );
     }
+  }
+
+  Future<List<ProfileActivity>> _visible(
+    List<ProfileActivity> activities,
+  ) async {
+    final hiddenIds = hiddenActivityIds;
+    if (hiddenIds == null || activities.isEmpty) return activities;
+    final Set<String> hidden;
+    try {
+      hidden = await hiddenIds();
+    } catch (_) {
+      return activities;
+    }
+    if (hidden.isEmpty) return activities;
+    return activities
+        .where((activity) => !hidden.contains(activity.id))
+        .toList(growable: false);
+  }
+
+  Future<void> _hideRemovedActivities() async {
+    final highlight = state.highlightActivity;
+    final current = [?highlight, ...state.recentActivities];
+    final visible = await _visible(current);
+    if (isClosed || visible.length == current.length) return;
+    emit(
+      state.copyWith(
+        highlightActivity: visible.isNotEmpty ? visible.first : null,
+        clearHighlight: visible.isEmpty,
+        recentActivities: visible.length > 1 ? visible.sublist(1) : const [],
+      ),
+    );
   }
 
   /// Profil zwrócony przez ekran edycji — widoczny od razu, bez czekania
