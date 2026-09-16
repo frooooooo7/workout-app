@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/presentation/account_settings_routes.dart';
 import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/auth/presentation/screens/login_form_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -104,7 +105,8 @@ GoRouter buildRouter({
       // Auth — unauthenticated zone
       GoRoute(
         path: '/login',
-        builder: (_, s) => const LoginScreen(),
+        builder: (_, s) =>
+            LoginScreen(notice: ServiceLocator.loginNotice),
         routes: [
           GoRoute(
             path: 'form',
@@ -305,8 +307,12 @@ GoRouter buildRouter({
                     builder: (_, s) {
                       final user = ServiceLocator.currentUser.value;
                       if (user == null) return const _LoadingScreen();
-                      return ProfileSettingsScreen(user: user);
+                      return ProfileSettingsScreen(
+                        user: user,
+                        accountRepository: ServiceLocator.accountRepository,
+                      );
                     },
+                    routes: buildAccountSettingsRoutes(appRootNavigatorKey),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
