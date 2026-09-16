@@ -14,10 +14,14 @@ class MonthlyStatsCard extends StatelessWidget {
     super.key,
     required this.focusedMonth,
     required this.stats,
+    this.onShowStats,
   });
 
   final DateTime focusedMonth;
   final MonthlyTrainingStats stats;
+
+  /// „Zobacz statystyki” — przejście do podsumowania tygodnia i miesiąca.
+  final VoidCallback? onShowStats;
 
   static const _fullMonthNames = [
     'Styczeń',
@@ -100,14 +104,47 @@ class MonthlyStatsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '$monthName ${focusedMonth.year}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$monthName ${focusedMonth.year}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+              if (onShowStats != null)
+                InkWell(
+                  key: const ValueKey('monthly-stats-show-stats'),
+                  onTap: onShowStats,
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Zobacz statystyki',
+                          style: TextStyle(
+                            color: AppColors.primaryVariant,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.primaryVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
           if (entries.isNotEmpty) ...[
             const SizedBox(height: 14),

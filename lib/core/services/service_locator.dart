@@ -274,7 +274,15 @@ class ServiceLocator {
       syncEngine: planSync,
     );
     final localSessions = TrainingSessionLocalHistory(database);
-    _trainingStatsRepository = LocalTrainingStatsRepository(localSessions);
+    _trainingStatsRepository = LocalTrainingStatsRepository(
+      localSessions,
+      // Statystyki liczą się z lokalnej bazy — dociągamy treningi z innych
+      // urządzeń najwyżej raz na 30 s; wynik przychodzi sygnałem zmiany.
+      onRead: () {
+        if (sessionSync.isStopped) return;
+        unawaited(sessionSync.pullIfDue().catchError((Object _) {}));
+      },
+    );
     _trainingHistoryRepository = OfflineFirstTrainingHistoryRepository(
       remote: _trainingHistoryRemoteDataSource,
       localCache: TrainingHistoryLocalCache(database),
@@ -302,6 +310,12 @@ class ServiceLocator {
     )..start();
 
     unawaited(restTimerScheduler.warmUp());
+  }
+
+  /// Sesje zmienione z ekranu (usunięcie, edycja) — historia, statystyki
+  /// i szczegóły czytają dane jeszcze raz, bez czekania na synchronizację.
+  static void notifyTrainingSessionsChanged() {
+    _trainingSessionDataChanges.value++;
   }
 
   static void requestProfileRefresh() {

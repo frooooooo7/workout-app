@@ -354,4 +354,15 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   Future<TrainingSession> setSharedToProfile(String sessionId, bool shared) {
     throw UnimplementedError();
   }
+
+  @override
+  Future<TrainingSession> startFromSession(TrainingSession source) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TrainingSession?> loadForEdit(String sessionId) async => null;
+
+  @override
+  Future<void> delete(String sessionId) async {}
 }

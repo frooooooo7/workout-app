@@ -1,7 +1,7 @@
 # GYM — kontekst projektu
 
 > Dokument orientacyjny dla agentów AI i developerów: co jest gdzie, z czego się składa, jakie technologie i jak to wszystko się łączy.
-> Data ostatniej aktualizacji: 2026-09-15 (zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
+> Data ostatniej aktualizacji: 2026-09-16 (zakres produktu: dziennik treningowy siłowego + social, bez GPS/cardio).
 >
 > **Utrzymanie:** ten plik musi być aktualizowany na bieżąco przy istotnych zmianach architektury, API, struktury katalogów, stacku lub infrastruktury — zgodnie z regułą `.cursor/rules/project-context.mdc`.
 
@@ -121,7 +121,7 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Brak 
 | Exercises | `GET/POST /exercises` (`GET` stronicowany: `limit` ≤ 100, `offset`; zwraca `clientId` własnych ćwiczeń), `PUT/DELETE /exercises/:id` (usunięcie ćwiczenia użytego w planie → **409 `exercise_in_use`**), `POST /exercises/:id/favourite`, `POST /exercises/:id/image` (multipart) |
 | Pliki statyczne | `GET /uploads/exercise-images/*` (`Cache-Control: 365d, immutable`) |
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
-| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id`, `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore }`). Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
+| Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id` (także edycja zakończonej sesji), `DELETE /training-sessions/:id` i `DELETE /training-sessions/by-client-id/:clientId` (204, nagrobek), `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore, deleted[] }`; `deleted` tylko na 1. stronie z `updatedSince`). Zapis usuniętej sesji → **410 `session_deleted`**. Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
 | Training history (odczyt) | `GET /api/v1/training-history`, `GET /api/v1/training-history/:sessionId` + aliasy `/api/v1/training-sessions[/:sessionId]`; paginacja kursorem, filtry, **ETag / If-None-Match → 304** |
 | Profile / social | `GET/PATCH /profile/me` (`firstName`, `lastName` 1–50, `bio` ≤ 120, pusty → `null`), `POST/DELETE /profile/me/avatar` (multipart, pole `avatar`, jpg/png/webp ≤ 5 MB → profil; błędy `missing_image`, `invalid_file`), `GET /profile/following|followers|activities`, `GET /users/search`, `GET /users/:userId/profile` (+ `isFollowing`, `isFollowedBy`), `GET /users/:userId/following|followers` (`limit`, `offset`; pozycje z `isFollowing`), `POST/DELETE /users/:userId/follow` → `{ isFollowing, followersCount }` (`cannot_follow_self`, `user_not_found`, `429`), `GET /users/:userId/activities` |
 | Feed / kudosy / komentarze | `GET /feed?limit&cursor` → `{ items: FeedPost[], nextCursor, hasMore }` (posty moje + obserwowanych, `invalid_cursor`), `GET /posts/:sessionId` (post + `exercises` jak w training-history, `post_not_found`), `POST/DELETE /posts/:id/kudos` → `{ hasKudoed, kudosCount }` (`cannot_kudo_own_post`), `GET /posts/:id/kudos?limit&offset` (lista jak obserwujący), `GET /posts/:id/comments?limit&cursor` (najstarsze najpierw), `POST /posts/:id/comments` `{ body }` (1–500 punktów kodowych, `invalid_comment_body`, `429`), `DELETE /posts/:id/comments/:commentId` → 204 (`forbidden`, `comment_not_found`), `GET /users/suggested?limit`. Aktywności profilu mają realne `kudosCount`, `commentCount`, `hasKudoed` (id = id sesji = id posta) |
@@ -216,7 +216,7 @@ Konwencja w feature: `domain/models/` + `domain/repositories/` (kontrakty), `dat
 |---------|-------|
 | `/splash` | rozwiązanie sesji → `/app/training` lub login |
 | `/login`, `/login/form`, `/login/register` | auth |
-| `/app/training` (+ nested) | hub: Sesja / Plany / Historia; ongoing workout, create plan, stats, szczegóły sesji |
+| `/app/training` (+ nested) | hub: Sesja / Plany / Historia; ongoing workout, create plan, `stats` (wejście: „Zobacz statystyki” na karcie miesiąca w Historii), `history/:sessionId` (szczegóły: menu Edytuj / Powtórz / Usuń), `history/:sessionId/edit` (EditWorkoutScreen) |
 | `/app/activity` | ActivityFeedScreen — feed (pull-to-refresh, doładowanie kursorem, pusty stan z propozycjami osób) |
 | `/app/library` | LibraryScreen, pick exercise |
 | `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar, imię, nazwisko, bio), `following` / `followers`, `find-people` |
@@ -234,15 +234,20 @@ Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkown
 
 - **Base URL** (`core/constants/api_constants.dart`): web `http://localhost:3000`, mobilnie domyślnie `http://10.0.2.2:3000` (emulator Androida); nadpisywalne przez `--dart-define=API_BASE_URL=...`.
 - **Auth flow:** login/register → JWT do secure storage → `AppUserBootstrap` przy starcie: cached user od razu + weryfikacja `GET /auth/me` w tle; 401 czyści storage.
-- **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v9**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
+- **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v11**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
   - Repozytoria `OfflineFirst*Repository` zapisują lokalnie i od razu wołają `flush`; odczyty wołają `pullIfDue` (najwyżej raz na 30 s).
   - Silniki (`ExerciseSyncEngine`, `TrainingPlanSyncEngine`, `TrainingSessionSyncEngine`) dziedziczą po `core/sync/SyncEngineBase` (kolejka, zlewanie zdublowanych żądań, licznik aktywności). Pull **nie nadpisuje** wierszy z `pending_op`; rekordy utworzone offline są parowane po `clientId`; edycja w trakcie żądania zostaje jako `update`.
   - Błędy 4xx (poza 401/408/409/425/429) oznaczają wiersz `sync_error` i nie są ponawiane w pętli; jeden zepsuty wiersz nie blokuje kolejki. Sesja czeka, aż ćwiczenie utworzone offline dostanie `server_id`.
   - `core/sync/SyncCoordinator`: pełny cykl ćwiczenia → plany → sesje, sync ~2 s po powrocie sieci (`connectivity_plus` → `core/sync/network_availability.dart`), sync po `AppLifecycleState.resumed`, a jako zabezpieczenie (sieć jest, internet jeszcze nie) ponawianie z backoffem 15 s → 2 min, dopóki są zaległości. Stan (`SyncStatus`) → `ServiceLocator.syncStatus` → `SyncStatusIndicator` w prawym górnym rogu ekranów (Trening, Plany, Historia, Aktywność, Profil, Biblioteka); tap = szczegóły + „Synchronizuj teraz”.
   - Po zmianach z synchronizacji cubity odświeżają się same (`ServiceLocator.*DataChanges`).
-  - Statystyki (`/app/training/stats`): `TrainingSummaryCubit` + czysty `TrainingSummaryCalculator` (tydzień od poniedziałku 00:00, miesiąc kalendarzowy; treningi, czas, ukończone serie, powtórzenia, objętość, różne ćwiczenia — bez kalorii) liczone z lokalnej bazy przez `LocalTrainingStatsRepository` (także niewysłane sesje). Treningi zrobione na innym urządzeniu nie są wliczane (sesje nie są pobierane do bazy).
+  - Statystyki (`/app/training/stats`): `TrainingSummaryCubit` + czysty `TrainingSummaryCalculator` (tydzień od poniedziałku 00:00, miesiąc kalendarzowy; treningi, czas, ukończone serie, powtórzenia, objętość, różne ćwiczenia — bez kalorii) liczone z lokalnej bazy przez `LocalTrainingStatsRepository` (niewysłane + pobrane z serwera sesje; odczyt woła `pullIfDue` sesji).
+  - **Pull sesji** (`TrainingSessionSyncEngine.pull`, w cyklu koordynatora po `sessions.flush`, `pullIfDue` 30 s): `GET /training-sessions/history` stronami po 100. Pierwszy raz bez `updatedSince` = pełna historia + usunięcie lokalnych zsynchronizowanych sesji (bez `pending_op`), których serwer nie ma. Potem `updatedSince = znacznik − 30 s`; znacznik (`sync_state`, klucz `training_sessions.pull_high_water_mark`) = max `updatedAt`/`deletedAt` z odpowiedzi (zegar serwera), zapisywany po pobraniu wszystkich stron. Parowanie po `server_id`, potem `local_id = clientId`; wiersze z `pending_op` nie są nadpisywane; ta sama wersja (`server_updated_at`) jest pomijana. `deleted[]` (po `clientId`, potem id) usuwa wiersz także z niewysłaną edycją (spójnie z 410); wyjątek: aktywny trening.
+  - **Usuwanie sesji** (`TrainingSessionRepository.delete`): ćwiczenia/serie znikają od razu, wiersz sesji zostaje jako nagrobek `pending_op = 'delete'` (ukryty w historii, statystykach, `getById`; cache historii czyszczony). Pusta, nigdy niewysłana sesja jest kasowana od razu. Sesja znana tylko z serwera → minimalny nagrobek (`local_id = server_id = id`). Flush: `server_id` → `DELETE /:id` (404 → dodatkowo `by-client-id`), brak `server_id` → `by-client-id`; 400/404/410 = sukces. Usunięcie w trakcie POST zostaje usunięciem. `countSyncBacklog` liczy nagrobki.
+  - **410 `session_deleted`** (`SyncFailureKind.gone`): create/update w kolejce → usunięcie lokalnej sesji bez `sync_error` i bez PUT→POST; bezpośredni PATCH udostępnienia → `TrainingSessionDeletedException` (szczegóły/podsumowanie pokazują „Ten trening został usunięty.”).
+  - **Powtórz trening**: `buildRepeatedSession` (ćwiczenia i serie w kolejności, plan = poprzednie wykonanie lub plan, nieukończone; powiązanie z planem tylko gdy plan istnieje) → `TrainingSessionCubit.startFromSession`; przy trwającym treningu dialog „Wróć do treningu”.
+  - **Edycja treningu**: `EditWorkoutCubit` + czyste `validateWorkoutEdit` / `applyWorkoutEdit` (`workout_edit.dart`; `finishedAt = start + minuty`, przesunięcie `completedAt`), zapis `save` → `pending_op = update` → `PUT`. Sesja spoza lokalnej bazy: `loadForEdit` = pull, a potem szukanie w pełnej historii (`fetchFromServer`). Po zmianach: `ServiceLocator.notifyTrainingSessionsChanged()`, flush, odświeżenie profilu i feedu.
   - Historia: serwer + cache (stale-while-revalidate: cache od razu, sieć w tle); treningi zakończone offline (niewysłane) są dokładane z lokalnej bazy (`TrainingSessionLocalHistory`), a bez sieci i cache pokazywane są same lokalne. Identyczne `getSessions` w locie są zlewane do jednego Future.
-  - Lokalna baza (sqflite, wersja 10): indeksy na dzieciach planów/sesji (`plan_local_id`, `session_local_id`, …), `pending_op` oraz `(status, started_at)`. Odczyt dzieci: `IN` + grupowanie, nie N+1. Zapis sesji/planu w jednej transakcji + Batch.
+  - Lokalna baza (sqflite, wersja 11 — tabela `sync_state`, kolumna `training_sessions.server_updated_at`): indeksy na dzieciach planów/sesji (`plan_local_id`, `session_local_id`, …), `pending_op` oraz `(status, started_at)`. Odczyt dzieci: `IN` + grupowanie, nie N+1. Zapis sesji/planu w jednej transakcji + Batch.
   - Obrazki ćwiczeń i awatary: `core/images/offline_network_image.dart` (pliki na dysku, web → `NetworkImage`); miniatury dekodowane przez `ResizeImage` / `exerciseThumbProvider`.
 - **Serializacja:** ręczne `fromJson` / mappery — **bez** json_serializable/freezed.
 
@@ -266,7 +271,7 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Platformy: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
-- Testy: 41 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
+- Testy: 49 plików w `test/` (routing, cubity, sync offline, widgety; social: `follow_cubit_test.dart`, `api_profile_repository_test.dart`, `edit_profile_screen_test.dart`, `feed_cubit_test.dart`, `post_comments_cubit_test.dart`, `api_feed_repository_test.dart`, `feed_post_card_test.dart`; statystyki: `training_summary_calculator_test.dart`, `training_stats_screen_test.dart`). Scenariusze offline-first: `offline_sync_*_test.dart` (w tym `offline_sync_conflicts_test.dart` — pull vs niewysłane edycje, duplikaty po `clientId`, odrzucone wiersze; `offline_sync_training_session_delete_pull_test.dart` — usuwanie, 410, pull + `deleted[]`), `offline_first_training_history_repository_test.dart`, `sync_status_indicator_test.dart`. Brak `integration_test/`, brak CI.
 - UI hardcoded po polsku; brak l10n (skill przygotowany, nieużyty).
 
 ---
@@ -337,11 +342,11 @@ flutter run -d chrome           # web: API pod localhost:3000
 - statystyki tygodnia/miesiąca liczone lokalnie.
 
 **Mocki / placeholdery:**
-- Brak dashboardów z danymi na sztywno (zakładka Aktywność i statystyki korzystają z realnych danych). Placeholdery: menu „Edytuj / Powtórz / Usuń” w szczegółach sesji (SnackBar „wkrótce”), przycisk „Udostępnij” na karcie aktywności profilu (bez akcji).
+- Brak dashboardów z danymi na sztywno (zakładka Aktywność i statystyki korzystają z realnych danych). Placeholder: przycisk „Udostępnij” na karcie aktywności profilu (bez akcji).
 
 **Braki (gap'e):**
 - listy obserwowanych/obserwujących i lista kudosów ładują tylko pierwszą stronę, bez doładowywania,
-- statystyki nie uwzględniają treningów z innych urządzeń (brak pobierania sesji do lokalnej bazy),
+- feed/profil po usunięciu treningu offline pokazują go do czasu wysłania usunięcia (dane z serwera),
 - brak websocketów, feed na żywo, wspólnych sesji, push, Sentry, CI,
 - nieujednolicone wersjonowanie API (`/api/v1` tylko dla training-history).
 

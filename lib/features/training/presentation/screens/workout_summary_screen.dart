@@ -83,6 +83,16 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
             : WorkoutShareStatus.notShared;
       });
       unawaited(_syncAndRefreshProfile());
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareStatus = WorkoutShareStatus.notShared);
+      ServiceLocator.notifyTrainingSessionsChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ten trening został usunięty.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _shareStatus = previous);

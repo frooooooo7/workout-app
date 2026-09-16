@@ -1,23 +1,39 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../domain/models/training_history_models.dart';
+import '../../domain/models/training_session.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
+import '../bloc/training_session_cubit.dart';
 import '../widgets/session_details/session_exercise_card.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
 import '../widgets/session_details/session_timeline.dart';
+import 'ongoing_workout_screen.dart';
+
+/// Nawigacja z ekranu szczegółów (test seam dla `context.push`).
+typedef SessionDetailsNavigate =
+    Future<Object?> Function(
+      BuildContext context,
+      String location, {
+      Object? extra,
+    });
 
 /// Szczegóły zakończonej sesji, ułożone od ogółu do szczegółu:
 /// nagłówek z metrykami → mapa mięśni → oś czasu → karty ćwiczeń.
 ///
 /// Metryki całej sesji pojawiają się **wyłącznie** w nagłówku; każda kolejna
 /// sekcja dokłada informację, której poprzednie nie niosą.
+///
+/// Menu: edycja (`/app/training/history/:id/edit`), „Powtórz trening” (nowa
+/// aktywna sesja) i usunięcie (offline-first, z potwierdzeniem).
 class TrainingSessionDetailsScreen extends StatefulWidget {
   const TrainingSessionDetailsScreen({
     super.key,
@@ -25,6 +41,8 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
     required this.repository,
     this.sessionRepository,
     this.dataChanges,
+    this.navigate,
+    this.onSessionsChanged,
   });
 
   final String sessionId;
@@ -36,6 +54,12 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
   /// Sygnał świeżych danych historii; domyślnie
   /// [ServiceLocator.trainingSessionDataChanges].
   final Listenable? dataChanges;
+
+  /// Test seam; domyślnie `context.push`.
+  final SessionDetailsNavigate? navigate;
+
+  /// Test seam; domyślnie odświeża historię, statystyki, profil i feed.
+  final VoidCallback? onSessionsChanged;
 
   @override
   State<TrainingSessionDetailsScreen> createState() =>
@@ -50,8 +74,16 @@ class _TrainingSessionDetailsScreenState
   bool _loading = true;
   bool _shareSaving = false;
   bool _sharedToProfile = false;
+
+  /// Trwa usuwanie / przygotowanie powtórzenia — menu jest zablokowane.
+  bool _busy = false;
+
+  /// Po usunięciu ekran się zamyka; sygnał zmiany danych nie może go już
+  /// przeładować (sesji nie ma).
+  bool _removed = false;
   String? _error;
   late final Listenable _dataChanges;
+  TrainingSessionCubit? _repeatCubit;
 
   TrainingSessionRepository? get _sessionRepository {
     if (widget.sessionRepository != null) return widget.sessionRepository;
@@ -74,13 +106,14 @@ class _TrainingSessionDetailsScreenState
   @override
   void dispose() {
     _dataChanges.removeListener(_onDataChanged);
+    unawaited(_repeatCubit?.close());
     super.dispose();
   }
 
   /// Szczegóły odświeżone w tle albo zsynchronizowana sesja — przeładuj
   /// bez spinnera.
   void _onDataChanged() {
-    if (!mounted || _loading || _shareSaving) return;
+    if (!mounted || _loading || _shareSaving || _removed) return;
     unawaited(_load(silent: true));
   }
 
@@ -109,13 +142,25 @@ class _TrainingSessionDetailsScreenState
         _loading = false;
         _error = null;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted || silent) return;
       setState(() {
         _loading = false;
-        _error = 'Nie udało się pobrać szczegółów sesji.';
+        _error = error is ApiException && error.statusCode == 410
+            ? 'Ten trening został usunięty.'
+            : 'Nie udało się pobrać szczegółów sesji.';
       });
     }
+  }
+
+  void _notifySessionsChanged() {
+    final notify = widget.onSessionsChanged;
+    if (notify != null) {
+      notify();
+      return;
+    }
+    ServiceLocator.notifyTrainingSessionsChanged();
+    unawaited(_syncAndRefreshProfile());
   }
 
   Future<void> _onSharePressed() async {
@@ -145,6 +190,10 @@ class _TrainingSessionDetailsScreenState
         ),
       );
       unawaited(_syncAndRefreshProfile());
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      _closeAfterRemoval('Ten trening został usunięty.');
     } catch (_) {
       if (!mounted) return;
       setState(() => _shareSaving = false);
@@ -160,19 +209,208 @@ class _TrainingSessionDetailsScreenState
   Future<void> _syncAndRefreshProfile() async {
     await ServiceLocator.flushTrainingSessionSync();
     ServiceLocator.requestProfileRefresh();
-    // Udostępniony (albo schowany) trening pojawia się w feedzie.
+    // Udostępniony (albo schowany / usunięty) trening znika z feedu.
     ServiceLocator.requestFeedRefresh();
   }
 
+  Future<Object?> _navigate(String location, {Object? extra}) {
+    final navigate = widget.navigate;
+    if (navigate != null) return navigate(context, location, extra: extra);
+    return context.push(location, extra: extra);
+  }
+
   void _onMenuActionSelected(_SessionHeaderAction action) {
-    final message = switch (action) {
-      _SessionHeaderAction.edit => 'Edycja treningu – wkrótce dostępna',
-      _SessionHeaderAction.repeat => 'Powtórzenie treningu – wkrótce dostępne',
-      _SessionHeaderAction.delete => 'Usuwanie treningu – wkrótce dostępne',
-    };
-    ScaffoldMessenger.of(context).showSnackBar(
+    switch (action) {
+      case _SessionHeaderAction.edit:
+        unawaited(_editSession());
+      case _SessionHeaderAction.repeat:
+        unawaited(_repeatSession());
+      case _SessionHeaderAction.delete:
+        unawaited(_deleteSession());
+    }
+  }
+
+  // ── Usuwanie ──────────────────────────────────────────────────────────────
+
+  Future<void> _deleteSession() async {
+    final repository = _sessionRepository;
+    if (repository == null || _busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Usunąć trening?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Tej operacji nie można cofnąć. Znikną też kudosy i komentarze.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('session-delete-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Usuń',
+              style: TextStyle(color: AppColors.strengthWeak),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await repository.delete(widget.sessionId);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się usunąć treningu. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    _closeAfterRemoval('Trening został usunięty.');
+  }
+
+  void _closeAfterRemoval(String message) {
+    _removed = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    _notifySessionsChanged();
+    messenger.showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
+    unawaited(navigator.maybePop(true));
+  }
+
+  // ── Edycja ────────────────────────────────────────────────────────────────
+
+  Future<void> _editSession() async {
+    if (_busy) return;
+    final saved = await _navigate(
+      '/app/training/history/${Uri.encodeComponent(widget.sessionId)}/edit',
+    );
+    if (saved != true || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Zapisano zmiany w treningu.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    await _load();
+  }
+
+  // ── Powtórzenie ───────────────────────────────────────────────────────────
+
+  Future<void> _repeatSession() async {
+    final repository = _sessionRepository;
+    if (repository == null || _busy) return;
+    final cubit = _repeatCubit ??= TrainingSessionCubit(
+      repository,
+      autoRefresh: false,
+    );
+
+    setState(() => _busy = true);
+    TrainingSession? started;
+    TrainingSession? conflict;
+    String? failure;
+    try {
+      conflict = await repository.getActive();
+      if (conflict == null) {
+        final source = await repository.loadForEdit(widget.sessionId);
+        if (source == null) {
+          failure =
+              'Nie udało się wczytać treningu. Sprawdź połączenie i spróbuj ponownie.';
+        } else if (source.exercises.isEmpty) {
+          failure = 'Ten trening nie ma ćwiczeń do powtórzenia.';
+        } else {
+          started = await cubit.startFromSession(source);
+          conflict = started == null ? cubit.state.activeConflict : null;
+        }
+      }
+    } catch (_) {
+      failure = 'Nie udało się rozpocząć treningu. Spróbuj ponownie.';
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure), duration: const Duration(seconds: 3)),
+      );
+      return;
+    }
+    if (conflict != null) {
+      final resume = await _askToResume(conflict);
+      if (resume != true || !mounted) return;
+      unawaited(_openOngoingWorkout(conflict, cubit));
+      return;
+    }
+    final session = started;
+    if (session == null) return;
+    unawaited(_openOngoingWorkout(session, cubit));
+  }
+
+  Future<bool?> _askToResume(TrainingSession active) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Trwa inny trening',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Masz aktywny trening „${active.planName}”. Zakończ go albo anuluj, '
+          'zanim powtórzysz ten.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('session-repeat-resume-active'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Wróć do treningu',
+              style: TextStyle(color: AppColors.primaryVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openOngoingWorkout(
+    TrainingSession session,
+    TrainingSessionCubit cubit,
+  ) async {
+    await _navigate(
+      '/app/training/ongoing-workout',
+      extra: OngoingWorkoutArgs(initialSession: session, sessionCubit: cubit),
+    );
+    if (!mounted) return;
+    // Aktywny trening mógł się skończyć — historia i statystyki się zmieniły.
+    unawaited(cubit.refresh());
   }
 
   void _showMoreMenu(BuildContext context, RenderBox button) async {
@@ -203,13 +441,14 @@ class _TrainingSessionDetailsScreenState
       ),
       items: [
         const PopupMenuItem(
+          key: ValueKey('session-menu-edit'),
           value: _SessionHeaderAction.edit,
           child: Row(
             children: [
               Icon(Icons.edit_outlined, color: Colors.white, size: 18),
               SizedBox(width: 10),
               Text(
-                'Edytuj',
+                'Edytuj trening',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 13.5,
@@ -220,6 +459,7 @@ class _TrainingSessionDetailsScreenState
           ),
         ),
         const PopupMenuItem(
+          key: ValueKey('session-menu-repeat'),
           value: _SessionHeaderAction.repeat,
           child: Row(
             children: [
@@ -238,6 +478,7 @@ class _TrainingSessionDetailsScreenState
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(
+          key: ValueKey('session-menu-delete'),
           value: _SessionHeaderAction.delete,
           child: Row(
             children: [
@@ -248,7 +489,7 @@ class _TrainingSessionDetailsScreenState
               ),
               SizedBox(width: 10),
               Text(
-                'Usuń',
+                'Usuń trening',
                 style: TextStyle(
                   color: AppColors.strengthWeak,
                   fontSize: 13.5,
@@ -268,6 +509,7 @@ class _TrainingSessionDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final canAct = _detail != null && !_busy && !_removed;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -291,8 +533,11 @@ class _TrainingSessionDetailsScreenState
                 Builder(
                   builder: (btnContext) {
                     return AppHeaderIconButton(
+                      key: const ValueKey('session-details-more-button'),
                       icon: Icons.more_vert_rounded,
+                      tooltip: 'Więcej opcji',
                       onTap: () {
+                        if (!canAct) return;
                         final box = btnContext.findRenderObject() as RenderBox;
                         _showMoreMenu(context, box);
                       },
@@ -301,6 +546,12 @@ class _TrainingSessionDetailsScreenState
                 ),
               ],
             ),
+            if (_busy)
+              const LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.primary,
+                backgroundColor: Colors.transparent,
+              ),
             Expanded(
               child: _loading
                   ? const Center(

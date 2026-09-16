@@ -248,4 +248,15 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
     session = session.copyWith(sharedToProfile: shared);
     return session;
   }
+
+  @override
+  Future<TrainingSession> startFromSession(TrainingSession source) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<TrainingSession?> loadForEdit(String sessionId) async => null;
+
+  @override
+  Future<void> delete(String sessionId) async {}
 }

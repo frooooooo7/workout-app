@@ -10,8 +10,8 @@ class TrainingSessionLocalHistory {
 
   final ExerciseDatabase _localDb;
 
-  /// Górny limit wczytywanych sesji — lokalna baza trzyma tylko treningi
-  /// z tego urządzenia, ale nie chcemy mapować całego roku przy każdej liście.
+  /// Górny limit wczytywanych sesji — lokalna baza trzyma też historię
+  /// pobraną z serwera, a nie chcemy mapować całych lat przy każdej liście.
   static const _maxSessions = 100;
 
   /// Zakończone (lub anulowane) sesje z ćwiczeniami, najnowsze najpierw.
@@ -25,7 +25,12 @@ class TrainingSessionLocalHistory {
     required bool includeSynced,
   }) {
     return _localDb.run((db) async {
-      final where = <String>['status <> ?'];
+      // Sesje czekające na usunięcie znikają od razu, zanim serwer to
+      // potwierdzi.
+      final where = <String>[
+        'status <> ?',
+        "(pending_op IS NULL OR pending_op <> 'delete')",
+      ];
       final args = <Object?>[TrainingSessionStatus.active.name];
       if (status != null) {
         where.add('status = ?');
@@ -60,17 +65,39 @@ class TrainingSessionLocalHistory {
     });
   }
 
-  /// Szuka po `local_id` albo `server_id`.
+  /// Szuka po `local_id` albo `server_id` (bez sesji czekających na
+  /// usunięcie).
   Future<TrainingSession?> findById(String id) {
     return _localDb.run((db) async {
       final rows = await db.query(
         ExerciseDatabase.tableTrainingSessions,
-        where: 'local_id = ? OR server_id = ?',
+        where:
+            "(local_id = ? OR server_id = ?) "
+            "AND (pending_op IS NULL OR pending_op <> 'delete')",
         whereArgs: [id, id],
         limit: 1,
       );
       if (rows.isEmpty) return null;
       return TrainingSessionLocalMapper.fromDb(db, rows.first);
+    });
+  }
+
+  /// Id (lokalne i serwerowe) sesji usuniętych na tym urządzeniu, których
+  /// usunięcie nie dotarło jeszcze na serwer — historia serwera i cache
+  /// muszą je ukrywać.
+  Future<Set<String>> pendingDeletionIds() {
+    return _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableTrainingSessions,
+        columns: ['local_id', 'server_id'],
+        where: "pending_op = 'delete'",
+      );
+      return <String>{
+        for (final row in rows) ...[
+          row['local_id'] as String,
+          if (row['server_id'] != null) row['server_id'] as String,
+        ],
+      };
     });
   }
 }

@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 10;
+  static const _dbVersion = 11;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -37,6 +37,10 @@ class ExerciseDatabase {
   static const tableTrainingSessions = 'training_sessions';
   static const tableTrainingSessionExercises = 'training_session_exercises';
   static const tableTrainingSessionSets = 'training_session_sets';
+
+  /// Klucz → wartość dla silników synchronizacji (np. znacznik ostatniego
+  /// pobrania sesji). Baza jest per użytkownik, więc stan też.
+  static const tableSyncState = 'sync_state';
 
   /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
   static const syncedTables = [
@@ -158,10 +162,10 @@ class ExerciseDatabase {
              WHERE pending_op IS NOT NULL AND sync_error IS NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions s
              WHERE s.pending_op IS NOT NULL AND s.sync_error IS NULL
-               AND EXISTS (
+               AND (s.pending_op = 'delete' OR EXISTS (
                  SELECT 1 FROM $tableTrainingSessionExercises e
                  WHERE e.session_local_id = s.local_id
-               )) AS pending,
+               ))) AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
@@ -172,6 +176,33 @@ class ExerciseDatabase {
         pending: (row['pending'] as int?) ?? 0,
         failed: (row['failed'] as int?) ?? 0,
       );
+    });
+  }
+
+  Future<String?> readSyncState(String key) {
+    return run((db) async {
+      final rows = await db.query(
+        tableSyncState,
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      return rows.isEmpty ? null : rows.first['value'] as String?;
+    });
+  }
+
+  Future<void> writeSyncState(String key, String? value) {
+    return run((db) async {
+      if (value == null) {
+        await db.delete(tableSyncState, where: 'key = ?', whereArgs: [key]);
+        return;
+      }
+      await db.insert(tableSyncState, {
+        'key': key,
+        'value': value,
+        'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
 
@@ -238,6 +269,17 @@ class ExerciseDatabase {
     await _createTrainingHistoryTables(db);
     await _createTrainingSessionTables(db);
     await _createPerformanceIndexes(db);
+    await _createSyncStateTable(db);
+  }
+
+  Future<void> _createSyncStateTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableSyncState (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   /// Indeksy pod odczyty historii / planów i kolejkę sync — bez nich
@@ -352,7 +394,8 @@ class ExerciseDatabase {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         pending_op TEXT,
-        sync_error TEXT
+        sync_error TEXT,
+        server_updated_at INTEGER
       )
     ''');
     await db.execute('''
@@ -490,6 +533,17 @@ class ExerciseDatabase {
     }
     if (oldVersion < 10) {
       await _createPerformanceIndexes(db);
+    }
+    if (oldVersion < 11) {
+      await _createSyncStateTable(db);
+      // `updatedAt` z serwera przy ostatnim pobraniu — pull pomija sesje,
+      // które już ma w tej wersji (okno zakładki odsyła je ponownie).
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessions,
+        column: 'server_updated_at',
+        definition: 'INTEGER',
+      );
     }
   }
 

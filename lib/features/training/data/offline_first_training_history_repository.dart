@@ -20,7 +20,10 @@ import 'training_session_local_history.dart';
 ///   daje znać ekranom, żeby przeczytały dane jeszcze raz.
 /// * Brak cache — czekamy na sieć. Błąd: lokalne sesje, a bez nich wyjątek.
 /// * Treningi zakończone offline (jeszcze niewysłane) są dokładane do
-///   pierwszej strony wyników, więc od razu widać je w historii.
+///   pierwszej strony wyników, więc od razu widać je w historii; niewysłana
+///   edycja zastępuje starszą wersję z serwera.
+/// * Treningi usunięte na tym urządzeniu (usunięcie czeka na wysyłkę) są
+///   ukrywane na każdej stronie — z sieci i z cache.
 class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository {
   OfflineFirstTrainingHistoryRepository({
     required TrainingHistoryRemoteDataSource remote,
@@ -119,9 +122,10 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
         readCache: () => _localCache.readListResponse(cacheKey),
         decodeCache: _remote.pageFromCachedJson,
       );
-      if (!isFirstPage) return page;
+      final visible = await _withoutPendingDeletions(page);
+      if (!isFirstPage) return visible;
       return await _withLocalSessions(
-        page,
+        visible,
         status: status,
         planId: planId,
         query: query,
@@ -144,6 +148,9 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
 
   @override
   Future<TrainingSessionDetail> getSessionDetail(String sessionId) async {
+    if ((await _pendingDeletionIds()).contains(sessionId)) {
+      throw const ApiException('session_deleted', statusCode: 410);
+    }
     final local = await _findLocal(sessionId);
     if (local != null && _isUnconfirmed(local)) {
       // Serwer jeszcze nie ma tej sesji (albo ma jej starszą wersję).
@@ -244,6 +251,31 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
 
   // ── Local sessions ────────────────────────────────────────────────────────
 
+  Future<Set<String>> _pendingDeletionIds() async {
+    final localSessions = _localSessions;
+    if (localSessions == null) return const {};
+    return await _readSafely(localSessions.pendingDeletionIds) ?? const {};
+  }
+
+  Future<TrainingSessionPage> _withoutPendingDeletions(
+    TrainingSessionPage page,
+  ) async {
+    if (page.items.isEmpty) return page;
+    final hidden = await _pendingDeletionIds();
+    if (hidden.isEmpty) return page;
+    final items = [
+      for (final item in page.items)
+        if (!hidden.contains(item.id)) item,
+    ];
+    if (items.length == page.items.length) return page;
+    return TrainingSessionPage(
+      items: items,
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+      isFromCache: page.isFromCache,
+    );
+  }
+
   bool _isUnconfirmed(TrainingSession session) =>
       session.status != TrainingSessionStatus.active &&
       session.exercises.isNotEmpty &&
@@ -281,9 +313,11 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
   /// Dokłada do pierwszej strony sesje, których nie ma w odpowiedzi serwera.
   ///
   /// Świeża odpowiedź: tylko sesje jeszcze niewysłane. Cache: także
-  /// wysłane, bo cache może być starszy niż synchronizacja. Sesje starsze
-  /// niż najstarsza pozycja strony (gdy są kolejne strony) pomijamy — pojawią
-  /// się na swojej stronie, bez duplikatów.
+  /// wysłane (i pobrane z serwera), bo cache może być starszy niż
+  /// synchronizacja. Sesja obecna już na stronie nie jest dublowana — jeśli
+  /// ma niewysłaną edycję, zastępuje wersję serwera. Sesje starsze niż
+  /// najstarsza pozycja strony (gdy są kolejne strony) pomijamy — pojawią się
+  /// na swojej stronie, bez duplikatów.
   Future<TrainingSessionPage> _withLocalSessions(
     TrainingSessionPage page, {
     TrainingSessionStatus? status,
@@ -303,7 +337,6 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       );
       if (locals.isEmpty) return page;
 
-      final knownIds = {for (final item in page.items) item.id};
       final knownStarts = {
         for (final item in page.items) item.startedAt.millisecondsSinceEpoch,
       };
@@ -314,21 +347,44 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
         }
       }
 
-      final extras = <TrainingSessionListItem>[
-        for (final session in locals)
-          if (_matchesFilters(session, planId: planId, query: query) &&
-              !knownIds.contains(session.id) &&
-              !knownIds.contains(session.serverId) &&
-              // Ta sama sesja po zgubionej odpowiedzi na POST (inne id).
-              !knownStarts.contains(session.startedAt.millisecondsSinceEpoch) &&
-              !(page.hasMore &&
-                  oldest != null &&
-                  session.startedAt.isBefore(oldest)))
-            trainingSessionListItemFromSession(session),
-      ];
-      if (extras.isEmpty) return page;
+      // Pozycje strony po id; niewysłana edycja podmienia albo (gdy już nie
+      // pasuje do filtrów) usuwa pozycję serwera.
+      final byId = <String, TrainingSessionListItem?>{
+        for (final item in page.items) item.id: item,
+      };
+      final extras = <TrainingSessionListItem>[];
+      var changed = false;
+      for (final session in locals) {
+        final matches = _matchesFilters(session, planId: planId, query: query);
+        final key = byId.containsKey(session.id)
+            ? session.id
+            : (session.serverId != null && byId.containsKey(session.serverId)
+                  ? session.serverId
+                  : null);
+        if (key != null) {
+          final pending = session.pendingOp;
+          if (pending == 'create' || pending == 'update') {
+            byId[key] = matches
+                ? trainingSessionListItemFromSession(session)
+                : null;
+            changed = true;
+          }
+          continue;
+        }
+        if (!matches ||
+            // Ta sama sesja po zgubionej odpowiedzi na POST (inne id).
+            knownStarts.contains(session.startedAt.millisecondsSinceEpoch) ||
+            (page.hasMore &&
+                oldest != null &&
+                session.startedAt.isBefore(oldest))) {
+          continue;
+        }
+        extras.add(trainingSessionListItemFromSession(session));
+        changed = true;
+      }
+      if (!changed) return page;
 
-      final items = [...page.items, ...extras]
+      final items = [...byId.values.whereType<TrainingSessionListItem>(), ...extras]
         ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
       return TrainingSessionPage(
         items: items,

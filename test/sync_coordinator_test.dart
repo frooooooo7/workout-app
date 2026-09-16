@@ -179,4 +179,18 @@ class _SessionRemote extends TrainingSessionRemoteDataSource {
     if (!online) throw const ApiException('network_error');
     return session.copyWith(serverId: '33333333-3333-4333-8333-333333333333');
   }
+
+  @override
+  Future<TrainingSessionHistoryPage> history({
+    int limit = 100,
+    String? cursor,
+    DateTime? updatedSince,
+  }) async {
+    if (!online) throw const ApiException('network_error');
+    return const TrainingSessionHistoryPage(
+      items: [],
+      nextCursor: null,
+      hasMore: false,
+    );
+  }
 }

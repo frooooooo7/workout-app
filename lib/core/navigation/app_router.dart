@@ -10,6 +10,7 @@ import '../../features/training/presentation/screens/ongoing_workout_screen.dart
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
+import '../../features/training/presentation/screens/edit_workout_screen.dart';
 import '../../features/training/presentation/screens/history_screen.dart';
 import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/training/presentation/screens/plans_screen.dart';
@@ -243,6 +244,17 @@ GoRouter buildRouter({
                             ServiceLocator.trainingSessionRepository,
                       );
                     },
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: appRootNavigatorKey,
+                        name: 'training-session-edit',
+                        path: 'edit',
+                        builder: (context, state) => EditWorkoutScreen(
+                          sessionId: state.pathParameters['sessionId']!,
+                          repository: ServiceLocator.trainingSessionRepository,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

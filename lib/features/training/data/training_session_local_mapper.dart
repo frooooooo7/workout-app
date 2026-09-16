@@ -182,33 +182,43 @@ class TrainingSessionLocalMapper {
   }
 
   /// Removes all rows for [sessionLocalId] (session, exercises, sets).
-  static Future<void> deleteSession(Database db, String sessionLocalId) async {
-    await db.transaction((txn) async {
-      final oldExercises = await txn.query(
-        ExerciseDatabase.tableTrainingSessionExercises,
-        columns: ['local_id'],
-        where: 'session_local_id = ?',
-        whereArgs: [sessionLocalId],
-      );
-      await _deleteIn(
-        txn,
-        ExerciseDatabase.tableTrainingSessionSets,
-        column: 'session_exercise_local_id',
-        ids: [
-          for (final old in oldExercises) old['local_id'] as String,
-        ],
-      );
-      await txn.delete(
-        ExerciseDatabase.tableTrainingSessionExercises,
-        where: 'session_local_id = ?',
-        whereArgs: [sessionLocalId],
-      );
+  static Future<void> deleteSession(
+    DatabaseExecutor db,
+    String sessionLocalId,
+  ) {
+    return _inTransaction(db, (txn) async {
+      await deleteChildren(txn, sessionLocalId);
       await txn.delete(
         ExerciseDatabase.tableTrainingSessions,
         where: 'local_id = ?',
         whereArgs: [sessionLocalId],
       );
     });
+  }
+
+  /// Usuwa ćwiczenia i serie sesji, zostawiając sam wiersz sesji (np. jako
+  /// nagrobek `pending_op = 'delete'`).
+  static Future<void> deleteChildren(
+    DatabaseExecutor db,
+    String sessionLocalId,
+  ) async {
+    final oldExercises = await db.query(
+      ExerciseDatabase.tableTrainingSessionExercises,
+      columns: ['local_id'],
+      where: 'session_local_id = ?',
+      whereArgs: [sessionLocalId],
+    );
+    await _deleteIn(
+      db,
+      ExerciseDatabase.tableTrainingSessionSets,
+      column: 'session_exercise_local_id',
+      ids: [for (final old in oldExercises) old['local_id'] as String],
+    );
+    await db.delete(
+      ExerciseDatabase.tableTrainingSessionExercises,
+      where: 'session_local_id = ?',
+      whereArgs: [sessionLocalId],
+    );
   }
 
   static Future<void> replaceChildren(

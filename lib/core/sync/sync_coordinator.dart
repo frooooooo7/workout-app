@@ -222,6 +222,8 @@ class SyncCoordinator {
       await _step('plans.flush', _plans.flush);
       await _step('plans.pull', _plans.pull);
       await _step('sessions.flush', _sessions.flush);
+      // Treningi i usunięcia z innych urządzeń (historia, statystyki).
+      await _step('sessions.pull', _sessions.pull);
 
       // Pełny cykl bez błędów sieci — jesteśmy online.
       _offline = _drainNetworkFailure();
