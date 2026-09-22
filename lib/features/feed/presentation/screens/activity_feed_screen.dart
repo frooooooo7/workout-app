@@ -85,7 +85,9 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Bottom inset (incl. the shell's bottom nav) is left to the lists.
       body: SafeArea(
+        bottom: false,
         child: FollowFailureListener(
           child: MultiBlocListener(
             listeners: [
@@ -122,6 +124,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
 
   Widget _buildBody(BuildContext context, FeedState state) {
     final cubit = context.read<FeedCubit>();
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     if (state.items.isEmpty &&
         (state.status == FeedStatus.initial ||
@@ -136,8 +139,9 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            child: SizedBox(
+            child: Container(
               height: constraints.maxHeight,
+              padding: EdgeInsets.only(bottom: bottomInset),
               child: FeedMessageView(
                 icon: Icons.wifi_off_rounded,
                 title: 'Nie udało się wczytać feedu',
@@ -157,6 +161,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         color: AppColors.primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(bottom: bottomInset),
           children: [
             if (state.staleMessage != null)
               Padding(
@@ -185,7 +190,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
       child: ListView.builder(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 32 + bottomInset),
         itemCount: state.items.length + bannerOffset + 1,
         itemBuilder: (context, index) {
           if (hasBanner && index == 0) {

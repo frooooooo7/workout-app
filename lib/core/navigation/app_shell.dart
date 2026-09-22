@@ -53,6 +53,11 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Tab content scrolls behind the bottom nav, including the transparent
+      // strip around the center button. Tab screens skip the bottom SafeArea
+      // and pad their scroll views by `MediaQuery.paddingOf(context).bottom`,
+      // which then covers the nav.
+      extendBody: true,
       body: navigationShell,
       bottomNavigationBar:
           BlocBuilder<TrainingSessionCubit, TrainingSessionState>(

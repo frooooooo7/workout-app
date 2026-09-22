@@ -81,7 +81,9 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
       body: SafeArea(
+        bottom: false,
         child: BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
           builder: (context, state) {
             final cubit = context.read<WorkoutHistoryCubit>();
@@ -234,7 +236,9 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
               child: MonthlySummaryFooter(stats: stats),
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        SliverToBoxAdapter(
+          child: SizedBox(height: 24 + MediaQuery.paddingOf(context).bottom),
+        ),
       ],
     );
   }
@@ -246,7 +250,12 @@ class _WorkoutHistorySkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        8,
+        24,
+        8 + MediaQuery.paddingOf(context).bottom,
+      ),
       children: [
         Container(
           height: 170,

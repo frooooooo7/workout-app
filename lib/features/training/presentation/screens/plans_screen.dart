@@ -32,7 +32,9 @@ class _PlansScreenContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
       body: SafeArea(
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -158,7 +158,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     profile: profile,
                   ),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 40 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                ),
               ],
             ),
           );
