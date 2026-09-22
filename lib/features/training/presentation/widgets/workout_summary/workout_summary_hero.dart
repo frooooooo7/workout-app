@@ -3,46 +3,69 @@ import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../session_details/session_details_formatters.dart';
 
-/// Nagłówek podsumowania: pulsujący znacznik sukcesu, nagłówek i nazwa planu
-/// z datą. Nie powtarza metryk — te żyją w siatce poniżej.
+/// Nagłówek podsumowania: znacznik sukcesu, nazwa planu, dzień i zakres
+/// godzin. Nie powtarza metryk — te żyją w karcie statystyk poniżej.
 class WorkoutSummaryHero extends StatelessWidget {
   const WorkoutSummaryHero({
     super.key,
     required this.planName,
     required this.startedAt,
+    this.endedAt,
   });
 
   final String planName;
   final DateTime startedAt;
+  final DateTime? endedAt;
+
+  String get _when {
+    final day =
+        '${formatWeekdayShort(startedAt)}, '
+        '${formatDayNumber(startedAt)} ${formatMonthShort(startedAt)}';
+    final end = endedAt;
+    final time = end == null
+        ? formatClock(startedAt)
+        : '${formatClock(startedAt)}–${formatClock(end)}';
+    return '$day  ·  $time';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         const _SuccessBadge(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         const Text(
           'Trening ukończony!',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 26,
+            color: AppColors.success,
+            fontSize: 13,
             fontWeight: FontWeight.w800,
-            letterSpacing: -0.6,
-            height: 1.1,
+            letterSpacing: 0.3,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
-          '$planName  ·  ${formatDateWithTime(startedAt)}',
+          planName,
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
+            color: Colors.white,
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.6,
+            height: 1.15,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _when,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
             color: AppColors.textSecondary,
             fontSize: 13.5,
             fontWeight: FontWeight.w500,
-            height: 1.35,
           ),
         ),
       ],
@@ -93,8 +116,8 @@ class _SuccessBadgeState extends State<_SuccessBadge>
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: SizedBox(
-        width: 132,
-        height: 132,
+        width: 96,
+        height: 96,
         child: Stack(
           alignment: Alignment.center,
           children: [
@@ -110,15 +133,15 @@ class _SuccessBadgeState extends State<_SuccessBadge>
                       width: 1.5,
                     ),
                   ),
-                  child: const SizedBox(width: 132, height: 132),
+                  child: const SizedBox(width: 96, height: 96),
                 ),
               ),
             ),
             ScaleTransition(
               scale: _scale,
               child: Container(
-                width: 88,
-                height: 88,
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -132,16 +155,16 @@ class _SuccessBadgeState extends State<_SuccessBadge>
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.success.withValues(alpha: 0.35),
-                      blurRadius: 32,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 10),
+                      blurRadius: 24,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.check_rounded,
                   color: Colors.white,
-                  size: 46,
+                  size: 34,
                 ),
               ),
             ),

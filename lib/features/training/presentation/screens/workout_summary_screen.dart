@@ -14,15 +14,12 @@ import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
 import '../widgets/workout_summary/workout_summary_exercise_list.dart';
+import '../widgets/workout_summary/workout_summary_highlights.dart';
 import '../widgets/workout_summary/workout_summary_hero.dart';
-import '../widgets/workout_summary/workout_summary_metrics_grid.dart';
+import '../widgets/workout_summary/workout_summary_stats_card.dart';
 
 class WorkoutSummaryArgs {
-  const WorkoutSummaryArgs({
-    required this.session,
-    this.repository,
-    this.user,
-  });
+  const WorkoutSummaryArgs({required this.session, this.repository, this.user});
 
   /// Ukończona sesja — źródło wszystkich metryk na ekranie.
   final TrainingSession session;
@@ -142,23 +139,30 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                 ),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     children: [
                       StaggeredReveal(
                         index: 0,
                         child: WorkoutSummaryHero(
                           planName: _session.planName,
                           startedAt: _session.startedAt,
+                          endedAt: _session.finishedAt,
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 22),
                       StaggeredReveal(
                         index: 1,
-                        child: WorkoutSummaryMetricsGrid(detail: _detail),
+                        child: WorkoutSummaryStatsCard(detail: _detail),
                       ),
-                      const SizedBox(height: 14),
                       StaggeredReveal(
                         index: 2,
+                        child: WorkoutSummaryHighlights(
+                          exercises: _detail.exercises,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      StaggeredReveal(
+                        index: 3,
                         child: WorkoutShareCard(
                           status: _shareStatus,
                           user: _user,
@@ -166,15 +170,15 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                           onUnshare: () => _handleShareChanged(false),
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       StaggeredReveal(
-                        index: 3,
+                        index: 4,
                         child: SessionMuscleMap(detail: _detail),
                       ),
                       if (_detail.exercises.isNotEmpty) ...[
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
                         StaggeredReveal(
-                          index: 4,
+                          index: 5,
                           child: WorkoutSummaryExerciseList(
                             exercises: _detail.exercises,
                           ),

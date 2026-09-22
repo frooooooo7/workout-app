@@ -46,10 +46,36 @@ void main() {
     expect(find.textContaining('Push'), findsOneWidget);
     // 45 minut treningu.
     expect(find.text('45:00'), findsOneWidget);
-    // 60×8 + 62,5×8 = 980 kg (nieukończona seria nie liczy się).
-    expect(find.text('980 kg'), findsOneWidget);
+    // 60×8 + 62,5×8 = 980 kg (nieukończona seria nie liczy się) — w karcie
+    // statystyk i w wyróżnieniu największej objętości.
+    expect(find.text('980 kg'), findsNWidgets(2));
     expect(find.text('Ukończone serie'), findsOneWidget);
     expect(find.text('2'), findsWidgets);
+    expect(find.text('Ukończono 2 z 3 serii'), findsOneWidget);
+    expect(find.text('67%'), findsOneWidget);
+  });
+
+  testWidgets('highlights the heaviest set and top-volume exercise', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    final heaviest = find.byKey(const ValueKey('summary-highlight-heaviest'));
+    expect(
+      find.descendant(of: heaviest, matching: find.text('62,5 kg × 8')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: heaviest, matching: find.text('Bench press')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('summary-highlight-volume')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('share button persists flag and switches card to shared state', (
@@ -62,7 +88,7 @@ void main() {
 
     final shareButton = find.byKey(const ValueKey('workout-share-button'));
     await scrollTo(tester, shareButton);
-    expect(find.text('Udostępnij na profilu'), findsNWidgets(2));
+    expect(find.text('Udostępnij na profilu'), findsOneWidget);
 
     await tester.tap(shareButton);
     await tester.pumpAndSettle();

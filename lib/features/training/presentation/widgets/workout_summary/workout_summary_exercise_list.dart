@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/utils/polish_plural.dart';
 import '../../../domain/models/training_history_models.dart';
 import '../session_details/session_details_formatters.dart';
 import '../session_details/session_section_card.dart';
 
-/// Zwięzła lista ćwiczeń: numer, nazwa, ukończone serie i najcięższa seria.
+/// Zwięzła lista ćwiczeń: numer, nazwa, ukończone serie, najcięższa seria
+/// i pasek objętości względem najmocniejszego ćwiczenia sesji.
 /// Bez tabel z każdą serią — po szczegóły użytkownik idzie do historii.
 class WorkoutSummaryExerciseList extends StatelessWidget {
   const WorkoutSummaryExerciseList({super.key, required this.exercises});
@@ -14,6 +16,10 @@ class WorkoutSummaryExerciseList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final maxVolume = exercises.fold<double>(
+      0,
+      (max, e) => e.volumeKg > max ? e.volumeKg : max,
+    );
     return SessionSectionCard(
       icon: Icons.fitness_center_rounded,
       title: 'Ćwiczenia',
@@ -34,7 +40,13 @@ class WorkoutSummaryExerciseList extends StatelessWidget {
                 height: 1,
                 color: AppColors.border.withValues(alpha: 0.5),
               ),
-            _ExerciseRow(index: i, exercise: exercises[i]),
+            _ExerciseRow(
+              index: i,
+              exercise: exercises[i],
+              volumeShare: maxVolume > 0
+                  ? exercises[i].volumeKg / maxVolume
+                  : 0,
+            ),
           ],
         ],
       ),
@@ -43,10 +55,17 @@ class WorkoutSummaryExerciseList extends StatelessWidget {
 }
 
 class _ExerciseRow extends StatelessWidget {
-  const _ExerciseRow({required this.index, required this.exercise});
+  const _ExerciseRow({
+    required this.index,
+    required this.exercise,
+    required this.volumeShare,
+  });
 
   final int index;
   final TrainingExerciseDetail exercise;
+
+  /// Objętość ćwiczenia jako ułamek największej w sesji (0–1).
+  final double volumeShare;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +76,7 @@ class _ExerciseRow extends StatelessWidget {
     final volume = exercise.volumeKg;
 
     final subtitleParts = <String>[
-      '$completed/$total ${_setsLabel(total)}',
+      '$completed/$total ${polishPlural(total, 'seria', 'serie', 'serii')}',
       if (topSet != null) 'top ${formatSetMetrics(topSet.actual)}',
     ];
 
@@ -116,6 +135,32 @@ class _ExerciseRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (volumeShare > 0) ...[
+                  const SizedBox(height: 7),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: SizedBox(
+                      height: 3,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ColoredBox(
+                            color: AppColors.surfaceVariant.withValues(
+                              alpha: 0.8,
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: volumeShare.clamp(0, 1),
+                            child: const ColoredBox(
+                              color: AppColors.primaryVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -134,14 +179,5 @@ class _ExerciseRow extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static String _setsLabel(int count) {
-    if (count == 1) return 'seria';
-    final lastDigit = count % 10;
-    final lastTwo = count % 100;
-    final isFew =
-        lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14);
-    return isFew ? 'serie' : 'serii';
   }
 }
