@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 
 class ProfileSectionHeader extends StatelessWidget {
   const ProfileSectionHeader({
@@ -16,50 +17,43 @@ class ProfileSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasAction = actionLabel != null && onActionTap != null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pageGutter,
+        AppSpacing.xl,
+        hasAction ? AppSpacing.xxs : AppSpacing.pageGutter,
+        hasAction ? AppSpacing.xxs : AppSpacing.sm,
+      ),
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              title.toUpperCase(),
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
+            child: Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
           ),
-          if (actionLabel != null && onActionTap != null)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onActionTap,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        actionLabel!,
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.primary,
-                        size: 16,
-                      ),
-                    ],
-                  ),
+          if (hasAction)
+            TextButton(
+              onPressed: onActionTap,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryVariant,
+                minimumSize: const Size(0, AppSpacing.minTapTarget),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+              child: Text(actionLabel!),
             ),
         ],
       ),

@@ -24,6 +24,7 @@ class FeedPostCard extends StatelessWidget {
     this.onKudosListTap,
     this.onCommentTap,
     this.now,
+    this.showAuthor = true,
   });
 
   final FeedPost post;
@@ -35,6 +36,10 @@ class FeedPostCard extends StatelessWidget {
 
   /// Test seam dla względnego znacznika czasu.
   final DateTime? now;
+
+  /// `false` na osi czasu profilu — autor jest już w nagłówku ekranu, więc
+  /// karta zaczyna się od daty.
+  final bool showAuthor;
 
   static const _radius = 24.0;
 
@@ -78,14 +83,21 @@ class FeedPostCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                PostAuthorRow(
-                  author: post.author,
-                  timestamp: formatFeedTimestamp(post.startedAt, now: now),
-                  onTap: onAuthorTap,
-                  avatarSize: PostAuthorAvatarSize.large,
-                  trailing: post.isOwn ? const _OwnBadge() : null,
-                ),
-                const SizedBox(height: 14),
+                if (showAuthor) ...[
+                  PostAuthorRow(
+                    author: post.author,
+                    timestamp: formatFeedTimestamp(post.startedAt, now: now),
+                    onTap: onAuthorTap,
+                    avatarSize: PostAuthorAvatarSize.large,
+                    trailing: post.isOwn ? const _OwnBadge() : null,
+                  ),
+                  const SizedBox(height: 14),
+                ] else ...[
+                  _PostTimestamp(
+                    label: formatFeedTimestamp(post.startedAt, now: now),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Text(
                   post.title,
                   maxLines: 2,
@@ -142,6 +154,38 @@ class FeedPostCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PostTimestamp extends StatelessWidget {
+  const _PostTimestamp({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.fitness_center_rounded,
+          size: 13,
+          color: AppColors.textMuted,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

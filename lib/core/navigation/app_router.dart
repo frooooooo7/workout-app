@@ -32,6 +32,8 @@ import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
@@ -293,13 +295,32 @@ GoRouter buildRouter({
                 builder: (_, s) {
                   final user = ServiceLocator.currentUser.value;
                   if (user == null) return const _LoadingScreen();
-                  return BlocProvider(
-                    create: (_) => ProfileCubit(
-                      _profileRepositoryForCurrentUser(),
-                      hiddenActivityIds:
-                          ServiceLocator.pendingDeletedSessionIds,
-                    ),
-                    child: const ProfileScreen(),
+                  final feedRepository = ServiceLocator.feedRepository;
+                  return MultiBlocProvider(
+                    providers: [
+                      BlocProvider(
+                        create: (_) =>
+                            ProfileCubit(_profileRepositoryForCurrentUser()),
+                      ),
+                      BlocProvider(
+                        create: (_) => ProfilePostsCubit(
+                          repository: feedRepository,
+                          userId: user.id,
+                          events: ServiceLocator.feedPostEvents,
+                          currentUser: _currentFeedAuthor(),
+                          hiddenPostIds:
+                              ServiceLocator.pendingDeletedSessionIds,
+                        ),
+                      ),
+                      BlocProvider(
+                        create: (_) => ProfileWeekCubit(
+                          ServiceLocator.trainingStatsRepository,
+                          dataChanges:
+                              ServiceLocator.trainingSessionDataChanges,
+                        ),
+                      ),
+                    ],
+                    child: ProfileScreen(feedRepository: feedRepository),
                   );
                 },
                 routes: [
@@ -421,7 +442,10 @@ GoRouter buildRouter({
             UserProfileScreen(
               userId: userId,
               repository: _profileRepositoryForCurrentUser(),
+              feedRepository: ServiceLocator.feedRepository,
               currentUserId: ServiceLocator.currentUser.value?.id,
+              currentUser: _currentFeedAuthor(),
+              postEvents: ServiceLocator.feedPostEvents,
             ),
           );
         },

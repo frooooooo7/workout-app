@@ -445,21 +445,25 @@ void main() {
       ).updateProfile(bio: '');
       expect(cleared.bio, isNull);
 
-      final seenByBob = await ApiProfileRepository(
+      final seenByBob = await ApiFeedRepository(
         bob.api,
-      ).getRecentActivities(userId: alice.id, limit: 5);
-      final activity = seenByBob.singleWhere((a) => a.id == shared.serverId);
+      ).getUserPosts(alice.id, limit: 5);
+      final activity = seenByBob.items.singleWhere(
+        (p) => p.id == shared.serverId,
+      );
       expect(activity.title, plan.name);
       expect(activity.kudosCount, 1);
       expect(activity.commentCount, 1);
       expect(activity.hasKudoed, isTrue);
-      expect(activity.date, isNotEmpty);
-      expect(activity.stats, isNotEmpty);
+      expect(activity.isOwn, isFalse);
 
-      final mine = await ApiProfileRepository(alice.api).getRecentActivities();
-      final ownActivity = mine.singleWhere((a) => a.id == shared.serverId);
+      final mine = await ApiFeedRepository(alice.api).getUserPosts(alice.id);
+      final ownActivity = mine.items.singleWhere(
+        (p) => p.id == shared.serverId,
+      );
       expect(ownActivity.kudosCount, 1);
       expect(ownActivity.hasKudoed, isFalse);
+      expect(ownActivity.isOwn, isTrue);
     });
 
     test('user search + suggested', () async {

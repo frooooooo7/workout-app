@@ -25,6 +25,22 @@ class ApiFeedRepository implements FeedRepository {
   }
 
   @override
+  Future<FeedPage> getUserPosts(
+    String userId, {
+    String? cursor,
+    int limit = 10,
+  }) async {
+    final path = Uri(
+      path: '/users/${_segment(userId)}/posts',
+      queryParameters: {
+        'limit': '$limit',
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    ).toString();
+    return FeedJson.feedPageFromJson(await _api.get(path, auth: true));
+  }
+
+  @override
   Future<PostDetail> getPost(String postId) async {
     final data = await _api.get('/posts/${_segment(postId)}', auth: true);
     return FeedJson.postDetailFromJson(data);

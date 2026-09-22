@@ -1,133 +1,173 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/utils/number_formatter.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../feed/presentation/widgets/post_author_row.dart';
 import '../../domain/models/user_profile.dart';
 import 'follow_button.dart';
-import 'profile_bio_section.dart';
 
+/// Nagłówek profilu: pasek górny, awatar, imię, @handle, opis, główna akcja
+/// i liczniki. Tło to granatowa poświata przechodząca w [AppColors.background],
+/// więc nie ma twardej krawędzi z resztą ekranu.
 class ProfileHeroHeader extends StatelessWidget {
   const ProfileHeroHeader({
     super.key,
     required this.profile,
-    required this.onSettingsTap,
-    this.showSettings = true,
-    this.onBioEditTap,
-    this.onEditProfileTap,
+    this.title,
+    this.leading,
+    this.actions = const [],
+    this.primaryAction,
+    this.stats,
     this.followsYou = false,
+    this.onAddBioTap,
   });
 
   final UserProfile profile;
-  final VoidCallback onSettingsTap;
-  final bool showSettings;
-  final VoidCallback? onBioEditTap;
 
-  /// Przycisk „Edytuj profil” (tylko własny profil).
-  final VoidCallback? onEditProfileTap;
+  /// Tytuł paska górnego (np. „Profil”); `null` — pusty pasek.
+  final String? title;
 
-  /// Znacznik „Obserwuje Cię” obok nazwy użytkownika.
+  /// Np. przycisk „Wstecz” na cudzym profilu.
+  final Widget? leading;
+
+  /// Ikony po prawej stronie paska (synchronizacja, ustawienia).
+  final List<Widget> actions;
+
+  /// „Edytuj profil” albo „Obserwuj” — na pełną szerokość.
+  final Widget? primaryAction;
+
+  /// Rząd liczników pod akcją ([ProfileStatsRow]).
+  final Widget? stats;
+
+  /// Znacznik „Obserwuje Cię” obok @handle.
   final bool followsYou;
+
+  /// Własny profil bez opisu — zachęta „Dodaj opis profilu”.
+  final VoidCallback? onAddBioTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    final bio = profile.bio?.trim() ?? '';
+
+    return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppColors.gradientTop,
-            AppColors.gradientHero,
-            Color(0xFF1E1240),
-          ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
+          colors: [AppColors.heroGlow, AppColors.background],
+          stops: [0, 0.85],
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xs,
+            AppSpacing.xxs,
+            AppSpacing.xs,
+            AppSpacing.xs,
+          ),
           child: Column(
             children: [
-              if (showSettings)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+              _TopBar(title: title, leading: leading, actions: actions),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pageGutter - AppSpacing.xs,
+                ),
+                child: Column(
                   children: [
-                    IconButton(
-                      onPressed: onSettingsTap,
-                      tooltip: 'Ustawienia profilu',
-                      icon: const Icon(Icons.settings_outlined),
-                      color: AppColors.textSecondary,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(44, 44),
-                        backgroundColor:
-                            AppColors.surface.withValues(alpha: 0.5),
+                    const SizedBox(height: AppSpacing.xs),
+                    GradientAvatarRing(
+                      radius: 46,
+                      child: UserAvatar.fromNames(
+                        firstName: profile.firstName,
+                        lastName: profile.lastName,
+                        imageUrl: profile.avatarUrl,
+                        size: UserAvatarSize.lg,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const SyncStatusIndicator(size: 44),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      profile.fullName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xxs,
+                      children: [
+                        Text(
+                          profile.displayHandle,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (followsYou) const FollowsYouChip(),
+                      ],
+                    ),
+                    if (bio.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: Text(
+                          bio,
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ] else if (onAddBioTap != null) ...[
+                      const SizedBox(height: AppSpacing.xxs),
+                      TextButton.icon(
+                        key: const ValueKey('profile-add-bio'),
+                        onPressed: onAddBioTap,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Dodaj opis profilu'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primaryVariant,
+                          minimumSize: const Size(0, AppSpacing.minTapTarget),
+                          textStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (primaryAction != null) ...[
+                      SizedBox(
+                        height: bio.isEmpty && onAddBioTap != null
+                            ? AppSpacing.xs
+                            : AppSpacing.lg,
+                      ),
+                      SizedBox(width: double.infinity, child: primaryAction),
+                    ],
+                    if (stats != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      stats!,
+                    ],
                   ],
-                )
-              else
-                const SizedBox(height: 44),
-              UserAvatar.fromNames(
-                firstName: profile.firstName,
-                lastName: profile.lastName,
-                imageUrl: profile.avatarUrl,
-                size: UserAvatarSize.lg,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                profile.fullName,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 4),
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  Text(
-                    profile.displayHandle,
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (followsYou) const FollowsYouChip(),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ProfileBioSection(
-                profile: profile,
-                onEditTap: profile.isOwnProfile ? onBioEditTap : null,
-              ),
-              if (profile.isOwnProfile && onEditProfileTap != null) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: onEditProfileTap,
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Edytuj profil'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    backgroundColor: AppColors.surface.withValues(alpha: 0.5),
-                    side: const BorderSide(color: AppColors.border),
-                    minimumSize: const Size(0, 38),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    textStyle: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -136,101 +176,219 @@ class ProfileHeroHeader extends StatelessWidget {
   }
 }
 
-class ProfileStatsRow extends StatelessWidget {
-  const ProfileStatsRow({
-    super.key,
-    required this.followingCount,
-    required this.followersCount,
-    required this.workoutsCount,
-    required this.onFollowingTap,
-    required this.onFollowersTap,
-    required this.onWorkoutsTap,
-  });
+class _TopBar extends StatelessWidget {
+  const _TopBar({this.title, this.leading, required this.actions});
 
-  final int followingCount;
-  final int followersCount;
-  final int workoutsCount;
-  final VoidCallback onFollowingTap;
-  final VoidCallback onFollowersTap;
-  final VoidCallback onWorkoutsTap;
+  final String? title;
+  final Widget? leading;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
+    return SizedBox(
+      height: AppSpacing.minTapTarget + AppSpacing.xxs,
       child: Row(
         children: [
-          Expanded(
-            child: _StatItem(
-              label: 'Obserwowani',
-              value: followingCount,
-              onTap: onFollowingTap,
-            ),
-          ),
-          const _VerticalDivider(),
-          Expanded(
-            child: _StatItem(
-              label: 'Obserwujący',
-              value: followersCount,
-              onTap: onFollowersTap,
-            ),
-          ),
-          const _VerticalDivider(),
-          Expanded(
-            child: _StatItem(
-              label: 'Treningi',
-              value: workoutsCount,
-              onTap: onWorkoutsTap,
-            ),
-          ),
+          ?leading,
+          if (title != null)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: leading == null ? AppSpacing.xs : AppSpacing.xxs,
+                ),
+                child: Text(
+                  title!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+            )
+          else
+            const Spacer(),
+          ...actions,
         ],
       ),
     );
   }
 }
 
-class _StatItem extends StatelessWidget {
-  const _StatItem({
-    required this.label,
-    required this.value,
-    required this.onTap,
+/// Przycisk „Edytuj profil” w nagłówku własnego profilu.
+class ProfileEditButton extends StatelessWidget {
+  const ProfileEditButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: const ValueKey('profile-edit-button'),
+      onPressed: onPressed,
+      icon: const Icon(Icons.edit_outlined, size: 18),
+      label: const Text('Edytuj profil'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        backgroundColor: AppColors.surface,
+        side: const BorderSide(color: AppColors.border),
+        minimumSize: const Size.fromHeight(AppSpacing.minTapTarget),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+/// Ikona w pasku górnym profilu — ta sama „kafelkowa” forma co
+/// [SyncStatusIndicator], więc obie ikony tworzą spójną parę.
+class ProfileTopBarButton extends StatelessWidget {
+  const ProfileTopBarButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
   });
 
-  final String label;
-  final int value;
-  final VoidCallback onTap;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.xs),
+      child: IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        icon: Icon(icon, size: 21),
+        color: AppColors.textSecondary,
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.surface,
+          fixedSize: const Size.square(AppSpacing.minTapTarget),
+          minimumSize: const Size.square(AppSpacing.minTapTarget),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            side: const BorderSide(color: AppColors.border),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Liczniki profilu. Pozycja bez [onTap] nie jest klikalna.
+class ProfileStatsRow extends StatelessWidget {
+  const ProfileStatsRow({
+    super.key,
+    required this.followingCount,
+    required this.followersCount,
+    required this.workoutsCount,
+    this.onFollowingTap,
+    this.onFollowersTap,
+    this.onWorkoutsTap,
+  });
+
+  final int followingCount;
+  final int followersCount;
+  final int workoutsCount;
+  final VoidCallback? onFollowingTap;
+  final VoidCallback? onFollowersTap;
+  final VoidCallback? onWorkoutsTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surface.withValues(alpha: 0.7),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _StatItem(
+                label: 'Treningi',
+                value: workoutsCount,
+                onTap: onWorkoutsTap,
+              ),
+            ),
+            const _VerticalDivider(),
+            Expanded(
+              child: _StatItem(
+                label: 'Obserwujący',
+                value: followersCount,
+                onTap: onFollowersTap,
+              ),
+            ),
+            const _VerticalDivider(),
+            Expanded(
+              child: _StatItem(
+                label: 'Obserwowani',
+                value: followingCount,
+                onTap: onFollowingTap,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  const _StatItem({required this.label, required this.value, this.onTap});
+
+  final String label;
+  final int value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted = formatCompactCount(value);
+    return Semantics(
+      button: onTap != null,
+      label: '$label: $formatted',
+      excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.sm,
+            horizontal: AppSpacing.xxs,
+          ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                '$value',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: [FontFeature.tabularFigures()],
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  formatted,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppColors.textMuted,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -249,8 +407,8 @@ class _VerticalDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 1,
-      height: 36,
-      color: AppColors.border,
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      color: AppColors.border.withValues(alpha: 0.7),
     );
   }
 }

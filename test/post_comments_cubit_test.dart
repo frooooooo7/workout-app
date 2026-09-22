@@ -15,6 +15,13 @@ import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 
 class _FakeFeedRepository implements FeedRepository {
+  @override
+  Future<FeedPage> getUserPosts(
+    String userId, {
+    String? cursor,
+    int limit = 10,
+  }) async => const FeedPage(items: []);
+
   Future<CommentsPage> Function(String? cursor)? onGetComments;
   Future<PostComment> Function(String body)? onAddComment;
   Future<void> Function(String commentId)? onDeleteComment;

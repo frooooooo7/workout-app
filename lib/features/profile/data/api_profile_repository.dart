@@ -6,10 +6,7 @@ import 'package:mime/mime.dart';
 
 import '../../../core/network/api_client.dart';
 import '../domain/models/follow_result.dart';
-import '../domain/models/recent_activity.dart';
 import '../domain/models/following_user.dart';
-import '../domain/models/profile_activity.dart';
-import '../domain/models/profile_activity_stat.dart';
 import '../domain/models/profile_stats.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
@@ -148,23 +145,6 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<List<ProfileActivity>> getRecentActivities({
-    int limit = 5,
-    String? userId,
-  }) async {
-    final path = userId == null
-        ? Uri(
-            path: '/profile/activities',
-            queryParameters: {'limit': '$limit'},
-          ).toString()
-        : Uri(
-            path: '/users/$userId/activities',
-            queryParameters: {'limit': '$limit'},
-          ).toString();
-    return _activitiesFromJson(await _api.get(path, auth: true));
-  }
-
-  @override
   Future<List<FollowingUser>> searchUsers(String query) async {
     final path = Uri(
       path: '/users/search',
@@ -264,41 +244,4 @@ class ApiProfileRepository implements ProfileRepository {
     if (lower.endsWith('.webp')) return MediaType('image', 'webp');
     return MediaType('image', 'jpeg');
   }
-
-  List<ProfileActivity> _activitiesFromJson(dynamic data) {
-    if (data is! List) return const [];
-    return data
-        .cast<Map<String, dynamic>>()
-        .map(
-          (json) => ProfileActivity(
-            id: json['id'] as String?,
-            kind: _kindFromApi(json['kind'] as String?),
-            title: json['title'] as String? ?? '',
-            date: json['date'] as String? ?? '',
-            duration: json['duration'] as String? ?? '',
-            detail: json['detail'] as String?,
-            timeLabel: json['timeLabel'] as String?,
-            stats: _statsFromJson(json['stats']),
-            kudosCount: (json['kudosCount'] as num?)?.toInt() ?? 0,
-            commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
-            hasKudoed: json['hasKudoed'] as bool? ?? false,
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  List<ProfileActivityStat> _statsFromJson(dynamic raw) {
-    if (raw is! List) return const [];
-    return raw
-        .cast<Map<String, dynamic>>()
-        .map(
-          (json) => ProfileActivityStat(
-            label: json['label'] as String? ?? '',
-            value: json['value'] as String? ?? '',
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  RecentActivityKind _kindFromApi(String? _) => RecentActivityKind.strength;
 }

@@ -15,6 +15,13 @@ import 'package:gym/features/feed/presentation/bloc/feed_state.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 
 class _FakeFeedRepository implements FeedRepository {
+  @override
+  Future<FeedPage> getUserPosts(
+    String userId, {
+    String? cursor,
+    int limit = 10,
+  }) async => const FeedPage(items: []);
+
   final feedCalls = <String?>[];
   final kudosCalls = <String>[];
   late Future<FeedPage> Function(String? cursor) onGetFeed;

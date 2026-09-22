@@ -9,6 +9,14 @@ abstract interface class FeedRepository {
   /// Posty moje i obserwowanych osób, najnowsze najpierw.
   Future<FeedPage> getFeed({String? cursor, int limit = 20});
 
+  /// Udostępnione treningi jednej osoby (oś czasu na profilu), najnowsze
+  /// najpierw.
+  Future<FeedPage> getUserPosts(
+    String userId, {
+    String? cursor,
+    int limit = 10,
+  });
+
   Future<PostDetail> getPost(String postId);
 
   Future<KudosResult> giveKudos(String postId);

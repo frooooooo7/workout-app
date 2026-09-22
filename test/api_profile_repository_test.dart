@@ -194,30 +194,6 @@ void main() {
     expect(profile.avatarUrl, isNull);
   });
 
-  test('activities parse real kudos/comment counts and hasKudoed', () async {
-    api.responses['GET /users/u1/activities?limit=5'] = [
-      {
-        'id': 'session-1',
-        'kind': 'strength',
-        'title': 'Push A',
-        'date': 'Dziś',
-        'duration': '57 min',
-        'kudosCount': 3,
-        'commentCount': 2,
-        'hasKudoed': true,
-      },
-      {'id': 'session-2', 'title': 'Pull', 'date': 'Wczoraj', 'duration': '1h'},
-    ];
-
-    final activities = await repository.getRecentActivities(userId: 'u1');
-
-    expect(activities.first.id, 'session-1');
-    expect(activities.first.kudosCount, 3);
-    expect(activities.first.commentCount, 2);
-    expect(activities.first.hasKudoed, isTrue);
-    expect(activities.last.hasKudoed, isFalse);
-  });
-
   test('remembers own avatar URLs per account, not other users', () async {
     api.responses['GET /profile/me'] = _profileJson(
       avatarUrl: '/uploads/avatars/old.jpg',

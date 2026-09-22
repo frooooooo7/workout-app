@@ -110,6 +110,21 @@ void main() {
     expect(post.recentKudos.single.id, 'u2');
   });
 
+  test('getUserPosts hits the profile timeline with cursor', () async {
+    api.responses['GET /users/u1/posts?limit=10&cursor=abc'] = {
+      'items': [_postJson()],
+      'nextCursor': 'next',
+      'hasMore': true,
+    };
+
+    final page = await repository.getUserPosts('u1', cursor: 'abc');
+
+    expect(api.calls, ['GET /users/u1/posts?limit=10&cursor=abc']);
+    expect(page.items.single.title, isNotEmpty);
+    expect(page.nextCursor, 'next');
+    expect(page.hasMore, isTrue);
+  });
+
   test('first page path has no cursor', () async {
     api.responses['GET /feed?limit=20'] = {
       'items': <dynamic>[],

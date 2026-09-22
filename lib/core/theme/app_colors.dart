@@ -19,4 +19,7 @@ abstract final class AppColors {
 
   static const gradientTop = Color(0xFF0B0E14);
   static const gradientHero = Color(0xFF141B28);
+
+  /// Granatowa poświata u góry nagłówka profilu (przechodzi w [background]).
+  static const heroGlow = Color(0xFF15254A);
 }
