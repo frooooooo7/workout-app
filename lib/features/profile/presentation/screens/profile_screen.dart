@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/services/profile_week_calculator.dart';
@@ -96,12 +96,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    ServiceLocator.profileRefreshTick.removeListener(_onProfileRefreshRequested);
+    ServiceLocator.profileRefreshTick.removeListener(
+      _onProfileRefreshRequested,
+    );
     _router?.routerDelegate.removeListener(_onRouteStackChanged);
     super.dispose();
   }
 
-  Future<void> _openEditProfile(BuildContext context, UserProfile profile) async {
+  Future<void> _openEditProfile(
+    BuildContext context,
+    UserProfile profile,
+  ) async {
     final cubit = context.read<ProfileCubit>();
     final updated = await context.push<UserProfile>(
       '/app/profile/edit',
@@ -123,46 +128,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: MultiBlocListener(
-        listeners: [
-          BlocListener<ProfileCubit, ProfileState>(
-            listenWhen: (previous, current) =>
-                current.errorSeq != previous.errorSeq &&
-                current.profile != null &&
-                current.error != null,
-            listener: (context, state) => _showSnack(context, state.error!),
-          ),
-          BlocListener<ProfilePostsCubit, ProfilePostsState>(
-            listenWhen: (previous, current) =>
-                current.notice != null && current.notice != previous.notice,
-            listener: (context, state) =>
-                _showSnack(context, state.notice!.message),
-          ),
-        ],
-        child: BlocBuilder<ProfileCubit, ProfileState>(
-          builder: (context, state) {
-            final profile = state.profile;
-            if (profile == null) {
-              if (state.error != null && !state.loading) {
-                return _ErrorView(
-                  message: state.error!,
-                  offline: state.offline,
-                  onRetry: () {
-                    context.read<ProfileCubit>().load();
-                    context.read<ProfilePostsCubit>().load();
-                  },
-                );
+      body: AppTabBackground(
+        child: MultiBlocListener(
+          listeners: [
+            BlocListener<ProfileCubit, ProfileState>(
+              listenWhen: (previous, current) =>
+                  current.errorSeq != previous.errorSeq &&
+                  current.profile != null &&
+                  current.error != null,
+              listener: (context, state) => _showSnack(context, state.error!),
+            ),
+            BlocListener<ProfilePostsCubit, ProfilePostsState>(
+              listenWhen: (previous, current) =>
+                  current.notice != null && current.notice != previous.notice,
+              listener: (context, state) =>
+                  _showSnack(context, state.notice!.message),
+            ),
+          ],
+          child: BlocBuilder<ProfileCubit, ProfileState>(
+            builder: (context, state) {
+              final profile = state.profile;
+              if (profile == null) {
+                if (state.error != null && !state.loading) {
+                  return _ErrorView(
+                    message: state.error!,
+                    offline: state.offline,
+                    onRetry: () {
+                      context.read<ProfileCubit>().load();
+                      context.read<ProfilePostsCubit>().load();
+                    },
+                  );
+                }
+                return const ProfileSkeleton();
               }
-              return const ProfileSkeleton();
-            }
-            return _ProfileContent(
-              profile: profile,
-              state: state,
-              feedRepository: widget.feedRepository,
-              onRefresh: _refreshAll,
-              onEditProfile: () => _openEditProfile(context, profile),
-            );
-          },
+              return _ProfileContent(
+                profile: profile,
+                state: state,
+                feedRepository: widget.feedRepository,
+                onRefresh: _refreshAll,
+                onEditProfile: () => _openEditProfile(context, profile),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -198,8 +205,7 @@ class _ProfileContent extends StatelessWidget {
               profile: profile,
               title: 'Profil',
               actions: [
-                const SyncStatusIndicator(size: AppSpacing.minTapTarget),
-                ProfileTopBarButton(
+                AppTabHeaderButton(
                   icon: Icons.settings_outlined,
                   tooltip: 'Ustawienia profilu',
                   onPressed: () => context.push('/app/profile/settings'),
@@ -291,7 +297,9 @@ class _ErrorView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.xl),
                 ),
                 child: Icon(
-                  offline ? Icons.cloud_off_rounded : Icons.error_outline_rounded,
+                  offline
+                      ? Icons.cloud_off_rounded
+                      : Icons.error_outline_rounded,
                   color: AppColors.textSecondary,
                   size: 30,
                 ),
@@ -323,7 +331,9 @@ class _ErrorView extends StatelessWidget {
                 onPressed: onRetry,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(0, AppSpacing.minTapTarget),
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xl,
+                  ),
                 ),
                 child: const Text('Spróbuj ponownie'),
               ),

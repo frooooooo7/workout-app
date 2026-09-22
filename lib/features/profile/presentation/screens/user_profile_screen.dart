@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../../feed/domain/models/feed_author.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../feed/domain/services/feed_post_events.dart';
@@ -95,11 +96,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       profile.isOwnProfile ||
       (widget.currentUserId != null && profile.id == widget.currentUserId);
 
-  Widget _backButton(BuildContext context) => ProfileTopBarButton(
-    icon: Icons.arrow_back_rounded,
-    tooltip: 'Wstecz',
-    onPressed: () => context.pop(),
-  );
+  Widget _backButton(BuildContext context) =>
+      AppTabHeaderButton.back(onPressed: () => context.pop());
 
   @override
   Widget build(BuildContext context) {
@@ -107,28 +105,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       value: _postsCubit,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: FollowFailureListener(
-          child: BlocListener<ProfilePostsCubit, ProfilePostsState>(
-            listenWhen: (previous, current) =>
-                current.notice != null && current.notice != previous.notice,
-            listener: (context, state) => ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(SnackBar(content: Text(state.notice!.message))),
-            child: FutureBuilder<UserProfile>(
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return ProfileSkeleton(leading: _backButton(context));
-                }
-                final profile = snapshot.data;
-                if (snapshot.hasError || profile == null) {
-                  return _ErrorView(
-                    back: _backButton(context),
-                    onRetry: () => setState(_load),
-                  );
-                }
-                return _content(context, profile);
-              },
+        body: AppTabBackground(
+          child: FollowFailureListener(
+            child: BlocListener<ProfilePostsCubit, ProfilePostsState>(
+              listenWhen: (previous, current) =>
+                  current.notice != null && current.notice != previous.notice,
+              listener: (context, state) => ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(SnackBar(content: Text(state.notice!.message))),
+              child: FutureBuilder<UserProfile>(
+                future: _future,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return ProfileSkeleton(leading: _backButton(context));
+                  }
+                  final profile = snapshot.data;
+                  if (snapshot.hasError || profile == null) {
+                    return _ErrorView(
+                      back: _backButton(context),
+                      onRetry: () => setState(_load),
+                    );
+                  }
+                  return _content(context, profile);
+                },
+              ),
             ),
           ),
         ),
@@ -154,6 +154,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: ProfileHeroHeader(
               profile: profile,
               leading: _backButton(context),
+              showSync: false,
               followsYou: !isMe && profile.isFollowedBy,
               primaryAction: isMe
                   ? null

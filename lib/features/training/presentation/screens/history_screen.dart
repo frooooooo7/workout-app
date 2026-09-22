@@ -5,9 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/workout_history_cubit.dart';
-import '../widgets/training_header.dart';
 import '../widgets/workout_history/month_selector_bar.dart';
 import '../widgets/workout_history/monthly_sessions_list.dart';
 import '../widgets/workout_history/monthly_stats_card.dart';
@@ -55,24 +54,34 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     await context.read<WorkoutHistoryCubit>().refresh();
   }
 
-  void _onHorizontalDragEnd(BuildContext context, DragEndDetails details, WorkoutHistoryState state) {
+  void _onHorizontalDragEnd(
+    BuildContext context,
+    DragEndDetails details,
+    WorkoutHistoryState state,
+  ) {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity.abs() < 200) return;
 
     final currentIndex = state.availableMonths.indexWhere(
-      (m) => m.year == state.focusedMonth.year && m.month == state.focusedMonth.month,
+      (m) =>
+          m.year == state.focusedMonth.year &&
+          m.month == state.focusedMonth.month,
     );
     if (currentIndex == -1) return;
 
     if (velocity < 0) {
       // Swiped left -> next month
       if (currentIndex < state.availableMonths.length - 1) {
-        context.read<WorkoutHistoryCubit>().selectMonth(state.availableMonths[currentIndex + 1]);
+        context.read<WorkoutHistoryCubit>().selectMonth(
+          state.availableMonths[currentIndex + 1],
+        );
       }
     } else {
       // Swiped right -> previous month
       if (currentIndex > 0) {
-        context.read<WorkoutHistoryCubit>().selectMonth(state.availableMonths[currentIndex - 1]);
+        context.read<WorkoutHistoryCubit>().selectMonth(
+          state.availableMonths[currentIndex - 1],
+        );
       }
     }
   }
@@ -82,87 +91,64 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
-      body: SafeArea(
-        bottom: false,
-        child: BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
-          builder: (context, state) {
-            final cubit = context.read<WorkoutHistoryCubit>();
+      body: AppTabBackground(
+        child: SafeArea(
+          bottom: false,
+          child: BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
+            builder: (context, state) {
+              final cubit = context.read<WorkoutHistoryCubit>();
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. Header (W stylu panelu Plany / Trening)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Historia',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            SizedBox(height: 3),
-                            Text(
-                              'Twoje zakończone treningi',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      HeaderIconButton(
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Header — wspólny dla wszystkich zakładek
+                  AppTabHeader(
+                    title: 'Historia',
+                      actions: [
+                      AppTabHeaderButton(
                         tooltip: 'Wybierz rok/miesiąc',
                         icon: Icons.calendar_today_rounded,
-                        onTap: () => cubit.openMonthPicker(context),
+                        onPressed: () => cubit.openMonthPicker(context),
                       ),
-                      const SizedBox(width: 10),
-                      const SyncStatusIndicator(),
                     ],
                   ),
-                ),
 
-                // 2. Month Selector Bar
-                const SizedBox(height: 16),
-                MonthSelectorBar(
-                  availableMonths: state.availableMonths,
-                  focusedMonth: state.focusedMonth,
-                  onMonthSelected: (month) => cubit.selectMonth(month),
-                ),
-                const SizedBox(height: 12),
+                  // 2. Month Selector Bar
+                  const SizedBox(height: 8),
+                  MonthSelectorBar(
+                    availableMonths: state.availableMonths,
+                    focusedMonth: state.focusedMonth,
+                    onMonthSelected: (month) => cubit.selectMonth(month),
+                  ),
+                  const SizedBox(height: 12),
 
-                // Main Content — Vertical scroll view with swipe gesture for months
-                Expanded(
-                  child: GestureDetector(
-                    onHorizontalDragEnd: (details) => _onHorizontalDragEnd(context, details, state),
-                    behavior: HitTestBehavior.opaque,
-                    child: RefreshIndicator(
-                      onRefresh: () => _onRefresh(context),
-                      color: AppColors.primary,
-                      child: _buildBody(context, state, cubit),
+                  // Main Content — Vertical scroll view with swipe gesture for months
+                  Expanded(
+                    child: GestureDetector(
+                      onHorizontalDragEnd: (details) =>
+                          _onHorizontalDragEnd(context, details, state),
+                      behavior: HitTestBehavior.opaque,
+                      child: RefreshIndicator(
+                        onRefresh: () => _onRefresh(context),
+                        color: AppColors.primary,
+                        child: _buildBody(context, state, cubit),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, WorkoutHistoryState state, WorkoutHistoryCubit cubit) {
+  Widget _buildBody(
+    BuildContext context,
+    WorkoutHistoryState state,
+    WorkoutHistoryCubit cubit,
+  ) {
     if (state.isLoading) {
       return const _WorkoutHistorySkeleton();
     }
@@ -187,13 +173,10 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
             children: [
               if (state.fromCache)
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: Text(
                     'Tryb offline: pokazujemy zapisane dane z pamięci podręcznej.',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                 ),
               AnimatedSwitcher(
@@ -225,10 +208,7 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
             ],
           ),
         ),
-        MonthlySessionsList(
-          sessions: sessions,
-          selectedDay: state.selectedDay,
-        ),
+        MonthlySessionsList(sessions: sessions, selectedDay: state.selectedDay),
         if (stats != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -251,9 +231,9 @@ class _WorkoutHistorySkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       padding: EdgeInsets.fromLTRB(
-        24,
+        16,
         8,
-        24,
+        16,
         8 + MediaQuery.paddingOf(context).bottom,
       ),
       children: [
@@ -286,10 +266,7 @@ class _WorkoutHistorySkeleton extends StatelessWidget {
 }
 
 class _WorkoutHistoryError extends StatelessWidget {
-  const _WorkoutHistoryError({
-    required this.message,
-    required this.onRetry,
-  });
+  const _WorkoutHistoryError({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;

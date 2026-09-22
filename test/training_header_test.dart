@@ -15,9 +15,8 @@ void main() {
       ),
     );
 
-    final tooltip = tester.widget<Tooltip>(find.byType(Tooltip).last);
-
-    expect(tooltip.message, 'Dodaj trening');
+    // Wskaźnik synchronizacji jest ostatni w pasku — szukamy po treści.
+    expect(find.byTooltip('Dodaj trening'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });
 

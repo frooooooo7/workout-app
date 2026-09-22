@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/training_history_cubit.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
@@ -84,55 +85,42 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child:
-                        BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
-                          builder: (context, sessionState) {
-                            final active = sessionState.activeSession;
-                            return TrainingHeader(
-                              activePlanName: active?.planName,
-                              onActiveTap: active == null
-                                  ? null
-                                  : () {
-                                      final cubit = context
-                                          .read<TrainingSessionCubit>();
-                                      context.push(
-                                        '/app/training/ongoing-workout',
-                                        extra: OngoingWorkoutArgs(
-                                          initialSession: active,
-                                          sessionCubit: cubit,
-                                        ),
-                                      );
-                                    },
-                              onLibraryTap: () {
-                                context.push('/app/training/library');
-                              },
-                              onAddTap: () {
-                                context.push('/app/training/pick-activity-type');
-                              },
+      body: AppTabBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
+                builder: (context, sessionState) {
+                  final active = sessionState.activeSession;
+                  return TrainingHeader(
+                    activePlanName: active?.planName,
+                    onActiveTap: active == null
+                        ? null
+                        : () {
+                            final cubit = context.read<TrainingSessionCubit>();
+                            context.push(
+                              '/app/training/ongoing-workout',
+                              extra: OngoingWorkoutArgs(
+                                initialSession: active,
+                                sessionCubit: cubit,
+                              ),
                             );
                           },
-                        ),
-                  ),
-                  const SizedBox(width: 10),
-                  const SyncStatusIndicator(),
-                ],
+                    onLibraryTap: () {
+                      context.push('/app/training/library');
+                    },
+                    onAddTap: () {
+                      context.push('/app/training/pick-activity-type');
+                    },
+                  );
+                },
               ),
-            ),
-            const SizedBox(height: 20),
-            const Expanded(
-              child: TrainingSessionTab(),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.sm),
+              const Expanded(child: TrainingSessionTab()),
+            ],
+          ),
         ),
       ),
     );

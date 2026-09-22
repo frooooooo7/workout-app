@@ -193,9 +193,9 @@ class _TrainingSessionBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
-        24,
+        16,
         0,
-        24,
+        16,
         24 + MediaQuery.paddingOf(context).bottom,
       ),
       child: Column(

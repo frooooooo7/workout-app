@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 
 class LibraryHeader extends StatelessWidget {
   const LibraryHeader({
@@ -23,81 +23,20 @@ class LibraryHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Tooltip(
-              message: 'Wstecz',
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onBackTap,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Ink(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
+        AppTabHeader(
+          title: 'Biblioteka',
+          gutter: 0,
+          leading: AppTabHeaderButton.back(onPressed: onBackTap),
+          actions: [
+            AppTabHeaderButton(
+              tooltip: 'Dodaj ćwiczenie',
+              icon: Icons.add_rounded,
+              accent: true,
+              onPressed: onAddTap,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Biblioteka ćwiczeń',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  const Text(
-                    'Znajdź, zapisz i twórz własne ćwiczenia',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: onAddTap,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const SyncStatusIndicator(),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _SearchBar(
           controller: searchController,
           onChanged: onSearchChanged,
@@ -162,10 +101,7 @@ class _SearchBarState extends State<_SearchBar> {
               child: TextField(
                 controller: widget.controller,
                 onChanged: widget.onChanged,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
                 cursorColor: AppColors.primary,
                 decoration: const InputDecoration(
                   hintText: 'Szukaj ćwiczeń, partii mięśni...',
@@ -190,9 +126,7 @@ class _SearchBarState extends State<_SearchBar> {
               width: 48,
               height: 48,
               decoration: const BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: AppColors.border),
-                ),
+                border: Border(left: BorderSide(color: AppColors.border)),
               ),
               child: const Icon(
                 Icons.tune_rounded,

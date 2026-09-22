@@ -48,7 +48,6 @@ void main() {
 
     // Verify Header
     expect(find.text('Historia'), findsOneWidget);
-    expect(find.text('Twoje zakończone treningi'), findsOneWidget);
 
     // Verify Month Selector Bar
     expect(find.byType(MonthSelectorBar), findsOneWidget);

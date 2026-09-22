@@ -4,9 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/training_plans_cubit.dart';
-import '../widgets/training_header.dart';
 import '../widgets/training_plans_tab.dart';
 import 'create_plan_screen.dart';
 
@@ -33,32 +33,20 @@ class _PlansScreenContent extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Plany treningowe',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                  HeaderIconButton(
+      body: AppTabBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppTabHeader(
+                title: 'Plany treningowe',
+                actions: [
+                  AppTabHeaderButton(
                     tooltip: 'Utwórz plan',
                     icon: Icons.add_rounded,
-                    isAccent: true,
-                    onTap: () {
+                    accent: true,
+                    onPressed: () {
                       context.push(
                         '/app/training/create-plan',
                         extra: CreatePlanArgs(
@@ -67,16 +55,12 @@ class _PlansScreenContent extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(width: 10),
-                  const SyncStatusIndicator(),
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
-            const Expanded(
-              child: TrainingPlansTab(),
-            ),
-          ],
+              const SizedBox(height: AppSpacing.sm),
+              const Expanded(child: TrainingPlansTab()),
+            ],
+          ),
         ),
       ),
     );

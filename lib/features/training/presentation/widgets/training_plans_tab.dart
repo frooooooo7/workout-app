@@ -24,7 +24,7 @@ class TrainingPlansTab extends StatelessWidget {
         return CustomScrollView(
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               sliver: SliverToBoxAdapter(
                 child: Center(
                   child: ConstrainedBox(
@@ -37,7 +37,7 @@ class TrainingPlansTab extends StatelessWidget {
             const SliverToBoxAdapter(child: SizedBox(height: 18)),
             if (state.plans.isEmpty)
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+                padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
                 sliver: SliverToBoxAdapter(
                   child: Center(
                     child: ConstrainedBox(
@@ -49,7 +49,7 @@ class TrainingPlansTab extends StatelessWidget {
               )
             else
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, bottomPadding),
+                padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
                 sliver: SliverList.builder(
                   itemCount: state.plans.length,
                   itemBuilder: (context, index) {

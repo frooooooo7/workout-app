@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../domain/models/exercise.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/library_add_exercise_sheet.dart';
@@ -37,148 +38,149 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) =>
-          LibraryCubit(
-            ServiceLocator.exerciseRepository,
-            dataChanges: ServiceLocator.exerciseDataChanges,
-          )..refresh(),
+      create: (_) => LibraryCubit(
+        ServiceLocator.exerciseRepository,
+        dataChanges: ServiceLocator.exerciseDataChanges,
+      )..refresh(),
       child: Builder(
         builder: (context) {
           final cubit = context.read<LibraryCubit>();
 
           return Scaffold(
             backgroundColor: AppColors.background,
-            body: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        LibraryHeader(
-                          searchController: _searchController,
-                          onSearchChanged: cubit.setQuery,
-                          onFilterTap: () {},
-                          onBackTap: () {
-                            if (context.canPop()) {
-                              context.pop();
-                              return;
-                            }
-                            context.go('/app/training');
-                          },
-                          onAddTap: () async {
-                            final created = await showLibraryAddExerciseSheet(
-                              context,
-                              onSubmit: ({
-                                required String name,
-                                required List<MuscleGroup> muscles,
-                                required ExerciseCategory category,
-                                required String description,
-                                Uint8List? imageBytes,
-                                String? imageFilename,
-                              }) =>
-                                  cubit.createExercise(
-                                    name: name,
-                                    muscles: muscles,
-                                    category: category,
-                                    description: description,
-                                    imageBytes: imageBytes,
-                                    imageFilename: imageFilename,
-                                  ),
-                            );
-                            if (!context.mounted) return;
-                            if (created != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    created.isPendingSync
-                                        ? 'Dodano ćwiczenie. Synchronizacja w toku…'
-                                        : 'Dodano ćwiczenie do biblioteki.',
-                                  ),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
+            body: AppTabBackground(
+              child: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          LibraryHeader(
+                            searchController: _searchController,
+                            onSearchChanged: cubit.setQuery,
+                            onFilterTap: () {},
+                            onBackTap: () {
+                              if (context.canPop()) {
+                                context.pop();
+                                return;
+                              }
+                              context.go('/app/training');
+                            },
+                            onAddTap: () async {
+                              final created = await showLibraryAddExerciseSheet(
+                                context,
+                                onSubmit:
+                                    ({
+                                      required String name,
+                                      required List<MuscleGroup> muscles,
+                                      required ExerciseCategory category,
+                                      required String description,
+                                      Uint8List? imageBytes,
+                                      String? imageFilename,
+                                    }) => cubit.createExercise(
+                                      name: name,
+                                      muscles: muscles,
+                                      category: category,
+                                      description: description,
+                                      imageBytes: imageBytes,
+                                      imageFilename: imageFilename,
+                                    ),
                               );
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        BlocBuilder<LibraryCubit, LibraryState>(
-                          buildWhen: (previous, current) =>
-                              previous.filter != current.filter ||
-                              previous.category != current.category,
-                          builder: (context, state) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                LibraryFilterChips(
-                                  selected: state.filter,
-                                  onSelected: cubit.setFilter,
-                                ),
-                                const SizedBox(height: 14),
-                                LibraryCategoryTabs(
-                                  selected: state.category,
-                                  onSelected: cubit.setCategory,
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        BlocBuilder<LibraryCubit, LibraryState>(
-                          buildWhen: (previous, current) =>
-                              previous.exercises != current.exercises ||
-                              previous.loading != current.loading ||
-                              previous.error != current.error,
-                          builder: (context, state) {
-                            return LibraryResultsBar(
-                              count: state.exercises.length,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: BlocBuilder<LibraryCubit, LibraryState>(
-                      buildWhen: (previous, current) =>
-                          previous.exercises != current.exercises ||
-                          previous.loading != current.loading ||
-                          previous.error != current.error,
-                      builder: (context, state) {
-                        if (state.loading) {
-                          return const LibraryLoadingState();
-                        }
-                        if (state.error != null) {
-                          return LibraryErrorState(message: state.error!);
-                        }
-                        if (state.exercises.isEmpty) {
-                          return const LibraryEmptyState();
-                        }
-                        return LibraryExerciseGrid(
-                          exercises: state.exercises,
-                          onFavouriteTap: (exercise) async {
-                            try {
-                              await cubit.toggleFavourite(exercise);
-                            } catch (_) {
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Nie udało się zaktualizować ulubionych.',
+                              if (created != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      created.isPendingSync
+                                          ? 'Dodano ćwiczenie. Synchronizacja w toku…'
+                                          : 'Dodano ćwiczenie do biblioteki.',
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
                                   ),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          BlocBuilder<LibraryCubit, LibraryState>(
+                            buildWhen: (previous, current) =>
+                                previous.filter != current.filter ||
+                                previous.category != current.category,
+                            builder: (context, state) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  LibraryFilterChips(
+                                    selected: state.filter,
+                                    onSelected: cubit.setFilter,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  LibraryCategoryTabs(
+                                    selected: state.category,
+                                    onSelected: cubit.setCategory,
+                                  ),
+                                ],
                               );
-                            }
-                          },
-                        );
-                      },
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          BlocBuilder<LibraryCubit, LibraryState>(
+                            buildWhen: (previous, current) =>
+                                previous.exercises != current.exercises ||
+                                previous.loading != current.loading ||
+                                previous.error != current.error,
+                            builder: (context, state) {
+                              return LibraryResultsBar(
+                                count: state.exercises.length,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: BlocBuilder<LibraryCubit, LibraryState>(
+                        buildWhen: (previous, current) =>
+                            previous.exercises != current.exercises ||
+                            previous.loading != current.loading ||
+                            previous.error != current.error,
+                        builder: (context, state) {
+                          if (state.loading) {
+                            return const LibraryLoadingState();
+                          }
+                          if (state.error != null) {
+                            return LibraryErrorState(message: state.error!);
+                          }
+                          if (state.exercises.isEmpty) {
+                            return const LibraryEmptyState();
+                          }
+                          return LibraryExerciseGrid(
+                            exercises: state.exercises,
+                            onFavouriteTap: (exercise) async {
+                              try {
+                                await cubit.toggleFavourite(exercise);
+                              } catch (_) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Nie udało się zaktualizować ulubionych.',
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );

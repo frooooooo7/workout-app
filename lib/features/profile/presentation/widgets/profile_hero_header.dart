@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/number_formatter.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../feed/presentation/widgets/post_author_row.dart';
 import '../../domain/models/user_profile.dart';
 import 'follow_button.dart';
 
-/// Nagłówek profilu: pasek górny, awatar, imię, @handle, opis, główna akcja
-/// i liczniki. Tło to granatowa poświata przechodząca w [AppColors.background],
-/// więc nie ma twardej krawędzi z resztą ekranu.
+/// Nagłówek profilu: wspólny [AppTabHeader], awatar, imię, @handle, opis,
+/// główna akcja i liczniki. Tło (poświatę) daje [AppTabBackground] ekranu.
 class ProfileHeroHeader extends StatelessWidget {
   const ProfileHeroHeader({
     super.key,
@@ -22,12 +22,16 @@ class ProfileHeroHeader extends StatelessWidget {
     this.stats,
     this.followsYou = false,
     this.onAddBioTap,
+    this.showSync = true,
   });
 
   final UserProfile profile;
 
   /// Tytuł paska górnego (np. „Profil”); `null` — pusty pasek.
   final String? title;
+
+  /// Wskaźnik synchronizacji w pasku (tylko własny profil).
+  final bool showSync;
 
   /// Np. przycisk „Wstecz” na cudzym profilu.
   final Widget? leading;
@@ -51,168 +55,116 @@ class ProfileHeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final bio = profile.bio?.trim() ?? '';
 
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppColors.heroGlow, AppColors.background],
-          stops: [0, 0.85],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xs,
-            AppSpacing.xxs,
-            AppSpacing.xs,
-            AppSpacing.xs,
-          ),
-          child: Column(
-            children: [
-              _TopBar(title: title, leading: leading, actions: actions),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.pageGutter - AppSpacing.xs,
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: AppSpacing.xs),
-                    GradientAvatarRing(
-                      radius: 46,
-                      child: UserAvatar.fromNames(
-                        firstName: profile.firstName,
-                        lastName: profile.lastName,
-                        imageUrl: profile.avatarUrl,
-                        size: UserAvatarSize.lg,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      profile.fullName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.4,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xxs),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: AppSpacing.xs,
-                      runSpacing: AppSpacing.xxs,
-                      children: [
-                        Text(
-                          profile.displayHandle,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (followsYou) const FollowsYouChip(),
-                      ],
-                    ),
-                    if (bio.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.sm),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: Text(
-                          bio,
-                          textAlign: TextAlign.center,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    ] else if (onAddBioTap != null) ...[
-                      const SizedBox(height: AppSpacing.xxs),
-                      TextButton.icon(
-                        key: const ValueKey('profile-add-bio'),
-                        onPressed: onAddBioTap,
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Dodaj opis profilu'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primaryVariant,
-                          minimumSize: const Size(0, AppSpacing.minTapTarget),
-                          textStyle: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (primaryAction != null) ...[
-                      SizedBox(
-                        height: bio.isEmpty && onAddBioTap != null
-                            ? AppSpacing.xs
-                            : AppSpacing.lg,
-                      ),
-                      SizedBox(width: double.infinity, child: primaryAction),
-                    ],
-                    if (stats != null) ...[
-                      const SizedBox(height: AppSpacing.md),
-                      stats!,
-                    ],
-                  ],
-                ),
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+        child: Column(
+          children: [
+            AppTabHeader(
+              title: title ?? '',
+              leading: leading,
+              actions: actions,
+              showSync: showSync,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pageGutter,
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({this.title, this.leading, required this.actions});
-
-  final String? title;
-  final Widget? leading;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: AppSpacing.minTapTarget + AppSpacing.xxs,
-      child: Row(
-        children: [
-          ?leading,
-          if (title != null)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: leading == null ? AppSpacing.xs : AppSpacing.xxs,
-                ),
-                child: Text(
-                  title!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
+              child: Column(
+                children: [
+                  const SizedBox(height: AppSpacing.xs),
+                  GradientAvatarRing(
+                    radius: 46,
+                    child: UserAvatar.fromNames(
+                      firstName: profile.firstName,
+                      lastName: profile.lastName,
+                      imageUrl: profile.avatarUrl,
+                      size: UserAvatarSize.lg,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    profile.fullName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xxs),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xxs,
+                    children: [
+                      Text(
+                        profile.displayHandle,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (followsYou) const FollowsYouChip(),
+                    ],
+                  ),
+                  if (bio.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Text(
+                        bio,
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ] else if (onAddBioTap != null) ...[
+                    const SizedBox(height: AppSpacing.xxs),
+                    TextButton.icon(
+                      key: const ValueKey('profile-add-bio'),
+                      onPressed: onAddBioTap,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Dodaj opis profilu'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primaryVariant,
+                        minimumSize: const Size(0, AppSpacing.minTapTarget),
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (primaryAction != null) ...[
+                    SizedBox(
+                      height: bio.isEmpty && onAddBioTap != null
+                          ? AppSpacing.xs
+                          : AppSpacing.lg,
+                    ),
+                    SizedBox(width: double.infinity, child: primaryAction),
+                  ],
+                  if (stats != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    stats!,
+                  ],
+                ],
               ),
-            )
-          else
-            const Spacer(),
-          ...actions,
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -240,43 +192,6 @@ class ProfileEditButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-/// Ikona w pasku górnym profilu — ta sama „kafelkowa” forma co
-/// [SyncStatusIndicator], więc obie ikony tworzą spójną parę.
-class ProfileTopBarButton extends StatelessWidget {
-  const ProfileTopBarButton({
-    super.key,
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.xs),
-      child: IconButton(
-        onPressed: onPressed,
-        tooltip: tooltip,
-        icon: Icon(icon, size: 21),
-        color: AppColors.textSecondary,
-        style: IconButton.styleFrom(
-          backgroundColor: AppColors.surface,
-          fixedSize: const Size.square(AppSpacing.minTapTarget),
-          minimumSize: const Size.square(AppSpacing.minTapTarget),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            side: const BorderSide(color: AppColors.border),
-          ),
-        ),
       ),
     );
   }

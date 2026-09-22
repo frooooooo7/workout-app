@@ -4,7 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/sync_status_indicator.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../../profile/presentation/bloc/follow_cubit.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
 import '../../domain/models/feed_post.dart';
@@ -86,35 +86,36 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the lists.
-      body: SafeArea(
-        bottom: false,
-        child: FollowFailureListener(
-          child: MultiBlocListener(
-            listeners: [
-              BlocListener<FeedCubit, FeedState>(
-                listenWhen: (previous, current) =>
-                    current.notice != null &&
-                    previous.notice?.id != current.notice!.id,
-                listener: (_, state) => _showSnackBar(state.notice!.message),
-              ),
-              BlocListener<FeedCubit, FeedState>(
-                listenWhen: (previous, current) =>
-                    !identical(previous.suggestions, current.suggestions),
-                listener: (context, state) =>
-                    context.read<FollowCubit>().seedUsers(state.suggestions),
-              ),
-            ],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _FeedHeader(),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: BlocBuilder<FeedCubit, FeedState>(
-                    builder: (context, state) => _buildBody(context, state),
-                  ),
+      body: AppTabBackground(
+        child: SafeArea(
+          bottom: false,
+          child: FollowFailureListener(
+            child: MultiBlocListener(
+              listeners: [
+                BlocListener<FeedCubit, FeedState>(
+                  listenWhen: (previous, current) =>
+                      current.notice != null &&
+                      previous.notice?.id != current.notice!.id,
+                  listener: (_, state) => _showSnackBar(state.notice!.message),
+                ),
+                BlocListener<FeedCubit, FeedState>(
+                  listenWhen: (previous, current) =>
+                      !identical(previous.suggestions, current.suggestions),
+                  listener: (context, state) =>
+                      context.read<FollowCubit>().seedUsers(state.suggestions),
                 ),
               ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const AppTabHeader(title: 'Aktywność'),
+                  Expanded(
+                    child: BlocBuilder<FeedCubit, FeedState>(
+                      builder: (context, state) => _buildBody(context, state),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -213,10 +214,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
           }
           final postIndex = index - headerCount;
           if (postIndex == state.items.length) {
-            return _FeedFooter(
-              state: state,
-              onRetry: cubit.loadMore,
-            );
+            return _FeedFooter(state: state, onRetry: cubit.loadMore);
           }
           final post = state.items[postIndex];
           return Padding(
@@ -262,46 +260,6 @@ class _FeedPostItem extends StatelessWidget {
         ),
         onCommentTap: () =>
             openPostDetails(context, post.id, focusComment: true),
-      ),
-    );
-  }
-}
-
-class _FeedHeader extends StatelessWidget {
-  const _FeedHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Aktywność',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Co słychać u Ciebie i znajomych',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SyncStatusIndicator(),
-        ],
       ),
     );
   }
