@@ -66,14 +66,24 @@ class OngoingWorkoutProgressBar extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  exerciseName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  switchInCurve: Curves.easeOut,
+                                  switchOutCurve: Curves.easeIn,
+                                  layoutBuilder: (current, previous) => Stack(
+                                    alignment: Alignment.centerLeft,
+                                    children: [...previous, ?current],
+                                  ),
+                                  child: Text(
+                                    exerciseName,
+                                    key: ValueKey(currentIndex),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -95,14 +105,21 @@ class OngoingWorkoutProgressBar extends StatelessWidget {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              minHeight: 4,
-              value: exerciseCount == 0
-                  ? 0
-                  : (currentIndex + 1) / exerciseCount,
-              backgroundColor: AppColors.surfaceVariant,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.primaryVariant,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(
+                end: exerciseCount == 0
+                    ? 0
+                    : (currentIndex + 1) / exerciseCount,
+              ),
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                minHeight: 4,
+                value: value,
+                backgroundColor: AppColors.surfaceVariant,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryVariant,
+                ),
               ),
             ),
           ),

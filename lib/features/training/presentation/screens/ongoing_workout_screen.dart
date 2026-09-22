@@ -49,13 +49,17 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   final PageController _exercisePageController = PageController();
   final ValueNotifier<TrainingSession?> _draftSession =
       ValueNotifier<TrainingSession?>(null);
-  final ValueNotifier<Duration> _restRemaining =
-      ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _restRemaining = ValueNotifier<Duration>(
+    Duration.zero,
+  );
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
   final Set<String> _userHiddenRirColumns = {};
   final Set<String> _userHiddenTempoColumns = {};
-  int _currentExerciseIndex = 0;
+
+  /// Osobny notifier, żeby zmiana strony (także w trakcie swipe'a) nie
+  /// przebudowywała całego ekranu — słucha go tylko pasek postępu.
+  final ValueNotifier<int> _currentExerciseIndex = ValueNotifier<int>(0);
   bool _hasUnsavedDraft = false;
   Future<void>? _inFlightSave;
   bool _allowPop = false;
@@ -84,6 +88,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     _restTimer?.cancel();
     _draftSession.dispose();
     _restRemaining.dispose();
+    _currentExerciseIndex.dispose();
     if (_restTimerScheduler != null) {
       unawaited(_restTimerScheduler!.cancelRestFinished());
     }
@@ -95,7 +100,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   RestTimerScheduler? get _restTimerScheduler {
     try {
-      return widget.args?.restTimerScheduler ?? ServiceLocator.restTimerScheduler;
+      return widget.args?.restTimerScheduler ??
+          ServiceLocator.restTimerScheduler;
     } catch (_) {
       return null;
     }
@@ -128,7 +134,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           _userEnabledTempoColumns.clear();
           _userHiddenRirColumns.clear();
           _userHiddenTempoColumns.clear();
-          _currentExerciseIndex = 0;
+          _currentExerciseIndex.value = 0;
         }
         final session = _draftSession.value!;
         final exerciseCount = session.exercises.length;
@@ -218,8 +224,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             ),
           );
         }
-        if (exerciseCount > 0 && _currentExerciseIndex >= exerciseCount) {
-          _currentExerciseIndex = exerciseCount - 1;
+        if (_currentExerciseIndex.value >= exerciseCount) {
+          _currentExerciseIndex.value = exerciseCount - 1;
         }
 
         return PopScope(
@@ -251,96 +257,109 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                             onBack: () => _leaveWorkout(context),
                             onCancel: () => _cancelWorkout(context, session),
                           ),
-                          OngoingWorkoutProgressBar(
-                            currentIndex: _currentExerciseIndex,
-                            exerciseCount: exerciseCount,
-                            exerciseName: session
-                                .exercises[_currentExerciseIndex]
-                                .exerciseName,
-                            onPrevious: _currentExerciseIndex > 0
-                                ? () =>
-                                      _goToExercise(_currentExerciseIndex - 1)
-                                : null,
-                            onNext: _currentExerciseIndex < exerciseCount - 1
-                                ? () =>
-                                      _goToExercise(_currentExerciseIndex + 1)
-                                : null,
-                            onShowList: () {
-                              final current = _draftSession.value;
-                              if (current != null) {
-                                _showExercisePicker(context, current);
-                              }
+                          ValueListenableBuilder<int>(
+                            valueListenable: _currentExerciseIndex,
+                            builder: (context, currentIndex, _) {
+                              final safeIndex = currentIndex.clamp(
+                                0,
+                                exerciseCount - 1,
+                              );
+                              return OngoingWorkoutProgressBar(
+                                currentIndex: safeIndex,
+                                exerciseCount: exerciseCount,
+                                exerciseName:
+                                    session.exercises[safeIndex].exerciseName,
+                                onPrevious: safeIndex > 0
+                                    ? () => _goToExercise(safeIndex - 1)
+                                    : null,
+                                onNext: safeIndex < exerciseCount - 1
+                                    ? () => _goToExercise(safeIndex + 1)
+                                    : null,
+                                onShowList: () {
+                                  final current = _draftSession.value;
+                                  if (current != null) {
+                                    _showExercisePicker(context, current);
+                                  }
+                                },
+                              );
                             },
                           ),
                           Expanded(
                             child: PageView.builder(
                               controller: _exercisePageController,
                               itemCount: session.exercises.length,
-                              onPageChanged: (index) {
-                                setState(() => _currentExerciseIndex = index);
-                              },
+                              // Sąsiednie strony budują się z wyprzedzeniem,
+                              // więc swipe nie czeka na layout karty.
+                              allowImplicitScrolling: true,
+                              onPageChanged: (index) =>
+                                  _currentExerciseIndex.value = index,
                               itemBuilder: (context, index) {
-                                return SingleChildScrollView(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    20,
-                                    12,
-                                    20,
-                                    20,
+                                return _KeepAlivePage(
+                                  key: ValueKey(
+                                    'exercise-page-${session.exercises[index].id}',
                                   ),
-                                  child: _SessionExerciseCard(
-                                    key: ValueKey(
-                                      session.exercises[index].id,
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      20,
+                                      12,
+                                      20,
+                                      20,
                                     ),
-                                    exerciseIndex: index,
-                                    exercise: session.exercises[index],
-                                    showRirColumn: _shouldShowRirColumn(
-                                      session.exercises[index],
+                                    child: _SessionExerciseCard(
+                                      key: ValueKey(
+                                        session.exercises[index].id,
+                                      ),
+                                      exerciseIndex: index,
+                                      exercise: session.exercises[index],
+                                      showRirColumn: _shouldShowRirColumn(
+                                        session.exercises[index],
+                                      ),
+                                      showTempoColumn: _shouldShowTempoColumn(
+                                        session.exercises[index],
+                                      ),
+                                      onShowRirColumn: () => setState(() {
+                                        _userHiddenRirColumns.remove(
+                                          session.exercises[index].id,
+                                        );
+                                        _userEnabledRirColumns.add(
+                                          session.exercises[index].id,
+                                        );
+                                      }),
+                                      onShowTempoColumn: () => setState(() {
+                                        _userHiddenTempoColumns.remove(
+                                          session.exercises[index].id,
+                                        );
+                                        _userEnabledTempoColumns.add(
+                                          session.exercises[index].id,
+                                        );
+                                      }),
+                                      onHideRirColumn: () => setState(() {
+                                        _userEnabledRirColumns.remove(
+                                          session.exercises[index].id,
+                                        );
+                                        _userHiddenRirColumns.add(
+                                          session.exercises[index].id,
+                                        );
+                                      }),
+                                      onHideTempoColumn: () => setState(() {
+                                        _userEnabledTempoColumns.remove(
+                                          session.exercises[index].id,
+                                        );
+                                        _userHiddenTempoColumns.add(
+                                          session.exercises[index].id,
+                                        );
+                                      }),
+                                      onSetChanged: (setIndex, set) =>
+                                          _updateSet(
+                                            context,
+                                            index,
+                                            setIndex,
+                                            set,
+                                          ),
+                                      onAddSet: () => _addSet(context, index),
+                                      onRemoveSet: (setIndex) =>
+                                          _removeSet(context, index, setIndex),
                                     ),
-                                    showTempoColumn: _shouldShowTempoColumn(
-                                      session.exercises[index],
-                                    ),
-                                    onShowRirColumn: () => setState(() {
-                                      _userHiddenRirColumns.remove(
-                                        session.exercises[index].id,
-                                      );
-                                      _userEnabledRirColumns.add(
-                                        session.exercises[index].id,
-                                      );
-                                    }),
-                                    onShowTempoColumn: () => setState(() {
-                                      _userHiddenTempoColumns.remove(
-                                        session.exercises[index].id,
-                                      );
-                                      _userEnabledTempoColumns.add(
-                                        session.exercises[index].id,
-                                      );
-                                    }),
-                                    onHideRirColumn: () => setState(() {
-                                      _userEnabledRirColumns.remove(
-                                        session.exercises[index].id,
-                                      );
-                                      _userHiddenRirColumns.add(
-                                        session.exercises[index].id,
-                                      );
-                                    }),
-                                    onHideTempoColumn: () => setState(() {
-                                      _userEnabledTempoColumns.remove(
-                                        session.exercises[index].id,
-                                      );
-                                      _userHiddenTempoColumns.add(
-                                        session.exercises[index].id,
-                                      );
-                                    }),
-                                    onSetChanged: (setIndex, set) =>
-                                        _updateSet(
-                                          context,
-                                          index,
-                                          setIndex,
-                                          set,
-                                        ),
-                                    onAddSet: () => _addSet(context, index),
-                                    onRemoveSet: (setIndex) =>
-                                        _removeSet(context, index, setIndex),
                                   ),
                                 );
                               },
@@ -447,12 +466,18 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     context.pop();
   }
 
-  Future<void> _cancelWorkout(BuildContext context, TrainingSession session) async {
+  Future<void> _cancelWorkout(
+    BuildContext context,
+    TrainingSession session,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Odrzucić trening?', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Odrzucić trening?',
+          style: TextStyle(color: Colors.white),
+        ),
         content: const Text(
           'Czy na pewno chcesz odrzucić ten trening? Wszystkie zapisane postępy zostaną utracone.',
           style: TextStyle(color: AppColors.textSecondary),
@@ -460,11 +485,17 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Anuluj', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Odrzuć', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Odrzuć',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -507,9 +538,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final nextIndex = exercises.length - 1;
     setState(() {
       _draftSession.value = session.copyWith(exercises: exercises);
-      _currentExerciseIndex = nextIndex;
       _hasUnsavedDraft = true;
     });
+    _currentExerciseIndex.value = nextIndex;
     final cubit = context.read<TrainingSessionCubit>();
     if (wasEmpty) {
       _saveDebounce?.cancel();
@@ -520,9 +551,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_exercisePageController.hasClients) return;
       _exercisePageController.jumpToPage(nextIndex);
-      if (_currentExerciseIndex != nextIndex) {
-        setState(() => _currentExerciseIndex = nextIndex);
-      }
+      _currentExerciseIndex.value = nextIndex;
     });
   }
 
@@ -797,13 +826,23 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   void _goToExercise(int index) {
-    if (_currentExerciseIndex != index) {
-      setState(() => _currentExerciseIndex = index);
+    if (!_exercisePageController.hasClients) {
+      _currentExerciseIndex.value = index;
+      return;
     }
-    if (!_exercisePageController.hasClients) return;
+    final from =
+        _exercisePageController.page?.round() ?? _currentExerciseIndex.value;
+    if (from == index) return;
+    // Przy skoku o kilka ćwiczeń animacja przez wszystkie strony pośrednie
+    // buduje każdą z nich po drodze — przeskakujemy na sąsiada celu i
+    // animujemy już tylko ostatnią stronę.
+    if ((index - from).abs() > 1) {
+      _exercisePageController.jumpToPage(index > from ? index - 1 : index + 1);
+    }
+    _currentExerciseIndex.value = index;
     _exercisePageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
   }
@@ -829,7 +868,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
               final completedSets = exercise.sets
                   .where((set) => set.completed)
                   .length;
-              final isCurrent = index == _currentExerciseIndex;
+              final isCurrent = index == _currentExerciseIndex.value;
               return ListTile(
                 selected: isCurrent,
                 selectedTileColor: AppColors.primary.withValues(alpha: 0.12),
@@ -874,6 +913,29 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
     if (selectedIndex == null || !mounted) return;
     _goToExercise(selectedIndex);
+  }
+}
+
+/// Utrzymuje stronę ćwiczenia przy życiu po zjechaniu z ekranu — powrót do
+/// niej nie odtwarza pól tekstowych ani miniatury od zera.
+class _KeepAlivePage extends StatefulWidget {
+  const _KeepAlivePage({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return RepaintBoundary(child: widget.child);
   }
 }
 
