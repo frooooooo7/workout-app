@@ -33,12 +33,44 @@ class _FeedSkeletonState extends State<FeedSkeleton>
       label: 'Wczytywanie feedu',
       child: FadeTransition(
         opacity: _controller,
-        child: ListView.separated(
+        child: ListView(
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          itemCount: widget.count,
-          separatorBuilder: (_, _) => const SizedBox(height: 14),
-          itemBuilder: (_, _) => const _SkeletonCard(),
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            const _SkeletonStrip(),
+            const SizedBox(height: 14),
+            for (var i = 0; i < widget.count; i++)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
+                child: _SkeletonCard(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonStrip extends StatelessWidget {
+  const _SkeletonStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 6,
+        separatorBuilder: (_, _) => const SizedBox(width: 20),
+        itemBuilder: (_, _) => const Column(
+          children: [
+            SizedBox(height: 2),
+            _Block(width: 54, height: 54, radius: 18),
+            SizedBox(height: 8),
+            _Block(width: 40, height: 9),
+          ],
         ),
       ),
     );
@@ -54,16 +86,16 @@ class _SkeletonCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.55)),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              _Block(width: 36, height: 36, radius: 11),
-              SizedBox(width: 11),
+              _Block(width: 54, height: 54, radius: 18),
+              SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -77,21 +109,19 @@ class _SkeletonCard extends StatelessWidget {
           SizedBox(height: 16),
           _Block(width: 170, height: 16),
           SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _Block(height: 30)),
-              SizedBox(width: 12),
-              Expanded(child: _Block(height: 30)),
-              SizedBox(width: 12),
-              Expanded(child: _Block(height: 30)),
-            ],
-          ),
+          _Block(height: 64, radius: 16),
           SizedBox(height: 16),
           _Block(height: 11),
           SizedBox(height: 7),
           _Block(width: 220, height: 11),
           SizedBox(height: 18),
-          _Block(height: 32),
+          Row(
+            children: [
+              Expanded(child: _Block(height: 42, radius: 21)),
+              SizedBox(width: 8),
+              Expanded(child: _Block(height: 42, radius: 21)),
+            ],
+          ),
         ],
       ),
     );

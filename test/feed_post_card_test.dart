@@ -5,6 +5,7 @@ import 'package:gym/features/feed/domain/models/feed_author.dart';
 import 'package:gym/features/feed/domain/models/feed_post.dart';
 import 'package:gym/features/feed/presentation/utils/feed_formatters.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_empty_state.dart';
+import 'package:gym/features/feed/presentation/widgets/feed_people_strip.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_post_card.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
@@ -95,17 +96,26 @@ void main() {
       );
     });
 
-    test('top exercise line and Polish plurals', () {
-      expect(
-        formatTopExerciseLine(_post().topExercises.single),
-        'Wyciskanie sztangi na ławce · 4 serie · 82,5 kg × 8',
+    test('best set picks strongest weighted set and Polish plurals', () {
+      const bench = TopExercise(
+        name: 'Wyciskanie',
+        completedSets: 4,
+        bestSet: TrainingSetMetrics(weightKg: 82.5, reps: 8),
       );
-      expect(
-        formatTopExerciseLine(
-          const TopExercise(name: 'Pompki', completedSets: 5),
-        ),
-        'Pompki · 5 serii',
+      const squat = TopExercise(
+        name: 'Przysiad',
+        completedSets: 4,
+        bestSet: TrainingSetMetrics(weightKg: 100, reps: 3),
       );
+      const pushUps = TopExercise(
+        name: 'Pompki',
+        completedSets: 5,
+        bestSet: TrainingSetMetrics(reps: 40),
+      );
+      // 82,5×(1+8/30)=104,5 < 100×(1+3/30)=110.
+      expect(pickBestSetExercise(const [bench, squat, pushUps]), squat);
+      expect(pickBestSetExercise(const [pushUps]), isNull);
+      expect(pickBestSetExercise(const []), isNull);
       expect(formatKudosCount(1), '1 kudos');
       expect(formatKudosCount(3), '3 kudosy');
       expect(formatKudosCount(12), '12 kudosów');
@@ -133,10 +143,9 @@ void main() {
       expect(find.text('57 min'), findsOneWidget);
       expect(find.text('5,23 t'), findsOneWidget);
       expect(find.text('18'), findsOneWidget);
-      expect(
-        find.text('Wyciskanie sztangi na ławce · 4 serie · 82,5 kg × 8'),
-        findsOneWidget,
-      );
+      expect(find.text('NAJLEPSZA SERIA'), findsOneWidget);
+      expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
+      expect(find.text('82,5 kg × 8'), findsOneWidget);
       expect(find.text('Klatka'), findsOneWidget);
       expect(find.text('3 kudosy'), findsOneWidget);
       expect(find.text('1 komentarz'), findsOneWidget);
@@ -217,5 +226,47 @@ void main() {
 
     await tester.tap(find.text('Znajdź znajomych'));
     expect(findFriendsTaps, 1);
+  });
+
+  testWidgets('people strip lists distinct other authors after find tile',
+      (tester) async {
+    var findTaps = 0;
+    final tapped = <String>[];
+    FeedPost post(String id, String authorId, String name, {bool own = false}) =>
+        FeedPost(
+          id: id,
+          author: FeedAuthor(id: authorId, firstName: name, lastName: 'X'),
+          title: 'T',
+          startedAt: DateTime(2026, 9, 15, 10),
+          isOwn: own,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FeedPeopleStrip(
+            now: DateTime(2026, 9, 15, 20),
+            posts: [
+              post('p1', 'me', 'Ja', own: true),
+              post('p2', 'u1', 'Ola'),
+              post('p3', 'u1', 'Ola'),
+              post('p4', 'u2', 'Piotr'),
+            ],
+            onFindPeople: () => findTaps++,
+            onAuthorTap: (author) => tapped.add(author.id),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Znajdź'), findsOneWidget);
+    expect(find.text('Ja'), findsNothing);
+    expect(find.text('Ola'), findsOneWidget);
+    expect(find.text('Piotr'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('feed-strip-find-people')));
+    await tester.tap(find.text('Piotr'));
+    expect(findTaps, 1);
+    expect(tapped, ['u2']);
   });
 }

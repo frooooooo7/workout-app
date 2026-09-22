@@ -20,25 +20,27 @@ String formatFeedTimestamp(DateTime at, {DateTime? now}) {
   return '$date ${local.year}, $clock';
 }
 
-/// `Wyciskanie sztangi na ławce · 4 serie · 82,5 kg × 8`.
-String formatTopExerciseLine(TopExercise exercise) {
-  final parts = <String>[
-    exercise.name,
-    formatSetsCount(exercise.completedSets),
-  ];
-  final best = formatSetMetrics(exercise.bestSet);
-  if (best != '—') parts.add(best);
-  return parts.join(' · ');
+/// Ćwiczenie z najmocniejszą serią posta (szacowany 1RM wg Epleya), żeby
+/// porównywać różne ciężary i liczby powtórzeń. Tylko serie z ciężarem —
+/// bez ciężaru nie ma czym się pochwalić na karcie; wtedy `null`.
+TopExercise? pickBestSetExercise(List<TopExercise> exercises) {
+  TopExercise? best;
+  var bestScore = 0.0;
+  for (final exercise in exercises) {
+    final weight = exercise.bestSet?.weightKg;
+    if (weight == null || weight <= 0) continue;
+    final reps = exercise.bestSet?.reps ?? 1;
+    final score = weight * (1 + reps / 30);
+    if (score > bestScore) {
+      best = exercise;
+      bestScore = score;
+    }
+  }
+  return best;
 }
-
-String formatSetsCount(int count) =>
-    '$count ${polishPlural(count, 'seria', 'serie', 'serii')}';
 
 String formatKudosCount(int count) =>
     '$count ${polishPlural(count, 'kudos', 'kudosy', 'kudosów')}';
 
 String formatCommentsCount(int count) =>
     '$count ${polishPlural(count, 'komentarz', 'komentarze', 'komentarzy')}';
-
-String formatExercisesCount(int count) =>
-    '$count ${polishPlural(count, 'ćwiczenie', 'ćwiczenia', 'ćwiczeń')}';

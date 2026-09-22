@@ -7,13 +7,13 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sync_status_indicator.dart';
 import '../../../profile/presentation/bloc/follow_cubit.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
-import '../../../training/presentation/widgets/training_header.dart';
 import '../../domain/models/feed_post.dart';
 import '../../domain/repositories/feed_repository.dart';
 import '../bloc/feed_cubit.dart';
 import '../bloc/feed_state.dart';
 import '../utils/feed_navigation.dart';
 import '../widgets/feed_empty_state.dart';
+import '../widgets/feed_people_strip.dart';
 import '../widgets/feed_post_card.dart';
 import '../widgets/feed_skeleton.dart';
 import '../widgets/feed_status_views.dart';
@@ -107,8 +107,8 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _FeedHeader(onFindPeople: _openFindPeople),
-                const SizedBox(height: 12),
+                const _FeedHeader(),
+                const SizedBox(height: 8),
                 Expanded(
                   child: BlocBuilder<FeedCubit, FeedState>(
                     builder: (context, state) => _buildBody(context, state),
@@ -182,7 +182,8 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     }
 
     final hasBanner = state.staleMessage != null;
-    final bannerOffset = hasBanner ? 1 : 0;
+    // Pasek osób + opcjonalny baner nad postami.
+    final headerCount = 1 + (hasBanner ? 1 : 0);
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
@@ -190,16 +191,27 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
       child: ListView.builder(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 32 + bottomInset),
-        itemCount: state.items.length + bannerOffset + 1,
+        padding: EdgeInsets.only(bottom: 32 + bottomInset),
+        itemCount: state.items.length + headerCount + 1,
         itemBuilder: (context, index) {
-          if (hasBanner && index == 0) {
+          if (index == 0) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.only(bottom: 14),
+              child: FeedPeopleStrip(
+                posts: state.items,
+                onFindPeople: _openFindPeople,
+                onAuthorTap: (author) =>
+                    openAuthorProfile(context, author.id, isOwn: false),
+              ),
+            );
+          }
+          if (hasBanner && index == 1) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: FeedStaleBanner(message: state.staleMessage!),
             );
           }
-          final postIndex = index - bannerOffset;
+          final postIndex = index - headerCount;
           if (postIndex == state.items.length) {
             return _FeedFooter(
               state: state,
@@ -209,7 +221,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
           final post = state.items[postIndex];
           return Padding(
             key: ValueKey('feed-post-${post.id}'),
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
             child: _FeedPostItem(
               post: post,
               repository: widget.repository,
@@ -256,14 +268,12 @@ class _FeedPostItem extends StatelessWidget {
 }
 
 class _FeedHeader extends StatelessWidget {
-  const _FeedHeader({required this.onFindPeople});
-
-  final VoidCallback onFindPeople;
+  const _FeedHeader();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Row(
         children: [
           const Expanded(
@@ -274,14 +284,14 @@ class _FeedHeader extends StatelessWidget {
                   'Aktywność',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 28,
+                    fontSize: 30,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                    letterSpacing: -0.8,
                   ),
                 ),
-                SizedBox(height: 3),
+                SizedBox(height: 2),
                 Text(
-                  'Treningi Twoje i obserwowanych osób',
+                  'Co słychać u Ciebie i znajomych',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -290,13 +300,6 @@ class _FeedHeader extends StatelessWidget {
               ],
             ),
           ),
-          HeaderIconButton(
-            key: const ValueKey('feed-find-people-button'),
-            tooltip: 'Znajdź osoby',
-            icon: Icons.person_add_alt_1_rounded,
-            onTap: onFindPeople,
-          ),
-          const SizedBox(width: 10),
           const SyncStatusIndicator(),
         ],
       ),
