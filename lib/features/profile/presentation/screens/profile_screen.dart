@@ -129,46 +129,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AppTabBackground(
-        child: MultiBlocListener(
-          listeners: [
-            BlocListener<ProfileCubit, ProfileState>(
-              listenWhen: (previous, current) =>
-                  current.errorSeq != previous.errorSeq &&
-                  current.profile != null &&
-                  current.error != null,
-              listener: (context, state) => _showSnack(context, state.error!),
-            ),
-            BlocListener<ProfilePostsCubit, ProfilePostsState>(
-              listenWhen: (previous, current) =>
-                  current.notice != null && current.notice != previous.notice,
-              listener: (context, state) =>
-                  _showSnack(context, state.notice!.message),
-            ),
-          ],
-          child: BlocBuilder<ProfileCubit, ProfileState>(
-            builder: (context, state) {
-              final profile = state.profile;
-              if (profile == null) {
-                if (state.error != null && !state.loading) {
-                  return _ErrorView(
-                    message: state.error!,
-                    offline: state.offline,
-                    onRetry: () {
-                      context.read<ProfileCubit>().load();
-                      context.read<ProfilePostsCubit>().load();
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppTabHeader(
+                title: 'Profil',
+                actions: [
+                  AppTabHeaderButton(
+                    icon: Icons.settings_outlined,
+                    tooltip: 'Ustawienia profilu',
+                    onPressed: () => context.push('/app/profile/settings'),
+                  ),
+                ],
+              ),
+              const AppTabScrollEdge(),
+              Expanded(
+                child: MultiBlocListener(
+                  listeners: [
+                    BlocListener<ProfileCubit, ProfileState>(
+                      listenWhen: (previous, current) =>
+                          current.errorSeq != previous.errorSeq &&
+                          current.profile != null &&
+                          current.error != null,
+                      listener: (context, state) =>
+                          _showSnack(context, state.error!),
+                    ),
+                    BlocListener<ProfilePostsCubit, ProfilePostsState>(
+                      listenWhen: (previous, current) =>
+                          current.notice != null &&
+                          current.notice != previous.notice,
+                      listener: (context, state) =>
+                          _showSnack(context, state.notice!.message),
+                    ),
+                  ],
+                  child: BlocBuilder<ProfileCubit, ProfileState>(
+                    builder: (context, state) {
+                      final profile = state.profile;
+                      if (profile == null) {
+                        if (state.error != null && !state.loading) {
+                          return _ErrorView(
+                            message: state.error!,
+                            offline: state.offline,
+                            onRetry: () {
+                              context.read<ProfileCubit>().load();
+                              context.read<ProfilePostsCubit>().load();
+                            },
+                          );
+                        }
+                        return const ProfileSkeleton();
+                      }
+                      return _ProfileContent(
+                        profile: profile,
+                        state: state,
+                        feedRepository: widget.feedRepository,
+                        onRefresh: _refreshAll,
+                        onEditProfile: () => _openEditProfile(context, profile),
+                      );
                     },
-                  );
-                }
-                return const ProfileSkeleton();
-              }
-              return _ProfileContent(
-                profile: profile,
-                state: state,
-                feedRepository: widget.feedRepository,
-                onRefresh: _refreshAll,
-                onEditProfile: () => _openEditProfile(context, profile),
-              );
-            },
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -203,14 +226,6 @@ class _ProfileContent extends StatelessWidget {
           SliverToBoxAdapter(
             child: ProfileHeroHeader(
               profile: profile,
-              title: 'Profil',
-              actions: [
-                AppTabHeaderButton(
-                  icon: Icons.settings_outlined,
-                  tooltip: 'Ustawienia profilu',
-                  onPressed: () => context.push('/app/profile/settings'),
-                ),
-              ],
               onAddBioTap: onEditProfile,
               primaryAction: ProfileEditButton(onPressed: onEditProfile),
               stats: ProfileStatsRow(

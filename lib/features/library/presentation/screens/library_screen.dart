@@ -142,6 +142,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    const AppTabScrollEdge(),
                     Expanded(
                       child: BlocBuilder<LibraryCubit, LibraryState>(
                         buildWhen: (previous, current) =>

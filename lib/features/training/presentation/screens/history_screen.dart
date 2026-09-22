@@ -121,6 +121,7 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                     onMonthSelected: (month) => cubit.selectMonth(month),
                   ),
                   const SizedBox(height: 12),
+                  const AppTabScrollEdge(),
 
                   // Main Content — Vertical scroll view with swipe gesture for months
                   Expanded(

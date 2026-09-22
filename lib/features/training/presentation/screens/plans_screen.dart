@@ -58,6 +58,7 @@ class _PlansScreenContent extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
+              const AppTabScrollEdge(),
               const Expanded(child: TrainingPlansTab()),
             ],
           ),

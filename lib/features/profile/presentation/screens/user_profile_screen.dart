@@ -106,29 +106,47 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: AppTabBackground(
-          child: FollowFailureListener(
-            child: BlocListener<ProfilePostsCubit, ProfilePostsState>(
-              listenWhen: (previous, current) =>
-                  current.notice != null && current.notice != previous.notice,
-              listener: (context, state) => ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(content: Text(state.notice!.message))),
-              child: FutureBuilder<UserProfile>(
-                future: _future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return ProfileSkeleton(leading: _backButton(context));
-                  }
-                  final profile = snapshot.data;
-                  if (snapshot.hasError || profile == null) {
-                    return _ErrorView(
-                      back: _backButton(context),
-                      onRetry: () => setState(_load),
-                    );
-                  }
-                  return _content(context, profile);
-                },
-              ),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppTabHeader(
+                  title: '',
+                  leading: _backButton(context),
+                  showSync: false,
+                ),
+                const AppTabScrollEdge(),
+                Expanded(
+                  child: FollowFailureListener(
+                    child: BlocListener<ProfilePostsCubit, ProfilePostsState>(
+                      listenWhen: (previous, current) =>
+                          current.notice != null &&
+                          current.notice != previous.notice,
+                      listener: (context, state) =>
+                          ScaffoldMessenger.of(context)
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text(state.notice!.message)),
+                            ),
+                      child: FutureBuilder<UserProfile>(
+                        future: _future,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const ProfileSkeleton();
+                          }
+                          final profile = snapshot.data;
+                          if (snapshot.hasError || profile == null) {
+                            return _ErrorView(onRetry: () => setState(_load));
+                          }
+                          return _content(context, profile);
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -153,8 +171,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           SliverToBoxAdapter(
             child: ProfileHeroHeader(
               profile: profile,
-              leading: _backButton(context),
-              showSync: false,
               followsYou: !isMe && profile.isFollowedBy,
               primaryAction: isMe
                   ? null
@@ -204,52 +220,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 }
 
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.back, required this.onRetry});
+  const _ErrorView({required this.onRetry});
 
-  final Widget back;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: AppSpacing.xs),
-            child: back,
-          ),
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.person_off_outlined,
-                      color: AppColors.textSecondary,
-                      size: 36,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    const Text(
-                      'Nie udało się wczytać profilu.',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    FilledButton(
-                      onPressed: onRetry,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, AppSpacing.minTapTarget),
-                      ),
-                      child: const Text('Spróbuj ponownie'),
-                    ),
-                  ],
-                ),
-              ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.person_off_outlined,
+              color: AppColors.textSecondary,
+              size: 36,
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Nie udało się wczytać profilu.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            FilledButton(
+              onPressed: onRetry,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, AppSpacing.minTapTarget),
+              ),
+              child: const Text('Spróbuj ponownie'),
+            ),
+          ],
+        ),
       ),
     );
   }

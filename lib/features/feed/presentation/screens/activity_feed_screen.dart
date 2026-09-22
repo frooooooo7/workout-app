@@ -109,6 +109,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const AppTabHeader(title: 'Aktywność'),
+                  const AppTabScrollEdge(),
                   Expanded(
                     child: BlocBuilder<FeedCubit, FeedState>(
                       builder: (context, state) => _buildBody(context, state),

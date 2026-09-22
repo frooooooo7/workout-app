@@ -9,35 +9,20 @@ import '../../../feed/presentation/widgets/post_author_row.dart';
 import '../../domain/models/user_profile.dart';
 import 'follow_button.dart';
 
-/// Nagłówek profilu: wspólny [AppTabHeader], awatar, imię, @handle, opis,
-/// główna akcja i liczniki. Tło (poświatę) daje [AppTabBackground] ekranu.
+/// Nagłówek profilu: awatar, imię, @handle, opis, główna akcja i liczniki.
+/// Pasek z tytułem ([AppTabHeader]) jest przypięty nad listą w ekranie,
+/// a tło (poświatę) daje [AppTabBackground].
 class ProfileHeroHeader extends StatelessWidget {
   const ProfileHeroHeader({
     super.key,
     required this.profile,
-    this.title,
-    this.leading,
-    this.actions = const [],
     this.primaryAction,
     this.stats,
     this.followsYou = false,
     this.onAddBioTap,
-    this.showSync = true,
   });
 
   final UserProfile profile;
-
-  /// Tytuł paska górnego (np. „Profil”); `null` — pusty pasek.
-  final String? title;
-
-  /// Wskaźnik synchronizacji w pasku (tylko własny profil).
-  final bool showSync;
-
-  /// Np. przycisk „Wstecz” na cudzym profilu.
-  final Widget? leading;
-
-  /// Ikony po prawej stronie paska (synchronizacja, ustawienia).
-  final List<Widget> actions;
 
   /// „Edytuj profil” albo „Obserwuj” — na pełną szerokość.
   final Widget? primaryAction;
@@ -55,116 +40,107 @@ class ProfileHeroHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final bio = profile.bio?.trim() ?? '';
 
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-        child: Column(
-          children: [
-            AppTabHeader(
-              title: title ?? '',
-              leading: leading,
-              actions: actions,
-              showSync: showSync,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.pageGutter,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.pageGutter,
-              ),
-              child: Column(
-                children: [
-                  const SizedBox(height: AppSpacing.xs),
-                  GradientAvatarRing(
-                    radius: 46,
-                    child: UserAvatar.fromNames(
-                      firstName: profile.firstName,
-                      lastName: profile.lastName,
-                      imageUrl: profile.avatarUrl,
-                      size: UserAvatarSize.lg,
+            child: Column(
+              children: [
+                const SizedBox(height: AppSpacing.xs),
+                GradientAvatarRing(
+                  radius: 46,
+                  child: UserAvatar.fromNames(
+                    firstName: profile.firstName,
+                    lastName: profile.lastName,
+                    imageUrl: profile.avatarUrl,
+                    size: UserAvatarSize.lg,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  profile.fullName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxs),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xxs,
+                  children: [
+                    Text(
+                      profile.displayHandle,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (followsYou) const FollowsYouChip(),
+                  ],
+                ),
+                if (bio.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Text(
+                      bio,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                        height: 1.45,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    profile.fullName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
-                      height: 1.2,
-                    ),
-                  ),
+                ] else if (onAddBioTap != null) ...[
                   const SizedBox(height: AppSpacing.xxs),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: AppSpacing.xs,
-                    runSpacing: AppSpacing.xxs,
-                    children: [
-                      Text(
-                        profile.displayHandle,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                  TextButton.icon(
+                    key: const ValueKey('profile-add-bio'),
+                    onPressed: onAddBioTap,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Dodaj opis profilu'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primaryVariant,
+                      minimumSize: const Size(0, AppSpacing.minTapTarget),
+                      textStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
-                      if (followsYou) const FollowsYouChip(),
-                    ],
+                    ),
                   ),
-                  if (bio.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: Text(
-                        bio,
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
-                          height: 1.45,
-                        ),
-                      ),
-                    ),
-                  ] else if (onAddBioTap != null) ...[
-                    const SizedBox(height: AppSpacing.xxs),
-                    TextButton.icon(
-                      key: const ValueKey('profile-add-bio'),
-                      onPressed: onAddBioTap,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Dodaj opis profilu'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primaryVariant,
-                        minimumSize: const Size(0, AppSpacing.minTapTarget),
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (primaryAction != null) ...[
-                    SizedBox(
-                      height: bio.isEmpty && onAddBioTap != null
-                          ? AppSpacing.xs
-                          : AppSpacing.lg,
-                    ),
-                    SizedBox(width: double.infinity, child: primaryAction),
-                  ],
-                  if (stats != null) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    stats!,
-                  ],
                 ],
-              ),
+                if (primaryAction != null) ...[
+                  SizedBox(
+                    height: bio.isEmpty && onAddBioTap != null
+                        ? AppSpacing.xs
+                        : AppSpacing.lg,
+                  ),
+                  SizedBox(width: double.infinity, child: primaryAction),
+                ],
+                if (stats != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  stats!,
+                ],
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
