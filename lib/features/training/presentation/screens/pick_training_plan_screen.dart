@@ -7,7 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
-import 'ongoing_workout_screen.dart';
+import '../utils/start_workout.dart';
 
 class PickTrainingPlanScreen extends StatelessWidget {
   const PickTrainingPlanScreen({super.key});
@@ -223,26 +223,6 @@ class _ExpandablePlanCardState extends State<_ExpandablePlanCard> {
     );
   }
 
-  Future<void> _startPlan(BuildContext context, CustomTrainingPlan plan) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final sessionCubit = context.read<TrainingSessionCubit>();
-    final session = await sessionCubit.startFromPlan(plan);
-    if (!context.mounted) return;
-    final selected = session ?? sessionCubit.state.activeConflict;
-    if (session == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Masz juz aktywna sesje. Wznawiam obecny trening.'),
-        ),
-      );
-    }
-    if (selected == null) return;
-    context.pushReplacement(
-      '/app/training/ongoing-workout',
-      extra: OngoingWorkoutArgs(
-        initialSession: selected,
-        sessionCubit: sessionCubit,
-      ),
-    );
-  }
+  Future<void> _startPlan(BuildContext context, CustomTrainingPlan plan) =>
+      startPlanWorkout(context, plan, replace: true);
 }

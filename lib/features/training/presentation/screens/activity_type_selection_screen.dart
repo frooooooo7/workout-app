@@ -7,8 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/training_session_cubit.dart';
+import '../utils/start_workout.dart';
 import '../widgets/activity_type_option_tile.dart';
-import 'ongoing_workout_screen.dart';
 
 class ActivityTypeSelectionScreen extends StatelessWidget {
   const ActivityTypeSelectionScreen({super.key});
@@ -26,30 +26,11 @@ class ActivityTypeSelectionScreen extends StatelessWidget {
 class _ActivityTypeSelectionView extends StatelessWidget {
   const _ActivityTypeSelectionView();
 
-  Future<void> _startCustom(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final sessionCubit = context.read<TrainingSessionCubit>();
-    final session = await sessionCubit.startCustom();
-    if (!context.mounted) return;
-    final selected = session ?? sessionCubit.state.activeConflict;
-    if (selected == null) return;
-    if (session == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Masz juz aktywna sesje. Wznawiam obecny trening.',
-          ),
-        ),
-      );
-    }
-    context.pushReplacement(
-      '/app/training/ongoing-workout',
-      extra: OngoingWorkoutArgs(
-        initialSession: selected,
-        sessionCubit: sessionCubit,
-      ),
-    );
-  }
+  Future<void> _startCustom(BuildContext context) => startWorkout(
+    context,
+    start: (cubit) => cubit.startCustom(),
+    replace: true,
+  );
 
   @override
   Widget build(BuildContext context) {

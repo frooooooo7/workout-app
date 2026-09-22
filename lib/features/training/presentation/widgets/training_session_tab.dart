@@ -11,6 +11,7 @@ import '../bloc/training_session_cubit.dart';
 import '../screens/create_plan_screen.dart';
 import '../screens/ongoing_workout_screen.dart';
 import '../screens/plan_details_screen.dart';
+import '../utils/start_workout.dart';
 import 'training_active_session_card.dart';
 import 'training_last_session_section.dart';
 import 'training_today_plan_section.dart';
@@ -94,41 +95,9 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
   }
 
   Future<void> _startPlan(BuildContext context, CustomTrainingPlan plan) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final sessionCubit = context.read<TrainingSessionCubit>();
     final historyCubit = context.read<TrainingHistoryCubit>();
-    final session = await sessionCubit.startFromPlan(plan);
-    if (!context.mounted) return;
-    if (session == null) {
-      final conflict = sessionCubit.state.activeConflict;
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Masz juz aktywna sesje. Wznow ja albo zakoncz przed startem nowej.',
-          ),
-        ),
-      );
-      if (conflict != null) {
-        context.push(
-          '/app/training/ongoing-workout',
-          extra: OngoingWorkoutArgs(
-            initialSession: conflict,
-            sessionCubit: sessionCubit,
-          ),
-        );
-      }
-      return;
-    }
-    await context.push(
-      '/app/training/ongoing-workout',
-      extra: OngoingWorkoutArgs(
-        initialSession: session,
-        sessionCubit: sessionCubit,
-      ),
-    );
-    if (!context.mounted) return;
-    sessionCubit.refresh();
-    historyCubit.refresh();
+    final opened = await startPlanWorkout(context, plan);
+    if (opened) historyCubit.refresh();
   }
 
   Future<void> _repeatHistoryItem(

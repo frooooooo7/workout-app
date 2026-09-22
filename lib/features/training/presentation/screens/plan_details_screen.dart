@@ -6,10 +6,10 @@ import '../../../library/data/exercise_image_uri.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
+import '../utils/start_workout.dart';
 import '../widgets/plan_days_list.dart';
 import '../widgets/plan_details_stats_card.dart';
 import 'create_plan_screen.dart';
-import 'ongoing_workout_screen.dart';
 
 class PlanDetailsArgs {
   final CustomTrainingPlan plan;
@@ -91,41 +91,7 @@ class PlanDetailsScreen extends StatelessWidget {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    final sessionCubit = context.read<TrainingSessionCubit>();
-                    final session = await sessionCubit.startFromPlan(
-                      currentPlan,
-                    );
-                    if (!context.mounted) return;
-                    if (session == null) {
-                      final conflict = sessionCubit.state.activeConflict;
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Masz juz aktywna sesje. Wznow ja albo zakoncz przed startem nowej.',
-                          ),
-                        ),
-                      );
-                      if (conflict != null) {
-                        context.push(
-                          '/app/training/ongoing-workout',
-                          extra: OngoingWorkoutArgs(
-                            initialSession: conflict,
-                            sessionCubit: sessionCubit,
-                          ),
-                        );
-                      }
-                      return;
-                    }
-                    context.push(
-                      '/app/training/ongoing-workout',
-                      extra: OngoingWorkoutArgs(
-                        initialSession: session,
-                        sessionCubit: sessionCubit,
-                      ),
-                    );
-                  },
+                  onPressed: () => startPlanWorkout(context, currentPlan),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: const Text('Rozpocznij trening'),
                   style: ElevatedButton.styleFrom(
