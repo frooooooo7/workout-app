@@ -56,15 +56,7 @@ class TokenStorage {
     _userGeneration++;
     _userCache = user;
     _userLoaded = true;
-    await _storage.write(
-      key: _userKey,
-      value: jsonEncode({
-        'id': user.id,
-        'email': user.email,
-        'firstName': user.firstName,
-        'lastName': user.lastName,
-      }),
-    );
+    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
   }
 
   Future<AuthUser?> readUser() async {

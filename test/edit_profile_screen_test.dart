@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/network/api_client.dart';
+import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
@@ -24,21 +25,27 @@ class _FakeEditRepository extends Fake implements ProfileRepository {
   var uploadCalls = 0;
   var removeCalls = 0;
   Object? uploadError;
+  Object? updateError;
 
   @override
   Future<UserProfile> updateProfile({
     String? firstName,
     String? lastName,
     String? bio,
+    String? handle,
+    ProfileDetails? details,
   }) async {
+    if (updateError != null) throw updateError!;
     updateCalls.add({
       'firstName': firstName,
       'lastName': lastName,
       'bio': bio,
+      'handle': ?handle,
     });
     return _profile.copyWith(
       firstName: firstName,
       lastName: lastName,
+      handle: handle,
       bio: bio,
       clearBio: bio != null && bio.isEmpty,
     );
@@ -207,6 +214,63 @@ void main() {
     expect(repo.removeCalls, 1);
     expect(repo.updateCalls, isEmpty);
     expect(cubit.state.saved?.avatarUrl, isNull);
+    await cubit.close();
+  });
+
+  testWidgets('changed handle is validated and sent normalized', (
+    tester,
+  ) async {
+    final repo = _FakeEditRepository();
+    final cubit = EditProfileCubit(repo, initialProfile: _profile);
+    addTearDown(cubit.close);
+    await pumpScreen(tester, cubit);
+
+    expect(find.text('jan.kowalski'), findsOneWidget);
+
+    await tester.enterText(find.byKey(editProfileHandleFieldKey), '_jan');
+    await tester.pump();
+    expect(find.text('Nick musi zaczynać się literą lub cyfrą.'), findsOneWidget);
+    expect(_saveButton(tester).onPressed, isNull);
+
+    await tester.enterText(find.byKey(editProfileHandleFieldKey), ' @Jan.Silny');
+    await tester.pump();
+    expect(_saveButton(tester).onPressed, isNotNull);
+
+    await tester.tap(find.byKey(editProfileSaveButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(repo.updateCalls.single['handle'], 'jan.silny');
+  });
+
+  test('an old generated handle over the limit does not block saving',
+      () async {
+    final repo = _FakeEditRepository();
+    final cubit = EditProfileCubit(
+      repo,
+      initialProfile: _profile.copyWith(
+        handle: 'aleksandra.wisniewska.kowalska_a1b2c3',
+      ),
+    );
+
+    cubit.bioChanged('Nowe bio');
+
+    expect(cubit.state.handleError, isNull);
+    expect(cubit.state.canSave, isTrue);
+    await cubit.save();
+    expect(repo.updateCalls.single.containsKey('handle'), isFalse);
+    await cubit.close();
+  });
+
+  test('taken handle shows a Polish error', () async {
+    final repo = _FakeEditRepository()
+      ..updateError = const ApiException('handle_taken', statusCode: 409);
+    final cubit = EditProfileCubit(repo, initialProfile: _profile);
+
+    cubit.handleChanged('anna.nowak');
+    await cubit.save();
+
+    expect(cubit.state.error, 'Ten nick jest już zajęty. Wybierz inny.');
+    expect(cubit.state.saved, isNull);
     await cubit.close();
   });
 }

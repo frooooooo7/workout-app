@@ -6,6 +6,8 @@ import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/auth/presentation/screens/login_form_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/onboarding/presentation/bloc/onboarding_cubit.dart';
+import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
@@ -31,12 +33,14 @@ import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
+import '../../features/profile/presentation/screens/profile_details_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_settings_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
@@ -87,15 +91,24 @@ GoRouter buildRouter({
     navigatorKey: appRootNavigatorKey,
     initialLocation: initialLocation,
     redirect: (_, state) async {
-      final isProtectedRoute = state.uri.path.startsWith('/app/');
-      if (!isProtectedRoute || ServiceLocator.currentUser.value != null) {
-        return null;
+      final path = state.uri.path;
+      final isProtectedRoute = path.startsWith('/app/');
+      final isOnboarding = path == '/onboarding';
+      if (!isProtectedRoute && !isOnboarding) return null;
+
+      var user = ServiceLocator.currentUser.value;
+      if (user == null) {
+        user = await resolveUser();
+        if (user == null) return '/login';
+        ServiceLocator.currentUser.value = user;
       }
 
-      final user = await resolveUser();
-      if (user == null) return '/login';
-
-      ServiceLocator.currentUser.value = user;
+      // Świeże konto najpierw przechodzi onboarding profilu (chyba że
+      // w tej sesji odłożyło go na później).
+      final needsOnboarding = !user.onboardingCompleted &&
+          !ServiceLocator.isOnboardingDeferred(user.id);
+      if (isProtectedRoute && needsOnboarding) return '/onboarding';
+      if (isOnboarding && user.onboardingCompleted) return '/app/training';
       return null;
     },
     routes: [
@@ -116,6 +129,29 @@ GoRouter buildRouter({
           ),
           GoRoute(path: 'register', builder: (_, s) => const RegisterScreen()),
         ],
+      ),
+
+      // Onboarding profilu po rejestracji — zalogowany, ale poza shellem.
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, s) {
+          final user = ServiceLocator.currentUser.value;
+          if (user == null) return const _LoadingScreen();
+          return BlocProvider(
+            create: (_) => OnboardingCubit(
+              _profileRepositoryForCurrentUser(),
+              onCompleted: (_) =>
+                  ServiceLocator.markOnboardingCompleted(user.id),
+            )..load(),
+            child: OnboardingScreen(
+              onFinish: () => context.go('/app/training'),
+              onDefer: () {
+                ServiceLocator.deferOnboarding(user.id);
+                context.go('/app/training');
+              },
+            ),
+          );
+        },
       ),
 
       // App shell — authenticated zone
@@ -356,6 +392,16 @@ GoRouter buildRouter({
                         child: const EditProfileScreen(),
                       );
                     },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'details',
+                    builder: (_, s) => BlocProvider(
+                      create: (_) => ProfileDetailsCubit(
+                        _profileRepositoryForCurrentUser(),
+                      ),
+                      child: const ProfileDetailsScreen(),
+                    ),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,

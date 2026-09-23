@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../domain/models/user_profile.dart';
+import '../utils/profile_details_draft.dart';
 
 const kProfileNameMaxLength = 50;
 const kProfileBioMaxLength = 120;
@@ -13,6 +14,7 @@ class EditProfileState {
     this.loadError,
     this.firstName = '',
     this.lastName = '',
+    this.handle = '',
     this.bio = '',
     this.avatarBytes,
     this.avatarFilename,
@@ -27,6 +29,7 @@ class EditProfileState {
       initial: profile,
       firstName: profile.firstName,
       lastName: profile.lastName,
+      handle: profile.handle,
       bio: profile.bio ?? '',
     );
   }
@@ -38,6 +41,7 @@ class EditProfileState {
 
   final String firstName;
   final String lastName;
+  final String handle;
   final String bio;
 
   /// Nowo wybrane zdjęcie (jeszcze niewysłane).
@@ -59,12 +63,19 @@ class EditProfileState {
   String? get lastNameError =>
       _nameError(lastName, empty: 'Podaj nazwisko.', tooLong: 'Nazwisko');
 
+  /// Tylko zmieniony nick — stare, generowane nicki bywają dłuższe niż
+  /// obecny limit i nie mogą blokować zapisu innych pól.
+  String? get handleError => handleChanged ? handleInputError(handle) : null;
+
   String? get bioError => bio.trim().length > kProfileBioMaxLength
       ? 'Opis może mieć maksymalnie $kProfileBioMaxLength znaków.'
       : null;
 
   bool get isValid =>
-      firstNameError == null && lastNameError == null && bioError == null;
+      firstNameError == null &&
+      lastNameError == null &&
+      handleError == null &&
+      bioError == null;
 
   bool get firstNameChanged =>
       initial != null && firstName.trim() != initial!.firstName;
@@ -72,9 +83,13 @@ class EditProfileState {
   bool get lastNameChanged =>
       initial != null && lastName.trim() != initial!.lastName;
 
+  bool get handleChanged =>
+      initial != null && normalizeHandle(handle) != initial!.handle;
+
   bool get bioChanged => initial != null && bio.trim() != (initial!.bio ?? '');
 
-  bool get hasFieldChanges => firstNameChanged || lastNameChanged || bioChanged;
+  bool get hasFieldChanges =>
+      firstNameChanged || lastNameChanged || handleChanged || bioChanged;
 
   bool get hasAvatarChange =>
       initial != null &&
@@ -108,6 +123,7 @@ class EditProfileState {
     bool clearLoadError = false,
     String? firstName,
     String? lastName,
+    String? handle,
     String? bio,
     Uint8List? avatarBytes,
     String? avatarFilename,
@@ -124,6 +140,7 @@ class EditProfileState {
       loadError: clearLoadError ? null : (loadError ?? this.loadError),
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
+      handle: handle ?? this.handle,
       bio: bio ?? this.bio,
       avatarBytes: clearAvatarBytes ? null : (avatarBytes ?? this.avatarBytes),
       avatarFilename:

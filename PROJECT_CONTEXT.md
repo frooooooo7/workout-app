@@ -120,7 +120,7 @@ Wszystko poza `/health` i `/ready` wymaga `Authorization: Bearer <jwt>`. **Wszys
 | Training plans | `GET/POST /training-plans`, `PUT/DELETE /training-plans/:id` (zagnieżdżone ćwiczenia i serie, `clientId` do sync) |
 | Training sessions (zapis) | `POST /training-sessions` (upsert po `clientId`), `PUT /training-sessions/:id` (także edycja zakończonej sesji), `DELETE /training-sessions/:id` i `DELETE /training-sessions/by-client-id/:clientId` (204, nagrobek), `GET /training-sessions/active`, `GET /training-sessions/history` (keyset: `limit` ≤ 100, `cursor`, `updatedSince` → `{ items, nextCursor, hasMore, deleted[] }`; `deleted` tylko na 1. stronie z `updatedSince`). Zapis usuniętej sesji → **410 `session_deleted`**. Niewidoczne już `exerciseId` / `planId` (usunięte, zanim sesja offline dotarła) zapisywane są jako `NULL` — snapshot nazw zostaje, zapis nie jest odrzucany |
 | Training history (odczyt) | `GET /training-history`, `GET /training-history/:sessionId` + aliasy tylko w v1: `GET /api/v1/training-sessions[/:sessionId]` (router zapisu ma pierwszeństwo, więc `/training-sessions/history` i `/active` trafiają do zapisu); paginacja kursorem, filtry, ETag / If-None-Match → 304 (klient nie wysyła `If-None-Match` — ma własny cache SWR) |
-| Profile / social | `GET/PATCH /profile/me` (`firstName`, `lastName` 1–50, `bio` ≤ 120, pusty → `null`), `POST/DELETE /profile/me/avatar` (multipart, pole `avatar`, jpg/png/webp ≤ 5 MB → profil; błędy `missing_image`, `invalid_file`), `GET /profile/following|followers`, `GET /users/search`, `GET /users/:userId/profile` (+ `isFollowing`, `isFollowedBy`), `GET /users/:userId/following|followers` (`limit`, `offset`; pozycje z `isFollowing`), `POST/DELETE /users/:userId/follow` → `{ isFollowing, followersCount }` (`cannot_follow_self`, `user_not_found`, `429`), `GET /users/:userId/posts` (oś czasu profilu w formacie feedu, `limit`, `cursor`) |
+| Profile / social | `GET/PATCH /profile/me` (`firstName`, `lastName` 1–50, `bio` ≤ 120, pusty → `null`, `handle` 3–30 `[a-z0-9._]` → `409 handle_taken`; prywatne `details`: `birthDate` (wiek 16–100), `gender`, `heightCm` 100–250, `weightKg` 30–300, `trainingGoal`, `experienceLevel`, `weeklyTrainingDays` 1–7 — `null` czyści; odpowiedź z `onboardingCompleted` i `details` tylko w `/profile/me*`), `POST /profile/me/onboarding/complete` (idempotentne), `POST/DELETE /profile/me/avatar` (multipart, pole `avatar`, jpg/png/webp ≤ 5 MB → profil; błędy `missing_image`, `invalid_file`), `GET /profile/following|followers`, `GET /users/search`, `GET /users/:userId/profile` (+ `isFollowing`, `isFollowedBy`), `GET /users/:userId/following|followers` (`limit`, `offset`; pozycje z `isFollowing`), `POST/DELETE /users/:userId/follow` → `{ isFollowing, followersCount }` (`cannot_follow_self`, `user_not_found`, `429`), `GET /users/:userId/posts` (oś czasu profilu w formacie feedu, `limit`, `cursor`) |
 | Feed / kudosy / komentarze | `GET /feed?limit&cursor` → `{ items: FeedPost[], nextCursor, hasMore }` (posty moje + obserwowanych, `invalid_cursor`), `GET /posts/:sessionId` (post + `exercises` jak w training-history, `post_not_found`), `POST/DELETE /posts/:id/kudos` → `{ hasKudoed, kudosCount }` (`cannot_kudo_own_post`), `GET /posts/:id/kudos?limit&offset` (lista jak obserwujący), `GET /posts/:id/comments?limit&cursor` (najstarsze najpierw), `POST /posts/:id/comments` `{ body }` (1–500 punktów kodowych, `invalid_comment_body`, `429`), `DELETE /posts/:id/comments/:commentId` → 204 (`forbidden`, `comment_not_found`), `GET /users/suggested?limit`. Aktywności profilu mają realne `kudosCount`, `commentCount`, `hasKudoed` (id = id sesji = id posta) |
 | Pliki statyczne (awatary) | `GET /uploads/avatars/*` — `avatarUrl` to ścieżka względna, klient dokleja base URL (`core/network/api_asset_uri.dart`) |
 
@@ -141,7 +141,8 @@ users ─┬─< exercises (created_by, SET NULL)
 - `training_session_sets`: `planned_*` + `actual_*` + `completed`.
 - **Offline-first:** unikalne indeksy `(user_id, client_id)` na exercises/plans/sessions → klient robi upsert po `clientId`.
 - Seed: migracja `003` wstawia ~14 systemowych ćwiczeń (polskie nazwy, stałe UUID).
-- Handle użytkowników: generowany przy rejestracji (`profile.handle.ts`), migracja `009` backfilluje.
+- Handle użytkowników: generowany przy rejestracji (`profile.handle.ts`), migracja `009` backfilluje; od `016` edytowalny.
+- Migracja `016`: prywatne dane profilu w `users` (`birth_date`, `gender`, `height_cm`, `weight_kg`, `training_goal`, `experience_level`, `weekly_training_days`) + `onboarding_completed_at` (istniejące konta = ukończony).
 - Migracja `011`: indeksy pod historię (`user_id, started_at DESC, id DESC`), FK (`plan_id`, `exercise_id`) oraz `pg_trgm` na `users.handle` / imię+nazwisko / `exercises.name`.
 
 ### 3.6 Skrypty npm
@@ -201,6 +202,7 @@ lib/
 │   └── widgets/                    <- user_avatar (xxs…lg), app_header, sync_status_indicator (ikonka synchronizacji)
 └── features/
     ├── auth/       <- login/register (data + domain models + presentation); bez logowania społecznościowego
+    ├── onboarding/ <- po rejestracji: zdjęcie + nick + bio → dane o sobie → cel (każdy krok „Pomiń”)
     ├── account/    <- zmiana hasła, wyloguj wszędzie, usunięcie konta, ustawienia powiadomień, pomoc (FAQ)
     ├── feed/       <- zakładka Aktywność: feed społecznościowy (posty, kudosy, komentarze, cache 1. strony)
     ├── library/    <- katalog ćwiczeń, offline-first + sync
@@ -215,11 +217,12 @@ Konwencja w feature: `domain/models/` + `domain/repositories/` (kontrakty), `dat
 | Ścieżka | Ekran |
 |---------|-------|
 | `/splash` | rozwiązanie sesji → `/app/training` lub login |
-| `/login`, `/login/form`, `/login/register` | auth |
+| `/login`, `/login/form`, `/login/register` | auth; po rejestracji → `/onboarding` |
+| `/onboarding` | OnboardingScreen (`OnboardingCubit`): 3 kroki zapisywane osobno + „Gotowe”; „Dokończ później” przy błędzie wczytania |
 | `/app/training` (+ nested) | hub: Sesja / Plany / Historia; ongoing workout, create plan, `stats` (wejście: „Zobacz statystyki” na karcie miesiąca w Historii), `history/:sessionId` (szczegóły: menu Edytuj / Powtórz / Usuń), `history/:sessionId/edit` (EditWorkoutScreen) |
 | `/app/activity` | ActivityFeedScreen — feed (pull-to-refresh, doładowanie kursorem, pusty stan z propozycjami osób) |
 | `/app/library` | LibraryScreen, pick exercise |
-| `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar, imię, nazwisko, bio), `following` / `followers`, `find-people` |
+| `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar z galerii/aparatu, imię, nazwisko, nick, bio), `details` (ProfileDetailsScreen — „Dane i cele”, prywatne), `following` / `followers`, `find-people` |
 | `/app/profile/settings/change-password` | ChangePasswordScreen (`ChangePasswordCubit`; walidacja jak przy rejestracji + powtórzenie + inne niż obecne) |
 | `/app/profile/settings/notifications` | NotificationSettingsScreen — przełącznik „Powiadomienie o końcu przerwy” (`shared_preferences`, klucz `rest_timer_notifications_enabled`) |
 | `/app/profile/settings/help` | HelpScreen — statyczne FAQ |
@@ -232,7 +235,7 @@ Feed (`features/feed/`): `FeedCubit` (cache pierwszej strony w `shared_preferenc
 
 Obserwowanie: `FollowCubit` (optymistyczny toggle + cofnięcie przy błędzie) dostarczany w routerze dla list, wyszukiwarki i profilu użytkownika; wspólny widget `FollowButton` / `FollowToggleButton`. Edycja profilu: `EditProfileCubit`; zmiana imienia/nazwiska aktualizuje `ServiceLocator.currentUser` + cache w `TokenStorage` (`ServiceLocator.updateCurrentUserNames`) — id się nie zmienia, więc baza per-user nie jest przebudowywana. `UserAvatar` wczytuje zdjęcie z API (cache offline) z fallbackiem na inicjały.
 
-Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkownika.
+Wszystko pod `/app/` jest chronione — redirect na `/login`, gdy brak użytkownika. Konto z `AuthUser.onboardingCompleted == false` trafia z `/app/**` na `/onboarding` (chyba że w tej sesji odłożyło go przez „Dokończ później” — `ServiceLocator.deferOnboarding`); po zakończeniu `ServiceLocator.markOnboardingCompleted` zapisuje flagę w sesji i cache. Wspólne pola danych o sobie/celu: `profile/presentation/widgets/profile_details_fields.dart` + `ProfileDetailsDraft` (walidacja) + mixin `ProfileDetailsDraftEditor` (cubity onboardingu i „Dane i cele”).
 
 Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtrasy ustawień rejestruje `buildAccountSettingsRoutes()`. Ustawienia: sekcje Konto / Bezpieczeństwo (zmiana hasła, „Wyloguj ze wszystkich urządzeń” z potwierdzeniem — `LogoutAllDevicesCubit`) / Ustawienia (powiadomienia, pomoc) oraz wydzielona „Strefa niebezpieczna” z „Usuń konto”. Operacje idą przez `AccountRepository` (`ServiceLocator.accountRepository`).
 
@@ -270,7 +273,7 @@ Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtra
 | `CustomTrainingPlan`, `PlanExercise`, `ExerciseSet` | `features/training/domain/models/custom_training_plan.dart` |
 | `TrainingSession*` (sesja na żywo) | `features/training/domain/models/training_session.dart` |
 | historia (list/detail/page) | `features/training/domain/models/training_history_models.dart` |
-| `UserProfile`, `ProfileStats`, `FollowingUser` | `features/profile/domain/models/` |
+| `UserProfile`, `ProfileStats`, `FollowingUser`, `ProfileDetails` (+ `Gender`, `TrainingGoal`, `ExperienceLevel`) | `features/profile/domain/models/` |
 | `FeedPost`, `FeedAuthor`, `TopExercise`, `PostComment`, `PostDetail`, `CursorPage` | `features/feed/domain/models/` (JSON: `features/feed/data/feed_json.dart`; ćwiczenia/serie: `training/data/training_history_json.dart`) |
 | `TrainingPeriodStats`, `TrainingSummary` | `features/training/domain/models/training_summary_stats.dart` |
 
@@ -366,6 +369,7 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - **faza 3** — usuwanie, powtarzanie i edycja zakończonych treningów; pull sesji z serwera z nagrobkami (`deleted[]`, 410); usunięty offline trening znika od razu z historii, statystyk, feedu i aktywności profilu,
 - **faza 4** — konto: zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta (z czyszczeniem danych lokalnych i awatarów w cache), globalna obsługa unieważnionej sesji, ekran pomocy,
 - **faza 5** — jakość: migracja na `/api/v1`, testy kontraktowe E2E z prawdziwym backendem (`test/e2e/`), test integracyjny UI (`integration_test/`), CI (GitHub Actions), README.
+- **onboarding profilu** (spec `docs/superpowers/specs/2026-09-23-registration-onboarding-design.md`) — po rejestracji zdjęcie, nick, bio, prywatne dane o sobie (płeć, data urodzenia, wzrost, waga) i cel; edycja później w „Dane i cele”.
 
 **Mocki / placeholdery:**
 - Placeholder: przycisk „Udostępnij” na karcie aktywności profilu (bez akcji), „Zapomniałeś hasła?” na ekranie logowania (bez akcji).
@@ -375,7 +379,8 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - cache awatarów usuwanego konta obejmuje tylko adresy widziane w bieżącej sesji aplikacji (po restarcie — dopiero po wejściu na profil),
 - test integracyjny nie działa na webie (sqflite ffi) — web weryfikuje job `build-web`; Windows desktop wymaga Visual Studio,
 - job E2E w CI wymaga zewnętrznej instancji backendu (`E2E_BASE_URL`),
-- brak websocketów, feedu na żywo, wspólnych sesji, push, Sentry.
+- brak websocketów, feedu na żywo, wspólnych sesji, push, Sentry,
+- waga to jedna bieżąca wartość (bez historii pomiarów); płeć nie wpływa jeszcze na sylwetkę w mapie mięśni; dostępność nicku sprawdzana dopiero przy zapisie.
 
 ---
 

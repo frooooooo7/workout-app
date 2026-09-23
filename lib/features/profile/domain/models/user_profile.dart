@@ -1,3 +1,4 @@
+import 'profile_details.dart';
 import 'profile_stats.dart';
 
 class UserProfile {
@@ -12,6 +13,8 @@ class UserProfile {
     required this.isOwnProfile,
     this.isFollowing = false,
     this.isFollowedBy = false,
+    this.details,
+    this.onboardingCompleted = true,
   });
 
   final String id;
@@ -29,6 +32,12 @@ class UserProfile {
   /// Ten profil obserwuje zalogowanego użytkownika.
   final bool isFollowedBy;
 
+  /// Prywatne dane — tylko we własnym profilu (`/profile/me*`), inaczej null.
+  final ProfileDetails? details;
+
+  /// Tylko we własnym profilu; dla cudzych zawsze `true`.
+  final bool onboardingCompleted;
+
   String get fullName => '$firstName $lastName';
 
   String get displayHandle => handle.startsWith('@') ? handle : '@$handle';
@@ -45,6 +54,8 @@ class UserProfile {
     bool? isOwnProfile,
     bool? isFollowing,
     bool? isFollowedBy,
+    ProfileDetails? details,
+    bool? onboardingCompleted,
   }) {
     return UserProfile(
       id: id,
@@ -57,6 +68,8 @@ class UserProfile {
       isOwnProfile: isOwnProfile ?? this.isOwnProfile,
       isFollowing: isFollowing ?? this.isFollowing,
       isFollowedBy: isFollowedBy ?? this.isFollowedBy,
+      details: details ?? this.details,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     );
   }
 }

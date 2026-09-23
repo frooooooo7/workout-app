@@ -235,6 +235,76 @@ void main() {
 
     expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
   });
+
+  testWidgets('sends a fresh account to onboarding first', (tester) async {
+    await setDesktopViewport(tester);
+
+    const user = AuthUser(
+      id: 'fresh-user',
+      email: 'fresh@example.com',
+      firstName: 'Nowy',
+      lastName: 'User',
+      onboardingCompleted: false,
+    );
+    final router = buildRouter(
+      initialLocation: '/app/training',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/onboarding');
+  });
+
+  testWidgets('deferred onboarding lets the account into the app', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+
+    const user = AuthUser(
+      id: 'deferring-user',
+      email: 'later@example.com',
+      firstName: 'Później',
+      lastName: 'User',
+      onboardingCompleted: false,
+    );
+    ServiceLocator.deferOnboarding(user.id);
+    final router = buildRouter(
+      initialLocation: '/app/activity',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/app/activity');
+  });
+
+  testWidgets('onboarded account opening /onboarding lands in the app', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+
+    const user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+    final router = buildRouter(
+      initialLocation: '/onboarding',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/app/training');
+  });
 }
 
 class _FakeProfileRepository extends Fake implements ProfileRepository {}

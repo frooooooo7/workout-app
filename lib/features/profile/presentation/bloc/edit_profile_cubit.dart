@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../domain/models/profile_details.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/profile_repository.dart';
+import '../utils/profile_details_draft.dart';
 import 'edit_profile_state.dart';
 
 class EditProfileCubit extends Cubit<EditProfileState> {
@@ -50,6 +52,9 @@ class EditProfileCubit extends Cubit<EditProfileState> {
 
   void lastNameChanged(String value) =>
       emit(state.copyWith(lastName: value, clearError: true));
+
+  void handleChanged(String value) =>
+      emit(state.copyWith(handle: value, clearError: true));
 
   void bioChanged(String value) =>
       emit(state.copyWith(bio: value, clearError: true));
@@ -98,6 +103,9 @@ class EditProfileCubit extends Cubit<EditProfileState> {
               ? snapshot.firstName.trim()
               : null,
           lastName: snapshot.lastNameChanged ? snapshot.lastName.trim() : null,
+          handle: snapshot.handleChanged
+              ? normalizeHandle(snapshot.handle)
+              : null,
           bio: snapshot.bioChanged ? snapshot.bio.trim() : null,
         );
         if (snapshot.firstNameChanged || snapshot.lastNameChanged) {
@@ -160,6 +168,20 @@ class EditProfileCubit extends Cubit<EditProfileState> {
           return 'Imię musi mieć od 1 do $kProfileNameMaxLength znaków.';
         case 'invalid_last_name':
           return 'Nazwisko musi mieć od 1 do $kProfileNameMaxLength znaków.';
+        case 'invalid_handle':
+          return 'Nieprawidłowy nick — 3–30 znaków: małe litery, cyfry, '
+              'kropka i podkreślenie.';
+        case 'handle_taken':
+          return 'Ten nick jest już zajęty. Wybierz inny.';
+        case 'invalid_birth_date':
+          return 'Sprawdź datę urodzenia — wiek musi mieścić się '
+              'w przedziale $kMinUserAge–$kMaxUserAge lat.';
+        case 'invalid_height':
+          return 'Wzrost musi mieścić się w przedziale '
+              '$kMinHeightCm–$kMaxHeightCm cm.';
+        case 'invalid_weight':
+          return 'Waga musi mieścić się w przedziale '
+              '${kMinWeightKg.toInt()}–${kMaxWeightKg.toInt()} kg.';
         case 'bio_too_long':
           return 'Opis może mieć maksymalnie $kProfileBioMaxLength znaków.';
         case 'no_fields_to_update':

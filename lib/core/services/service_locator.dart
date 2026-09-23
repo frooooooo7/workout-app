@@ -406,12 +406,28 @@ class ServiceLocator {
     if (current.firstName == firstName && current.lastName == lastName) {
       return;
     }
-    final updated = AuthUser(
-      id: current.id,
-      email: current.email,
-      firstName: firstName,
-      lastName: lastName,
-    );
+    final updated = current.copyWith(firstName: firstName, lastName: lastName);
+    currentUser.value = updated;
+    await tokenStorage.saveUser(updated);
+  }
+
+  /// Konto, które w tej sesji aplikacji odłożyło onboarding na później
+  /// (np. brak sieci) — router nie kieruje go już na `/onboarding`.
+  static String? _onboardingDeferredForUserId;
+
+  static bool isOnboardingDeferred(String userId) =>
+      _onboardingDeferredForUserId == userId;
+
+  static void deferOnboarding(String userId) {
+    _onboardingDeferredForUserId = userId;
+  }
+
+  /// Onboarding zakończony na serwerze — zapis flagi w sesji i w cache.
+  static Future<void> markOnboardingCompleted(String userId) async {
+    final current = currentUser.value;
+    if (current == null || current.id != userId) return;
+    if (current.onboardingCompleted) return;
+    final updated = current.copyWith(onboardingCompleted: true);
     currentUser.value = updated;
     await tokenStorage.saveUser(updated);
   }

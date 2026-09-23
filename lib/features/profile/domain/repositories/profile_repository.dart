@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../models/follow_result.dart';
 import '../models/following_user.dart';
+import '../models/profile_details.dart';
 import '../models/user_profile.dart';
 
 abstract class ProfileRepository {
@@ -34,12 +35,18 @@ abstract class ProfileRepository {
   Future<FollowResult> unfollow(String userId);
 
   /// `PATCH /profile/me` — wysyła tylko przekazane (nie-null) pola.
-  /// Pusty [bio] czyści opis.
+  /// Pusty [bio] czyści opis. [details] idą w całości — puste pola
+  /// czyszczą wartości na serwerze.
   Future<UserProfile> updateProfile({
     String? firstName,
     String? lastName,
     String? bio,
+    String? handle,
+    ProfileDetails? details,
   });
+
+  /// `POST /profile/me/onboarding/complete` (idempotentne).
+  Future<UserProfile> completeOnboarding();
 
   Future<UserProfile> updateBio(String bio);
 

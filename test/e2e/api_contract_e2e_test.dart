@@ -22,6 +22,7 @@ import 'package:gym/features/feed/data/api_feed_repository.dart';
 import 'package:gym/features/library/data/exercise_remote_data_source.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/profile/data/api_profile_repository.dart';
+import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/training/data/training_history_remote_data_source.dart';
 import 'package:gym/features/training/data/training_plan_remote_data_source.dart';
 import 'package:gym/features/training/data/training_session_remote_data_source.dart';
@@ -71,6 +72,7 @@ void main() {
         expect(result.token, isNotEmpty);
         expect(result.user.email, u.email);
         expect(result.user.firstName, u.firstName);
+        expect(result.user.onboardingCompleted, isFalse);
         u.user = result.user;
         u.storage.token = result.token;
       }
@@ -464,6 +466,61 @@ void main() {
       expect(ownActivity.kudosCount, 1);
       expect(ownActivity.hasKudoed, isFalse);
       expect(ownActivity.isOwn, isTrue);
+    });
+
+    test('onboarding: private details, handle and completion', () async {
+      final repo = ApiProfileRepository(alice.api);
+      final handle = 'e2e.$e2eRunId';
+      final details = ProfileDetails(
+        birthDate: DateTime(1995, 6, 15),
+        gender: Gender.female,
+        heightCm: 168,
+        weightKg: 61.46,
+        trainingGoal: TrainingGoal.fatLoss,
+        experienceLevel: ExperienceLevel.intermediate,
+        weeklyTrainingDays: 4,
+      );
+
+      final updated = await repo.updateProfile(
+        handle: handle.toUpperCase(),
+        details: details,
+      );
+      expect(updated.handle, handle);
+      expect(updated.onboardingCompleted, isFalse);
+      expect(
+        updated.details,
+        ProfileDetails(
+          birthDate: DateTime(1995, 6, 15),
+          gender: Gender.female,
+          heightCm: 168,
+          weightKg: 61.5,
+          trainingGoal: TrainingGoal.fatLoss,
+          experienceLevel: ExperienceLevel.intermediate,
+          weeklyTrainingDays: 4,
+        ),
+      );
+
+      await expectLater(
+        ApiProfileRepository(bob.api).updateProfile(handle: handle),
+        throwsA(isApiError('handle_taken', status: 409)),
+      );
+      await expectLater(
+        repo.updateProfile(details: ProfileDetails(birthDate: DateTime.now())),
+        throwsA(isApiError('invalid_birth_date', status: 400)),
+      );
+
+      final seenByBob = await ApiProfileRepository(
+        bob.api,
+      ).getUserProfile(alice.id);
+      expect(seenByBob.details, isNull);
+
+      final completed = await repo.completeOnboarding();
+      expect(completed.onboardingCompleted, isTrue);
+      expect(completed.details?.heightCm, 168);
+      final me = AuthUser.fromJson(
+        await alice.api.get('/auth/me', auth: true) as Map<String, dynamic>,
+      );
+      expect(me.onboardingCompleted, isTrue);
     });
 
     test('user search + suggested', () async {

@@ -9,7 +9,9 @@ import '../../../account/domain/repositories/account_repository.dart';
 import '../../../account/presentation/account_settings_routes.dart';
 import '../../../account/presentation/bloc/logout_all_devices_cubit.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import 'profile_details_screen.dart';
 
+const settingsProfileDetailsRowKey = Key('settings-profile-details');
 const settingsChangePasswordRowKey = Key('settings-change-password');
 const settingsLogoutAllRowKey = Key('settings-logout-all');
 const settingsNotificationsRowKey = Key('settings-notifications');
@@ -191,6 +193,13 @@ class _ProfileSettingsView extends StatelessWidget {
                   icon: Icons.edit_outlined,
                   label: 'Edytuj profil',
                   onTap: () => context.push('/app/profile/edit'),
+                ),
+                const SizedBox(height: 10),
+                _MenuRow(
+                  key: settingsProfileDetailsRowKey,
+                  icon: Icons.monitor_weight_outlined,
+                  label: 'Dane i cele',
+                  onTap: () => context.push(kProfileDetailsRoute),
                 ),
                 const SizedBox(height: 32),
                 const _SectionLabel(label: 'Bezpieczeństwo'),

@@ -7,6 +7,7 @@ import 'package:mime/mime.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/models/follow_result.dart';
 import '../domain/models/following_user.dart';
+import '../domain/models/profile_details.dart';
 import '../domain/models/profile_stats.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
@@ -44,11 +45,15 @@ class ApiProfileRepository implements ProfileRepository {
     String? firstName,
     String? lastName,
     String? bio,
+    String? handle,
+    ProfileDetails? details,
   }) async {
     final body = <String, dynamic>{
       'firstName': ?firstName,
       'lastName': ?lastName,
       'bio': ?bio,
+      'handle': ?handle,
+      ...?details?.toJson(),
     };
     final data =
         await _api.patch('/profile/me', body, auth: true)
@@ -58,6 +63,16 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> updateBio(String bio) => updateProfile(bio: bio);
+
+  @override
+  Future<UserProfile> completeOnboarding() async {
+    final data = await _api.post(
+      '/profile/me/onboarding/complete',
+      const <String, dynamic>{},
+      auth: true,
+    );
+    return _rememberOwn(userProfileFromJson(data as Map<String, dynamic>));
+  }
 
   @override
   Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
@@ -167,6 +182,7 @@ class ApiProfileRepository implements ProfileRepository {
 
   static UserProfile userProfileFromJson(Map<String, dynamic> json) {
     final stats = json['stats'] as Map<String, dynamic>? ?? const {};
+    final details = json['details'];
     return UserProfile(
       id: json['id'] as String,
       firstName: json['firstName'] as String,
@@ -182,6 +198,10 @@ class ApiProfileRepository implements ProfileRepository {
       isOwnProfile: json['isOwnProfile'] as bool? ?? false,
       isFollowing: json['isFollowing'] as bool? ?? false,
       isFollowedBy: json['isFollowedBy'] as bool? ?? false,
+      details: details is Map<String, dynamic>
+          ? ProfileDetails.fromJson(details)
+          : null,
+      onboardingCompleted: json['onboardingCompleted'] as bool? ?? true,
     );
   }
 

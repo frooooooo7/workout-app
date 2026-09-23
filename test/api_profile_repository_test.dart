@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/network/api_client.dart';
 import 'package:gym/features/profile/data/api_profile_repository.dart';
+import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:http/http.dart' as http;
 
 class _FakeApiClient extends ApiClient {
@@ -214,5 +215,104 @@ void main() {
       '/uploads/avatars/new.jpg',
     });
     expect(repository.ownAvatarUrlsFor('other'), isEmpty);
+  });
+
+  test('own profile parses private details and onboarding flag', () async {
+    api.responses['GET /profile/me'] = {
+      ..._profileJson(),
+      'isOwnProfile': true,
+      'onboardingCompleted': false,
+      'details': {
+        'birthDate': '1998-03-15',
+        'gender': 'female',
+        'heightCm': 168,
+        'weightKg': 61.5,
+        'trainingGoal': 'fat_loss',
+        'experienceLevel': 'intermediate',
+        'weeklyTrainingDays': 4,
+      },
+    };
+
+    final profile = await repository.getOwnProfile();
+
+    expect(profile.onboardingCompleted, isFalse);
+    expect(
+      profile.details,
+      ProfileDetails(
+        birthDate: DateTime(1998, 3, 15),
+        gender: Gender.female,
+        heightCm: 168,
+        weightKg: 61.5,
+        trainingGoal: TrainingGoal.fatLoss,
+        experienceLevel: ExperienceLevel.intermediate,
+        weeklyTrainingDays: 4,
+      ),
+    );
+  });
+
+  test('other profiles have no details and count as onboarded', () async {
+    api.responses['GET /users/u1/profile'] = _profileJson();
+
+    final profile = await repository.getUserProfile('u1');
+
+    expect(profile.details, isNull);
+    expect(profile.onboardingCompleted, isTrue);
+  });
+
+  test('unknown enum values from the API are ignored', () async {
+    api.responses['GET /profile/me'] = {
+      ..._profileJson(),
+      'details': {'gender': 'robot', 'trainingGoal': null, 'birthDate': 'x'},
+    };
+
+    final details = (await repository.getOwnProfile()).details!;
+
+    expect(details.gender, isNull);
+    expect(details.birthDate, isNull);
+    expect(details.isEmpty, isTrue);
+  });
+
+  test('updateProfile sends handle and every detail, nulls included', () async {
+    api.responses['PATCH /profile/me'] = _profileJson();
+
+    await repository.updateProfile(
+      handle: 'jan.silny',
+      details: ProfileDetails(
+        birthDate: DateTime(2001, 1, 9),
+        heightCm: 182,
+        trainingGoal: TrainingGoal.strength,
+      ),
+    );
+
+    expect(api.lastBody, {
+      'handle': 'jan.silny',
+      'birthDate': '2001-01-09',
+      'gender': null,
+      'heightCm': 182,
+      'weightKg': null,
+      'trainingGoal': 'strength',
+      'experienceLevel': null,
+      'weeklyTrainingDays': null,
+    });
+  });
+
+  test('updateProfile without details sends only given fields', () async {
+    api.responses['PATCH /profile/me'] = _profileJson();
+
+    await repository.updateProfile(bio: 'Siła');
+
+    expect(api.lastBody, {'bio': 'Siła'});
+  });
+
+  test('completeOnboarding posts to the onboarding endpoint', () async {
+    api.responses['POST /profile/me/onboarding/complete'] = {
+      ..._profileJson(),
+      'onboardingCompleted': true,
+    };
+
+    final profile = await repository.completeOnboarding();
+
+    expect(api.calls, ['POST /profile/me/onboarding/complete']);
+    expect(profile.onboardingCompleted, isTrue);
   });
 }

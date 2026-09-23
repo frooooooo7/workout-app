@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/widgets/app_pressable.dart';
-import '../../../../core/widgets/user_avatar.dart';
 import '../bloc/edit_profile_cubit.dart';
 import '../bloc/edit_profile_state.dart';
+import '../widgets/avatar_picker_field.dart';
 
 const editProfileFirstNameFieldKey = Key('edit-profile-first-name');
 const editProfileLastNameFieldKey = Key('edit-profile-last-name');
+const editProfileHandleFieldKey = Key('edit-profile-handle');
 const editProfileBioFieldKey = Key('edit-profile-bio');
 const editProfileSaveButtonKey = Key('edit-profile-save');
 
@@ -26,6 +25,7 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
+  final _handleController = TextEditingController();
   final _bioController = TextEditingController();
   bool _seeded = false;
 
@@ -44,6 +44,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _handleController.dispose();
     _bioController.dispose();
     super.dispose();
   }
@@ -51,33 +52,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void _seedControllers(EditProfileState state) {
     _firstNameController.text = state.firstName;
     _lastNameController.text = state.lastName;
+    _handleController.text = state.handle;
     _bioController.text = state.bio;
     _seeded = true;
   }
 
   Future<void> _pickAvatar() async {
     final cubit = context.read<EditProfileCubit>();
-    try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1024,
-        imageQuality: 85,
-      );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      cubit.avatarPicked(
-        bytes,
-        file.name.isNotEmpty ? file.name : 'avatar.jpg',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nie udało się otworzyć galerii.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    final picked = await pickAvatarImage(context);
+    if (picked == null) return;
+    cubit.avatarPicked(picked.bytes, picked.filename);
   }
 
   @override
@@ -112,6 +96,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             state: state,
             firstNameController: _firstNameController,
             lastNameController: _lastNameController,
+            handleController: _handleController,
             bioController: _bioController,
             onPickAvatar: _pickAvatar,
           );
@@ -126,6 +111,7 @@ class _EditProfileForm extends StatelessWidget {
     required this.state,
     required this.firstNameController,
     required this.lastNameController,
+    required this.handleController,
     required this.bioController,
     required this.onPickAvatar,
   });
@@ -133,6 +119,7 @@ class _EditProfileForm extends StatelessWidget {
   final EditProfileState state;
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
+  final TextEditingController handleController;
   final TextEditingController bioController;
   final VoidCallback onPickAvatar;
 
@@ -147,65 +134,14 @@ class _EditProfileForm extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: AppPressable(
-                onTap: enabled ? onPickAvatar : null,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    UserAvatar.fromNames(
-                      firstName: state.firstName,
-                      lastName: state.lastName,
-                      imageUrl:
-                          state.removeAvatar ? null : state.initial?.avatarUrl,
-                      imageBytes: state.avatarBytes,
-                      size: UserAvatarSize.lg,
-                    ),
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.background,
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.photo_camera_outlined,
-                          color: AppColors.onPrimary,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 4,
-              children: [
-                TextButton(
-                  onPressed: enabled ? onPickAvatar : null,
-                  child: Text(
-                    state.hasAvatar ? 'Zmień zdjęcie' : 'Dodaj zdjęcie',
-                  ),
-                ),
-                if (state.hasAvatar)
-                  TextButton(
-                    onPressed: enabled ? cubit.avatarRemoved : null,
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.strengthWeak,
-                    ),
-                    child: const Text('Usuń zdjęcie'),
-                  ),
-              ],
+            AvatarPickerField(
+              firstName: state.firstName,
+              lastName: state.lastName,
+              imageUrl: state.removeAvatar ? null : state.initial?.avatarUrl,
+              imageBytes: state.avatarBytes,
+              enabled: enabled,
+              onPick: onPickAvatar,
+              onRemove: cubit.avatarRemoved,
             ),
             const SizedBox(height: 20),
             const _FieldLabel(label: 'Imię'),
@@ -234,6 +170,19 @@ class _EditProfileForm extends StatelessWidget {
               textCapitalization: TextCapitalization.words,
               textInputAction: TextInputAction.next,
               onChanged: cubit.lastNameChanged,
+            ),
+            const SizedBox(height: 16),
+            const _FieldLabel(label: 'Nick'),
+            const SizedBox(height: 8),
+            _ProfileTextField(
+              fieldKey: editProfileHandleFieldKey,
+              controller: handleController,
+              enabled: enabled,
+              errorText: state.handleError,
+              showCounter: false,
+              prefixText: '@',
+              textInputAction: TextInputAction.next,
+              onChanged: cubit.handleChanged,
             ),
             const SizedBox(height: 16),
             const _FieldLabel(label: 'Bio'),
@@ -311,9 +260,10 @@ class _ProfileTextField extends StatelessWidget {
     required this.controller,
     required this.enabled,
     required this.errorText,
-    required this.maxLength,
     required this.showCounter,
     required this.onChanged,
+    this.maxLength,
+    this.prefixText,
     this.minLines,
     this.maxLines = 1,
     this.hintText,
@@ -325,7 +275,8 @@ class _ProfileTextField extends StatelessWidget {
   final TextEditingController controller;
   final bool enabled;
   final String? errorText;
-  final int maxLength;
+  final int? maxLength;
+  final String? prefixText;
   final bool showCounter;
   final ValueChanged<String> onChanged;
   final int? minLines;
@@ -356,6 +307,9 @@ class _ProfileTextField extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: const TextStyle(color: AppColors.textMuted),
+        prefixText: prefixText,
+        prefixStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+        errorMaxLines: 2,
         errorText: errorText,
         counterText: showCounter ? null : '',
         counterStyle: const TextStyle(color: AppColors.textMuted),

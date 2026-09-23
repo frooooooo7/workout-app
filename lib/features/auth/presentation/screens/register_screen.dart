@@ -91,7 +91,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ServiceLocator.currentUser.value = result.user;
 
       if (!mounted) return;
-      context.go('/app/training');
+      context.go('/onboarding');
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
