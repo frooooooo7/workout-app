@@ -21,6 +21,12 @@ ImageProvider? exerciseImageProvider(String? imageUrl, {int? cacheWidth}) {
   return ResizeImage.resizeIfNeeded(cacheWidth, null, base);
 }
 
+/// Miniatury są przycinane (`BoxFit.cover`) do kwadratu o boku
+/// `logicalSize`, a dekodujemy tylko po szerokości — obrazek poziomy musi
+/// więc mieć szerokość boku × proporcje, żeby jego wysokość nie była
+/// rozciągana. 2 pokrywa obrazki do 2:1 (ilustracje ćwiczeń mają 4:3).
+const _maxCoverAspect = 2;
+
 /// Miniatura w logicznym rozmiarze widgetu — mnoży przez DPR i przycina
 /// do rozsądnego zakresu, żeby siatka ćwiczeń nie dekodowała pełnych zdjęć.
 ImageProvider? exerciseThumbProvider(
@@ -28,6 +34,8 @@ ImageProvider? exerciseThumbProvider(
   String? imageUrl, {
   required double logicalSize,
 }) {
-  final px = (logicalSize * MediaQuery.devicePixelRatioOf(context)).round();
+  final px =
+      (logicalSize * _maxCoverAspect * MediaQuery.devicePixelRatioOf(context))
+          .round();
   return exerciseImageProvider(imageUrl, cacheWidth: px.clamp(32, 512));
 }

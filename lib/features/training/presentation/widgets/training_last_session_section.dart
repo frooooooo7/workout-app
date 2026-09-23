@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_pressable.dart';
-import '../../../library/data/exercise_image_uri.dart';
+import '../../../library/presentation/widgets/exercise_thumbnail.dart';
 import '../../domain/models/training_history_models.dart';
 import '../bloc/training_history_cubit.dart';
 
@@ -684,7 +684,20 @@ class _ExerciseRowItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
           child: Row(
             children: [
-              _ExerciseThumb(imageUrl: exercise.imageUrl),
+              ExerciseThumbnail(
+                imageUrl: exercise.imageUrl,
+                size: 40,
+                backgroundColor:
+                    AppColors.surfaceVariant.withValues(alpha: 0.6),
+                borderColor: AppColors.border.withValues(alpha: 0.5),
+                placeholder: const Center(
+                  child: Icon(
+                    Icons.fitness_center_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ),
+              ),
               const SizedBox(width: 12),
 
               // Nazwa ćwiczenia (zawija do 2 linii przy długich nazwach)
@@ -733,52 +746,6 @@ class _ExerciseRowItem extends StatelessWidget {
     final isFew =
         lastDigit >= 2 && lastDigit <= 4 && !(lastTwo >= 12 && lastTwo <= 14);
     return isFew ? 'serie' : 'serii';
-  }
-}
-
-/// Miniatura ćwiczenia w wierszu; ikona hantli, gdy ćwiczenie nie ma obrazka,
-/// wciąż się wczytuje albo nie dało się go pobrać.
-class _ExerciseThumb extends StatelessWidget {
-  const _ExerciseThumb({required this.imageUrl});
-
-  static const double _size = 40;
-
-  final String? imageUrl;
-
-  Widget _placeholder() => const Center(
-        child: Icon(
-          Icons.fitness_center_rounded,
-          color: AppColors.primary,
-          size: 18,
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final provider =
-        exerciseThumbProvider(context, imageUrl, logicalSize: _size);
-
-    return Container(
-      width: _size,
-      height: _size,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: AppColors.border.withValues(alpha: 0.5),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: provider == null
-          ? _placeholder()
-          : Image(
-              image: provider,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => _placeholder(),
-              loadingBuilder: (context, child, progress) =>
-                  progress == null ? child : _placeholder(),
-            ),
-    );
   }
 }
 

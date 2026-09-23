@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
-import '../../../../library/data/exercise_image_uri.dart';
+import '../../../../library/presentation/widgets/exercise_thumbnail.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
 import 'session_details_formatters.dart';
@@ -189,29 +189,11 @@ class _ExerciseThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolved = exerciseImageResolvedUri(exercise.imageUrl);
-
-    return Container(
-      width: _size,
-      height: _size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: resolved == null
-          ? _placeholder()
-          : Image(
-              image: exerciseThumbProvider(
-                context,
-                exercise.imageUrl,
-                logicalSize: _size,
-              )!,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => _placeholder(),
-              loadingBuilder: (context, child, progress) =>
-                  progress == null ? child : _placeholder(),
-            ),
+    return ExerciseThumbnail(
+      imageUrl: exercise.imageUrl,
+      size: _size,
+      borderColor: AppColors.border.withValues(alpha: 0.7),
+      placeholder: _placeholder(),
     );
   }
 }
