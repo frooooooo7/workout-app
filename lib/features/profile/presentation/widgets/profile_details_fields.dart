@@ -739,7 +739,6 @@ class _GoalArt extends StatelessWidget {
     return Image.asset(
       goal.imageAsset,
       fit: BoxFit.cover,
-      cacheWidth: 480,
       filterQuality: FilterQuality.medium,
       errorBuilder: (_, _, _) => fallback,
     );
