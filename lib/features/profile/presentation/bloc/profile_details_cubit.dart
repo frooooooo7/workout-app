@@ -30,13 +30,11 @@ class ProfileDetailsState {
   /// Ustawiane po udanym zapisie — ekran się zamyka.
   final UserProfile? saved;
 
-  ProfileDetails get savedDetails =>
-      initial?.details ?? ProfileDetails.empty;
+  ProfileDetails get savedDetails => initial?.details ?? ProfileDetails.empty;
 
   bool get hasChanges => initial != null && draft.toDetails() != savedDetails;
 
-  bool get canSave =>
-      initial != null && !saving && draft.isBodyValid && hasChanges;
+  bool get canSave => initial != null && !saving && hasChanges;
 
   ProfileDetailsState copyWith({
     UserProfile? initial,
@@ -65,7 +63,7 @@ class ProfileDetailsState {
 class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
     with ProfileDetailsDraftEditor<ProfileDetailsState> {
   ProfileDetailsCubit(this._repository)
-      : super(const ProfileDetailsState(loading: true));
+    : super(const ProfileDetailsState(loading: true));
 
   final ProfileRepository _repository;
 

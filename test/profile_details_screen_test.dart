@@ -79,11 +79,21 @@ void main() {
     Finder save() => find.byKey(profileDetailsSaveButtonKey);
     bool saveEnabled() => tester.widget<FilledButton>(save()).onPressed != null;
 
-    expect(find.text('180'), findsOneWidget);
+    expect(find.text('180'), findsWidgets);
+    expect(find.text('80'), findsWidgets);
     expect(saveEnabled(), isFalse);
 
-    await tester.enterText(find.byKey(profileWeightFieldKey), '78,5');
-    await tester.tap(find.text('Siła')); // odznaczenie celu
+    // „Wyczyść” w karcie wagi i odznaczenie celu.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(profileWeightRulerKey),
+        matching: find.text('Wyczyść'),
+      ),
+    );
+    await tester.ensureVisible(
+      find.byKey(profileGoalOptionKey(TrainingGoal.strength)),
+    );
+    await tester.tap(find.byKey(profileGoalOptionKey(TrainingGoal.strength)));
     await tester.pump();
     expect(saveEnabled(), isTrue);
 
@@ -91,12 +101,11 @@ void main() {
     await tester.tap(save());
     await tester.pumpAndSettle();
 
-    expect(repo.sentDetails.single, const ProfileDetails(
-      heightCm: 180,
-      weightKg: 78.5,
-      weeklyTrainingDays: 3,
-    ));
+    expect(
+      repo.sentDetails.single,
+      const ProfileDetails(heightCm: 180, weeklyTrainingDays: 3),
+    );
     expect(find.byType(ProfileDetailsScreen), findsNothing);
-    expect((result! as UserProfile).details?.weightKg, 78.5);
+    expect((result! as UserProfile).details?.weightKg, isNull);
   });
 }

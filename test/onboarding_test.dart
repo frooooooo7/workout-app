@@ -14,7 +14,9 @@ import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
+import 'package:gym/features/profile/presentation/widgets/birth_date_sheet.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_details_fields.dart';
+import 'package:gym/features/profile/presentation/widgets/ruler_picker.dart';
 
 const _newAccount = UserProfile(
   id: 'me',
@@ -97,7 +99,7 @@ void main() {
       expect(cubit.state.step, OnboardingStep.profile);
       expect(cubit.state.handle, 'jan.kowalski_ab12cd');
       expect(cubit.state.bio, 'Siłka');
-      expect(cubit.state.draft.heightText, '180');
+      expect(cubit.state.draft.heightCm, 180);
       await cubit.close();
     });
 
@@ -159,11 +161,8 @@ void main() {
       final cubit = await _loadedCubit(repo);
       await cubit.skip();
 
-      cubit.heightChanged('99');
-      expect(cubit.state.canContinue, isFalse);
-
-      cubit.heightChanged('182');
-      cubit.weightChanged('82,5');
+      cubit.heightChanged(182);
+      cubit.weightChanged(82.5);
       cubit.genderChanged(Gender.male);
       await cubit.next();
 
@@ -205,7 +204,7 @@ void main() {
       final repo = _FakeRepository();
       final cubit = await _loadedCubit(repo);
 
-      cubit.heightChanged('180'); // wpisane, ale krok pominięty
+      cubit.heightChanged(180); // ustawione, ale krok pominięty
       await cubit.skip();
       await cubit.skip();
       await cubit.skip();
@@ -283,37 +282,42 @@ void main() {
 
       expect(find.text('Twój profil'), findsOneWidget);
       expect(find.text('jan.kowalski_ab12cd'), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_back_ios_new_rounded), findsNothing);
+      expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
 
-      await tester.enterText(find.byKey(onboardingHandleFieldKey), 'jan.silny');
+      // Podgląd profilu pokazuje nick na żywo, już znormalizowany.
+      await tester.enterText(find.byKey(onboardingHandleFieldKey), 'Jan.Silny');
+      await tester.pump();
+      expect(find.text('@jan.silny'), findsOneWidget);
       await tapKey(tester, onboardingNextButtonKey);
 
       expect(find.text('O Tobie'), findsOneWidget);
-      await tester.enterText(find.byKey(profileBirthDateFieldKey), '01012020');
-      await tester.pump();
-      expect(find.text('Musisz mieć co najmniej 16 lat.'), findsOneWidget);
-      expect(
-        tester
-            .widget<ElevatedButton>(find.byKey(onboardingNextButtonKey))
-            .onPressed,
-        isNull,
+      // Arkusz daty startuje na 1 stycznia sprzed 25 lat.
+      await tapKey(tester, profileBirthDateTileKey);
+      await tapKey(tester, birthDateSheetConfirmKey);
+      expect(find.textContaining('1 stycznia'), findsOneWidget);
+      expect(find.text('25 lat'), findsOneWidget);
+      // Stuknięcie w nieustawioną linijkę przyjmuje wartość ze środka.
+      expect(find.text('Przesuń linijkę, aby ustawić'), findsNWidgets(2));
+      await tester.ensureVisible(find.byKey(profileHeightRulerKey));
+      final heightRuler = find.descendant(
+        of: find.byKey(profileHeightRulerKey),
+        matching: find.byType(RulerPicker),
       );
-
-      await tester.enterText(find.byKey(profileBirthDateFieldKey), '15031998');
-      await tester.enterText(find.byKey(profileHeightFieldKey), '182');
-      await tester.pump();
-      expect(find.text('15.03.1998'), findsOneWidget);
+      await tester.tap(heightRuler);
+      await tester.pumpAndSettle();
+      expect(find.text('172'), findsOneWidget);
       await tapKey(tester, onboardingNextButtonKey);
 
       expect(find.text('Twój cel'), findsOneWidget);
-      await tester.tap(find.text('Siła'));
-      await tester.tap(find.text('4'));
-      await tester.pump();
+      await tapKey(tester, profileGoalOptionKey(TrainingGoal.strength));
+      await tapKey(tester, profileWeeklyDaysOptionKey(4));
+      expect(find.text('4 treningi w tygodniu'), findsOneWidget);
       await tapKey(tester, onboardingNextButtonKey);
 
       expect(find.text('Gotowe, Jan!'), findsOneWidget);
       expect(find.text('@jan.silny'), findsOneWidget);
-      expect(find.text('182 cm'), findsOneWidget);
+      expect(find.text('25'), findsOneWidget);
+      expect(find.text('172 cm'), findsOneWidget);
       expect(find.text('Siła'), findsOneWidget);
       expect(find.text('4× w tygodniu'), findsOneWidget);
       expect(repo.completes, 1);
@@ -330,7 +334,7 @@ void main() {
       await tapKey(tester, onboardingSkipButtonKey);
       expect(find.text('O Tobie'), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
       expect(find.text('Twój profil'), findsOneWidget);
     });

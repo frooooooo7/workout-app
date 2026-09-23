@@ -66,8 +66,7 @@ class OnboardingState {
     if (profile == null || saving) return false;
     return switch (step) {
       OnboardingStep.profile => handleError == null && bioError == null,
-      OnboardingStep.body => draft.isBodyValid,
-      OnboardingStep.goal || OnboardingStep.done => true,
+      OnboardingStep.body || OnboardingStep.goal || OnboardingStep.done => true,
     };
   }
 
@@ -98,8 +97,9 @@ class OnboardingState {
       handle: handle ?? this.handle,
       bio: bio ?? this.bio,
       avatarBytes: clearAvatar ? null : (avatarBytes ?? this.avatarBytes),
-      avatarFilename:
-          clearAvatar ? null : (avatarFilename ?? this.avatarFilename),
+      avatarFilename: clearAvatar
+          ? null
+          : (avatarFilename ?? this.avatarFilename),
       draft: draft ?? this.draft,
       saving: saving ?? this.saving,
       error: clearError ? null : (error ?? this.error),

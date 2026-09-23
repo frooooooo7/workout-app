@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/app_spacing.dart';
 import '../../../profile/presentation/widgets/profile_details_fields.dart';
 import '../bloc/onboarding_cubit.dart';
 import '../bloc/onboarding_state.dart';
@@ -15,34 +16,23 @@ class OnboardingStepBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<OnboardingCubit>();
-    final enabled = !state.saving;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+    return _StepScroll(
       children: [
         const OnboardingStepHeader(
           title: 'O Tobie',
-          subtitle: 'Krok 2 z 3 — pomoże dopasować treningi do Ciebie.',
+          subtitle: 'Każde pole jest opcjonalne.',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.sm),
         const ProfileDetailsPrivacyNote(),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         ProfileBodyFields(
           draft: state.draft,
-          enabled: enabled,
+          enabled: !state.saving,
           onGenderChanged: cubit.genderChanged,
           onBirthDateChanged: cubit.birthDateChanged,
           onHeightChanged: cubit.heightChanged,
           onWeightChanged: cubit.weightChanged,
-        ),
-        const SizedBox(height: 24),
-        OnboardingStepActions(
-          nextLabel: 'Dalej',
-          onNext: state.canContinue ? cubit.next : null,
-          onSkip: enabled ? cubit.skip : null,
-          saving: state.saving,
-          error: state.error,
         ),
       ],
     );
@@ -58,35 +48,46 @@ class OnboardingStepGoal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<OnboardingCubit>();
-    final enabled = !state.saving;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+    return _StepScroll(
       children: [
         const OnboardingStepHeader(
           title: 'Twój cel',
-          subtitle: 'Krok 3 z 3 — co chcesz osiągnąć?',
+          subtitle: 'Co chcesz osiągnąć i jak często trenować?',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.sm),
         const ProfileDetailsPrivacyNote(),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         ProfileGoalFields(
           draft: state.draft,
-          enabled: enabled,
+          enabled: !state.saving,
           onGoalChanged: cubit.trainingGoalChanged,
           onLevelChanged: cubit.experienceLevelChanged,
           onWeeklyDaysChanged: cubit.weeklyTrainingDaysChanged,
         ),
-        const SizedBox(height: 24),
-        OnboardingStepActions(
-          nextLabel: 'Zakończ',
-          onNext: state.canContinue ? cubit.next : null,
-          onSkip: enabled ? cubit.skip : null,
-          saving: state.saving,
-          error: state.error,
-        ),
       ],
+    );
+  }
+}
+
+class _StepScroll extends StatelessWidget {
+  const _StepScroll({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        kOnboardingGutter,
+        AppSpacing.sm,
+        kOnboardingGutter,
+        kOnboardingBottomSpace,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 }

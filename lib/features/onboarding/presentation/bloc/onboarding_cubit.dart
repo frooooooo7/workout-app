@@ -18,7 +18,7 @@ import 'onboarding_state.dart';
 class OnboardingCubit extends Cubit<OnboardingState>
     with ProfileDetailsDraftEditor<OnboardingState> {
   OnboardingCubit(this._repository, {this.onCompleted})
-      : super(const OnboardingState(loading: true));
+    : super(const OnboardingState(loading: true));
 
   final ProfileRepository _repository;
 
@@ -109,7 +109,9 @@ class OnboardingCubit extends Cubit<OnboardingState>
     final snapshot = state;
     if (snapshot.handleChanged || snapshot.bioChanged) {
       final updated = await _repository.updateProfile(
-        handle: snapshot.handleChanged ? normalizeHandle(snapshot.handle) : null,
+        handle: snapshot.handleChanged
+            ? normalizeHandle(snapshot.handle)
+            : null,
         bio: snapshot.bioChanged ? snapshot.bio.trim() : null,
       );
       if (isClosed) return;

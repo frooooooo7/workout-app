@@ -18,7 +18,9 @@ class RegisterStepProgress extends StatelessWidget {
       children: List.generate(stepCount, (index) {
         final isActive = index <= currentStep;
         return Expanded(
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
             height: 3,
             margin: EdgeInsets.only(right: index < stepCount - 1 ? 6 : 0),
             decoration: BoxDecoration(

@@ -1,42 +1,14 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/presentation/utils/profile_details_draft.dart';
 import 'package:gym/features/profile/presentation/utils/profile_details_labels.dart';
-import 'package:gym/features/profile/presentation/widgets/profile_details_fields.dart';
+import 'package:gym/features/profile/presentation/widgets/birth_date_sheet.dart';
+import 'package:gym/features/profile/presentation/widgets/ruler_picker.dart';
 
 void main() {
-  final today = DateTime(2026, 9, 23);
-
-  group('birthDateInputError', () {
-    test('empty is fine (optional field)', () {
-      expect(birthDateInputError('', today), isNull);
-    });
-
-    test('age boundaries 16–100', () {
-      expect(birthDateInputError('23.09.2010', today), isNull);
-      expect(
-        birthDateInputError('24.09.2010', today),
-        'Musisz mieć co najmniej 16 lat.',
-      );
-      expect(birthDateInputError('23.09.1926', today), isNull);
-      expect(
-        birthDateInputError('22.09.1925', today),
-        'Sprawdź rok urodzenia.',
-      );
-    });
-
-    test('incomplete or impossible dates', () {
-      for (final text in ['12.03', '31.02.1999', '1999-03-12', '00.01.1999']) {
-        expect(
-          birthDateInputError(text, today),
-          'Podaj datę w formacie DD.MM.RRRR.',
-          reason: text,
-        );
-      }
-    });
-  });
-
   group('handleInputError / normalizeHandle', () {
     test('normalizes @, spaces and case', () {
       expect(normalizeHandle('  @Jan.Silny '), 'jan.silny');
@@ -62,25 +34,6 @@ void main() {
   });
 
   group('ProfileDetailsDraft', () {
-    test('parses height and weight (comma or dot, rounded to 0.1)', () {
-      const draft = ProfileDetailsDraft(heightText: '182', weightText: '82,46');
-      expect(draft.heightCm, 182);
-      expect(draft.weightKg, 82.5);
-      expect(draft.isBodyValid, isTrue);
-      expect(
-        const ProfileDetailsDraft(weightText: '82.4').weightKg,
-        82.4,
-      );
-    });
-
-    test('out of range values are errors, empty ones are not', () {
-      const draft = ProfileDetailsDraft(heightText: '99', weightText: '301');
-      expect(draft.heightError, 'Podaj wzrost w cm (100–250).');
-      expect(draft.weightError, 'Podaj wagę w kg (30–300).');
-      expect(draft.isBodyValid, isFalse);
-      expect(const ProfileDetailsDraft().isBodyValid, isTrue);
-    });
-
     test('round-trips saved details', () {
       final details = ProfileDetails(
         birthDate: DateTime(1998, 3, 5),
@@ -91,11 +44,7 @@ void main() {
         experienceLevel: ExperienceLevel.beginner,
         weeklyTrainingDays: 3,
       );
-      final draft = ProfileDetailsDraft.fromDetails(details);
-
-      expect(draft.birthDateText, '05.03.1998');
-      expect(draft.weightText, '80');
-      expect(draft.toDetails(), details);
+      expect(ProfileDetailsDraft.fromDetails(details).toDetails(), details);
     });
 
     test('bodyOnto / goalOnto only replace their own step', () {
@@ -105,7 +54,7 @@ void main() {
         weeklyTrainingDays: 2,
       );
       const draft = ProfileDetailsDraft(
-        heightText: '175',
+        heightCm: 175,
         trainingGoal: TrainingGoal.strength,
       );
 
@@ -123,32 +72,177 @@ void main() {
       );
     });
 
-    test('choices can be cleared', () {
-      const draft = ProfileDetailsDraft(gender: Gender.other);
-      expect(draft.copyWith(clearGender: true).gender, isNull);
+    test('every field can be cleared', () {
+      final draft = ProfileDetailsDraft(
+        gender: Gender.other,
+        birthDate: DateTime(2000),
+        heightCm: 170,
+        weightKg: 70,
+      );
+      final cleared = draft.copyWith(
+        clearGender: true,
+        clearBirthDate: true,
+        clearHeight: true,
+        clearWeight: true,
+      );
+      expect(cleared.toDetails().isEmpty, isTrue);
+    });
+
+    test('age on a given day', () {
+      final draft = ProfileDetailsDraft(birthDate: DateTime(2010, 9, 24));
+      expect(draft.ageOn(DateTime(2026, 9, 23)), 15);
+      expect(draft.ageOn(DateTime(2026, 9, 24)), 16);
     });
   });
 
-  test('BirthDateInputFormatter inserts dots and caps at 8 digits', () {
-    final formatter = BirthDateInputFormatter();
-    String type(String text) => formatter
-        .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: text))
-        .text;
-
-    expect(type('1'), '1');
-    expect(type('150'), '15.0');
-    expect(type('15031998'), '15.03.1998');
-    expect(type('150319981'), '15.03.1998');
-    expect(type('15/03/1998'), '15.03.1998');
-  });
-
   test('labels and formatting', () {
+    expect(formatBirthDate(DateTime(1998, 3, 15)), '15 marca 1998');
     expect(formatAge(22), '22 lata');
     expect(formatAge(25), '25 lat');
     expect(formatWeightKg(82.5), '82,5 kg');
     expect(formatWeightKg(80), '80 kg');
+    expect(formatWeeklyTrainingsLong(1), '1 trening w tygodniu');
+    expect(formatWeeklyTrainingsLong(4), '4 treningi w tygodniu');
+    expect(formatWeeklyTrainingsLong(5), '5 treningów w tygodniu');
     expect(TrainingGoal.fatLoss.label, 'Redukcja');
     expect(TrainingGoal.fromApi('fat_loss'), TrainingGoal.fatLoss);
+    expect(ExperienceLevel.advanced.rank, 3);
+  });
+
+  group('RulerPicker', () {
+    Future<List<double>> pumpRuler(
+      WidgetTester tester, {
+      double? value,
+    }) async {
+      final changes = <double>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                child: RulerPicker(
+                  min: 100,
+                  max: 250,
+                  step: 1,
+                  initial: 172,
+                  value: value,
+                  semanticsLabel: 'Wzrost',
+                  formatValue: (v) => '${v.round()} cm',
+                  onChanged: changes.add,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return changes;
+    }
+
+    testWidgets('dragging snaps to a whole tick and reports it', (
+      tester,
+    ) async {
+      final changes = await pumpRuler(tester);
+
+      // 10 px na kreskę: 5 kresek w prawo = +5 cm.
+      await tester.timedDrag(
+        find.byType(RulerPicker),
+        const Offset(-50, 0),
+        const Duration(milliseconds: 600),
+      );
+      await tester.pumpAndSettle();
+
+      expect(changes, isNotEmpty);
+      expect(changes.last, 177);
+      expect(changes.every((v) => v == v.roundToDouble()), isTrue);
+    });
+
+    testWidgets('tapping an unset ruler takes the centre value', (
+      tester,
+    ) async {
+      final changes = await pumpRuler(tester);
+
+      await tester.tap(find.byType(RulerPicker));
+      await tester.pump();
+
+      expect(changes, [172]);
+    });
+
+    testWidgets('screen readers can step the value', (tester) async {
+      final handle = tester.ensureSemantics();
+      final changes = await pumpRuler(tester, value: 180);
+
+      expect(tester.getSemantics(find.byType(RulerPicker)).value, '180 cm');
+      tester.semantics.performAction(
+        find.semantics.byLabel('Wzrost'),
+        SemanticsAction.increase,
+      );
+      await tester.pumpAndSettle();
+
+      expect(changes, [181]);
+      handle.dispose();
+    });
+  });
+
+  group('birth date sheet', () {
+    /// Otwiera arkusz; zwraca funkcję odczytu wyniku po jego zamknięciu.
+    Future<BirthDateResult? Function()> openSheet(
+      WidgetTester tester, {
+      DateTime? initial,
+    }) async {
+      BirthDateResult? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                result = await showBirthDateSheet(
+                  context,
+                  initial: initial,
+                  today: DateTime(2026, 9, 23),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return () => result;
+    }
+
+    testWidgets('confirms the chosen date', (tester) async {
+      final result = await openSheet(tester, initial: DateTime(1998, 3, 15));
+
+      expect(find.text('15 marca 1998 · 28 lat'), findsOneWidget);
+      await tester.tap(find.byKey(birthDateSheetConfirmKey));
+      await tester.pumpAndSettle();
+
+      expect(result()?.date, DateTime(1998, 3, 15));
+    });
+
+    testWidgets('under 16 cannot be confirmed', (tester) async {
+      await openSheet(tester, initial: DateTime(2010, 12, 1));
+
+      expect(find.text('Musisz mieć co najmniej 16 lat.'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(birthDateSheetConfirmKey))
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('an existing date can be removed', (tester) async {
+      final result = await openSheet(tester, initial: DateTime(1998, 3, 15));
+
+      await tester.tap(find.byKey(birthDateSheetClearKey));
+      await tester.pumpAndSettle();
+
+      expect(result(), isNotNull);
+      expect(result()!.date, isNull);
+    });
   });
 
   group('AuthUser.onboardingCompleted', () {
