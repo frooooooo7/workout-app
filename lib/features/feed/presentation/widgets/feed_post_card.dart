@@ -5,6 +5,7 @@ import '../../../../core/utils/duration_formatter.dart';
 import '../../../training/presentation/widgets/session_details/session_details_formatters.dart';
 import '../../domain/models/feed_post.dart';
 import '../utils/feed_formatters.dart';
+import 'feed_seen_markers.dart';
 import 'post_author_row.dart';
 import 'post_best_set.dart';
 import 'post_muscle_chips.dart';
@@ -25,6 +26,7 @@ class FeedPostCard extends StatelessWidget {
     this.onCommentTap,
     this.now,
     this.showAuthor = true,
+    this.isNew = false,
   });
 
   final FeedPost post;
@@ -40,6 +42,9 @@ class FeedPostCard extends StatelessWidget {
   /// `false` na osi czasu profilu — autor jest już w nagłówku ekranu, więc
   /// karta zaczyna się od daty.
   final bool showAuthor;
+
+  /// Post nowy od ostatniej wizyty — plakietka „Nowy” przy autorze.
+  final bool isNew;
 
   static const _radius = 24.0;
 
@@ -89,7 +94,11 @@ class FeedPostCard extends StatelessWidget {
                     timestamp: formatFeedTimestamp(post.startedAt, now: now),
                     onTap: onAuthorTap,
                     avatarSize: PostAuthorAvatarSize.large,
-                    trailing: post.isOwn ? const _OwnBadge() : null,
+                    trailing: post.isOwn
+                        ? const _OwnBadge()
+                        : isNew
+                        ? const FeedNewBadge()
+                        : null,
                   ),
                   const SizedBox(height: 14),
                 ] else ...[

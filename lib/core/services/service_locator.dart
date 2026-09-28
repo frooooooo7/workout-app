@@ -24,6 +24,7 @@ import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
 import '../../features/feed/data/api_feed_repository.dart';
 import '../../features/feed/data/shared_preferences_feed_cache.dart';
+import '../../features/feed/data/shared_preferences_feed_seen_store.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/domain/services/feed_post_events.dart';
 import '../../features/training/data/local_training_stats_repository.dart';
@@ -93,6 +94,9 @@ class ServiceLocator {
   // Feed społecznościowy — oparty o API, nie zależy od bazy per-user.
   static FeedRepository? _feedRepository;
   static FeedCache _feedCache = const SharedPreferencesFeedCache();
+
+  /// Obejrzane posty feedu — licznik „nowe od ostatniej wizyty”.
+  static FeedSeenStore _feedSeenStore = const SharedPreferencesFeedSeenStore();
 
   /// Zmiany postów (kudosy, liczba komentarzy) przenoszone między ekranami.
   static final feedPostEvents = FeedPostEvents();
@@ -168,6 +172,7 @@ class ServiceLocator {
   }
 
   static FeedCache get feedCache => _feedCache;
+  static FeedSeenStore get feedSeenStore => _feedSeenStore;
 
   /// Prośba o odświeżenie feedu: udostępniony trening, zmiana obserwowania.
   static Listenable get feedRefreshSignal => _feedRefreshTick;
@@ -245,11 +250,16 @@ class ServiceLocator {
     _trainingStatsRepository = trainingStatsRepository;
   }
 
-  /// Test seam: repozytorium feedu (i cache) bez `init()`.
+  /// Test seam: repozytorium feedu (cache, obejrzane posty) bez `init()`.
   @visibleForTesting
-  static void debugSetFeed({FeedRepository? repository, FeedCache? cache}) {
+  static void debugSetFeed({
+    FeedRepository? repository,
+    FeedCache? cache,
+    FeedSeenStore? seenStore,
+  }) {
     _feedRepository = repository;
     _feedCache = cache ?? const SharedPreferencesFeedCache();
+    _feedSeenStore = seenStore ?? const SharedPreferencesFeedSeenStore();
   }
 
   static void _onUserChanged() {

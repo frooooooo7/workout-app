@@ -18,6 +18,10 @@ typedef HiddenPostIds = Future<Set<String>> Function();
 
 /// Feed aktywności: cache pierwszej strony od razu (stale-while-revalidate),
 /// odświeżanie, doładowanie kursorem i optymistyczne kudosy.
+///
+/// Z [seenStore] oznacza posty nowe od ostatniej wizyty: nowe są tylko posty
+/// z pierwszej strony, których id nie było w zapisie (doładowane starsze
+/// strony nigdy nie są „nowe” — mogły po prostu nie być przewinięte).
 class FeedCubit extends Cubit<FeedState> {
   FeedCubit({
     required FeedRepository repository,
@@ -27,8 +31,10 @@ class FeedCubit extends Cubit<FeedState> {
     FeedPostEvents? events,
     FeedAuthor? currentUser,
     HiddenPostIds? hiddenPostIds,
+    FeedSeenStore? seenStore,
     this.pageSize = 20,
   }) : _repository = repository,
+       _seenStore = seenStore,
        _hiddenPostIds = hiddenPostIds,
        _cache = cache,
        _userId = userId,
@@ -47,7 +53,17 @@ class FeedCubit extends Cubit<FeedState> {
   final FeedPostEvents? _events;
   final FeedAuthor? _currentUser;
   final HiddenPostIds? _hiddenPostIds;
+  final FeedSeenStore? _seenStore;
   final int pageSize;
+
+  /// Obejrzane id (najnowsze najpierw); `null` — jeszcze nie wczytane.
+  List<String>? _seen;
+
+  /// Zapis istniał przed tą wizytą — jest z czym porównać.
+  bool _hadSeenRecord = false;
+
+  /// Ile nowych przyniosło ostatnie pobranie pierwszej strony.
+  int _lastFetchNewCount = 0;
 
   StreamSubscription<FeedPostEvent>? _eventsSubscription;
   Future<void>? _firstPageFuture;
@@ -100,6 +116,27 @@ class FeedCubit extends Cubit<FeedState> {
   /// żądanie (np. pull-to-refresh w trakcie odświeżania w tle).
   Future<void> refresh() => _fetchFirstPage();
 
+  /// Odświeżenie gestem: po nim krótki komunikat, czy przyszło coś nowego.
+  Future<void> pullToRefresh() async {
+    _lastFetchNewCount = 0;
+    await _fetchFirstPage();
+    if (isClosed || state.status != FeedStatus.ready || !_hadSeenRecord) {
+      return;
+    }
+    if (state.staleMessage != null) return;
+    final count = _lastFetchNewCount;
+    emit(
+      state.copyWith(
+        notice: FeedNotice(
+          id: ++_noticeSeq,
+          message: count == 0
+              ? 'Brak nowych treningów — jesteś na bieżąco'
+              : feedNewPostsLabel(count),
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetchFirstPage() {
     final inFlight = _firstPageFuture;
     if (inFlight != null) return inFlight;
@@ -131,11 +168,33 @@ class FeedCubit extends Cubit<FeedState> {
     try {
       final page = await _repository.getFeed(limit: pageSize);
       final items = _dedupe(await _visible(page.items));
+      await _ensureSeenLoaded();
       if (isClosed || generation != _generation) return;
       _firstPageCursor = page.nextCursor;
       _firstPageHasMore = page.hasMore;
+      final seen = {...?_seen};
+      final arrived = _hadSeenRecord
+          ? {
+              for (final post in items)
+                if (!post.isOwn && !seen.contains(post.id)) post.id,
+            }
+          : const <String>{};
+      _lastFetchNewCount = arrived.length;
+      // Znaczniki z tej wizyty zostają do końca sesji — odświeżenie w tle
+      // nie może ich zgasić w trakcie czytania.
+      final newPostIds = {...state.newPostIds, ...arrived};
+      final nonOwnCount = items.where((post) => !post.isOwn).length;
       emit(
         state.copyWith(
+          newPostIds: Set.unmodifiable(newPostIds),
+          // Raz ustalone „20+” zostaje — późniejsze odświeżenie bez nowych
+          // nie może zaniżyć licznika.
+          newPostsCapped:
+              state.newPostsCapped ||
+              (page.hasMore &&
+                  nonOwnCount > 0 &&
+                  arrived.length == nonOwnCount),
+          showSeenSummary: _hadSeenRecord,
           status: FeedStatus.ready,
           items: items,
           nextCursor: page.nextCursor,
@@ -149,6 +208,7 @@ class FeedCubit extends Cubit<FeedState> {
         ),
       );
       unawaited(_persistFirstPage());
+      _markSeen(items, prepend: true);
       if (items.isEmpty && !state.suggestionsLoaded) {
         unawaited(loadSuggestions());
       }
@@ -207,6 +267,7 @@ class FeedCubit extends Cubit<FeedState> {
           isLoadingMore: false,
         ),
       );
+      _markSeen(pageItems, prepend: false);
     } catch (error) {
       if (isClosed || generation != _generation) return;
       if (error is ApiException && error.message == 'invalid_cursor') {
@@ -331,6 +392,40 @@ class FeedCubit extends Cubit<FeedState> {
         _updatePost(event.postId, (post) => post.withCommentDelta(event.delta));
     }
     unawaited(_persistFirstPage());
+  }
+
+  Future<void> _ensureSeenLoaded() async {
+    if (_seen != null) return;
+    final store = _seenStore;
+    final userId = _userId;
+    if (store == null || userId == null) {
+      _seen = const [];
+      return;
+    }
+    final stored = await store.read(userId);
+    _seen ??= stored ?? const [];
+    _hadSeenRecord = stored != null;
+  }
+
+  /// Dopisuje posty do obejrzanych: pierwsza strona na początek (najnowsze),
+  /// doładowane starsze na koniec.
+  void _markSeen(List<FeedPost> posts, {required bool prepend}) {
+    final store = _seenStore;
+    final userId = _userId;
+    final seen = _seen;
+    if (store == null || userId == null || seen == null) return;
+    final known = seen.toSet();
+    final added = [
+      for (final post in posts)
+        if (known.add(post.id)) post.id,
+    ];
+    final firstVisit = !_hadSeenRecord;
+    _hadSeenRecord = true;
+    if (added.isEmpty && !firstVisit) return;
+    _seen = List.unmodifiable(
+      prepend ? [...added, ...seen] : [...seen, ...added],
+    );
+    unawaited(store.write(userId, _seen!));
   }
 
   Future<List<FeedPost>> _visible(List<FeedPost> posts) async {

@@ -15,6 +15,7 @@ import '../utils/feed_navigation.dart';
 import '../widgets/feed_empty_state.dart';
 import '../widgets/feed_people_strip.dart';
 import '../widgets/feed_post_card.dart';
+import '../widgets/feed_seen_markers.dart';
 import '../widgets/feed_skeleton.dart';
 import '../widgets/feed_status_views.dart';
 import '../widgets/kudos_sheet.dart';
@@ -68,7 +69,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
 
   Future<void> _onRefresh() async {
     HapticFeedback.lightImpact();
-    await context.read<FeedCubit>().refresh();
+    await context.read<FeedCubit>().pullToRefresh();
   }
 
   void _openFindPeople() => context.push(ActivityFeedScreen.findPeoplePath);
@@ -184,8 +185,18 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     }
 
     final hasBanner = state.staleMessage != null;
-    // Pasek osób + opcjonalny baner nad postami.
-    final headerCount = 1 + (hasBanner ? 1 : 0);
+    final hasSummary = state.showSeenSummary;
+    // Pasek osób + opcjonalne banery nad postami.
+    final headerCount = 1 + (hasBanner ? 1 : 0) + (hasSummary ? 1 : 0);
+    final summaryIndex = hasBanner ? 2 : 1;
+
+    // Separator „przejrzałeś wszystkie nowe” stoi przed pierwszym postem
+    // starszym od ostatniego nowego — tylko gdy taki post jest już na liście.
+    final lastNew = state.lastNewPostIndex;
+    final dividerAt = lastNew >= 0 && lastNew < state.items.length - 1
+        ? lastNew + 1
+        : -1;
+    final hasDivider = dividerAt >= 0;
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
@@ -194,7 +205,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.only(bottom: 32 + bottomInset),
-        itemCount: state.items.length + headerCount + 1,
+        itemCount: state.items.length + headerCount + (hasDivider ? 1 : 0) + 1,
         itemBuilder: (context, index) {
           if (index == 0) {
             return Padding(
@@ -213,7 +224,20 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
               child: FeedStaleBanner(message: state.staleMessage!),
             );
           }
-          final postIndex = index - headerCount;
+          if (hasSummary && index == summaryIndex) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+              child: FeedSeenSummaryBanner(
+                newCount: state.newPostsCount,
+                capped: state.newPostsCapped,
+              ),
+            );
+          }
+          var postIndex = index - headerCount;
+          if (hasDivider) {
+            if (postIndex == dividerAt) return const FeedSeenDivider();
+            if (postIndex > dividerAt) postIndex--;
+          }
           if (postIndex == state.items.length) {
             return _FeedFooter(state: state, onRetry: cubit.loadMore);
           }
@@ -223,6 +247,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
             child: _FeedPostItem(
               post: post,
+              isNew: state.isNewPost(post.id),
               repository: widget.repository,
               currentUserId: widget.currentUserId,
             ),
@@ -236,11 +261,13 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
 class _FeedPostItem extends StatelessWidget {
   const _FeedPostItem({
     required this.post,
+    required this.isNew,
     required this.repository,
     required this.currentUserId,
   });
 
   final FeedPost post;
+  final bool isNew;
   final FeedRepository repository;
   final String? currentUserId;
 
@@ -249,6 +276,7 @@ class _FeedPostItem extends StatelessWidget {
     return RepaintBoundary(
       child: FeedPostCard(
         post: post,
+        isNew: isNew,
         onTap: () => openPostDetails(context, post.id),
         onAuthorTap: () =>
             openAuthorProfile(context, post.author.id, isOwn: post.isOwn),

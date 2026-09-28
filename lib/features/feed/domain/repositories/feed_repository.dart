@@ -50,3 +50,14 @@ abstract interface class FeedCache {
 
   Future<void> write(String userId, FeedPage page);
 }
+
+/// Posty, które użytkownik już widział w feedzie (per konto) — podstawa
+/// licznika „nowe od ostatniej wizyty”.
+abstract interface class FeedSeenStore {
+  /// Id obejrzanych postów, najnowsze najpierw; `null` — feed nie był
+  /// jeszcze otwierany na tym urządzeniu.
+  Future<List<String>?> read(String userId);
+
+  /// Zapisuje listę (najnowsze najpierw); implementacja może ją przyciąć.
+  Future<void> write(String userId, List<String> postIds);
+}

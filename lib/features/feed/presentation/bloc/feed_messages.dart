@@ -1,4 +1,5 @@
 import '../../../../core/network/api_client.dart';
+import '../../../../core/utils/polish_plural.dart';
 
 /// Jednorazowy komunikat dla SnackBara. [id] rośnie z każdym komunikatem,
 /// więc dwa identyczne błędy z rzędu pokażą się dwa razy.
@@ -7,6 +8,14 @@ class FeedNotice {
 
   final int id;
   final String message;
+}
+
+/// „1 nowy trening”, „3 nowe treningi”, „20+ nowych treningów”.
+String feedNewPostsLabel(int count, {bool capped = false}) {
+  if (capped) return '$count+ nowych treningów';
+  final adjective = polishPlural(count, 'nowy', 'nowe', 'nowych');
+  final noun = polishPlural(count, 'trening', 'treningi', 'treningów');
+  return '$count $adjective $noun';
 }
 
 /// Maksymalna długość komentarza — w punktach kodowych, jak na serwerze.

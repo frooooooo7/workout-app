@@ -36,6 +36,8 @@ void main() {
     ServiceLocator.debugSetFeed(
       repository: _FakeFeedRepository(),
       cache: _NoFeedCache(),
+      // Prawdziwe SharedPreferences nie odpowiadają w teście widgetu.
+      seenStore: _NoSeenStore(),
     );
     ServiceLocator.debugSetUserScopedRepositories(
       trainingPlanRepository: _FakeTrainingPlanRepository(),
@@ -435,4 +437,12 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+}
+
+class _NoSeenStore implements FeedSeenStore {
+  @override
+  Future<List<String>?> read(String userId) async => null;
+
+  @override
+  Future<void> write(String userId, List<String> postIds) async {}
 }

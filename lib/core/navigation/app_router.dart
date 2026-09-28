@@ -323,6 +323,7 @@ GoRouter buildRouter({
                         events: ServiceLocator.feedPostEvents,
                         currentUser: _currentFeedAuthor(),
                         hiddenPostIds: ServiceLocator.pendingDeletedSessionIds,
+                        seenStore: ServiceLocator.feedSeenStore,
                       ),
                       child: ActivityFeedScreen(
                         repository: ServiceLocator.feedRepository,

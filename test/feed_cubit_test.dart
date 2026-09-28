@@ -11,6 +11,7 @@ import 'package:gym/features/feed/domain/models/post_detail.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
 import 'package:gym/features/feed/domain/services/feed_post_events.dart';
 import 'package:gym/features/feed/presentation/bloc/feed_cubit.dart';
+import 'package:gym/features/feed/presentation/bloc/feed_messages.dart';
 import 'package:gym/features/feed/presentation/bloc/feed_state.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 
@@ -93,6 +94,20 @@ class _MemoryFeedCache implements FeedCache {
   }
 }
 
+class _MemorySeenStore implements FeedSeenStore {
+  List<String>? ids;
+  final writes = <List<String>>[];
+
+  @override
+  Future<List<String>?> read(String userId) async => ids;
+
+  @override
+  Future<void> write(String userId, List<String> postIds) async {
+    ids = postIds;
+    writes.add(postIds);
+  }
+}
+
 const _me = FeedAuthor(id: 'me', firstName: 'Jan', lastName: 'Kowalski');
 
 FeedPost _post(
@@ -131,8 +146,10 @@ void main() {
     Listenable? refreshSignal,
     FeedPostEvents? events,
     HiddenPostIds? hiddenPostIds,
+    FeedSeenStore? seenStore,
   }) {
     return FeedCubit(
+      seenStore: seenStore,
       repository: repo,
       cache: cache,
       userId: 'me',
@@ -436,5 +453,130 @@ void main() {
       expect(cache.page!.items.map((p) => p.id), ['p2']);
       await cubit.close();
     });
+  });
+
+  group('nowe od ostatniej wizyty', () {
+    late _MemorySeenStore seen;
+
+    setUp(() => seen = _MemorySeenStore());
+
+    test('pierwsza wizyta: bez znaczników, wszystko zapisane jako obejrzane',
+        () async {
+      repo.onGetFeed = (_) async => _page([_post('p1'), _post('p2')]);
+      final cubit = buildCubit(seenStore: seen);
+
+      await cubit.load();
+
+      expect(cubit.state.showSeenSummary, isFalse);
+      expect(cubit.state.newPostIds, isEmpty);
+      expect(seen.ids, ['p1', 'p2']);
+      await cubit.close();
+    });
+
+    test('oznacza tylko nieobejrzane cudze posty z pierwszej strony',
+        () async {
+      seen.ids = ['p2', 'p3'];
+      repo.onGetFeed = (_) async => _page([
+            _post('mine', isOwn: true),
+            _post('p1'),
+            _post('p2'),
+            _post('p3'),
+          ]);
+      final cubit = buildCubit(seenStore: seen);
+
+      await cubit.load();
+
+      expect(cubit.state.showSeenSummary, isTrue);
+      expect(cubit.state.newPostIds, {'p1'});
+      expect(cubit.state.newPostsCount, 1);
+      expect(cubit.state.lastNewPostIndex, 1);
+      expect(seen.ids, ['mine', 'p1', 'p2', 'p3']);
+      await cubit.close();
+    });
+
+    test('brak nowych: podsumowanie bez znaczników', () async {
+      seen.ids = ['p1', 'p2'];
+      repo.onGetFeed = (_) async => _page([_post('p1'), _post('p2')]);
+      final cubit = buildCubit(seenStore: seen);
+
+      await cubit.load();
+
+      expect(cubit.state.showSeenSummary, isTrue);
+      expect(cubit.state.newPostsCount, 0);
+      expect(cubit.state.lastNewPostIndex, -1);
+      await cubit.close();
+    });
+
+    test('doładowane starsze strony nie są nowe, ale trafiają do zapisu',
+        () async {
+      seen.ids = ['p1'];
+      repo.onGetFeed = (cursor) async => cursor == null
+          ? _page([_post('p0'), _post('p1')], cursor: 'c1', hasMore: true)
+          : _page([_post('old')]);
+      final cubit = buildCubit(seenStore: seen);
+
+      await cubit.load();
+      await cubit.loadMore();
+
+      expect(cubit.state.newPostIds, {'p0'});
+      expect(seen.ids, ['p0', 'p1', 'old']);
+      await cubit.close();
+    });
+
+    test('cała strona nowa i jest więcej — licznik ograniczony', () async {
+      seen.ids = ['x'];
+      repo.onGetFeed = (_) async =>
+          _page([_post('p1'), _post('p2')], cursor: 'c', hasMore: true);
+      final cubit = buildCubit(seenStore: seen);
+
+      await cubit.load();
+
+      expect(cubit.state.newPostsCount, 2);
+      expect(cubit.state.newPostsCapped, isTrue);
+
+      // Odświeżenie bez nowych nie zaniża licznika „20+”.
+      await cubit.refresh();
+      expect(cubit.state.newPostsCapped, isTrue);
+      await cubit.close();
+    });
+
+    test('pull-to-refresh: komunikat o nowych albo „jesteś na bieżąco”; '
+        'znaczniki z wizyty zostają', () async {
+      seen.ids = ['p1'];
+      var feed = [_post('p0'), _post('p1')];
+      repo.onGetFeed = (_) async => _page(feed);
+      final cubit = buildCubit(seenStore: seen);
+      await cubit.load();
+
+      await cubit.pullToRefresh();
+      expect(cubit.state.notice!.message, contains('na bieżąco'));
+      expect(cubit.state.newPostIds, {'p0'});
+
+      feed = [_post('n1'), _post('n2'), ...feed];
+      await cubit.pullToRefresh();
+      expect(cubit.state.notice!.message, '2 nowe treningi');
+      expect(cubit.state.newPostIds, {'p0', 'n1', 'n2'});
+      await cubit.close();
+    });
+
+    test('bez magazynu nie ma podsumowania ani komunikatów', () async {
+      repo.onGetFeed = (_) async => _page([_post('p1')]);
+      final cubit = buildCubit();
+
+      await cubit.load();
+      await cubit.pullToRefresh();
+
+      expect(cubit.state.showSeenSummary, isFalse);
+      expect(cubit.state.notice, isNull);
+      await cubit.close();
+    });
+  });
+
+  test('feedNewPostsLabel odmienia liczebniki', () {
+    expect(feedNewPostsLabel(1), '1 nowy trening');
+    expect(feedNewPostsLabel(3), '3 nowe treningi');
+    expect(feedNewPostsLabel(5), '5 nowych treningów');
+    expect(feedNewPostsLabel(22), '22 nowe treningi');
+    expect(feedNewPostsLabel(20, capped: true), '20+ nowych treningów');
   });
 }

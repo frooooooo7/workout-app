@@ -19,6 +19,9 @@ class FeedState {
     this.suggestions = const [],
     this.suggestionsLoading = false,
     this.suggestionsLoaded = false,
+    this.newPostIds = const {},
+    this.newPostsCapped = false,
+    this.showSeenSummary = false,
   });
 
   final FeedStatus status;
@@ -44,7 +47,26 @@ class FeedState {
   final bool suggestionsLoading;
   final bool suggestionsLoaded;
 
+  /// Posty, których nie było przy poprzedniej wizycie (bez własnych).
+  final Set<String> newPostIds;
+
+  /// Cała pierwsza strona jest nowa, a serwer ma więcej — licznik to „20+”.
+  final bool newPostsCapped;
+
+  /// Pokazuj podsumowanie „nowe / brak nowych” — `false` przy pierwszym
+  /// otwarciu feedu na urządzeniu (nie ma do czego porównać).
+  final bool showSeenSummary;
+
   bool get isEmptyFeed => status == FeedStatus.ready && items.isEmpty;
+
+  bool isNewPost(String postId) => newPostIds.contains(postId);
+
+  /// Liczba nowych postów widocznych na liście.
+  int get newPostsCount => items.where((p) => newPostIds.contains(p.id)).length;
+
+  /// Indeks ostatniego nowego posta na liście albo `-1`.
+  int get lastNewPostIndex =>
+      items.lastIndexWhere((p) => newPostIds.contains(p.id));
 
   FeedState copyWith({
     FeedStatus? status,
@@ -63,6 +85,9 @@ class FeedState {
     List<FollowingUser>? suggestions,
     bool? suggestionsLoading,
     bool? suggestionsLoaded,
+    Set<String>? newPostIds,
+    bool? newPostsCapped,
+    bool? showSeenSummary,
   }) {
     return FeedState(
       status: status ?? this.status,
@@ -82,6 +107,9 @@ class FeedState {
       suggestions: suggestions ?? this.suggestions,
       suggestionsLoading: suggestionsLoading ?? this.suggestionsLoading,
       suggestionsLoaded: suggestionsLoaded ?? this.suggestionsLoaded,
+      newPostIds: newPostIds ?? this.newPostIds,
+      newPostsCapped: newPostsCapped ?? this.newPostsCapped,
+      showSeenSummary: showSeenSummary ?? this.showSeenSummary,
     );
   }
 }
