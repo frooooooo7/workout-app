@@ -10,6 +10,7 @@ class LibraryHeader extends StatelessWidget {
     required this.onFilterTap,
     required this.onAddTap,
     required this.onBackTap,
+    this.activeFilterCount = 0,
   });
 
   final TextEditingController searchController;
@@ -17,6 +18,9 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback onFilterTap;
   final VoidCallback onAddTap;
   final VoidCallback onBackTap;
+
+  /// Liczba aktywnych filtrów typu — pokazywana jako plakietka na „tune”.
+  final int activeFilterCount;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +45,7 @@ class LibraryHeader extends StatelessWidget {
           controller: searchController,
           onChanged: onSearchChanged,
           onFilterTap: onFilterTap,
+          activeFilterCount: activeFilterCount,
         ),
       ],
     );
@@ -52,11 +57,13 @@ class _SearchBar extends StatefulWidget {
     required this.controller,
     required this.onChanged,
     required this.onFilterTap,
+    required this.activeFilterCount,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onFilterTap;
+  final int activeFilterCount;
 
   @override
   State<_SearchBar> createState() => _SearchBarState();
@@ -120,18 +127,57 @@ class _SearchBarState extends State<_SearchBar> {
               ),
             ),
           ),
-          GestureDetector(
-            onTap: widget.onFilterTap,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: const BoxDecoration(
-                border: Border(left: BorderSide(color: AppColors.border)),
-              ),
-              child: const Icon(
-                Icons.tune_rounded,
-                color: AppColors.textSecondary,
-                size: 18,
+          Tooltip(
+            message: 'Typ ćwiczenia',
+            child: GestureDetector(
+              onTap: widget.onFilterTap,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  border: Border(left: BorderSide(color: AppColors.border)),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      Icons.tune_rounded,
+                      color: widget.activeFilterCount > 0
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
+                      size: 18,
+                    ),
+                    if (widget.activeFilterCount > 0)
+                      Positioned(
+                        top: 9,
+                        right: 8,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 15),
+                          height: 15,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.surface,
+                              width: 1.5,
+                            ),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${widget.activeFilterCount}',
+                            style: const TextStyle(
+                              color: AppColors.onPrimary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              height: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

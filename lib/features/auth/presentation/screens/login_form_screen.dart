@@ -80,6 +80,10 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
     }
   }
 
+  void _handleForgotPassword() {
+    context.push('/login/forgot-password', extra: _emailController.text.trim());
+  }
+
   void _handleNavigateToRegister() {
     context.go('/login/register');
   }
@@ -140,14 +144,24 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
                                 const SizedBox(height: 10),
                                 Align(
                                   alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    onTap: () {},
-                                    child: const Text(
-                                      'Zapomniałeś hasła?',
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
+                                  child: Semantics(
+                                    button: true,
+                                    child: GestureDetector(
+                                      onTap: _handleForgotPassword,
+                                      behavior: HitTestBehavior.opaque,
+                                      child: const Padding(
+                                        // Większe pole dotyku niż sam tekst.
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 6,
+                                        ),
+                                        child: Text(
+                                          'Zapomniałeś hasła?',
+                                          style: TextStyle(
+                                            color: AppColors.primary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),

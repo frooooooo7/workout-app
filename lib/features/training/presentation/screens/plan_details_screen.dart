@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/data/exercise_image_uri.dart';
+import '../../../library/presentation/screens/exercise_details_screen.dart';
+import '../../../library/presentation/widgets/exercise_actions_sheet.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
@@ -81,7 +84,8 @@ class PlanDetailsScreen extends StatelessWidget {
                   icon: const Icon(Icons.edit, color: Colors.white, size: 20),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  tooltip: 'Więcej',
+                  onPressed: () => _showPlanActions(context, currentPlan),
                   icon: const Icon(Icons.more_horiz, color: Colors.white),
                 ),
               ],
@@ -141,9 +145,15 @@ class PlanDetailsScreen extends StatelessWidget {
                         (s) => s.tempo != null && s.tempo!.isNotEmpty,
                       );
                       return _ExerciseCard(
+                        key: ValueKey(planExercise.id),
                         planExercise: planExercise,
                         hasRir: hasRir,
                         hasTempo: hasTempo,
+                        onMore: () => _showExerciseActions(
+                          context,
+                          currentPlan,
+                          index,
+                        ),
                       );
                     }, childCount: currentPlan.exercises.length),
                   ),
@@ -155,6 +165,175 @@ class PlanDetailsScreen extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+enum _PlanAction { edit, duplicate, delete }
+
+enum _PlanExerciseAction { details, moveUp, moveDown, remove }
+
+void _showMessage(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+  );
+}
+
+Future<void> _showPlanActions(
+  BuildContext context,
+  CustomTrainingPlan plan,
+) async {
+  final cubit = context.read<TrainingPlansCubit>();
+  final action = await showAppActionSheet<_PlanAction>(
+    context,
+    title: plan.name,
+    actions: const [
+      AppSheetAction(
+        value: _PlanAction.edit,
+        icon: Icons.edit_outlined,
+        label: 'Edytuj plan',
+      ),
+      AppSheetAction(
+        value: _PlanAction.duplicate,
+        icon: Icons.copy_rounded,
+        label: 'Duplikuj plan',
+        subtitle: 'Kopia bez przypisanych dni tygodnia',
+      ),
+      AppSheetAction(
+        value: _PlanAction.delete,
+        icon: Icons.delete_outline_rounded,
+        label: 'Usuń plan',
+        destructive: true,
+      ),
+    ],
+  );
+  if (!context.mounted || action == null) return;
+
+  switch (action) {
+    case _PlanAction.edit:
+      context.push(
+        '/app/training/create-plan',
+        extra: CreatePlanArgs(cubit: cubit, existingPlan: plan),
+      );
+    case _PlanAction.duplicate:
+      try {
+        await cubit.addPlan(duplicatePlan(plan));
+        if (context.mounted) _showMessage(context, 'Utworzono kopię planu.');
+      } catch (_) {
+        if (context.mounted) {
+          _showMessage(context, 'Nie udało się zduplikować planu.');
+        }
+      }
+    case _PlanAction.delete:
+      final confirmed = await showAppConfirmDialog(
+        context,
+        title: 'Usunąć plan?',
+        message: '„${plan.name}” zniknie z listy planów. Historia treningów '
+            'pozostanie bez zmian.',
+      );
+      if (!confirmed || !context.mounted) return;
+      // Najpierw zamykamy ekran — po usunięciu builder pokazałby
+      // „Nie znaleziono planu”.
+      context.pop();
+      await cubit.removePlan(plan.id);
+  }
+}
+
+/// Kopia planu z nowymi identyfikatorami ćwiczeń i serii — inaczej
+/// synchronizacja potraktowałaby je jako wiersze oryginału.
+CustomTrainingPlan duplicatePlan(CustomTrainingPlan plan) {
+  return CustomTrainingPlan(
+    name: '${plan.name} (kopia)',
+    note: plan.note,
+    exercises: [
+      for (final planExercise in plan.exercises)
+        PlanExercise(
+          exercise: planExercise.exercise,
+          sets: [
+            for (final set in planExercise.sets)
+              ExerciseSet(
+                weight: set.weight,
+                reps: set.reps,
+                rir: set.rir,
+                tempo: set.tempo,
+              ),
+          ],
+        ),
+    ],
+  );
+}
+
+Future<void> _showExerciseActions(
+  BuildContext context,
+  CustomTrainingPlan plan,
+  int index,
+) async {
+  final cubit = context.read<TrainingPlansCubit>();
+  final planExercise = plan.exercises[index];
+  final isFirst = index == 0;
+  final isLast = index == plan.exercises.length - 1;
+
+  final action = await showAppActionSheet<_PlanExerciseAction>(
+    context,
+    header: ExerciseSheetHeader(exercise: planExercise.exercise),
+    actions: [
+      const AppSheetAction(
+        value: _PlanExerciseAction.details,
+        icon: Icons.open_in_full_rounded,
+        label: 'Karta ćwiczenia',
+        subtitle: 'Mięśnie, opis i Twoje rekordy',
+      ),
+      AppSheetAction(
+        value: _PlanExerciseAction.moveUp,
+        icon: Icons.arrow_upward_rounded,
+        label: 'Przesuń wyżej',
+        enabled: !isFirst,
+      ),
+      AppSheetAction(
+        value: _PlanExerciseAction.moveDown,
+        icon: Icons.arrow_downward_rounded,
+        label: 'Przesuń niżej',
+        enabled: !isLast,
+      ),
+      const AppSheetAction(
+        value: _PlanExerciseAction.remove,
+        icon: Icons.remove_circle_outline_rounded,
+        label: 'Usuń z planu',
+        destructive: true,
+      ),
+    ],
+  );
+  if (!context.mounted || action == null) return;
+
+  Future<void> save(List<PlanExercise> exercises) async {
+    try {
+      await cubit.updatePlan(plan.copyWith(exercises: exercises));
+    } catch (_) {
+      if (context.mounted) {
+        _showMessage(context, 'Nie udało się zapisać planu.');
+      }
+    }
+  }
+
+  switch (action) {
+    case _PlanExerciseAction.details:
+      await openExerciseDetails(context, planExercise.exercise);
+    case _PlanExerciseAction.moveUp:
+      final exercises = [...plan.exercises];
+      exercises.insert(index - 1, exercises.removeAt(index));
+      await save(exercises);
+    case _PlanExerciseAction.moveDown:
+      final exercises = [...plan.exercises];
+      exercises.insert(index + 1, exercises.removeAt(index));
+      await save(exercises);
+    case _PlanExerciseAction.remove:
+      final confirmed = await showAppConfirmDialog(
+        context,
+        title: 'Usunąć z planu?',
+        message: '„${planExercise.exercise.name}” i jego serie znikną z tego '
+            'planu. Ćwiczenie zostanie w bibliotece.',
+      );
+      if (!confirmed || !context.mounted) return;
+      await save([...plan.exercises]..removeAt(index));
   }
 }
 
@@ -195,14 +374,17 @@ class _NotesSection extends StatelessWidget {
 
 class _ExerciseCard extends StatefulWidget {
   const _ExerciseCard({
+    super.key,
     required this.planExercise,
     required this.hasRir,
     required this.hasTempo,
+    required this.onMore,
   });
 
   final PlanExercise planExercise;
   final bool hasRir;
   final bool hasTempo;
+  final VoidCallback onMore;
 
   @override
   State<_ExerciseCard> createState() => _ExerciseCardState();
@@ -308,7 +490,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: () {},
+                  tooltip: 'Więcej',
+                  onPressed: widget.onMore,
                   icon: const Icon(
                     Icons.more_vert,
                     color: AppColors.textSecondary,

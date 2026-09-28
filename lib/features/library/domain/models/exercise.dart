@@ -271,6 +271,37 @@ class Exercise {
   /// Identyfikator nadany offline przez klienta (API zwraca go tylko dla
   /// własnych ćwiczeń) — pozwala sparować rekord z serwera z lokalnym wierszem.
   final String? clientId;
+
+  /// Mięśnie bez sentinela [MuscleGroup.all] — to, co faktycznie pracuje.
+  /// Pierwszy na liście to mięsień główny, kolejne są wspomagające.
+  List<MuscleGroup> get workingMuscles =>
+      muscles.where((m) => m != MuscleGroup.all).toList(growable: false);
+
+  Exercise copyWith({
+    String? name,
+    List<MuscleGroup>? muscles,
+    ExerciseCategory? category,
+    String? description,
+    String? imageUrl,
+    bool? isFavourite,
+    bool? isMine,
+    DateTime? createdAt,
+    bool? isPendingSync,
+  }) {
+    return Exercise(
+      id: id,
+      name: name ?? this.name,
+      muscles: muscles ?? this.muscles,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isFavourite: isFavourite ?? this.isFavourite,
+      isMine: isMine ?? this.isMine,
+      createdAt: createdAt ?? this.createdAt,
+      isPendingSync: isPendingSync ?? this.isPendingSync,
+      clientId: clientId,
+    );
+  }
 }
 
 // ──────────────────────────────────────────────

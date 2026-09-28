@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/account_settings_routes.dart';
 import '../../features/auth/domain/models/auth_models.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_form_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
@@ -27,6 +28,9 @@ import '../../features/feed/presentation/bloc/post_comments_cubit.dart';
 import '../../features/feed/presentation/bloc/post_details_cubit.dart';
 import '../../features/feed/presentation/screens/activity_feed_screen.dart';
 import '../../features/feed/presentation/screens/post_details_screen.dart';
+import '../../features/library/domain/models/exercise.dart';
+import '../../features/library/presentation/bloc/exercise_details_cubit.dart';
+import '../../features/library/presentation/screens/exercise_details_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/domain/models/user_profile.dart';
@@ -128,6 +132,12 @@ GoRouter buildRouter({
                 LoginFormScreen(notice: ServiceLocator.loginNotice),
           ),
           GoRoute(path: 'register', builder: (_, s) => const RegisterScreen()),
+          GoRoute(
+            path: 'forgot-password',
+            builder: (_, s) => ForgotPasswordScreen(
+              initialEmail: s.extra is String ? s.extra as String : null,
+            ),
+          ),
         ],
       ),
 
@@ -475,6 +485,25 @@ GoRouter buildRouter({
                 focusComment: state.uri.queryParameters['comment'] == '1',
               ),
             ),
+          );
+        },
+      ),
+
+      // Karta ćwiczenia — poza shellem, otwierana z biblioteki i z planów.
+      GoRoute(
+        parentNavigatorKey: appRootNavigatorKey,
+        path: '/app/exercises/:exerciseId',
+        builder: (_, state) {
+          final extra = state.extra;
+          return BlocProvider(
+            create: (_) => ExerciseDetailsCubit(
+              repository: ServiceLocator.exerciseRepository,
+              statsRepository: ServiceLocator.trainingStatsRepository,
+              exerciseId: state.pathParameters['exerciseId']!,
+              initialExercise: extra is Exercise ? extra : null,
+              dataChanges: ServiceLocator.exerciseDataChanges,
+            )..load(),
+            child: const ExerciseDetailsScreen(),
           );
         },
       ),

@@ -8,28 +8,54 @@ class LibraryExerciseGrid extends StatelessWidget {
     super.key,
     required this.exercises,
     required this.onFavouriteTap,
+    required this.onExerciseTap,
+    required this.onMoreTap,
   });
 
   final List<Exercise> exercises;
   final Future<void> Function(Exercise) onFavouriteTap;
+  final ValueChanged<Exercise> onExerciseTap;
+  final ValueChanged<Exercise> onMoreTap;
+
+  static const double _gutter = 16;
+  static const double _spacing = 12;
+
+  /// Docelowa szerokość kafelka — na tablecie mieści się więcej kolumn.
+  static const double _targetTileWidth = 200;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.86,
-      ),
-      itemCount: exercises.length,
-      itemBuilder: (context, index) {
-        final exercise = exercises[index];
-        return ExerciseCard(
-          exercise: exercise,
-          onTap: () {},
-          onFavouriteTap: () => onFavouriteTap(exercise),
+    final textScaler = MediaQuery.textScalerOf(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - _gutter * 2;
+        final columns = ((available + _spacing) / (_targetTileWidth + _spacing))
+            .floor()
+            .clamp(2, 6);
+        final tileWidth = (available - _spacing * (columns - 1)) / columns;
+
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(_gutter, 0, _gutter, 24),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: _spacing,
+            mainAxisSpacing: _spacing,
+            mainAxisExtent: ExerciseCard.heightFor(
+              tileWidth,
+              textScaler: textScaler,
+            ),
+          ),
+          itemCount: exercises.length,
+          itemBuilder: (context, index) {
+            final exercise = exercises[index];
+            return ExerciseCard(
+              exercise: exercise,
+              onTap: () => onExerciseTap(exercise),
+              onFavouriteTap: () => onFavouriteTap(exercise),
+              onMoreTap: () => onMoreTap(exercise),
+            );
+          },
         );
       },
     );

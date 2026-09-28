@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/exercise_image_uri.dart';
+import '../../domain/models/exercise_stats.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
@@ -11,6 +12,7 @@ import '../widgets/library_error_state.dart';
 import '../widgets/library_filter_chips.dart';
 import '../widgets/library_loading_state.dart';
 import '../widgets/library_results_bar.dart';
+import '../widgets/library_sort_sheet.dart';
 
 class PickExerciseScreen extends StatefulWidget {
   const PickExerciseScreen({super.key});
@@ -35,6 +37,10 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
           LibraryCubit(
             ServiceLocator.exerciseRepository,
             dataChanges: ServiceLocator.exerciseDataChanges,
+            loadUsage: () async => ExerciseStats.usage(
+              await ServiceLocator.trainingStatsRepository
+                  .completedSessionsSince(DateTime(2000)),
+            ),
           )..refresh(),
       child: Builder(
         builder: (context) {
@@ -107,10 +113,19 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
                           buildWhen: (previous, current) =>
                               previous.exercises != current.exercises ||
                               previous.loading != current.loading ||
-                              previous.error != current.error,
+                              previous.error != current.error ||
+                              previous.sort != current.sort,
                           builder: (context, state) {
                             return LibraryResultsBar(
                               count: state.exercises.length,
+                              sort: state.sort,
+                              onSortTap: () async {
+                                final sort = await showLibrarySortSheet(
+                                  context,
+                                  current: cubit.state.sort,
+                                );
+                                if (sort != null) await cubit.setSort(sort);
+                              },
                             );
                           },
                         ),

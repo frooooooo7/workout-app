@@ -8,7 +8,10 @@ class ExerciseCategoryBadge extends StatelessWidget {
 
   final ExerciseCategory category;
 
-  Color get _color => switch (category) {
+  Color get _color => colorFor(category);
+
+  /// Kolor akcentu kategorii — wspólny dla plakietki, karty i filtrów.
+  static Color colorFor(ExerciseCategory category) => switch (category) {
         ExerciseCategory.compound => AppColors.primaryVariant,
         ExerciseCategory.isolation => const Color(0xFF4DB6AC),
         ExerciseCategory.cardio => AppColors.success,

@@ -370,9 +370,11 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - **faza 4** — konto: zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta (z czyszczeniem danych lokalnych i awatarów w cache), globalna obsługa unieważnionej sesji, ekran pomocy,
 - **faza 5** — jakość: migracja na `/api/v1`, testy kontraktowe E2E z prawdziwym backendem (`test/e2e/`), test integracyjny UI (`integration_test/`), CI (GitHub Actions), README.
 - **onboarding profilu** (spec `docs/superpowers/specs/2026-09-23-registration-onboarding-design.md`) — po rejestracji zdjęcie, nick, bio, prywatne dane o sobie (płeć, data urodzenia, wzrost, waga) i cel; edycja później w „Dane i cele”.
+- **karta ćwiczenia** (`/app/exercises/:id`, 2026-09-28) — ilustracja, mapa zaangażowanych mięśni, Twoje wyniki liczone lokalnie z historii (rekord, szacowany 1RM wg Epleya, treningi, objętość, wykres progresu), opis; edycja i usuwanie własnych ćwiczeń. Otwierana z siatki biblioteki i z menu ćwiczenia w szczegółach planu.
+- biblioteka: sortowanie (Popularne z historii, A–Z, Najnowsze, Ulubione), filtr typu ćwiczenia pod ikoną „tune”, menu „⋯” i długie przytrzymanie kafelka; szczegóły planu: edytuj / duplikuj / usuń plan, przesuwanie i usuwanie ćwiczeń z planu. Wspólny arkusz akcji: `core/widgets/app_action_sheet.dart`.
 
 **Mocki / placeholdery:**
-- Placeholder: przycisk „Udostępnij” na karcie aktywności profilu (bez akcji), „Zapomniałeś hasła?” na ekranie logowania (bez akcji).
+- „Zapomniałeś hasła?” → `/login/forgot-password`: pełne UI, ale wysyłkę obsługuje `PlaceholderPasswordResetRepository` (backend nie ma endpointu); ekran mówi, że e-mail jeszcze nie dotrze. Prawdziwą implementację podpina się w `ServiceLocator.passwordResetRepository`.
 
 **Braki (gap'e):**
 - listy obserwowanych/obserwujących i lista kudosów ładują tylko pierwszą stronę, bez doładowywania,

@@ -49,7 +49,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
           onPressed: () => context.pop(),
         ),
         title: const Text(
-          'Nowa aktywnosc',
+          'Nowa aktywność',
           style: TextStyle(
             color: Colors.white,
             fontSize: 17,
@@ -107,7 +107,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
                   imageAlignment: Alignment.centerLeft,
                   eyebrow: 'Wolny trening',
                   title: 'Niestandardowa',
-                  description: 'Zbuduj trening na biezaco, bez szablonu.',
+                  description: 'Zbuduj trening na bieżąco, bez szablonu.',
                   ctaLabel: 'Start od zera',
                   onTap: () => unawaited(_startCustom(context)),
                 ),

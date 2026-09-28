@@ -14,7 +14,9 @@ import '../../features/account/data/api_account_repository.dart';
 import '../../features/account/data/local_account_data_cleaner.dart';
 import '../../features/account/domain/repositories/account_repository.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../../features/auth/data/placeholder_password_reset_repository.dart';
 import '../../features/auth/domain/models/auth_models.dart';
+import '../../features/auth/domain/repositories/password_reset_repository.dart';
 import '../../features/library/data/exercise_database.dart';
 import '../../features/library/data/exercise_remote_data_source.dart';
 import '../../features/library/data/offline_first_exercise_repository.dart';
@@ -68,6 +70,11 @@ class ServiceLocator {
 
   /// Komunikat na ekranie logowania (wylogowanie wymuszone, usunięte konto).
   static final loginNotice = ValueNotifier<String?>(null);
+
+  /// Reset hasła — zaślepka, dopóki backend nie ma endpointu.
+  static PasswordResetRepository passwordResetRepository =
+      const PlaceholderPasswordResetRepository();
+
   static late final AccountRepository accountRepository;
 
   // User-scoped repository: recreated on login/logout via [currentUser] listener.

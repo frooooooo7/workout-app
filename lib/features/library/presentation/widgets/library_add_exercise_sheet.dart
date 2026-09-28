@@ -15,6 +15,13 @@ typedef LibraryAddExerciseSubmit = Future<Exercise> Function({
   String? imageFilename,
 });
 
+typedef LibraryEditExerciseSubmit = Future<Exercise> Function({
+  required String name,
+  required List<MuscleGroup> muscles,
+  required ExerciseCategory category,
+  required String description,
+});
+
 /// Opens a modal bottom sheet to create a user-owned exercise.
 /// Returns the created [Exercise] or `null` if cancelled.
 Future<Exercise?> showLibraryAddExerciseSheet(
@@ -31,10 +38,46 @@ Future<Exercise?> showLibraryAddExerciseSheet(
   return result;
 }
 
+/// Ten sam formularz w trybie edycji własnego ćwiczenia. Zdjęcia nie da się
+/// tu zmienić — API aktualizacji go nie przyjmuje.
+/// Returns the updated [Exercise] or `null` if cancelled.
+Future<Exercise?> showLibraryEditExerciseSheet(
+  BuildContext context, {
+  required Exercise exercise,
+  required LibraryEditExerciseSubmit onSubmit,
+}) {
+  return showModalBottomSheet<Exercise?>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black54,
+    builder: (sheetContext) => _LibraryAddExerciseSheet(
+      initial: exercise,
+      onSubmit: ({
+        required String name,
+        required List<MuscleGroup> muscles,
+        required ExerciseCategory category,
+        required String description,
+        Uint8List? imageBytes,
+        String? imageFilename,
+      }) =>
+          onSubmit(
+        name: name,
+        muscles: muscles,
+        category: category,
+        description: description,
+      ),
+    ),
+  );
+}
+
 class _LibraryAddExerciseSheet extends StatefulWidget {
-  const _LibraryAddExerciseSheet({required this.onSubmit});
+  const _LibraryAddExerciseSheet({required this.onSubmit, this.initial});
 
   final LibraryAddExerciseSubmit onSubmit;
+
+  /// Edytowane ćwiczenie; `null` — tworzymy nowe.
+  final Exercise? initial;
 
   @override
   State<_LibraryAddExerciseSheet> createState() =>
@@ -66,6 +109,23 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
           .where((m) => m.region == region && m.isApiSupported)
           .toList(growable: false),
   };
+
+  bool get _isEditing => widget.initial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    if (initial != null) {
+      _nameController.text = initial.name;
+      _descriptionController.text = initial.description;
+      _category = initial.category;
+      _selectedMuscles = initial.workingMuscles
+          .map((m) => m.apiGroup)
+          .where((m) => m.isApiSupported)
+          .toSet();
+    }
+  }
 
   InputDecoration _fieldDecoration({required String hintText}) {
     return InputDecoration(
@@ -254,8 +314,8 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Nowe ćwiczenie',
+                Text(
+                  _isEditing ? 'Edytuj ćwiczenie' : 'Nowe ćwiczenie',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -265,7 +325,9 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'To ćwiczenie będzie widoczne tylko na Twoim koncie.',
+                  _isEditing
+                      ? 'Zapisane treningi zachowają dotychczasową nazwę i partie.'
+                      : 'To ćwiczenie będzie widoczne tylko na Twoim koncie.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -308,6 +370,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                     }
                   },
                 ),
+                if (!_isEditing) ...[
                 const SizedBox(height: 14),
                 const Text(
                   'Zdjęcie',
@@ -372,6 +435,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                     ],
                   ],
                 ),
+                ],
                 const SizedBox(height: 18),
                 const Text(
                   'Partie mięśniowe',
