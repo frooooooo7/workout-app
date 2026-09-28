@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
+import 'package:gym/features/training/domain/models/training_session.dart'
+    as session;
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
+import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/history_screen.dart';
+import 'package:gym/features/training/presentation/widgets/stats/stats_range_selector.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/month_selector_bar.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/monthly_sessions_list.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/monthly_stats_card.dart';
@@ -28,6 +32,7 @@ void main() {
           ),
         ],
       ),
+      trainingStatsRepository: _FakeStatsRepository(),
     );
   });
 
@@ -84,6 +89,51 @@ void main() {
     expect(inSessionsList('4,20 t'), findsOneWidget); // 4200 kg
     expect(find.text('Zobacz wszystkie'), findsNothing);
   });
+
+  testWidgets('switches between sessions and statistics', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sesje'), findsOneWidget);
+    expect(find.byType(StatsRangeSelector), findsNothing);
+
+    await tester.tap(find.text('Statystyki'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StatsRangeSelector), findsOneWidget);
+    expect(find.byType(MonthSelectorBar), findsNothing);
+    expect(find.byTooltip('Wybierz rok/miesiąc'), findsNothing);
+
+    await tester.tap(find.text('Sesje'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MonthSelectorBar), findsOneWidget);
+
+    // „Zobacz statystyki” na karcie miesiąca przełącza podzakładkę.
+    await tester.tap(find.byKey(const ValueKey('monthly-stats-show-stats')));
+    await tester.pumpAndSettle();
+    expect(find.byType(StatsRangeSelector), findsOneWidget);
+  });
+}
+
+class _FakeStatsRepository implements TrainingStatsRepository {
+  final _sessions = [
+    session.TrainingSession(
+      planName: 'Plan Góra',
+      status: session.TrainingSessionStatus.completed,
+      startedAt: DateTime.now().toUtc().subtract(const Duration(days: 1)),
+      finishedAt: DateTime.now().toUtc().subtract(const Duration(hours: 23)),
+      exercises: const [],
+    ),
+  ];
+
+  @override
+  Future<List<session.TrainingSession>> completedSessionsSince(
+    DateTime from,
+  ) async => _sessions;
+
+  @override
+  Future<List<session.TrainingSession>> allCompletedSessions() async =>
+      _sessions;
 }
 
 class _FakeTrainingHistoryRepository implements TrainingHistoryRepository {

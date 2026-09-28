@@ -65,43 +65,14 @@ void main() {
       );
     });
 
-    test('month starts on the 1st; earliest start covers a week from the '
-        'previous month', () {
+    test('month starts on the 1st; a week can start in the previous '
+        'month', () {
       final now = DateTime(2026, 10, 2, 12);
       expect(TrainingSummaryCalculator.startOfMonth(now), DateTime(2026, 10));
       expect(
         TrainingSummaryCalculator.startOfWeek(now),
         DateTime(2026, 9, 28),
       );
-      expect(
-        TrainingSummaryCalculator.earliestStart(now),
-        DateTime(2026, 9, 28),
-      );
-    });
-
-    test('summarize splits sessions into week and month', () {
-      final now = DateTime(2026, 9, 16, 20);
-      final summary = TrainingSummaryCalculator.summarize([
-        _session(DateTime(2026, 9, 14, 0, 0)), // początek tygodnia
-        _session(DateTime(2026, 9, 16, 18)), // dziś
-        _session(DateTime(2026, 9, 13, 23, 59)), // ostatnia chwila przed tyg.
-        _session(DateTime(2026, 9, 1, 7)), // początek miesiąca
-        _session(DateTime(2026, 8, 31, 23, 59)), // poprzedni miesiąc
-        _session(
-          DateTime(2026, 9, 15, 18),
-          status: TrainingSessionStatus.cancelled,
-        ),
-        _session(
-          DateTime(2026, 9, 15, 19),
-          status: TrainingSessionStatus.active,
-        ),
-        _session(DateTime(2026, 9, 17, 8)), // przyszłość (błędny zegar)
-      ], now: now);
-
-      expect(summary.week.workouts, 2);
-      expect(summary.month.workouts, 4);
-      expect(summary.week.durationSec, 2 * 3600);
-      expect(summary.month.volumeKg, 4 * 800);
     });
   });
 

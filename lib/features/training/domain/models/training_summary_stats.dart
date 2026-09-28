@@ -1,5 +1,3 @@
-enum ActivitySummaryPeriod { week, month }
-
 /// Zagregowane wyniki treningów w jednym okresie (liczone lokalnie).
 class TrainingPeriodStats {
   const TrainingPeriodStats({
@@ -45,22 +43,6 @@ class TrainingPeriodStats {
       'TrainingPeriodStats(workouts: $workouts, durationSec: $durationSec, '
       'sets: $completedSets, reps: $reps, volumeKg: $volumeKg, '
       'exercises: $distinctExercises)';
-}
-
-/// Bieżący tydzień (od poniedziałku 00:00) i bieżący miesiąc kalendarzowy.
-class TrainingSummary {
-  const TrainingSummary({required this.week, required this.month});
-
-  final TrainingPeriodStats week;
-  final TrainingPeriodStats month;
-
-  static const empty = TrainingSummary(
-    week: TrainingPeriodStats.empty,
-    month: TrainingPeriodStats.empty,
-  );
-
-  TrainingPeriodStats of(ActivitySummaryPeriod period) =>
-      period == ActivitySummaryPeriod.week ? week : month;
 }
 
 /// `18 960` — separator tysięcy dla dużych liczb w kafelkach.

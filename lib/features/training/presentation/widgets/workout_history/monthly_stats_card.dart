@@ -20,7 +20,7 @@ class MonthlyStatsCard extends StatelessWidget {
   final DateTime focusedMonth;
   final MonthlyTrainingStats stats;
 
-  /// „Zobacz statystyki” — przejście do podsumowania tygodnia i miesiąca.
+  /// „Zobacz statystyki” — przełącza Historię na podzakładkę statystyk.
   final VoidCallback? onShowStats;
 
   static const _fullMonthNames = [

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_tab_header.dart';
 import '../../domain/repositories/training_stats_repository.dart';
-import '../bloc/training_summary_cubit.dart';
-import '../widgets/training_activity_summary.dart';
+import '../bloc/training_stats_cubit.dart';
+import '../widgets/stats/training_stats_view.dart';
 
+/// Statystyki jako osobny ekran — wejście z Profilu. W Historii te same
+/// statystyki są podzakładką.
 class TrainingStatsScreen extends StatelessWidget {
   const TrainingStatsScreen({
     super.key,
@@ -25,30 +29,35 @@ class TrainingStatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => TrainingSummaryCubit(
+      create: (_) => TrainingStatsCubit(
         repository ?? ServiceLocator.trainingStatsRepository,
         dataChanges: dataChanges ?? ServiceLocator.trainingSessionDataChanges,
         clock: clock,
       )..load(),
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          iconTheme: const IconThemeData(color: Colors.white),
-          title: const Text(
-            'Statystyki',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
+        body: AppTabBackground(
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppTabHeader(
+                  title: 'Statystyki',
+                  showSync: false,
+                  leading: AppTabHeaderButton.back(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const AppTabScrollEdge(),
+                Expanded(
+                  child: TrainingStatsView(
+                    onStartWorkout: () => context.go('/app/training'),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-        body: const SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(24, 12, 24, 24),
-            child: TrainingActivitySummary(),
           ),
         ),
       ),

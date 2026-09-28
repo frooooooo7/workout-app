@@ -22,4 +22,23 @@ abstract final class AppColors {
 
   /// Granatowa poświata u góry nagłówka profilu (przechodzi w [background]).
   static const heroGlow = Color(0xFF15254A);
+
+  // ── Statystyki i wykresy ───────────────────────
+  // Akcenty kafelków i serii danych. Jeden kolor = jedna miara na całym
+  // ekranie (np. czas zawsze pomarańczowy), żeby wykres i kafelek się łączyły.
+  static const statIndigo = Color(0xFF6C8EFF);
+  static const statOrange = Color(0xFFFF8A4C);
+  static const statTeal = Color(0xFF2DD4BF);
+  static const statAmber = Color(0xFFF59E0B);
+  static const statPink = Color(0xFFF472B6);
+
+  /// Zmiana na plus / na minus względem poprzedniego okresu.
+  static const trendUp = Color(0xFF34D399);
+  static const trendDown = Color(0xFFF87171);
+
+  /// Linie siatki wykresów — ciszej niż [border].
+  static const chartGrid = Color(0xFF222B3A);
+
+  /// Pusta kratka heatmapy i tor pasków.
+  static const chartTrack = Color(0xFF1A2030);
 }

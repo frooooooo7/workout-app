@@ -18,36 +18,6 @@ abstract final class TrainingSummaryCalculator {
     return DateTime(local.year, local.month);
   }
 
-  /// Najwcześniejsza data potrzebna do obu okresów (tydzień może zaczynać się
-  /// w poprzednim miesiącu).
-  static DateTime earliestStart(DateTime now) {
-    final week = startOfWeek(now);
-    final month = startOfMonth(now);
-    return week.isBefore(month) ? week : month;
-  }
-
-  static TrainingSummary summarize(
-    Iterable<TrainingSession> sessions, {
-    required DateTime now,
-  }) {
-    final weekStart = startOfWeek(now);
-    final monthStart = startOfMonth(now);
-    final week = <TrainingSession>[];
-    final month = <TrainingSession>[];
-
-    for (final session in sessions) {
-      if (session.status != TrainingSessionStatus.completed) continue;
-      final started = session.startedAt;
-      if (started.isAfter(now)) continue;
-      if (!started.isBefore(weekStart)) week.add(session);
-      if (!started.isBefore(monthStart)) month.add(session);
-    }
-
-    return TrainingSummary(week: aggregate(week), month: month.isEmpty
-        ? TrainingPeriodStats.empty
-        : aggregate(month));
-  }
-
   /// Liczy wyłącznie ukończone serie; ciężar i powtórzenia z wykonania
   /// (tekst z klawiatury: `82,5`, `82.5`, `8`). Seria bez kompletu liczb
   /// dokłada się do liczby serii, ale nie do objętości.

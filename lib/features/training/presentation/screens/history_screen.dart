@@ -6,7 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
+import '../bloc/training_stats_cubit.dart';
 import '../bloc/workout_history_cubit.dart';
+import '../widgets/stats/training_stats_view.dart';
+import '../widgets/workout_history/history_segment_switch.dart';
 import '../widgets/workout_history/month_selector_bar.dart';
 import '../widgets/workout_history/monthly_sessions_list.dart';
 import '../widgets/workout_history/monthly_stats_card.dart';
@@ -17,11 +20,23 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => WorkoutHistoryCubit(
-        ServiceLocator.trainingHistoryRepository,
-        dataChanges: ServiceLocator.trainingSessionDataChanges,
-      ),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => WorkoutHistoryCubit(
+            ServiceLocator.trainingHistoryRepository,
+            dataChanges: ServiceLocator.trainingSessionDataChanges,
+          ),
+        ),
+        // Leniwie — statystyki liczą się dopiero przy pierwszym wejściu
+        // w podzakładkę.
+        BlocProvider(
+          create: (_) => TrainingStatsCubit(
+            ServiceLocator.trainingStatsRepository,
+            dataChanges: ServiceLocator.trainingSessionDataChanges,
+          )..load(),
+        ),
+      ],
       child: const _WorkoutHistoryView(),
     );
   }
@@ -36,6 +51,12 @@ class _WorkoutHistoryView extends StatefulWidget {
 
 class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   late final PageController _pageController;
+  HistorySegment _segment = HistorySegment.sessions;
+
+  void _selectSegment(HistorySegment segment) {
+    if (segment == _segment) return;
+    setState(() => _segment = segment);
+  }
 
   @override
   void initState() {
@@ -97,6 +118,7 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
           child: BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
             builder: (context, state) {
               final cubit = context.read<WorkoutHistoryCubit>();
+              final showStats = _segment == HistorySegment.stats;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -104,38 +126,58 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                   // 1. Header — wspólny dla wszystkich zakładek
                   AppTabHeader(
                     title: 'Historia',
-                      actions: [
-                      AppTabHeaderButton(
-                        tooltip: 'Wybierz rok/miesiąc',
-                        icon: Icons.calendar_today_rounded,
-                        onPressed: () => cubit.openMonthPicker(context),
-                      ),
+                    actions: [
+                      if (!showStats)
+                        AppTabHeaderButton(
+                          tooltip: 'Wybierz rok/miesiąc',
+                          icon: Icons.calendar_today_rounded,
+                          onPressed: () => cubit.openMonthPicker(context),
+                        ),
                     ],
                   ),
 
-                  // 2. Month Selector Bar
-                  const SizedBox(height: 8),
-                  MonthSelectorBar(
-                    availableMonths: state.availableMonths,
-                    focusedMonth: state.focusedMonth,
-                    onMonthSelected: (month) => cubit.selectMonth(month),
-                  ),
-                  const SizedBox(height: 12),
-                  const AppTabScrollEdge(),
-
-                  // Main Content — Vertical scroll view with swipe gesture for months
-                  Expanded(
-                    child: GestureDetector(
-                      onHorizontalDragEnd: (details) =>
-                          _onHorizontalDragEnd(context, details, state),
-                      behavior: HitTestBehavior.opaque,
-                      child: RefreshIndicator(
-                        onRefresh: () => _onRefresh(context),
-                        color: AppColors.primary,
-                        child: _buildBody(context, state, cubit),
-                      ),
+                  // 2. Podzakładki: lista sesji / statystyki
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: HistorySegmentSwitch(
+                      selected: _segment,
+                      onChanged: _selectSegment,
                     ),
                   ),
+
+                  if (showStats) ...[
+                    const SizedBox(height: 12),
+                    const AppTabScrollEdge(),
+                    Expanded(
+                      child: TrainingStatsView(
+                        onStartWorkout: () => context.go('/app/training'),
+                      ),
+                    ),
+                  ] else ...[
+                    // 3. Month Selector Bar
+                    const SizedBox(height: 8),
+                    MonthSelectorBar(
+                      availableMonths: state.availableMonths,
+                      focusedMonth: state.focusedMonth,
+                      onMonthSelected: (month) => cubit.selectMonth(month),
+                    ),
+                    const SizedBox(height: 12),
+                    const AppTabScrollEdge(),
+
+                    // Main Content — Vertical scroll view with swipe gesture for months
+                    Expanded(
+                      child: GestureDetector(
+                        onHorizontalDragEnd: (details) =>
+                            _onHorizontalDragEnd(context, details, state),
+                        behavior: HitTestBehavior.opaque,
+                        child: RefreshIndicator(
+                          onRefresh: () => _onRefresh(context),
+                          color: AppColors.primary,
+                          child: _buildBody(context, state, cubit),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               );
             },
@@ -202,7 +244,7 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                 MonthlyStatsCard(
                   focusedMonth: state.focusedMonth,
                   stats: stats,
-                  onShowStats: () => context.push('/app/training/stats'),
+                  onShowStats: () => _selectSegment(HistorySegment.stats),
                 ),
                 const SizedBox(height: 16),
               ],
