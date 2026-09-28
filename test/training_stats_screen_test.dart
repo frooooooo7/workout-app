@@ -15,6 +15,9 @@ class _FakeStatsRepository implements TrainingStatsRepository {
     requestedFrom = from;
     return sessions;
   }
+
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async => sessions;
 }
 
 TrainingSession _session(DateTime startLocal) {

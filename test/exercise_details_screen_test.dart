@@ -67,6 +67,9 @@ class _FakeStats implements TrainingStatsRepository {
   @override
   Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
       sessions;
+
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async => sessions;
 }
 
 TrainingSession _session(DateTime date, String weight, String reps) =>

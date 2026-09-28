@@ -1,0 +1,42 @@
+import '../../models/training_session.dart';
+import '../training_session_detail_mapper.dart' show parseReps, parseWeightKg;
+
+/// Ukończona seria z wartościami rozparsowanymi z tekstu klawiatury. Liczymy
+/// wyłącznie wykonanie (`actual*`) — tak jak kafelki historii.
+class CompletedSetValues {
+  const CompletedSetValues({this.weightKg, this.reps, this.rir});
+
+  /// `null` albo 0 — seria z masą własną.
+  final double? weightKg;
+  final int? reps;
+  final int? rir;
+
+  bool get hasWeight => (weightKg ?? 0) > 0;
+
+  double get volumeKg => hasWeight && reps != null ? weightKg! * reps! : 0;
+}
+
+Iterable<CompletedSetValues> completedSetsOf(
+  TrainingSessionExercise exercise,
+) sync* {
+  for (final set in exercise.sets) {
+    if (!set.completed) continue;
+    yield CompletedSetValues(
+      weightKg: parseWeightKg(set.actualWeight),
+      reps: parseReps(set.actualReps),
+      rir: parseReps(set.actualRir),
+    );
+  }
+}
+
+/// Klucz ćwiczenia w statystykach. Nazwa, a nie id: sesje z serwera niosą
+/// identyfikator serwera, a lokalne — lokalny, i to samo ćwiczenie
+/// rozpadłoby się na dwa.
+String statsExerciseKey(TrainingSessionExercise exercise) {
+  final name = exercise.exerciseName.trim().toLowerCase();
+  if (name.isNotEmpty) return 'name:$name';
+  return 'id:${exercise.exerciseId.trim()}';
+}
+
+DateTime statsDay(DateTime local) =>
+    DateTime(local.year, local.month, local.day);

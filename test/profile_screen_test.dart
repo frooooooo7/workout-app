@@ -216,6 +216,9 @@ class _NoOpStats implements TrainingStatsRepository {
   @override
   Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
       const [];
+
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async => const [];
 }
 
 class _NoOpRepository extends Fake implements ProfileRepository {}

@@ -25,4 +25,14 @@ class LocalTrainingStatsRepository implements TrainingStatsRepository {
       includeSynced: true,
     );
   }
+
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() {
+    onRead?.call();
+    return _localHistory.finishedSessions(
+      status: TrainingSessionStatus.completed,
+      includeSynced: true,
+      limit: null,
+    );
+  }
 }

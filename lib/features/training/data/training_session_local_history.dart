@@ -18,11 +18,15 @@ class TrainingSessionLocalHistory {
   ///
   /// [includeSynced] = `false` zwraca tylko sesje, których serwer jeszcze
   /// nie potwierdził — pozostałe są już w odpowiedzi API.
+  ///
+  /// [limit] = `null` zdejmuje limit — tylko dla statystyk, które muszą
+  /// widzieć całą historię (rekordy, seria tygodni, zakres „Całość”).
   Future<List<TrainingSession>> finishedSessions({
     TrainingSessionStatus? status,
     DateTime? from,
     DateTime? to,
     required bool includeSynced,
+    int? limit = _maxSessions,
   }) {
     return _localDb.run((db) async {
       // Sesje czekające na usunięcie znikają od razu, zanim serwer to
@@ -59,7 +63,7 @@ class TrainingSessionLocalHistory {
         where: where.join(' AND '),
         whereArgs: args,
         orderBy: 'started_at DESC',
-        limit: _maxSessions,
+        limit: limit,
       );
       return TrainingSessionLocalMapper.fromDbMany(db, rows);
     });
