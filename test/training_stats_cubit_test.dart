@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
+import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
 import 'package:gym/features/training/presentation/bloc/training_stats_cubit.dart';
 
 class _Repo implements TrainingStatsRepository {
@@ -171,6 +172,32 @@ void main() {
         _session(DateTime(2026, 9, 15, 18).subtract(Duration(days: i))),
     ];
 
+    test(
+      'a goal that lands while the isolate is computing is not lost',
+      () async {
+        // Cel dochodzi po kilku–kilkudziesięciu ms, czyli w trakcie liczenia
+        // pierwszego snapshotu w wątku.
+        for (final delayMs in [5, 15, 30]) {
+          final cubit = TrainingStatsCubit(
+            _Repo(history()),
+            clock: () => _now,
+            weeklyGoalLoader: () async {
+              await Future<void>.delayed(Duration(milliseconds: delayMs));
+              return 4;
+            },
+          );
+          await cubit.load();
+          await _until(() => cubit.state.snapshot?.goal != null);
+          expect(
+            cubit.state.snapshot!.goal!.goal,
+            4,
+            reason: 'delay $delayMs ms',
+          );
+          await cubit.close();
+        }
+      },
+    );
+
     test('matches the direct calculation and keeps ranges in sync', () async {
       final sessions = history();
       final cubit = TrainingStatsCubit(
@@ -186,6 +213,23 @@ void main() {
       expect(snapshot.current.workouts, 29); // 18 sierpnia – 15 września
       expect(snapshot.hasHistory, isTrue);
       expect(snapshot.goal!.goal, 4);
+
+      // Wynik z wątku jest taki sam jak liczony bezpośrednio.
+      final direct = TrainingStatsCalculator.compute(
+        sessions,
+        range: StatsRange.month,
+        now: _now,
+        weeklyGoal: 4,
+      );
+      expect(snapshot.current, direct.current);
+      expect(snapshot.previous, direct.previous);
+      expect(snapshot.recordsCount, direct.recordsCount);
+      expect(snapshot.series.length, direct.series.length);
+      expect(snapshot.activity.trainingDays, direct.activity.trainingDays);
+      expect(
+        snapshot.insights.map((i) => i.text),
+        direct.insights.map((i) => i.text),
+      );
 
       cubit.selectRange(StatsRange.week);
       // Pasek zakresów reaguje od razu, wykresy po chwili.

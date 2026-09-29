@@ -246,6 +246,7 @@ class _ProfileContent extends StatelessWidget {
                   padding: const EdgeInsets.only(top: AppSpacing.xs),
                   child: ProfileWeekCard(
                     summary: summary,
+                    weeklyGoal: profile.details?.weeklyTrainingDays,
                     onTap: () => context.push('/app/training/stats'),
                   ),
                 );

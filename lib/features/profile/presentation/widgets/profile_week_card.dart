@@ -5,19 +5,26 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/duration_formatter.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../training/domain/models/training_summary_stats.dart';
+import '../../../training/domain/services/stats/weekly_goal_calculator.dart';
 import '../../domain/services/profile_week_calculator.dart';
 
 /// „Ten tydzień”: dni z treningiem (pon–nd), liczba treningów, czas,
-/// objętość i seria tygodni. Tap otwiera pełne statystyki.
+/// objętość i seria tygodni, a przy ustawionym celu — postęp do celu
+/// tygodniowego. Tap otwiera pełne statystyki.
 class ProfileWeekCard extends StatelessWidget {
   const ProfileWeekCard({
     super.key,
     required this.summary,
+    this.weeklyGoal,
     this.onTap,
     this.now,
   });
 
   final ProfileWeekSummary summary;
+
+  /// Cel „ile treningów w tygodniu” z profilu. Poza 1..14 (albo `null`)
+  /// karta wygląda jak bez celu.
+  final int? weeklyGoal;
   final VoidCallback? onTap;
 
   /// Test seam dla podświetlenia dzisiejszego dnia.
@@ -29,6 +36,9 @@ class ProfileWeekCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final today = (now ?? DateTime.now()).weekday;
     final stats = summary.stats;
+    final goal = weeklyGoal;
+    final hasGoal =
+        goal != null && goal >= 1 && goal <= WeeklyGoalCalculator.maxGoal;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageGutter),
@@ -52,6 +62,8 @@ class ProfileWeekCard extends StatelessWidget {
                     const Expanded(
                       child: Text(
                         'Ten tydzień',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 15,
@@ -59,6 +71,11 @@ class ProfileWeekCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (hasGoal) ...[
+                      _GoalPill(done: stats.workouts, goal: goal),
+                      if (summary.streakWeeks > 0)
+                        const SizedBox(width: AppSpacing.xs),
+                    ],
                     if (summary.streakWeeks > 0)
                       _StreakPill(weeks: summary.streakWeeks),
                     if (onTap != null) ...[
@@ -122,6 +139,77 @@ class ProfileWeekCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Postęp do celu tygodniowego: pierścień + „3/4”. Po osiągnięciu celu
+/// pierścień zamienia się w ptaszek, a całość w kolor sukcesu.
+class _GoalPill extends StatelessWidget {
+  const _GoalPill({required this.done, required this.goal});
+
+  final int done;
+  final int goal;
+
+  static const _iconSize = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final met = done >= goal;
+    final accent = met ? AppColors.success : AppColors.primaryVariant;
+    final unit = polishPlural(goal, 'treningu', 'treningów', 'treningów');
+    return Semantics(
+      container: true,
+      label:
+          'Cel tygodnia: $done z $goal $unit'
+          '${met ? ', osiągnięty' : ''}',
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('profile-week-goal'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.xxs,
+        ),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (met)
+              Icon(Icons.check_circle_rounded, size: _iconSize, color: accent)
+            else
+              SizedBox(
+                width: _iconSize,
+                height: _iconSize,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(end: (done / goal).clamp(0.0, 1.0)),
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) => CircularProgressIndicator(
+                    value: value,
+                    strokeWidth: 2.5,
+                    strokeCap: StrokeCap.round,
+                    color: accent,
+                    backgroundColor: accent.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
+            const SizedBox(width: AppSpacing.xxs + 2),
+            Text(
+              '$done/$goal',
+              maxLines: 1,
+              style: TextStyle(
+                color: accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
       ),
     );

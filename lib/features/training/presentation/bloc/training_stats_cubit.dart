@@ -124,17 +124,20 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
     try {
       final sessions = await _repository.allCompletedSessions();
       if (isClosed) return;
-      _sessions = sessions;
       final now = _clock();
       // Jak w kalkulatorze: sesja „z przyszłości” (zły zegar) nie liczy się.
       final valid = [
         for (final s in sessions)
           if (!s.startedAt.isAfter(now)) s,
       ];
-      _records = _heavy
+      final records = sessions.length >= isolateThreshold
           ? await compute(_recordsJob, valid)
           : _recordsJob(valid);
       if (isClosed) return;
+      // Sesje i ich rekordy podmieniamy razem — inaczej zmiana zakresu w trakcie
+      // liczenia zestawiłaby nowe sesje ze starymi rekordami.
+      _sessions = sessions;
+      _records = records;
       final snapshot = await _snapshotFor(state.range, state.customRange);
       if (isClosed || snapshot == null) return;
       emit(state.copyWith(snapshot: snapshot, loading: false, failed: false));
@@ -210,9 +213,24 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
   }
 
   Future<void> _recompute(StatsRange range, StatsDateRange? custom) async {
-    final snapshot = await _snapshotFor(range, custom);
-    if (isClosed || snapshot == null) return;
-    emit(state.copyWith(snapshot: snapshot, loading: false));
+    try {
+      final snapshot = await _snapshotFor(range, custom);
+      if (isClosed || snapshot == null) return;
+      emit(state.copyWith(snapshot: snapshot, loading: false));
+    } catch (_) {
+      // Porażka liczenia w tle nie może zostawić ekranu w stanie ładowania:
+      // zostaje poprzedni snapshot (albo błąd, gdy nie ma żadnego).
+      if (isClosed) return;
+      emit(
+        TrainingStatsState(
+          range: state.range,
+          customRange: state.customRange,
+          snapshot: state.snapshot,
+          loading: false,
+          failed: state.snapshot == null,
+        ),
+      );
+    }
   }
 
   /// Snapshot dla zakresu albo `null`, gdy w międzyczasie zlecono nowszy.
@@ -222,18 +240,24 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
   ) async {
     final seq = ++_computeSeq;
     if (!_heavy) return _computeNow(range, custom);
-    final result = await compute(
-      _snapshotJob,
-      _SnapshotArgs(
-        sessions: _sessions,
-        range: range,
-        customRange: custom,
-        now: _clock(),
-        records: _records,
-        weeklyGoal: _weeklyGoal,
-      ),
-    );
-    return seq == _computeSeq ? result : null;
+    while (true) {
+      final goal = _weeklyGoal;
+      final result = await compute(
+        _snapshotJob,
+        _SnapshotArgs(
+          sessions: _sessions,
+          range: range,
+          customRange: custom,
+          now: _clock(),
+          records: _records,
+          weeklyGoal: goal,
+        ),
+      );
+      if (seq != _computeSeq) return null;
+      // Cel z profilu mógł dojść, gdy wątek jeszcze liczył — bez ponowienia
+      // pierwszy ekran zostałby bez karty celu aż do kolejnej zmiany.
+      if (goal == _weeklyGoal) return result;
+    }
   }
 
   TrainingStatsSnapshot _computeNow(StatsRange range, StatsDateRange? custom) =>

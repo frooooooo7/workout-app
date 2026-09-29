@@ -80,14 +80,19 @@ abstract final class TrainingStatsCalculator {
           previousEnd: _sameElapsed(previousStart, start, tomorrow),
         );
       case StatsRange.custom:
-        final chosen = custom ?? StatsDateRange(DateTime(y, m, d - 29), today);
+        final picked = custom ?? StatsDateRange(DateTime(y, m, d - 29), today);
+        // Dni z przyszłości nie mają danych — długość okna i okresu
+        // porównawczego liczymy z tego, co już było.
+        final chosen = StatsDateRange(
+          picked.start.isAfter(today) ? today : picked.start,
+          picked.end.isAfter(today) ? today : picked.end,
+        );
         final start = chosen.start;
-        var end = DateTime(
+        final end = DateTime(
           chosen.end.year,
           chosen.end.month,
           chosen.end.day + 1,
         );
-        if (end.isAfter(tomorrow)) end = tomorrow;
         final length = chosen.days;
         return StatsWindow(
           start: start,
@@ -479,7 +484,9 @@ abstract final class TrainingStatsCalculator {
       avgSetsPerWorkout: sets / sessions.length,
       avgRepsPerSet: repsSets == 0 ? null : repsSum / repsSets,
       avgRir: rirSets == 0 ? null : rirSum / rirSets,
-      workoutsPerWeek: sessions.length / (elapsedDays / 7),
+      // Krótsze okno niż tydzień daje „7 treningów tygodniowo” z jednego
+      // treningu — liczymy co najmniej od tygodnia.
+      workoutsPerWeek: sessions.length / math.max(1.0, elapsedDays / 7),
     );
   }
 

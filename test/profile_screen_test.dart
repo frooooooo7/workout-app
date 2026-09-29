@@ -5,7 +5,9 @@ import 'package:gym/features/feed/domain/models/cursor_page.dart';
 import 'package:gym/features/feed/domain/models/feed_author.dart';
 import 'package:gym/features/feed/domain/models/feed_post.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
+import 'package:gym/core/theme/app_colors.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
+import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
@@ -16,6 +18,7 @@ import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_week_cubit.dart';
 import 'package:gym/features/profile/presentation/screens/profile_screen.dart';
 import 'package:gym/features/profile/presentation/widgets/following_avatar_strip.dart';
+import 'package:gym/features/profile/presentation/widgets/profile_week_card.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_hero_header.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/models/training_summary_stats.dart';
@@ -75,6 +78,8 @@ Future<void> _pumpProfile(
 }
 
 void main() {
+  _weekCardTests();
+
   testWidgets('ProfileScreen renders header, week, following and posts', (
     tester,
   ) async {
@@ -117,6 +122,48 @@ void main() {
     expect(find.text('Pull — plecy i biceps'), findsOneWidget);
     // Oś czasu profilu nie powtarza autora na każdej karcie.
     expect(find.text('Twój trening'), findsNothing);
+  });
+
+  testWidgets('ProfileScreen passes the weekly goal to the week card', (
+    tester,
+  ) async {
+    await _pumpProfile(
+      tester,
+      state: ProfileState(
+        profile: _profile.copyWith(
+          details: const ProfileDetails(weeklyTrainingDays: 4),
+        ),
+        loading: false,
+      ),
+      week: const ProfileWeekSummary(
+        trainedWeekdays: {1, 3},
+        stats: TrainingPeriodStats(workouts: 2),
+        streakWeeks: 0,
+      ),
+    );
+
+    expect(find.text('2/4'), findsOneWidget);
+    expect(
+      tester.widget<ProfileWeekCard>(find.byType(ProfileWeekCard)).weeklyGoal,
+      4,
+    );
+  });
+
+  testWidgets('ProfileScreen without a weekly goal hides the progress', (
+    tester,
+  ) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+      week: const ProfileWeekSummary(
+        trainedWeekdays: {1},
+        stats: TrainingPeriodStats(workouts: 1),
+        streakWeeks: 0,
+      ),
+    );
+
+    expect(find.byType(ProfileWeekCard), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-week-goal')), findsNothing);
   });
 
   testWidgets('empty timeline invites to start a workout', (tester) async {
@@ -188,6 +235,138 @@ void main() {
     await tester.tap(find.text('Znajdź osoby'));
     await tester.pump();
     expect(tapped, isTrue);
+  });
+}
+
+void _weekCardTests() {
+  Future<void> pumpCard(
+    WidgetTester tester, {
+    required int workouts,
+    int? goal,
+    int streakWeeks = 3,
+    VoidCallback? onTap,
+  }) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileWeekCard(
+            summary: ProfileWeekSummary(
+              trainedWeekdays: const {1, 3},
+              stats: TrainingPeriodStats(workouts: workouts, durationSec: 6000),
+              streakWeeks: streakWeeks,
+            ),
+            weeklyGoal: goal,
+            onTap: onTap,
+            now: DateTime(2026, 9, 16),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  final goalPill = find.byKey(const ValueKey('profile-week-goal'));
+
+  group('ProfileWeekCard weekly goal', () {
+    testWidgets('shows progress towards the goal', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester, workouts: 3, goal: 4);
+
+      expect(find.text('3/4'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Cel tygodnia: 3 z 4 treningów'),
+        findsOneWidget,
+      );
+      final ring = tester.widget<CircularProgressIndicator>(
+        find.descendant(
+          of: goalPill,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+      );
+      expect(ring.value, 0.75);
+      expect(ring.color, AppColors.primaryVariant);
+      expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
+      // Reszta karty bez zmian.
+      expect(find.text('Ten tydzień'), findsOneWidget);
+      expect(find.text('3 tygodnie'), findsOneWidget);
+      expect(find.text('treningi'), findsOneWidget);
+      semantics.dispose();
+    });
+
+    testWidgets('met goal switches to the success state', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester, workouts: 4, goal: 4);
+
+      expect(find.text('4/4'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Cel tygodnia: 4 z 4 treningów, osiągnięty'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: goalPill,
+          matching: find.byIcon(Icons.check_circle_rounded),
+        ),
+        findsOneWidget,
+      );
+      final text = tester.widget<Text>(find.text('4/4'));
+      expect(text.style?.color, AppColors.success);
+      semantics.dispose();
+    });
+
+    testWidgets('exceeding the goal keeps the honest count', (tester) async {
+      await pumpCard(tester, workouts: 5, goal: 4);
+
+      expect(find.text('5/4'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    });
+
+    testWidgets('uses the singular for a goal of one', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await pumpCard(tester, workouts: 0, goal: 1, streakWeeks: 0);
+
+      expect(find.text('0/1'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Cel tygodnia: 0 z 1 treningu'),
+        findsOneWidget,
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('fits 360 px with the widest header', (tester) async {
+      await pumpCard(
+        tester,
+        workouts: 10,
+        goal: 14,
+        streakWeeks: 5,
+        onTap: () {},
+      );
+
+      expect(find.text('10/14'), findsOneWidget);
+      expect(find.text('5 tygodni'), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(goalPill).right, lessThanOrEqualTo(360 - 32));
+    });
+
+    testWidgets('without a goal the card looks as before', (tester) async {
+      await pumpCard(tester, workouts: 3);
+
+      expect(goalPill, findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('3 tygodnie'), findsOneWidget);
+      expect(find.text('Ten tydzień'), findsOneWidget);
+    });
+
+    testWidgets('ignores goals outside 1..14', (tester) async {
+      for (final goal in [0, -2, 15]) {
+        await pumpCard(tester, workouts: 3, goal: goal);
+        expect(goalPill, findsNothing, reason: 'goal $goal');
+      }
+    });
   });
 }
 

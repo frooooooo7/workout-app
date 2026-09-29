@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../../domain/repositories/training_stats_repository.dart';
 import '../bloc/training_stats_cubit.dart';
+import '../bloc/weekly_goal_source.dart';
 import '../widgets/stats/training_stats_view.dart';
 
 /// Statystyki jako osobny ekran — wejście z Profilu. W Historii te same
@@ -17,6 +18,7 @@ class TrainingStatsScreen extends StatelessWidget {
     this.repository,
     this.dataChanges,
     this.clock,
+    this.weeklyGoalLoader,
   });
 
   /// Test seam; domyślnie [ServiceLocator.trainingStatsRepository].
@@ -26,6 +28,9 @@ class TrainingStatsScreen extends StatelessWidget {
   final Listenable? dataChanges;
   final DateTime Function()? clock;
 
+  /// Test seam; domyślnie cel z profilu ([loadOwnWeeklyGoal]).
+  final Future<int?> Function()? weeklyGoalLoader;
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
@@ -33,6 +38,7 @@ class TrainingStatsScreen extends StatelessWidget {
         repository ?? ServiceLocator.trainingStatsRepository,
         dataChanges: dataChanges ?? ServiceLocator.trainingSessionDataChanges,
         clock: clock,
+        weeklyGoalLoader: weeklyGoalLoader ?? loadOwnWeeklyGoal,
       )..load(),
       child: Scaffold(
         backgroundColor: AppColors.background,

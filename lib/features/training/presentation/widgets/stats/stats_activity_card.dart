@@ -9,6 +9,7 @@ import '../../../../../core/utils/polish_plural.dart';
 import '../../../domain/models/training_stats.dart';
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
+import 'stats_navigation.dart';
 
 /// Kolor poziomu 0–4: pusty dzień, trzy odcienie [AppColors.primary]
 /// i jaśniejszy [AppColors.primaryVariant] dla najcięższych dni.
@@ -73,9 +74,16 @@ class _StatsActivityCardState extends State<StatsActivityCard> {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          _DetailLine(
-            text: _selected == null ? summary : _dayLine(_selected!),
-            highlighted: _selected != null,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            alignment: Alignment.topCenter,
+            child: _DetailPanel(
+              text: _selected == null ? summary : _dayLine(_selected!),
+              highlighted: _selected != null,
+              sessions: _selected == null
+                  ? const []
+                  : widget.activity.dayAt(_selected!)?.sessions ?? const [],
+            ),
           ),
         ],
       ),
@@ -356,33 +364,136 @@ class _HeatmapPainter extends CustomPainter {
       old.weeks != weeks;
 }
 
-class _DetailLine extends StatelessWidget {
-  const _DetailLine({required this.text, required this.highlighted});
+/// Podsumowanie (całego okresu albo wybranego dnia) i — dla dnia z treningami —
+/// lista sesji do otwarcia ze szczegółami.
+class _DetailPanel extends StatelessWidget {
+  const _DetailPanel({
+    required this.text,
+    required this.highlighted,
+    required this.sessions,
+  });
 
   final String text;
   final bool highlighted;
+  final List<ActivitySession> sessions;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      // Przycięcie do zaokrągleń, żeby fala InkWell nie wychodziła poza panel.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: highlighted
             ? AppColors.surfaceVariant
             : AppColors.surfaceVariant.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: highlighted ? AppColors.textPrimary : AppColors.textSecondary,
-          fontSize: 12.5,
-          fontWeight: highlighted ? FontWeight.w600 : FontWeight.w500,
-          fontFeatures: const [FontFeature.tabularFigures()],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: highlighted
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+                fontSize: 12.5,
+                fontWeight: highlighted ? FontWeight.w600 : FontWeight.w500,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          if (sessions.isNotEmpty)
+            Material(
+              type: MaterialType.transparency,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final session in sessions) _SessionRow(session: session),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionRow extends StatelessWidget {
+  const _SessionRow({required this.session});
+
+  final ActivitySession session;
+
+  static String _time(DateTime startedAt) {
+    final t = startedAt.toLocal();
+    final hh = t.hour.toString().padLeft(2, '0');
+    final mm = t.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final time = _time(session.startedAt);
+    final name = session.name.trim().isEmpty ? 'Trening' : session.name.trim();
+    void open() => openStatsSession(context, session.id);
+
+    // `onTap` na samym Semantics: excludeSemantics wycina akcje dziecka,
+    // więc bez tego czytnik ekranu nie miałby czym otworzyć treningu.
+    return Semantics(
+      key: ValueKey('stats-activity-session-${session.id}'),
+      container: true,
+      button: true,
+      label: '$time, $name',
+      excludeSemantics: true,
+      onTap: open,
+      child: InkWell(
+        onTap: open,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: AppSpacing.minTapTarget),
+          padding: const EdgeInsets.only(left: 10, right: 6),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: AppColors.border.withValues(alpha: 0.6)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(
+                time,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: AppColors.textMuted,
+              ),
+            ],
+          ),
         ),
       ),
     );

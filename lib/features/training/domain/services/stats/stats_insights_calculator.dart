@@ -18,6 +18,9 @@ abstract final class StatsInsightsCalculator {
 
   static const inactivityDays = 7;
 
+  /// Najmniejsza zmiana (kg 1RM albo powtórzenia) warta wniosku o progresie.
+  static const minProgress = 1.0;
+
   static List<StatsInsight> compute({
     required TrainingPeriodStats current,
     required TrainingPeriodStats? previous,
@@ -116,7 +119,11 @@ abstract final class StatsInsightsCalculator {
       }
     }
 
-    final plateau = _plateau(exercises);
+    // Ćwiczenie z rekordem w tym okresie nie stoi w miejscu — rekord ciężaru
+    // bywa przy niższym szacowanym 1RM (mniej powtórzeń), a wniosek o
+    // stagnacji obok „Nowy rekord” byłby sprzeczny.
+    final withRecord = {for (final r in windowRecords) r.exerciseKey};
+    final plateau = _plateau(exercises, withRecord);
     if (plateau != null) insights.add(plateau);
 
     final progress = _progress(exercises);
@@ -177,8 +184,12 @@ abstract final class StatsInsightsCalculator {
     return since >= plateauSessionsSinceBest ? since : null;
   }
 
-  static StatsInsight? _plateau(List<ExerciseProgress> exercises) {
+  static StatsInsight? _plateau(
+    List<ExerciseProgress> exercises,
+    Set<String> withRecord,
+  ) {
     for (final e in exercises) {
+      if (withRecord.contains(e.exerciseKey)) continue;
       final since = _stalledFor(e);
       if (since == null) continue;
       return StatsInsight(
@@ -203,7 +214,9 @@ abstract final class StatsInsightsCalculator {
       // się nie poprawiło.
       if (_stalledFor(e) != null) continue;
       final change = e.change;
-      if (change != null && change > leaderChange) {
+      // Poniżej kilograma (albo powtórzenia) to szum zaokrągleń Epleya: inne
+      // serie dają to samo szacowane 1RM, a różnica wychodzi z ułamków.
+      if (change != null && change >= minProgress && change > leaderChange) {
         leader = e;
         leaderChange = change;
       }

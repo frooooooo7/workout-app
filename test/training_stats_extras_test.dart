@@ -95,6 +95,58 @@ void main() {
       );
     });
 
+    test('a duration typed in the editor is not overridden by set times', () {
+      final start = DateTime(2026, 9, 14, 18);
+      // Ostatnia seria po 50 min, ale ktoś poprawił czas na 90 min.
+      final session = _session(
+        start,
+        duration: const Duration(minutes: 90),
+        exercises: [
+          _exercise('A', [
+            _set(
+              weight: '50',
+              reps: '8',
+              at: start.add(const Duration(minutes: 20)),
+            ),
+            _set(
+              weight: '50',
+              reps: '8',
+              at: start.add(const Duration(minutes: 50)),
+            ),
+          ]),
+        ],
+      );
+      expect(TrainingSummaryCalculator.sessionDurationSec(session), 90 * 60);
+    });
+
+    test('set times before the start or clumped at the start are ignored', () {
+      final start = DateTime(2026, 9, 14, 18);
+      TrainingSession withStamps(List<DateTime> at) => _session(
+        start,
+        duration: const Duration(minutes: 70),
+        exercises: [
+          _exercise('A', [for (final t in at) _set(reps: '8', at: t)]),
+        ],
+      );
+      expect(
+        TrainingSummaryCalculator.sessionDurationSec(
+          withStamps([
+            start.subtract(const Duration(minutes: 9)),
+            start.subtract(const Duration(minutes: 9)),
+          ]),
+        ),
+        70 * 60,
+      );
+      expect(
+        TrainingSummaryCalculator.sessionDurationSec(
+          withStamps([
+            for (var i = 0; i < 12; i++) start.add(const Duration(minutes: 2)),
+          ]),
+        ),
+        70 * 60,
+      );
+    });
+
     test('a single timestamped set is not trusted, the 5 h cap applies', () {
       final start = DateTime(2026, 9, 14, 18);
       final session = _session(
@@ -210,6 +262,45 @@ void main() {
         custom: StatsDateRange(DateTime(2026, 9, 10), DateTime(2026, 9, 30)),
       );
       expect(window.end, DateTime(2026, 9, 17));
+    });
+
+    test('a future end compares with a previous span of the same length', () {
+      // Środa: zakres pn–nd ma za sobą 3 dni, więc porównujemy z 3 dniami.
+      final window = TrainingStatsCalculator.windowFor(
+        StatsRange.custom,
+        _now,
+        custom: StatsDateRange(DateTime(2026, 9, 14), DateTime(2026, 9, 20)),
+      );
+      expect(window.end, DateTime(2026, 9, 17));
+      expect(window.previousStart, DateTime(2026, 9, 11));
+      expect(window.containsPrevious(DateTime(2026, 9, 13, 12)), isTrue);
+      expect(window.containsPrevious(DateTime(2026, 9, 10, 12)), isFalse);
+    });
+
+    test('a range entirely in the future collapses to today', () {
+      final window = TrainingStatsCalculator.windowFor(
+        StatsRange.custom,
+        _now,
+        custom: StatsDateRange(DateTime(2026, 9, 20), DateTime(2026, 9, 25)),
+      );
+      expect(window.start, DateTime(2026, 9, 16));
+      expect(window.end, DateTime(2026, 9, 17));
+      expect(window.previousStart, DateTime(2026, 9, 15));
+      expect(window.end.isAfter(window.start), isTrue);
+    });
+
+    test('workouts per week is never inflated by a window under a week', () {
+      final snapshot = TrainingStatsCalculator.compute(
+        [_session(DateTime(2026, 9, 15, 8))],
+        range: StatsRange.custom,
+        customRange: StatsDateRange(
+          DateTime(2026, 9, 15),
+          DateTime(2026, 9, 15),
+        ),
+        now: _now,
+      );
+      expect(snapshot.current.workouts, 1);
+      expect(snapshot.habits.workoutsPerWeek, 1);
     });
 
     test('long spans move to weekly and monthly buckets', () {
@@ -700,6 +791,78 @@ void main() {
           ],
         ),
         isEmpty,
+      );
+    });
+
+    test('an exercise with a record in the window is never "stalled"', () {
+      // 100×8 sześć razy, potem 105×3: rekord ciężaru, ale niższe 1RM.
+      final points = [
+        for (var i = 0; i < 6; i++)
+          ExerciseProgressPoint(
+            date: DateTime(2026, 8, 1 + i * 3),
+            sets: 3,
+            volumeKg: 0,
+            oneRepMaxKg: 100 * (1 + 8 / 30),
+          ),
+        ExerciseProgressPoint(
+          date: DateTime(2026, 8, 25),
+          sets: 3,
+          volumeKg: 0,
+          oneRepMaxKg: 105 * (1 + 3 / 30),
+        ),
+      ];
+      final bench = ExerciseProgress(
+        exerciseKey: 'name:wyciskanie',
+        exerciseName: 'Wyciskanie',
+        exerciseId: 'bench',
+        sessions: 7,
+        sets: 21,
+        volumeKg: 0,
+        points: points,
+      );
+      PersonalRecord record(String key) => PersonalRecord(
+        exerciseKey: key,
+        exerciseName: 'Wyciskanie',
+        exerciseId: 'bench',
+        sessionId: 's',
+        date: DateTime(2026, 8, 25),
+        kinds: {PersonalRecordKind.weight},
+      );
+
+      expect(
+        insights(exercises: [bench]).map((i) => i.kind),
+        contains(StatsInsightKind.plateau),
+      );
+      final withRecord = insights(
+        exercises: [bench],
+        records: [record('name:wyciskanie')],
+      );
+      expect(withRecord.map((i) => i.kind), [StatsInsightKind.records]);
+    });
+
+    test('progress below one kilogram is noise, not a headline', () {
+      ExerciseProgress exercise(double first, double last) => ExerciseProgress(
+        exerciseKey: 'k',
+        exerciseName: 'Wyciskanie',
+        exerciseId: 'bench',
+        sessions: 3,
+        sets: 9,
+        volumeKg: 0,
+        points: [
+          for (final (i, v) in [first, (first + last) / 2, last].indexed)
+            ExerciseProgressPoint(
+              date: DateTime(2026, 9, 1 + i),
+              sets: 3,
+              volumeKg: 0,
+              oneRepMaxKg: v,
+            ),
+        ],
+      );
+      expect(insights(exercises: [exercise(100, 100.04)]), isEmpty);
+      expect(insights(exercises: [exercise(100, 100.9)]), isEmpty);
+      expect(
+        insights(exercises: [exercise(100, 101)]).single.text,
+        'Wyciskanie: szacowane 1RM wzrosło o 1 kg.',
       );
     });
 

@@ -24,8 +24,14 @@ Color _regionColor(MuscleRegion region) => switch (region) {
   MuscleRegion.legs => AppColors.statIndigo,
 };
 
+/// Etykieta pozycji rankingu: grupy zbiorcze pełną nazwą („Nogi”, „Plecy”,
+/// „Barki”), granularne skróconą, żeby zmieściły się w wąskim wierszu.
+String _rankLabel(MuscleGroup group) =>
+    group.isCoarse ? group.label : group.shortLabel;
+
 /// Rozkład pracy na partie i mięśnie w zakresie: donut partii, manekin
-/// podświetlony intensywnością, ranking mięśni i ostrzeżenie o pominiętych.
+/// podświetlony intensywnością ([MuscleDistribution.bodyMap]), ranking grup
+/// tak, jak otagowano ćwiczenia, i ostrzeżenie o pominiętych mięśniach.
 class StatsMusclesCard extends StatefulWidget {
   const StatsMusclesCard({super.key, required this.muscles});
 
@@ -55,7 +61,8 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Liczone w seriach; mięśnie wspomagające po połowie.',
+                  'Serie na grupę mięśniową, tak jak otagowano ćwiczenia; '
+                  'mięśnie wspomagające liczą się po połowie.',
                   style: _captionStyle,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -67,7 +74,7 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                 ],
                 const _SubHeader('MAPA OBCIĄŻENIA'),
                 const SizedBox(height: AppSpacing.sm),
-                _BodyMap(muscles: m.muscles),
+                _BodyMap(bodyMap: m.bodyMap),
                 const SizedBox(height: AppSpacing.lg),
                 const _SubHeader('RANKING MIĘŚNI'),
                 const SizedBox(height: AppSpacing.xs),
@@ -248,19 +255,20 @@ class _RegionDonut extends StatelessWidget {
 }
 
 class _BodyMap extends StatelessWidget {
-  const _BodyMap({required this.muscles});
+  const _BodyMap({required this.bodyMap});
 
-  final List<MuscleStat> muscles;
+  /// Konkretne mięśnie → 0..1; grupy zbiorcze są już rozwinięte w domenie.
+  final Map<MuscleGroup, double> bodyMap;
 
   static const _style = BodyHighlighterStyle.dark();
 
-  /// Kilka grup trafia w ten sam obszar manekina (np. najszersze
-  /// i romboidalne) — obszar świeci intensywnością najmocniejszej z nich.
+  /// Kilka mięśni trafia w ten sam obszar manekina (np. najszersze
+  /// i romboidalne) — obszar świeci intensywnością najmocniejszego z nich.
   Set<MuscleHighlight> _highlights() {
     final bySlug = <String, double>{};
-    for (final m in muscles) {
-      final slug = m.muscle.bodyHighlighterSlug;
-      if (m.intensity > (bySlug[slug] ?? 0)) bySlug[slug] = m.intensity;
+    for (final entry in bodyMap.entries) {
+      final slug = entry.key.bodyHighlighterSlug;
+      if (entry.value > (bySlug[slug] ?? 0)) bySlug[slug] = entry.value;
     }
     return {
       for (final e in bySlug.entries)
@@ -398,7 +406,7 @@ class _MuscleBar extends StatelessWidget {
       container: true,
       excludeSemantics: true,
       label:
-          '${stat.muscle.label}: $sets ${_setsLabel(stat.sets)}, '
+          '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
           '$percent procent',
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
@@ -410,7 +418,7 @@ class _MuscleBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    stat.muscle.shortLabel,
+                    _rankLabel(stat.muscle),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -502,23 +510,39 @@ class _NeglectedRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  const TextSpan(
-                    text: 'Bez serii w tym okresie: ',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text.rich(
                   TextSpan(
-                    text: muscles.map((m) => m.label).join(', '),
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    children: [
+                      const TextSpan(
+                        text: 'Bez serii w tym okresie: ',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                      TextSpan(
+                        text: muscles.map((m) => m.label).join(', '),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              style: const TextStyle(fontSize: 12.5, height: 1.4),
+                  style: const TextStyle(fontSize: 12.5, height: 1.4),
+                ),
+                const SizedBox(height: 2),
+                // Tag „Nogi” czy „Plecy” obejmuje wszystkie mięśnie regionu,
+                // więc nie ostrzegamy o mięśniach, które taka grupa pokrywa.
+                const Text(
+                  'Grupy zbiorcze (Nogi, Plecy, Barki) obejmują swoje mięśnie.',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11.5,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
@@ -193,6 +195,154 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Wt, 15 wrz · brak treningu'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    group('day drill-down', () {
+      // Dzisiejsza środa 16.09: dwa treningi (08:00 i 11:30), a wtorek pusty.
+      final sessions = [
+        _session(DateTime(2026, 9, 16, 11, 30), sets: 2).copyWith(
+          id: 'late',
+          planName:
+              'Nogi z bardzo długą nazwą planu, która nie mieści się w jednym wierszu',
+        ),
+        _session(DateTime(2026, 9, 16, 8), sets: 4).copyWith(id: 'morning'),
+        _session(DateTime(2026, 9, 9, 18)).copyWith(id: 'older'),
+      ];
+
+      Future<void> tapToday(WidgetTester tester, StatsActivity activity) async {
+        final rect = tester.getRect(
+          find.byKey(const ValueKey('stats-activity-grid')),
+        );
+        final pitch = _pitch(rect, activity.weeks);
+        await tester.tapAt(
+          rect.topLeft +
+              Offset((activity.weeks - 1) * pitch + 2, 2 * pitch + 2),
+        );
+        // AnimatedSize startuje dopiero po układzie — czekamy na koniec animacji.
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('lists sessions of the selected day, earliest first', (
+        tester,
+      ) async {
+        final snapshot = _snapshot(StatsRange.month, sessions);
+        await _pump(tester, StatsActivityCard(activity: snapshot.activity));
+
+        // Bez zaznaczenia nie ma listy sesji.
+        expect(
+          find.byKey(const ValueKey('stats-activity-session-morning')),
+          findsNothing,
+        );
+
+        await tapToday(tester, snapshot.activity);
+
+        expect(find.text('Śr, 16 wrz · 2 treningi · 6 serii'), findsOneWidget);
+        final morning = find.byKey(
+          const ValueKey('stats-activity-session-morning'),
+        );
+        final late = find.byKey(const ValueKey('stats-activity-session-late'));
+        expect(morning, findsOneWidget);
+        expect(late, findsOneWidget);
+        expect(find.text('08:00'), findsOneWidget);
+        expect(find.text('11:30'), findsOneWidget);
+        expect(find.text('Push'), findsOneWidget);
+        expect(find.byIcon(Icons.chevron_right_rounded), findsNWidgets(2));
+        expect(
+          tester.getTopLeft(morning).dy,
+          lessThan(tester.getTopLeft(late).dy),
+        );
+
+        // Długa nazwa jest przycięta, a karta mieści się w 360 px.
+        final card = tester.getRect(find.byType(StatsActivityCard));
+        expect(card.right, lessThanOrEqualTo(360 - 16));
+        expect(tester.takeException(), isNull);
+
+        // Drugie stuknięcie odznacza dzień i chowa listę.
+        await tapToday(tester, snapshot.activity);
+        expect(morning, findsNothing);
+        expect(late, findsNothing);
+      });
+
+      testWidgets('day without sessions shows only the summary line', (
+        tester,
+      ) async {
+        final snapshot = _snapshot(StatsRange.month, sessions);
+        await _pump(tester, StatsActivityCard(activity: snapshot.activity));
+
+        final rect = tester.getRect(
+          find.byKey(const ValueKey('stats-activity-grid')),
+        );
+        final pitch = _pitch(rect, snapshot.activity.weeks);
+        await tester.tapAt(
+          rect.topLeft +
+              Offset((snapshot.activity.weeks - 1) * pitch + 2, 1 * pitch + 2),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Wt, 15 wrz · brak treningu'), findsOneWidget);
+        expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+      });
+
+      testWidgets('tapping a row without a router does not throw', (
+        tester,
+      ) async {
+        final snapshot = _snapshot(StatsRange.month, sessions);
+        await _pump(tester, StatsActivityCard(activity: snapshot.activity));
+        await tapToday(tester, snapshot.activity);
+
+        await tester.tap(
+          find.byKey(const ValueKey('stats-activity-session-morning')),
+        );
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('row exposes a tap action and opens the session', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        final snapshot = _snapshot(StatsRange.month, sessions);
+        final router = GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, _) => Scaffold(
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: StatsActivityCard(activity: snapshot.activity),
+                ),
+              ),
+            ),
+            GoRoute(
+              path: '/app/training/history/:id',
+              builder: (_, state) =>
+                  Text('session ${state.pathParameters['id']}'),
+            ),
+          ],
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(
+          MaterialApp.router(theme: ThemeData.dark(), routerConfig: router),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        await tapToday(tester, snapshot.activity);
+
+        final row = find.semantics.byLabel(RegExp('^11:30, Nogi'));
+        final data = row.evaluate().single.getSemanticsData();
+        expect(data.hasAction(SemanticsAction.tap), isTrue);
+        expect(data.flagsCollection.isButton, isTrue);
+
+        tester.semantics.performAction(row, SemanticsAction.tap);
+        await tester.pumpAndSettle();
+
+        expect(find.text('session late'), findsOneWidget);
+        semantics.dispose();
+      });
     });
 
     testWidgets('fits 26 weeks at 360 px', (tester) async {

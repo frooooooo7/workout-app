@@ -53,6 +53,7 @@ Future<void> _pump(
   WidgetTester tester,
   _FakeStatsRepository repository, {
   ChangeNotifier? changes,
+  int? weeklyGoal,
 }) async {
   tester.view.physicalSize = const Size(390, 1600);
   tester.view.devicePixelRatio = 1;
@@ -63,6 +64,7 @@ Future<void> _pump(
         repository: repository,
         dataChanges: changes ?? ChangeNotifier(),
         clock: () => DateTime(2026, 9, 16, 12),
+        weeklyGoalLoader: () async => weeklyGoal,
       ),
     ),
   );
@@ -132,19 +134,28 @@ void main() {
         _session(DateTime(2026, 9, 10, 18)),
         _session(DateTime(2026, 9, 3, 18), weight: '75'),
       ]),
+      weeklyGoal: 3,
     );
+    // Cel z profilu dociąga się po pierwszym rysunku.
+    await tester.pump(const Duration(milliseconds: 300));
 
     for (final title in [
+      'Wnioski',
+      'Cel tygodnia',
       'Przebieg w czasie',
       'Rekordy',
+      'Rekordy sesji',
       'Partie mięśni',
+      'Regeneracja',
       'Progres ćwiczeń',
       'Najczęstsze ćwiczenia',
+      'Zakresy powtórzeń',
       'Aktywność',
       'Nawyki treningowe',
     ]) {
       // „Rekordy” to też etykieta kafelka — szukamy tytułu karty sekcji.
-      final card = find.widgetWithText(SessionSectionCard, title);
+      // `.first`: tytuł bywa też tekstem wierszy (np. plakietka „Regeneracja”).
+      final card = find.widgetWithText(SessionSectionCard, title).first;
       await tester.scrollUntilVisible(
         card,
         300,
@@ -153,6 +164,38 @@ void main() {
       expect(card, findsOneWidget, reason: title);
     }
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('no weekly goal in the profile means no goal card', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([_session(DateTime(2026, 9, 15, 18))]),
+    );
+    expect(
+      find.widgetWithText(SessionSectionCard, 'Cel tygodnia'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the calendar button opens the range picker', (tester) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([_session(DateTime(2026, 9, 15, 18))]),
+    );
+
+    // Nagłówek wbudowanego kalendarza nie mieści się w wąskim oknie przy
+    // szerokiej czcionce testowej — to jego, nie nasz układ.
+    tester.view.physicalSize = const Size(800, 1600);
+    await tester.tap(find.byIcon(Icons.date_range_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DateRangePickerDialog), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsNothing);
+    expect(find.text('Statystyki'), findsOneWidget);
   });
 
   testWidgets('chart metric survives a range change', (tester) async {

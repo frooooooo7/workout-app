@@ -7,6 +7,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/training_stats_cubit.dart';
+import '../bloc/weekly_goal_source.dart';
 import '../bloc/workout_history_cubit.dart';
 import '../widgets/stats/training_stats_view.dart';
 import '../widgets/workout_history/history_segment_switch.dart';
@@ -34,6 +35,7 @@ class HistoryScreen extends StatelessWidget {
           create: (_) => TrainingStatsCubit(
             ServiceLocator.trainingStatsRepository,
             dataChanges: ServiceLocator.trainingSessionDataChanges,
+            weeklyGoalLoader: loadOwnWeeklyGoal,
           )..load(),
         ),
       ],

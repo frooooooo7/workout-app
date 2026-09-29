@@ -22,7 +22,8 @@ abstract final class MuscleDistributionCalculator {
 
   /// Mięśnie, o których brak warto ostrzec. Pomijamy te, których ćwiczenia
   /// rzadko są tagowane osobno (prostowniki, romboidalne, przywodziciele,
-  /// skośne), żeby ostrzeżenie nie świeciło przy każdym planie.
+  /// skośne) oraz przedramiona: backend nie ma dla nich grupy (przy
+  /// synchronizacji stają się bicepsem), więc ostrzeżenie świeciłoby na stałe.
   static const keyMuscles = [
     MuscleGroup.chest,
     MuscleGroup.lats,
@@ -32,7 +33,6 @@ abstract final class MuscleDistributionCalculator {
     MuscleGroup.rearDelts,
     MuscleGroup.biceps,
     MuscleGroup.triceps,
-    MuscleGroup.forearms,
     MuscleGroup.abs,
     MuscleGroup.quads,
     MuscleGroup.hamstrings,

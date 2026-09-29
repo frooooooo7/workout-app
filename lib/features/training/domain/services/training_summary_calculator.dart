@@ -26,12 +26,17 @@ abstract final class TrainingSummaryCalculator {
   /// chwila zanim ktoś naciśnie „Zakończ”.
   static const _finishPaddingSec = 10 * 60;
 
+  /// Od takiej przerwy między ostatnią serią a „Zakończ” uznajemy, że sesję
+  /// zapomniano zakończyć. Krótsza to zwykłe zakończenie (albo czas wpisany
+  /// ręcznie przy edycji treningu) — wtedy wierzymy `finishedAt`.
+  static const _forgottenFinishGapSec = 2 * 3600;
+
   /// Czas trwania ukończonej sesji w sekundach.
   ///
   /// Zwykle to koniec minus początek. Gdy serie mają znaczniki czasu, a
-  /// „Zakończ” naciśnięto długo po ostatniej z nich (sesja zostawiona na noc),
-  /// liczymy do ostatniej serii plus zapas. Bez znaczników (sesje pobrane
-  /// z serwera) zostaje tylko górna granica [maxSessionSec].
+  /// „Zakończ” naciśnięto ponad 2 h po ostatniej z nich (sesja zostawiona na
+  /// noc), liczymy do ostatniej serii plus zapas. Bez znaczników (sesje
+  /// pobrane z serwera) zostaje tylko górna granica [maxSessionSec].
   static int sessionDurationSec(TrainingSession session) {
     final finishedAt = session.finishedAt;
     if (finishedAt == null) return 0;
@@ -50,10 +55,12 @@ abstract final class TrainingSummaryCalculator {
     }
     // Jedna seria to za mało, by ufać znacznikom (ktoś mógł odhaczyć całość
     // naraz na początku).
-    if (lastSet != null && stamped >= 2) {
-      final active =
+    if (lastSet != null &&
+        stamped >= 2 &&
+        lastSet.isAfter(session.startedAt) &&
+        finishedAt.difference(lastSet).inSeconds > _forgottenFinishGapSec) {
+      seconds =
           lastSet.difference(session.startedAt).inSeconds + _finishPaddingSec;
-      if (active > 0 && active < seconds) seconds = active;
     }
     return seconds > maxSessionSec ? maxSessionSec : seconds;
   }

@@ -8,12 +8,18 @@ import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import '../workout_summary/staggered_reveal.dart';
 import 'stats_activity_card.dart';
+import 'stats_date_range_picker.dart';
 import 'stats_exercise_progress_card.dart';
+import 'stats_goal_card.dart';
 import 'stats_habits_card.dart';
+import 'stats_insights_card.dart';
 import 'stats_kpi_grid.dart';
 import 'stats_muscles_card.dart';
 import 'stats_range_selector.dart';
+import 'stats_recovery_card.dart';
 import 'stats_records_card.dart';
+import 'stats_rep_ranges_card.dart';
+import 'stats_session_records_card.dart';
 import 'stats_states.dart';
 import 'stats_top_exercises_card.dart';
 import 'stats_trend_chart_card.dart';
@@ -67,7 +73,9 @@ class TrainingStatsView extends StatelessWidget {
                 if (snapshot?.hasHistory ?? true) ...[
                   StatsRangeSelector(
                     selected: state.range,
+                    customRange: state.customRange,
                     onChanged: cubit.selectRange,
+                    onPickCustom: () => _pickCustomRange(context, state),
                   ),
                   const SizedBox(height: AppSpacing.md),
                 ],
@@ -80,14 +88,33 @@ class TrainingStatsView extends StatelessWidget {
     );
   }
 
+  Future<void> _pickCustomRange(
+    BuildContext context,
+    TrainingStatsState state,
+  ) async {
+    final cubit = context.read<TrainingStatsCubit>();
+    final now = DateTime.now();
+    final picked = await pickStatsDateRange(
+      context,
+      initial: state.customRange,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (picked != null) cubit.selectCustomRange(picked);
+  }
+
   List<Widget> _sections(
     BuildContext context,
     TrainingStatsSnapshot snapshot,
     TrainingStatsCubit cubit,
   ) {
     final empty = snapshot.isEmpty;
+    final goal = snapshot.goal;
     final sections = <(String, Widget)>[
       ('kpi', StatsKpiGrid(snapshot: snapshot)),
+      if (snapshot.insights.isNotEmpty)
+        ('insights', StatsInsightsCard(insights: snapshot.insights)),
+      if (goal != null) ('goal', StatsGoalCard(goal: goal)),
       if (empty)
         (
           'empty-range',
@@ -99,7 +126,8 @@ class TrainingStatsView extends StatelessWidget {
         )
       else
         ('trend', StatsTrendChartCard(snapshot: snapshot)),
-      // Rekordy wszech czasów i heatmapa mają sens także przy pustym zakresie.
+      // Rekordy, regeneracja i heatmapa liczą się z całej historii, więc mają
+      // sens także przy pustym zakresie.
       (
         'records',
         StatsRecordsCard(
@@ -108,8 +136,15 @@ class TrainingStatsView extends StatelessWidget {
           now: snapshot.activity.today,
         ),
       ),
+      if (!snapshot.sessionRecords.isEmpty)
+        (
+          'session-records',
+          StatsSessionRecordsCard(records: snapshot.sessionRecords),
+        ),
+      if (!empty) ('muscles', StatsMusclesCard(muscles: snapshot.muscles)),
+      if (snapshot.recovery.isNotEmpty)
+        ('recovery', StatsRecoveryCard(recovery: snapshot.recovery)),
       if (!empty) ...[
-        ('muscles', StatsMusclesCard(muscles: snapshot.muscles)),
         (
           'progress',
           StatsExerciseProgressCard(
@@ -118,6 +153,7 @@ class TrainingStatsView extends StatelessWidget {
           ),
         ),
         ('top-exercises', StatsTopExercisesCard(exercises: snapshot.exercises)),
+        ('rep-ranges', StatsRepRangesCard(ranges: snapshot.repRanges)),
       ],
       ('activity', StatsActivityCard(activity: snapshot.activity)),
       if (!empty) ('habits', StatsHabitsCard(habits: snapshot.habits)),
