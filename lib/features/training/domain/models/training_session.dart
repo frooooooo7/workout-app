@@ -1,12 +1,16 @@
 import 'package:uuid/uuid.dart';
 
 import 'custom_training_plan.dart';
+import 'set_type.dart';
+
+export 'set_type.dart';
 
 enum TrainingSessionStatus { active, completed, cancelled }
 
 class TrainingSessionSet {
   TrainingSessionSet({
     String? id,
+    this.setType = SetType.normal,
     this.plannedWeight,
     this.plannedReps = '',
     this.plannedRir,
@@ -20,6 +24,7 @@ class TrainingSessionSet {
   }) : id = id ?? const Uuid().v4();
 
   final String id;
+  final SetType setType;
   final String? plannedWeight;
   final String plannedReps;
   final String? plannedRir;
@@ -31,8 +36,12 @@ class TrainingSessionSet {
   final bool completed;
   final DateTime? completedAt;
 
+  /// Czy seria wlicza się do objętości, liczby serii i rekordów.
+  bool get countsTowardStats => setType.countsTowardStats;
+
   TrainingSessionSet copyWith({
     String? id,
+    SetType? setType,
     String? plannedWeight,
     String? plannedReps,
     String? plannedRir,
@@ -51,6 +60,7 @@ class TrainingSessionSet {
   }) {
     return TrainingSessionSet(
       id: id ?? this.id,
+      setType: setType ?? this.setType,
       plannedWeight: plannedWeight ?? this.plannedWeight,
       plannedReps: plannedReps ?? this.plannedReps,
       plannedRir: plannedRir ?? this.plannedRir,
@@ -75,6 +85,7 @@ class TrainingSessionExercise {
     required this.exerciseMuscles,
     required this.exerciseCategory,
     this.exerciseImageUrl,
+    this.note,
     required this.sets,
   }) : id = id ?? const Uuid().v4();
 
@@ -84,6 +95,9 @@ class TrainingSessionExercise {
   final List<String> exerciseMuscles;
   final String exerciseCategory;
   final String? exerciseImageUrl;
+
+  /// Notatka do ćwiczenia w tej sesji (np. „ławka o 1 dziurkę niżej”).
+  final String? note;
   final List<TrainingSessionSet> sets;
 
   TrainingSessionExercise copyWith({
@@ -93,7 +107,9 @@ class TrainingSessionExercise {
     List<String>? exerciseMuscles,
     String? exerciseCategory,
     String? exerciseImageUrl,
+    String? note,
     List<TrainingSessionSet>? sets,
+    bool clearNote = false,
   }) {
     return TrainingSessionExercise(
       id: id ?? this.id,
@@ -102,6 +118,7 @@ class TrainingSessionExercise {
       exerciseMuscles: exerciseMuscles ?? this.exerciseMuscles,
       exerciseCategory: exerciseCategory ?? this.exerciseCategory,
       exerciseImageUrl: exerciseImageUrl ?? this.exerciseImageUrl,
+      note: clearNote ? null : (note ?? this.note),
       sets: sets ?? this.sets,
     );
   }

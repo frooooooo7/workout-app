@@ -68,12 +68,14 @@ TrainingExerciseDetail _exerciseDetailFromSession(
         .whereType<MuscleGroup>()
         .toList(growable: false),
     imageUrl: exercise.exerciseImageUrl,
+    note: exercise.note,
     sets: exercise.sets
         .asMap()
         .entries
         .map(
           (entry) => TrainingExerciseSetDetail(
             setIndex: entry.key,
+            setType: entry.value.setType,
             planned: _metricsFromRaw(
               weight: entry.value.plannedWeight,
               reps: entry.value.plannedReps,

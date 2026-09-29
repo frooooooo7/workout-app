@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 11;
+  static const _dbVersion = 12;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -410,6 +410,7 @@ class ExerciseDatabase {
         exercise_category TEXT NOT NULL,
         exercise_image_url TEXT,
         position INTEGER NOT NULL,
+        note TEXT,
         FOREIGN KEY(session_local_id) REFERENCES $tableTrainingSessions(local_id) ON DELETE CASCADE
       )
     ''');
@@ -429,6 +430,7 @@ class ExerciseDatabase {
         actual_tempo TEXT,
         completed INTEGER NOT NULL DEFAULT 0,
         completed_at INTEGER,
+        set_type TEXT NOT NULL DEFAULT 'normal',
         FOREIGN KEY(session_exercise_local_id) REFERENCES $tableTrainingSessionExercises(local_id) ON DELETE CASCADE
       )
     ''');
@@ -543,6 +545,21 @@ class ExerciseDatabase {
         table: tableTrainingSessions,
         column: 'server_updated_at',
         definition: 'INTEGER',
+      );
+    }
+    if (oldVersion < 12) {
+      // Rodzaj serii (rozgrzewka / do upadku / drop) i notatka do ćwiczenia.
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessionSets,
+        column: 'set_type',
+        definition: "TEXT NOT NULL DEFAULT 'normal'",
+      );
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessionExercises,
+        column: 'note',
+        definition: 'TEXT',
       );
     }
   }

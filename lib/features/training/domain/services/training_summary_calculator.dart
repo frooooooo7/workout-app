@@ -48,9 +48,9 @@ abstract final class TrainingSummaryCalculator {
         : aggregate(month));
   }
 
-  /// Liczy wyłącznie ukończone serie; ciężar i powtórzenia z wykonania
-  /// (tekst z klawiatury: `82,5`, `82.5`, `8`). Seria bez kompletu liczb
-  /// dokłada się do liczby serii, ale nie do objętości.
+  /// Liczy wyłącznie ukończone serie (bez rozgrzewek); ciężar i powtórzenia
+  /// z wykonania (tekst z klawiatury: `82,5`, `82.5`, `8`). Seria bez kompletu
+  /// liczb dokłada się do liczby serii, ale nie do objętości.
   static TrainingPeriodStats aggregate(Iterable<TrainingSession> sessions) {
     var workouts = 0;
     var durationSec = 0;
@@ -71,7 +71,7 @@ abstract final class TrainingSummaryCalculator {
       for (final exercise in session.exercises) {
         var hasCompletedSet = false;
         for (final set in exercise.sets) {
-          if (!set.completed) continue;
+          if (!set.completed || !set.countsTowardStats) continue;
           hasCompletedSet = true;
           completedSets++;
           final setReps = parseReps(set.actualReps);

@@ -119,27 +119,34 @@ class TrainingSessionLocalMapper {
             ),
             exerciseCategory: exerciseRow['exercise_category'] as String,
             exerciseImageUrl: exerciseRow['exercise_image_url'] as String?,
+            note: exerciseRow['note'] as String?,
             sets: [
               for (final set
                   in setsByExerciseId[exerciseRow['local_id'] as String] ??
                       const <Map<String, dynamic>>[])
-                TrainingSessionSet(
-                  id: set['local_id'] as String,
-                  plannedWeight: set['planned_weight'] as String?,
-                  plannedReps: set['planned_reps'] as String? ?? '',
-                  plannedRir: set['planned_rir'] as String?,
-                  plannedTempo: set['planned_tempo'] as String?,
-                  actualWeight: set['actual_weight'] as String?,
-                  actualReps: set['actual_reps'] as String?,
-                  actualRir: set['actual_rir'] as String?,
-                  actualTempo: set['actual_tempo'] as String?,
-                  completed: ((set['completed'] as int?) ?? 0) == 1,
-                  completedAt: decodeDate(set['completed_at']),
-                ),
+                setFromRow(set),
             ],
           ),
       ],
       pendingOp: sessionRow['pending_op'] as String?,
+    );
+  }
+
+  /// Wiersz `training_session_sets` → [TrainingSessionSet].
+  static TrainingSessionSet setFromRow(Map<String, dynamic> set) {
+    return TrainingSessionSet(
+      id: set['local_id'] as String,
+      setType: SetType.parse(set['set_type']),
+      plannedWeight: set['planned_weight'] as String?,
+      plannedReps: set['planned_reps'] as String? ?? '',
+      plannedRir: set['planned_rir'] as String?,
+      plannedTempo: set['planned_tempo'] as String?,
+      actualWeight: set['actual_weight'] as String?,
+      actualReps: set['actual_reps'] as String?,
+      actualRir: set['actual_rir'] as String?,
+      actualTempo: set['actual_tempo'] as String?,
+      completed: ((set['completed'] as int?) ?? 0) == 1,
+      completedAt: decodeDate(set['completed_at']),
     );
   }
 
@@ -278,6 +285,7 @@ class TrainingSessionLocalMapper {
         'exercise_category': exercise.exerciseCategory,
         'exercise_image_url': exercise.exerciseImageUrl,
         'position': entry.key,
+        'note': exercise.note,
       });
       for (final setEntry in exercise.sets.asMap().entries) {
         final set = setEntry.value;
@@ -286,6 +294,7 @@ class TrainingSessionLocalMapper {
           'server_id': setServerIdsByLocalId?[set.id],
           'session_exercise_local_id': exercise.id,
           'position': setEntry.key,
+          'set_type': set.setType.apiName,
           'planned_weight': set.plannedWeight,
           'planned_reps': set.plannedReps,
           'planned_rir': set.plannedRir,

@@ -70,7 +70,7 @@ class _ExerciseRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed = exercise.completedSetsCount;
-    final total = exercise.sets.length;
+    final total = exercise.workingSetsCount;
     final allDone = total > 0 && completed == total;
     final topSet = exercise.topSet;
     final volume = exercise.volumeKg;

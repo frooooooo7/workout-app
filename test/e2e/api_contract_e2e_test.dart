@@ -246,6 +246,89 @@ void main() {
       expect(shared.serverId, created.serverId);
     });
 
+    test('training session: set types + exercise note round-trip', () async {
+      final remote = TrainingSessionRemoteDataSource(alice.api);
+      final history = TrainingHistoryRemoteDataSource(alice.api);
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 3));
+      TrainingSessionSet typed(SetType type, String weight, String reps) =>
+          TrainingSessionSet(
+            setType: type,
+            actualWeight: weight,
+            actualReps: reps,
+            completed: true,
+            completedAt: started.add(const Duration(minutes: 5)),
+          );
+      // Rozgrzewka jest najcięższa celowo: gdyby serwer ją liczył, zmieniłaby
+      // liczbę serii (4), objętość (1500) i najlepszą serię (120 kg).
+      final local = TrainingSession(
+        planName: 'Typy serii',
+        status: TrainingSessionStatus.completed,
+        startedAt: started,
+        finishedAt: started.add(const Duration(minutes: 45)),
+        exercises: [
+          TrainingSessionExercise(
+            exerciseId: systemExercise.id,
+            exerciseName: systemExercise.name,
+            exerciseMuscles: systemExercise.muscles.map((m) => m.name).toList(),
+            exerciseCategory: systemExercise.category.name,
+            note: '  Ławka o 1 dziurkę niżej  ',
+            sets: [
+              typed(SetType.warmup, '120', '1'),
+              typed(SetType.normal, '100', '5'),
+              typed(SetType.failure, '100', '4'),
+              typed(SetType.drop, '80', '6'),
+            ],
+          ),
+        ],
+      );
+
+      final created = await remote.create(
+        local,
+        exerciseServerIdsByLocalId: {systemExercise.id: systemExercise.id},
+      );
+      final exercise = created.exercises.single;
+      expect(exercise.note, 'Ławka o 1 dziurkę niżej', reason: 'trimmed');
+      expect(exercise.sets.map((s) => s.setType), [
+        SetType.warmup,
+        SetType.normal,
+        SetType.failure,
+        SetType.drop,
+      ]);
+
+      final detail = await history.getSessionDetail(created.serverId!);
+      final detailExercise = detail.exercises.single;
+      expect(detailExercise.note, 'Ławka o 1 dziurkę niżej');
+      expect(detailExercise.sets.map((s) => s.setType), [
+        SetType.warmup,
+        SetType.normal,
+        SetType.failure,
+        SetType.drop,
+      ]);
+      expect(detail.completedSetsCount, 3);
+      expect(detail.totalVolumeKg, 1380);
+      expect(detailExercise.topSet?.actual?.weightKg, 100);
+
+      // Lista historii liczy to samo po stronie serwera.
+      final page = await history.getSessions(limit: 50);
+      final item = page.items.firstWhere((i) => i.id == created.serverId);
+      expect(item.completedSetsCount, 3);
+      expect(item.totalVolumeKg, 1380);
+
+      // Edycja tej samej sesji nie gubi typów ani notatki.
+      final edited = await remote.update(
+        created.serverId!,
+        created.copyWith(planName: 'Typy serii (edytowany)'),
+        exerciseServerIdsByLocalId: {systemExercise.id: systemExercise.id},
+      );
+      expect(edited.exercises.single.sets.map((s) => s.setType), [
+        SetType.warmup,
+        SetType.normal,
+        SetType.failure,
+        SetType.drop,
+      ]);
+      expect(edited.exercises.single.note, 'Ławka o 1 dziurkę niżej');
+    });
+
     test('follow: bob follows alice', () async {
       final bobProfiles = ApiProfileRepository(bob.api);
       final result = await bobProfiles.follow(alice.id);

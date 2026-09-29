@@ -27,6 +27,7 @@ import '../../features/feed/data/shared_preferences_feed_cache.dart';
 import '../../features/feed/data/shared_preferences_feed_seen_store.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/domain/services/feed_post_events.dart';
+import '../../features/training/data/local_previous_performance_repository.dart';
 import '../../features/training/data/local_training_stats_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
 import '../../features/training/data/offline_first_training_history_repository.dart';
@@ -41,6 +42,7 @@ import '../../features/training/data/training_history_remote_data_source.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
 import '../../features/training/data/training_session_local_history.dart';
 import '../../features/training/data/training_session_remote_data_source.dart';
+import '../../features/training/domain/repositories/previous_performance_repository.dart';
 import '../../features/training/domain/repositories/training_history_repository.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
 import '../../features/training/domain/repositories/training_session_repository.dart';
@@ -90,6 +92,7 @@ class ServiceLocator {
   static SyncCoordinator? _syncCoordinator;
   static TrainingStatsRepository? _trainingStatsRepository;
   static TrainingSessionLocalHistory? _localSessionHistory;
+  static PreviousPerformanceRepository? _previousPerformanceRepository;
 
   // Feed społecznościowy — oparty o API, nie zależy od bazy per-user.
   static FeedRepository? _feedRepository;
@@ -176,6 +179,10 @@ class ServiceLocator {
 
   /// Prośba o odświeżenie feedu: udostępniony trening, zmiana obserwowania.
   static Listenable get feedRefreshSignal => _feedRefreshTick;
+
+  /// „Poprzednio” w treningu na żywo. `null` poza zalogowanym użytkownikiem.
+  static PreviousPerformanceRepository? get previousPerformanceRepository =>
+      _previousPerformanceRepository;
 
   static TrainingSessionRepository get trainingSessionRepository {
     assert(
@@ -303,6 +310,7 @@ class ServiceLocator {
     _trainingHistoryRepository = null;
     _trainingStatsRepository = null;
     _localSessionHistory = null;
+    _previousPerformanceRepository = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
     await _exerciseDatabase?.close();
@@ -345,6 +353,9 @@ class ServiceLocator {
     );
     final localSessions = TrainingSessionLocalHistory(database);
     _localSessionHistory = localSessions;
+    _previousPerformanceRepository = LocalPreviousPerformanceRepository(
+      database,
+    );
     _trainingStatsRepository = LocalTrainingStatsRepository(
       localSessions,
       // Statystyki liczą się z lokalnej bazy — dociągamy treningi z innych
