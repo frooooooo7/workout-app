@@ -18,6 +18,46 @@ abstract final class TrainingSummaryCalculator {
     return DateTime(local.year, local.month);
   }
 
+  /// Górna granica czasu jednej sesji. Dłuższa oznacza niemal na pewno
+  /// zapomniane „Zakończ” — żaden trening nie trwa pół dnia.
+  static const maxSessionSec = 5 * 3600;
+
+  /// Zapas po ostatniej ukończonej serii: rozciąganie, prysznic na siłowni,
+  /// chwila zanim ktoś naciśnie „Zakończ”.
+  static const _finishPaddingSec = 10 * 60;
+
+  /// Czas trwania ukończonej sesji w sekundach.
+  ///
+  /// Zwykle to koniec minus początek. Gdy serie mają znaczniki czasu, a
+  /// „Zakończ” naciśnięto długo po ostatniej z nich (sesja zostawiona na noc),
+  /// liczymy do ostatniej serii plus zapas. Bez znaczników (sesje pobrane
+  /// z serwera) zostaje tylko górna granica [maxSessionSec].
+  static int sessionDurationSec(TrainingSession session) {
+    final finishedAt = session.finishedAt;
+    if (finishedAt == null) return 0;
+    var seconds = finishedAt.difference(session.startedAt).inSeconds;
+    if (seconds <= 0) return 0;
+
+    DateTime? lastSet;
+    var stamped = 0;
+    for (final exercise in session.exercises) {
+      for (final set in exercise.sets) {
+        final at = set.completedAt;
+        if (!set.completed || at == null) continue;
+        stamped++;
+        if (lastSet == null || at.isAfter(lastSet)) lastSet = at;
+      }
+    }
+    // Jedna seria to za mało, by ufać znacznikom (ktoś mógł odhaczyć całość
+    // naraz na początku).
+    if (lastSet != null && stamped >= 2) {
+      final active =
+          lastSet.difference(session.startedAt).inSeconds + _finishPaddingSec;
+      if (active > 0 && active < seconds) seconds = active;
+    }
+    return seconds > maxSessionSec ? maxSessionSec : seconds;
+  }
+
   /// Liczy wyłącznie ukończone serie; ciężar i powtórzenia z wykonania
   /// (tekst z klawiatury: `82,5`, `82.5`, `8`). Seria bez kompletu liczb
   /// dokłada się do liczby serii, ale nie do objętości.
@@ -32,11 +72,7 @@ abstract final class TrainingSummaryCalculator {
     for (final session in sessions) {
       if (session.status != TrainingSessionStatus.completed) continue;
       workouts++;
-      final finishedAt = session.finishedAt;
-      if (finishedAt != null) {
-        final seconds = finishedAt.difference(session.startedAt).inSeconds;
-        if (seconds > 0) durationSec += seconds;
-      }
+      durationSec += sessionDurationSec(session);
 
       for (final exercise in session.exercises) {
         var hasCompletedSet = false;

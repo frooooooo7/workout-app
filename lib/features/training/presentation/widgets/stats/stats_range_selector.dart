@@ -29,7 +29,7 @@ class StatsRangeSelector extends StatelessWidget {
       ),
       child: Row(
         children: [
-          for (final range in StatsRange.values)
+          for (final range in StatsRange.presets)
             Expanded(
               child: _RangeOption(
                 range: range,

@@ -5,8 +5,13 @@ import '../../models/training_session.dart';
 import '../../models/training_stats.dart';
 import '../training_summary_calculator.dart';
 import 'muscle_distribution_calculator.dart';
+import 'muscle_recovery_calculator.dart';
 import 'personal_records_calculator.dart';
+import 'rep_range_calculator.dart';
+import 'session_records_calculator.dart';
+import 'stats_insights_calculator.dart';
 import 'stats_sets.dart';
+import 'weekly_goal_calculator.dart';
 
 /// Czyste agregacje ekranu statystyk — bez I/O, łatwe do testowania.
 abstract final class TrainingStatsCalculator {
@@ -26,6 +31,7 @@ abstract final class TrainingStatsCalculator {
     StatsRange range,
     DateTime now, {
     DateTime? earliest,
+    StatsDateRange? custom,
   }) {
     final today = statsDay(now.toLocal());
     final y = today.year;
@@ -50,18 +56,50 @@ abstract final class TrainingStatsCalculator {
         );
       case StatsRange.quarter:
         final week = TrainingSummaryCalculator.startOfWeek(today);
+        final start = DateTime(week.year, week.month, week.day - 7 * 12);
+        final previousStart = DateTime(
+          week.year,
+          week.month,
+          week.day - 7 * 25,
+        );
         return StatsWindow(
-          start: DateTime(week.year, week.month, week.day - 7 * 12),
+          start: start,
           end: DateTime(week.year, week.month, week.day + 7),
           bucket: StatsBucket.week,
-          previousStart: DateTime(week.year, week.month, week.day - 7 * 25),
+          previousStart: previousStart,
+          previousEnd: _sameElapsed(previousStart, start, tomorrow),
         );
       case StatsRange.year:
+        final start = DateTime(y, m - 11);
+        final previousStart = DateTime(y, m - 23);
         return StatsWindow(
-          start: DateTime(y, m - 11),
+          start: start,
           end: DateTime(y, m + 1),
           bucket: StatsBucket.month,
-          previousStart: DateTime(y, m - 23),
+          previousStart: previousStart,
+          previousEnd: _sameElapsed(previousStart, start, tomorrow),
+        );
+      case StatsRange.custom:
+        final chosen = custom ?? StatsDateRange(DateTime(y, m, d - 29), today);
+        final start = chosen.start;
+        var end = DateTime(
+          chosen.end.year,
+          chosen.end.month,
+          chosen.end.day + 1,
+        );
+        if (end.isAfter(tomorrow)) end = tomorrow;
+        final length = chosen.days;
+        return StatsWindow(
+          start: start,
+          end: end,
+          bucket: length <= 35
+              ? StatsBucket.day
+              : length <= 26 * 7
+              ? StatsBucket.week
+              : length <= 36 * 31
+              ? StatsBucket.month
+              : StatsBucket.year,
+          previousStart: DateTime(start.year, start.month, start.day - length),
         );
       case StatsRange.all:
         final weekAgo = DateTime(y, m, d - 6);
@@ -103,6 +141,27 @@ abstract final class TrainingStatsCalculator {
     }
   }
 
+  /// Koniec okresu porównawczego: tyle samo dni od [previousStart], ile
+  /// upłynęło od [start] do [until]. Okno sięgające w przyszłość (bieżący
+  /// tydzień, miesiąc) nie może być porównywane z pełnym poprzednim okresem.
+  static DateTime _sameElapsed(
+    DateTime previousStart,
+    DateTime start,
+    DateTime until,
+  ) {
+    final elapsed = DateTime.utc(
+      until.year,
+      until.month,
+      until.day,
+    ).difference(DateTime.utc(start.year, start.month, start.day)).inDays;
+    final end = DateTime(
+      previousStart.year,
+      previousStart.month,
+      previousStart.day + elapsed,
+    );
+    return end.isAfter(start) ? start : end;
+  }
+
   /// Początek słupka, do którego należy chwila [local].
   static DateTime bucketStartOf(DateTime local, StatsBucket bucket) =>
       switch (bucket) {
@@ -135,11 +194,16 @@ abstract final class TrainingStatsCalculator {
 
   /// [records] pozwala nie przeliczać rekordów przy każdej zmianie zakresu —
   /// zależą tylko od historii, nie od okna.
+  ///
+  /// [customRange] jest potrzebny tylko dla [StatsRange.custom]; [weeklyGoal]
+  /// to cel z profilu (treningów w tygodniu) albo `null`.
   static TrainingStatsSnapshot compute(
     Iterable<TrainingSession> sessions, {
     required StatsRange range,
     required DateTime now,
     PersonalRecordsResult? records,
+    StatsDateRange? customRange,
+    int? weeklyGoal,
   }) {
     final completed = <TrainingSession>[];
     DateTime? earliest;
@@ -152,7 +216,12 @@ abstract final class TrainingStatsCalculator {
       }
     }
 
-    final window = windowFor(range, now, earliest: earliest);
+    final window = windowFor(
+      range,
+      now,
+      earliest: earliest,
+      custom: customRange,
+    );
     final today = statsDay(now.toLocal());
     final inWindow = <TrainingSession>[];
     final inPrevious = <TrainingSession>[];
@@ -192,9 +261,24 @@ abstract final class TrainingStatsCalculator {
       window.start,
       DateTime(today.year, today.month, today.day - progressMinDays),
     );
+    final windowExercises = _exercises(
+      inWindow,
+      completed.where((s) {
+        final local = s.startedAt.toLocal();
+        return !local.isBefore(progressFrom) && local.isBefore(window.end);
+      }),
+    );
+    final muscles = MuscleDistributionCalculator.compute(inWindow);
+    final goal = WeeklyGoalCalculator.compute(
+      completed,
+      today: today,
+      goal: weeklyGoal,
+    );
+    final daysSinceLast = _daysSinceLast(completed, today);
 
     return TrainingStatsSnapshot(
       range: range,
+      customRange: range == StatsRange.custom ? customRange : null,
       window: window,
       current: current,
       previous: window.previousStart == null
@@ -212,19 +296,50 @@ abstract final class TrainingStatsCalculator {
       series: _series(inWindow, window),
       activity: _activity(completed, today, elapsedDays),
       habits: _habits(inWindow, elapsedDays),
-      muscles: MuscleDistributionCalculator.compute(inWindow),
+      muscles: muscles,
       records: windowRecords,
       bests: allRecords.bests,
-      exercises: _exercises(
-        inWindow,
-        completed.where((s) {
-          final local = s.startedAt.toLocal();
-          return !local.isBefore(progressFrom) && local.isBefore(window.end);
-        }),
-      ),
+      exercises: windowExercises,
       progressFrom: progressFrom,
       hasHistory: completed.isNotEmpty,
+      goal: goal,
+      repRanges: RepRangeCalculator.compute(inWindow),
+      sessionRecords: SessionRecordsCalculator.compute(completed),
+      recovery: MuscleRecoveryCalculator.compute(
+        all: completed,
+        inWindow: inWindow,
+        windowWeeks: elapsedDays / 7,
+        today: today,
+      ),
+      daysSinceLastWorkout: daysSinceLast,
+      insights: StatsInsightsCalculator.compute(
+        current: current,
+        previous: window.previousStart == null
+            ? null
+            : TrainingSummaryCalculator.aggregate(inPrevious),
+        windowRecords: windowRecords,
+        streakWeeks: streaks.current,
+        goal: goal,
+        exercises: windowExercises,
+        neglectedLabels: [for (final m in muscles.neglected) m.label],
+        daysSinceLastWorkout: daysSinceLast,
+        today: today,
+      ),
     );
+  }
+
+  /// Pełne dni od ostatniego treningu; `null` bez historii.
+  static int? _daysSinceLast(List<TrainingSession> completed, DateTime today) {
+    DateTime? last;
+    for (final s in completed) {
+      final day = statsDay(s.startedAt.toLocal());
+      if (last == null || day.isAfter(last)) last = day;
+    }
+    if (last == null) return null;
+    return DateTime.utc(today.year, today.month, today.day)
+        .difference(DateTime.utc(last.year, last.month, last.day))
+        .inDays
+        .clamp(0, 100000);
   }
 
   static DateTime _earlier(DateTime a, DateTime b) => a.isBefore(b) ? a : b;
@@ -255,8 +370,10 @@ abstract final class TrainingStatsCalculator {
     StatsWindow window,
   ) {
     final starts = <DateTime>[];
+    // Własny zakres nie musi zaczynać się na granicy słupka (poniedziałek,
+    // pierwszy dzień miesiąca) — pierwszy słupek jest wtedy niepełny.
     for (
-      var cursor = window.start;
+      var cursor = bucketStartOf(window.start, window.bucket);
       cursor.isBefore(window.end);
       cursor = nextBucket(cursor, window.bucket)
     ) {
@@ -335,13 +452,10 @@ abstract final class TrainingStatsCalculator {
         (v) => v + 1,
         ifAbsent: () => 1,
       );
-      final finished = session.finishedAt;
-      if (finished != null) {
-        final seconds = finished.difference(session.startedAt).inSeconds;
-        if (seconds > 0) {
-          durationSum += seconds;
-          durationCount++;
-        }
+      final seconds = TrainingSummaryCalculator.sessionDurationSec(session);
+      if (seconds > 0) {
+        durationSum += seconds;
+        durationCount++;
       }
       for (final exercise in session.exercises) {
         for (final set in completedSetsOf(exercise)) {
@@ -484,11 +598,7 @@ class _SeriesAccumulator {
 
   void add(TrainingSession session) {
     workouts++;
-    final finished = session.finishedAt;
-    if (finished != null) {
-      final seconds = finished.difference(session.startedAt).inSeconds;
-      if (seconds > 0) durationSec += seconds;
-    }
+    durationSec += TrainingSummaryCalculator.sessionDurationSec(session);
     for (final exercise in session.exercises) {
       for (final set in completedSetsOf(exercise)) {
         sets++;

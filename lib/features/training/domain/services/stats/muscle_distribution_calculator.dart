@@ -3,9 +3,16 @@ import '../../models/training_session.dart';
 import '../../models/training_stats.dart';
 import 'stats_sets.dart';
 
-/// Rozkłada ukończone serie na mięśnie i partie ciała. Mięsień wymieniony
-/// jako pierwszy dostaje całą serię, wspomagające po pół — tak samo jak na
-/// mapie mięśni pojedynczej sesji.
+/// Rozkłada ukończone serie na grupy mięśni i partie ciała. Mięsień
+/// wymieniony jako pierwszy dostaje całą serię, wspomagające po pół — tak
+/// samo jak na mapie mięśni pojedynczej sesji.
+///
+/// Ranking trzyma grupy tak, jak ćwiczenia są otagowane. Backend zna dla
+/// ćwiczeń tylko grupy zbiorcze (plecy, nogi, barki…), więc „Nogi” nie wolno
+/// rozdzielać na czworogłowe, dwugłowe i łydki — wyszłyby serie, których nikt
+/// nie zrobił. Rozwinięcie na konkretne mięśnie dotyczy wyłącznie mapy ciała
+/// ([MuscleDistribution.bodyMap]), gdzie zapala cały region, jak wszędzie
+/// indziej w aplikacji.
 abstract final class MuscleDistributionCalculator {
   static const _primaryShare = 1.0;
   static const _secondaryShare = 0.5;
@@ -34,8 +41,9 @@ abstract final class MuscleDistributionCalculator {
   ];
 
   static MuscleDistribution compute(Iterable<TrainingSession> sessions) {
-    final setsByMuscle = <MuscleGroup, double>{};
-    final volumeByMuscle = <MuscleGroup, double>{};
+    final setsByUnit = <MuscleGroup, double>{};
+    final volumeByUnit = <MuscleGroup, double>{};
+    final bodySets = <MuscleGroup, double>{};
     final setsByRegion = <MuscleRegion, double>{};
     var workouts = 0;
 
@@ -51,29 +59,32 @@ abstract final class MuscleDistributionCalculator {
         }
         if (sets == 0) continue;
 
-        final muscles = <MuscleGroup>[
-          for (final raw in exercise.exerciseMuscles)
-            if (MuscleGroup.tryParse(raw) case final m?)
-              if (m != MuscleGroup.all) m,
-        ];
+        final muscles = taggedMuscles(exercise);
         final regionShare = <MuscleRegion, double>{};
         for (var i = 0; i < muscles.length; i++) {
           final share = i == 0 ? _primaryShare : _secondaryShare;
-          for (final muscle in muscles[i].expanded) {
-            setsByMuscle.update(
+          final unit = muscles[i];
+          setsByUnit.update(
+            unit,
+            (v) => v + sets * share,
+            ifAbsent: () => sets * share,
+          );
+          volumeByUnit.update(
+            unit,
+            (v) => v + volume * share,
+            ifAbsent: () => volume * share,
+          );
+          // Mapa ciała: grupa zbiorcza zapala wszystkie mięśnie regionu.
+          for (final muscle in unit.expanded) {
+            bodySets.update(
               muscle,
               (v) => v + sets * share,
               ifAbsent: () => sets * share,
             );
-            volumeByMuscle.update(
-              muscle,
-              (v) => v + volume * share,
-              ifAbsent: () => volume * share,
-            );
           }
           // Partia liczy serię raz, z najwyższym udziałem — ćwiczenie
           // otagowane „najszersze + kaptury” to wciąż jedna seria na plecy.
-          final region = muscles[i].region;
+          final region = unit.region;
           if (region != null && share > (regionShare[region] ?? 0)) {
             regionShare[region] = share;
           }
@@ -90,23 +101,25 @@ abstract final class MuscleDistributionCalculator {
 
     // Bez otagowanych mięśni nie wiemy nic — to nie znaczy, że wszystko
     // jest zaniedbane.
-    if (setsByMuscle.isEmpty) return MuscleDistribution.empty;
+    if (setsByUnit.isEmpty) return MuscleDistribution.empty;
 
-    final totalSets = setsByMuscle.values.fold<double>(0, (a, b) => a + b);
-    final maxSets = setsByMuscle.values.fold<double>(
-      0,
-      (a, b) => a > b ? a : b,
-    );
+    final totalSets = setsByUnit.values.fold<double>(0, (a, b) => a + b);
+    final maxSets = setsByUnit.values.fold<double>(0, (a, b) => a > b ? a : b);
     final muscles = [
-      for (final entry in setsByMuscle.entries)
+      for (final entry in setsByUnit.entries)
         MuscleStat(
           muscle: entry.key,
           sets: entry.value,
-          volumeKg: volumeByMuscle[entry.key] ?? 0,
+          volumeKg: volumeByUnit[entry.key] ?? 0,
           share: entry.value / totalSets,
           intensity: entry.value / maxSets,
         ),
     ]..sort((a, b) => b.sets.compareTo(a.sets));
+
+    final maxBody = bodySets.values.fold<double>(0, (a, b) => a > b ? a : b);
+    final bodyMap = {
+      for (final entry in bodySets.entries) entry.key: entry.value / maxBody,
+    };
 
     final regionTotal = setsByRegion.values.fold<double>(0, (a, b) => a + b);
     final regions = [
@@ -118,13 +131,18 @@ abstract final class MuscleDistributionCalculator {
         ),
     ]..sort((a, b) => b.sets.compareTo(a.sets));
 
+    // Mięsień objęty którąkolwiek trenowaną grupą (także zbiorczą) jest
+    // „pokryty”: przy tagu „nogi” nie umiemy powiedzieć, że pominięto łydki.
+    final covered = {for (final unit in setsByUnit.keys) ...unit.expanded};
+
     return MuscleDistribution(
       muscles: List.unmodifiable(muscles),
+      bodyMap: Map.unmodifiable(bodyMap),
       regions: List.unmodifiable(regions),
       neglected: workouts >= neglectedMinWorkouts
           ? [
               for (final m in keyMuscles)
-                if (!setsByMuscle.containsKey(m)) m,
+                if (!covered.contains(m)) m,
             ]
           : const [],
     );

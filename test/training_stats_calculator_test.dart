@@ -471,7 +471,7 @@ void main() {
       expect(result.neglected, isEmpty);
     });
 
-    test('coarse groups expand; neglected muscles after enough workouts', () {
+    test('coarse groups stay coarse in the ranking, expand on the body map', () {
       final sessions = [
         for (var i = 0; i < 3; i++)
           _session(
@@ -486,12 +486,18 @@ void main() {
           ),
       ];
       final result = MuscleDistributionCalculator.compute(sessions);
-      expect(
-        result.muscles.map((m) => m.muscle).toSet(),
-        MuscleGroup.legs.expanded,
-      );
+
+      // Nie zgadujemy, który mięsień nóg pracował.
+      expect(result.muscles.map((m) => m.muscle), [MuscleGroup.legs]);
+      expect(result.muscles.single.sets, 3);
+      expect(result.bodyMap.keys.toSet(), MuscleGroup.legs.expanded);
+      expect(result.bodyMap.values, everyElement(1));
+
       expect(result.neglected, contains(MuscleGroup.chest));
+      // Grupa zbiorcza „pokrywa” swoje mięśnie — nie da się stwierdzić braku.
       expect(result.neglected, isNot(contains(MuscleGroup.quads)));
+      expect(result.neglected, isNot(contains(MuscleGroup.calves)));
+      // Pośladki to osobna grupa.
       expect(result.neglected, contains(MuscleGroup.glutes));
     });
 

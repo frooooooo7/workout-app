@@ -1,3 +1,4 @@
+import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
 import '../training_session_detail_mapper.dart' show parseReps, parseWeightKg;
 
@@ -40,3 +41,10 @@ String statsExerciseKey(TrainingSessionExercise exercise) {
 
 DateTime statsDay(DateTime local) =>
     DateTime(local.year, local.month, local.day);
+
+/// Grupy mięśni ćwiczenia w kolejności tagów (pierwsza to główna), bez
+/// nieznanych nazw i sentinela `all`.
+List<MuscleGroup> taggedMuscles(TrainingSessionExercise exercise) => [
+  for (final raw in exercise.exerciseMuscles)
+    if (MuscleGroup.tryParse(raw) case final m? when m != MuscleGroup.all) m,
+];
