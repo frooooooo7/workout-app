@@ -6,6 +6,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
+import '../workout_summary/staggered_reveal.dart';
 import 'stats_activity_card.dart';
 import 'stats_exercise_progress_card.dart';
 import 'stats_habits_card.dart';
@@ -49,7 +50,10 @@ class TrainingStatsView extends StatelessWidget {
             HapticFeedback.lightImpact();
             return cubit.load();
           },
-          child: ListView(
+          // Kolumna zamiast ListView: ListView niszczy karty poza ekranem, więc
+          // po powrocie traciłyby stan (wybrane ćwiczenie, zaznaczony dzień)
+          // i animowały się od nowa. Kart jest kilka — budujemy wszystkie.
+          child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               AppSpacing.pageGutter,
@@ -57,16 +61,19 @@ class TrainingStatsView extends StatelessWidget {
               AppSpacing.pageGutter,
               AppSpacing.xl + MediaQuery.paddingOf(context).bottom,
             ),
-            children: [
-              if (snapshot?.hasHistory ?? true) ...[
-                StatsRangeSelector(
-                  selected: state.range,
-                  onChanged: cubit.selectRange,
-                ),
-                const SizedBox(height: AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (snapshot?.hasHistory ?? true) ...[
+                  StatsRangeSelector(
+                    selected: state.range,
+                    onChanged: cubit.selectRange,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                ...content,
               ],
-              ...content,
-            ],
+            ),
           ),
         );
       },
@@ -78,41 +85,58 @@ class TrainingStatsView extends StatelessWidget {
     TrainingStatsSnapshot snapshot,
     TrainingStatsCubit cubit,
   ) {
-    const gap = SizedBox(height: AppSpacing.md);
-    return [
-      StatsKpiGrid(snapshot: snapshot),
-      if (snapshot.isEmpty) ...[
-        gap,
-        StatsEmptyRangeNotice(
-          onShowAll: snapshot.range == StatsRange.all
-              ? null
-              : () => cubit.selectRange(StatsRange.all),
-        ),
-      ] else ...[
-        gap,
-        StatsTrendChartCard(snapshot: snapshot),
-      ],
+    final empty = snapshot.isEmpty;
+    final sections = <(String, Widget)>[
+      ('kpi', StatsKpiGrid(snapshot: snapshot)),
+      if (empty)
+        (
+          'empty-range',
+          StatsEmptyRangeNotice(
+            onShowAll: snapshot.range == StatsRange.all
+                ? null
+                : () => cubit.selectRange(StatsRange.all),
+          ),
+        )
+      else
+        ('trend', StatsTrendChartCard(snapshot: snapshot)),
       // Rekordy wszech czasów i heatmapa mają sens także przy pustym zakresie.
-      gap,
-      StatsRecordsCard(
-        records: snapshot.records,
-        bests: snapshot.bests,
-        now: snapshot.activity.today,
-      ),
-      if (!snapshot.isEmpty) ...[
-        gap,
-        StatsMusclesCard(muscles: snapshot.muscles),
-        gap,
-        StatsExerciseProgressCard(
-          exercises: snapshot.exercises,
-          progressFrom: snapshot.progressFrom,
+      (
+        'records',
+        StatsRecordsCard(
+          records: snapshot.records,
+          bests: snapshot.bests,
+          now: snapshot.activity.today,
         ),
-        gap,
-        StatsTopExercisesCard(exercises: snapshot.exercises),
+      ),
+      if (!empty) ...[
+        ('muscles', StatsMusclesCard(muscles: snapshot.muscles)),
+        (
+          'progress',
+          StatsExerciseProgressCard(
+            exercises: snapshot.exercises,
+            progressFrom: snapshot.progressFrom,
+          ),
+        ),
+        ('top-exercises', StatsTopExercisesCard(exercises: snapshot.exercises)),
       ],
-      gap,
-      StatsActivityCard(activity: snapshot.activity),
-      if (!snapshot.isEmpty) ...[gap, StatsHabitsCard(habits: snapshot.habits)],
+      ('activity', StatsActivityCard(activity: snapshot.activity)),
+      if (!empty) ('habits', StatsHabitsCard(habits: snapshot.habits)),
+    ];
+
+    return [
+      for (var i = 0; i < sections.length; i++)
+        // Klucz trzyma stan karty (wybrana miara, ćwiczenie, zaznaczony dzień),
+        // gdy przy zmianie zakresu sekcje nad nią pojawiają się i znikają.
+        Padding(
+          key: ValueKey('stats-${sections[i].$1}'),
+          padding: EdgeInsets.only(top: i == 0 ? 0 : AppSpacing.md),
+          child: StaggeredReveal(
+            // Pierwsze karty wchodzą kaskadą, dalsze (poza ekranem) razem —
+            // inaczej czekałyby na swoją kolej zbyt długo.
+            index: i.clamp(0, 4),
+            child: sections[i].$2,
+          ),
+        ),
     ];
   }
 }

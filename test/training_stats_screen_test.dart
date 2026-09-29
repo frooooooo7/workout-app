@@ -155,6 +155,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('chart metric survives a range change', (tester) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([
+        _session(DateTime(2026, 9, 15, 18)),
+        _session(DateTime(2026, 9, 3, 18)),
+      ]),
+    );
+    final trend = find.widgetWithText(SessionSectionCard, 'Przebieg w czasie');
+    await tester.scrollUntilVisible(
+      trend,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.descendant(of: trend, matching: find.text('Serie')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('serie łącznie'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('3 mies.'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('3 mies.'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('serie łącznie'), findsOneWidget);
+  });
+
   testWidgets('"all" range has no comparison, shows captions instead', (
     tester,
   ) async {
