@@ -54,6 +54,10 @@ class WorkoutEditDraft {
 /// Maksymalny czas treningu przyjmowany w formularzu (24 h).
 const maxWorkoutDurationMinutes = 24 * 60;
 
+/// Limit notatki do ćwiczenia — taki sam jak w API (dłuższa dałaby `400`
+/// i sesja utknęłaby w kolejce synchronizacji).
+const maxExerciseNoteLength = 1000;
+
 final _weightPattern = RegExp(r'^\d{1,4}([.,]\d{1,3})?$');
 final _intPattern = RegExp(r'^\d{1,4}$');
 
@@ -86,6 +90,10 @@ String? validateWorkoutEdit(WorkoutEditDraft draft, {DateTime? now}) {
     final name = exercise.exerciseName;
     if (exercise.sets.isEmpty) {
       return 'Ćwiczenie „$name” musi mieć co najmniej jedną serię.';
+    }
+    if ((exercise.note?.trim().length ?? 0) > maxExerciseNoteLength) {
+      return 'Notatka do ćwiczenia „$name” może mieć najwyżej '
+          '$maxExerciseNoteLength znaków.';
     }
     for (var i = 0; i < exercise.sets.length; i++) {
       final set = exercise.sets[i];
@@ -148,10 +156,13 @@ TrainingSession applyWorkoutEdit(
     exercises: [
       for (final exercise in draft.exercises)
         exercise.copyWith(
+          note: clean(exercise.note),
+          clearNote: clean(exercise.note) == null,
           sets: [
             for (final set in exercise.sets)
               TrainingSessionSet(
                 id: set.id,
+                setType: set.setType,
                 plannedWeight: set.plannedWeight,
                 plannedReps: set.plannedReps,
                 plannedRir: set.plannedRir,

@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../library/presentation/widgets/exercise_thumbnail.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
+import '../set_type_badge.dart';
 import 'session_details_formatters.dart';
 
 /// Karta pojedynczego ćwiczenia: miniatura po lewej, tożsamość ćwiczenia obok,
@@ -29,6 +30,8 @@ class SessionExerciseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topSet = exercise.topSet;
+    final note = exercise.note?.trim();
+    final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 320),
@@ -100,7 +103,7 @@ class SessionExerciseCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       [
-                        '${exercise.completedSetsCount}/${exercise.sets.length} serii',
+                        '${exercise.completedSetsCount}/${exercise.workingSetsCount} serii',
                         if (exercise.volumeKg > 0)
                           formatVolumeKg(exercise.volumeKg),
                       ].join('  ·  '),
@@ -115,12 +118,17 @@ class SessionExerciseCard extends StatelessWidget {
               ),
             ],
           ),
+          if (note != null && note.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ExerciseNote(text: note),
+          ],
           if (exercise.sets.isNotEmpty) ...[
             const SizedBox(height: 14),
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 8),
             const _SetTableHeader(),
-            for (final set in exercise.sets) _SetRow(set: set),
+            for (var i = 0; i < exercise.sets.length; i++)
+              _SetRow(set: exercise.sets[i], label: setLabels[i]),
           ],
           if (topSet != null) ...[
             const SizedBox(height: 8),
@@ -225,10 +233,56 @@ class _SetTableHeader extends StatelessWidget {
   }
 }
 
+/// Notatka do ćwiczenia zapisana podczas treningu.
+class _ExerciseNote extends StatelessWidget {
+  const _ExerciseNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.sticky_note_2_outlined,
+              size: 15,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SetRow extends StatelessWidget {
-  const _SetRow({required this.set});
+  const _SetRow({required this.set, required this.label});
 
   final TrainingExerciseSetDetail set;
+
+  /// Numer serii roboczej albo litera rodzaju (W / F / D).
+  final String label;
 
   /// Różnica ciężaru wykonanego względem zaplanowanego — pokazywana tylko
   /// wtedy, gdy realnie odbiega od planu.
@@ -262,11 +316,13 @@ class _SetRow extends StatelessWidget {
           SizedBox(
             width: 24,
             child: Text(
-              '${set.setIndex}',
-              style: const TextStyle(
-                color: AppColors.textMuted,
+              label,
+              style: TextStyle(
+                color: setTypeColor(set.setType) ?? AppColors.textMuted,
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: set.setType == SetType.normal
+                    ? FontWeight.w600
+                    : FontWeight.w800,
               ),
             ),
           ),

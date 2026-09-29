@@ -52,6 +52,7 @@ class TrainingSessionRemoteDataSource {
               .map(
                 (set) => TrainingSessionSet(
                   id: set['clientId'] as String? ?? set['id'] as String?,
+                  setType: SetType.parse(set['setType']),
                   plannedWeight: set['plannedWeight'] as String?,
                   plannedReps: set['plannedReps'] as String? ?? '',
                   plannedRir: set['plannedRir'] as String?,
@@ -78,6 +79,7 @@ class TrainingSessionRemoteDataSource {
                 .cast<String>(),
             exerciseCategory: exercise['exerciseCategory'] as String,
             exerciseImageUrl: exercise['exerciseImageUrl'] as String?,
+            note: exercise['note'] as String?,
             sets: sets,
           );
         })
@@ -133,12 +135,14 @@ class TrainingSessionRemoteDataSource {
           'exerciseMuscles': exercise.exerciseMuscles,
           'exerciseCategory': exercise.exerciseCategory,
           'exerciseImageUrl': exercise.exerciseImageUrl,
+          'note': exercise.note,
           'position': entry.key,
           'sets': exercise.sets.asMap().entries.map((setEntry) {
             final set = setEntry.value;
             return {
               'clientId': set.id,
               'position': setEntry.key,
+              'setType': set.setType.apiName,
               'plannedWeight': set.plannedWeight,
               'plannedReps': set.plannedReps,
               'plannedRir': set.plannedRir,

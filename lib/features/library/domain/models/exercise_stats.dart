@@ -122,7 +122,8 @@ class ExerciseStats {
       for (final entry in session.exercises) {
         if (!matches(entry, exercise)) continue;
         for (final set in entry.sets) {
-          if (!set.completed) continue;
+          // Rozgrzewki nie psują rekordów ani objętości.
+          if (!set.completed || !set.countsTowardStats) continue;
           sessionSets++;
           final weight =
               parseWeightKg(set.actualWeight ?? set.plannedWeight) ?? 0;
@@ -185,7 +186,9 @@ class ExerciseStats {
       final seenIds = <String>{};
       final seenNames = <String>{};
       for (final entry in session.exercises) {
-        if (!entry.sets.any((s) => s.completed)) continue;
+        if (!entry.sets.any((s) => s.completed && s.countsTowardStats)) {
+          continue;
+        }
         if (entry.exerciseId.isNotEmpty && seenIds.add(entry.exerciseId)) {
           byId.update(entry.exerciseId, (v) => v + 1, ifAbsent: () => 1);
         }

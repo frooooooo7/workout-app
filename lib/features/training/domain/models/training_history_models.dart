@@ -1,6 +1,7 @@
 import '../../../library/domain/models/exercise.dart';
 import 'training_session.dart';
 
+export 'set_type.dart';
 export 'training_session.dart' show TrainingSessionStatus;
 
 enum TrainingProgressHighlightType {
@@ -88,6 +89,7 @@ class TrainingSetMetrics {
 class TrainingExerciseSetDetail {
   const TrainingExerciseSetDetail({
     required this.setIndex,
+    this.setType = SetType.normal,
     this.planned,
     this.actual,
     required this.completed,
@@ -95,6 +97,7 @@ class TrainingExerciseSetDetail {
   });
 
   final int setIndex;
+  final SetType setType;
   final TrainingSetMetrics? planned;
   final TrainingSetMetrics? actual;
   final bool completed;
@@ -103,10 +106,14 @@ class TrainingExerciseSetDetail {
   /// sesji sprzed wprowadzenia tego pola — oś czasu musi to znieść.
   final DateTime? completedAt;
 
+  /// Czy seria wlicza się do objętości, liczby serii i „top setu”
+  /// (rozgrzewki nie).
+  bool get countsTowardStats => setType.countsTowardStats;
+
   /// Objętość serii w kg (ciężar × powtórzenia). Liczona z wykonania, nie
-  /// z planu; seria nieukończona lub bez kompletu liczb daje `0`.
+  /// z planu; seria nieukończona, rozgrzewkowa lub bez kompletu liczb daje `0`.
   double get volumeKg {
-    if (!completed) return 0;
+    if (!completed || !countsTowardStats) return 0;
     final weight = actual?.weightKg;
     final reps = actual?.reps;
     if (weight == null || reps == null) return 0;
@@ -120,6 +127,7 @@ class TrainingExerciseDetail {
     required this.exerciseName,
     this.muscles = const [],
     this.imageUrl,
+    this.note,
     required this.sets,
   });
 
@@ -134,9 +142,16 @@ class TrainingExerciseDetail {
   /// `exerciseImageResolvedUri`.
   final String? imageUrl;
 
+  /// Notatka do ćwiczenia w tej sesji.
+  final String? note;
+
   final List<TrainingExerciseSetDetail> sets;
 
-  int get completedSetsCount => sets.where((s) => s.completed).length;
+  /// Serie, które wchodzą do statystyk (bez rozgrzewek) — mianownik „x/y serii”.
+  int get workingSetsCount => sets.where((s) => s.countsTowardStats).length;
+
+  int get completedSetsCount =>
+      sets.where((s) => s.completed && s.countsTowardStats).length;
 
   double get volumeKg =>
       sets.fold(0, (sum, set) => sum + set.volumeKg);
@@ -161,11 +176,11 @@ class TrainingExerciseDetail {
     return stamps.reduce((a, b) => a.isAfter(b) ? a : b);
   }
 
-  /// Najcięższa ukończona seria — „top set" pokazywany w stopce karty.
+  /// Najcięższa ukończona seria robocza — „top set" pokazywany w stopce karty.
   TrainingExerciseSetDetail? get topSet {
     TrainingExerciseSetDetail? best;
     for (final set in sets) {
-      if (!set.completed) continue;
+      if (!set.completed || !set.countsTowardStats) continue;
       final weight = set.actual?.weightKg;
       if (weight == null) continue;
       if (best == null || weight > (best.actual?.weightKg ?? 0)) best = set;
@@ -201,6 +216,10 @@ class TrainingSessionDetail {
 
   int get completedSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.completedSetsCount);
+
+  /// Serie robocze całej sesji (bez rozgrzewek) — mianownik „x/y serii”.
+  int get workingSetsCount =>
+      exercises.fold(0, (sum, e) => sum + e.workingSetsCount);
 
   double get totalVolumeKg =>
       exercises.fold(0, (sum, e) => sum + e.volumeKg);

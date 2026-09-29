@@ -10,7 +10,9 @@ import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/repositories/training_session_repository.dart';
+import '../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
 import '../bloc/edit_workout_cubit.dart';
+import '../widgets/set_type_badge.dart';
 import '../widgets/table_cell_input.dart';
 
 /// Edycja zakończonego treningu (`/app/training/history/:sessionId/edit`).
@@ -379,6 +381,7 @@ class _ExerciseEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<EditWorkoutCubit>();
+    final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
     const headerStyle = TextStyle(
       color: AppColors.textMuted,
       fontSize: 11,
@@ -421,6 +424,38 @@ class _ExerciseEditor extends StatelessWidget {
               ),
             ],
           ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: TextFormField(
+              key: ValueKey('edit-exercise-note-${exercise.id}'),
+              initialValue: exercise.note ?? '',
+              onChanged: (v) => cubit.setExerciseNote(exerciseIndex, v),
+              maxLength: maxExerciseNoteLength,
+              minLines: 1,
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Notatka do ćwiczenia',
+                hintStyle: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                ),
+                counterText: '',
+                isDense: true,
+                filled: true,
+                fillColor: AppColors.surfaceVariant,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
           const Padding(
             padding: EdgeInsets.only(right: 6, bottom: 6),
             child: Row(
@@ -453,12 +488,19 @@ class _ExerciseEditor extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: 34,
-                    child: Text(
-                      '${s + 1}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: SetTypeBadge(
+                      key: ValueKey('edit-set-$exerciseIndex-$s-type'),
+                      label: setLabels[s],
+                      type: exercise.sets[s].setType,
+                      onTap: () async {
+                        final picked = await showSetTypePicker(
+                          context,
+                          exercise.sets[s].setType,
+                        );
+                        if (picked != null) {
+                          cubit.setSetType(exerciseIndex, s, picked);
+                        }
+                      },
                     ),
                   ),
                   const SizedBox(width: 6),

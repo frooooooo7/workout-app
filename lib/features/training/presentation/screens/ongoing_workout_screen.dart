@@ -11,12 +11,15 @@ import '../../../library/data/exercise_image_uri.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/repositories/previous_performance_repository.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
+import '../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
 import '../bloc/training_session_cubit.dart';
 import '../widgets/ongoing_workout/ongoing_workout_progress_bar.dart';
 import '../widgets/ongoing_workout/rest_timer_controls.dart';
 import '../widgets/ongoing_workout_footer.dart';
 import '../widgets/ongoing_workout_header.dart';
+import '../widgets/set_type_badge.dart';
 import '../widgets/table_cell_input.dart';
 import 'workout_summary_screen.dart';
 
@@ -26,12 +29,16 @@ class OngoingWorkoutArgs {
     this.sessionCubit,
     this.pickExercise,
     this.restTimerScheduler,
+    this.previousPerformance,
   });
 
   final TrainingSession? initialSession;
   final TrainingSessionCubit? sessionCubit;
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
   final RestTimerScheduler? restTimerScheduler;
+
+  /// Źródło kolumny „POPRZ.”; domyślnie lokalna historia użytkownika.
+  final PreviousPerformanceRepository? previousPerformance;
 }
 
 class OngoingWorkoutScreen extends StatefulWidget {
@@ -102,6 +109,32 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     try {
       return widget.args?.restTimerScheduler ??
           ServiceLocator.restTimerScheduler;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  PreviousPerformanceRepository? get _previousPerformance {
+    try {
+      return widget.args?.previousPerformance ??
+          ServiceLocator.previousPerformanceRepository;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Poprzedni wynik ćwiczenia; brak danych lub błąd odczytu to po prostu
+  /// brak kolumny — nigdy błąd na ekranie treningu.
+  Future<List<TrainingSessionSet>?> _loadPreviousSets(
+    TrainingSessionExercise exercise,
+  ) async {
+    final repository = _previousPerformance;
+    if (repository == null) return null;
+    try {
+      return await repository.lastCompletedSets(
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+      );
     } catch (_) {
       return null;
     }
@@ -359,6 +392,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                                       onAddSet: () => _addSet(context, index),
                                       onRemoveSet: (setIndex) =>
                                           _removeSet(context, index, setIndex),
+                                      onNoteChanged: (note) =>
+                                          _updateNote(context, index, note),
+                                      loadPreviousSets: _loadPreviousSets,
                                     ),
                                   ),
                                 );
@@ -725,6 +761,19 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     _scheduleDraftSave(context.read<TrainingSessionCubit>());
   }
 
+  void _updateNote(BuildContext context, int exerciseIndex, String note) {
+    final session = _draftSession.value;
+    if (session == null) return;
+    final exercises = List<TrainingSessionExercise>.from(session.exercises);
+    final exercise = exercises[exerciseIndex];
+    exercises[exerciseIndex] = note.trim().isEmpty
+        ? exercise.copyWith(clearNote: true)
+        : exercise.copyWith(note: note);
+    _draftSession.value = session.copyWith(exercises: exercises);
+    _hasUnsavedDraft = true;
+    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+  }
+
   void _addSet(BuildContext context, int exerciseIndex) {
     final session = _draftSession.value;
     if (session == null) return;
@@ -865,7 +914,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                 const Divider(color: AppColors.border, height: 1),
             itemBuilder: (context, index) {
               final exercise = session.exercises[index];
-              final completedSets = exercise.sets
+              final workingSets = exercise.sets.where(
+                (set) => set.countsTowardStats,
+              );
+              final completedSets = workingSets
                   .where((set) => set.completed)
                   .length;
               final isCurrent = index == _currentExerciseIndex.value;
@@ -895,7 +947,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                   ),
                 ),
                 subtitle: Text(
-                  '$completedSets / ${exercise.sets.length} serii',
+                  '$completedSets / ${workingSets.length} serii',
                   style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 trailing: isCurrent
@@ -978,6 +1030,8 @@ class _SessionExerciseCard extends StatefulWidget {
     required this.onSetChanged,
     required this.onAddSet,
     required this.onRemoveSet,
+    required this.onNoteChanged,
+    this.loadPreviousSets,
   });
 
   final int exerciseIndex;
@@ -991,13 +1045,33 @@ class _SessionExerciseCard extends StatefulWidget {
   final void Function(int setIndex, TrainingSessionSet set) onSetChanged;
   final VoidCallback onAddSet;
   final void Function(int setIndex) onRemoveSet;
+  final ValueChanged<String> onNoteChanged;
+  final Future<List<TrainingSessionSet>?> Function(
+    TrainingSessionExercise exercise,
+  )?
+  loadPreviousSets;
 
   @override
   State<_SessionExerciseCard> createState() => _SessionExerciseCardState();
 }
 
 class _SessionExerciseCardState extends State<_SessionExerciseCard> {
+  static const _setColumnWidth = 36.0;
+  static const _previousColumnWidth = 56.0;
+  static const _checkColumnWidth = 44.0;
+  static const _deleteColumnWidth = 32.0;
+  static const _columnGap = 8.0;
+
+  /// Najmniejsza szerokość pola (kg / powt. / RIR / tempo), przy której
+  /// kolumna „POPRZ.” jeszcze się mieści — na wąskich telefonach z włączonym
+  /// RIR i tempem ustępuje polom.
+  static const _minInputWidth = 40.0;
+
   late List<TrainingSessionSet> _sets;
+  late final TextEditingController _noteController;
+  bool _noteOpen = false;
+  bool _noteAutofocus = false;
+  List<TrainingSessionSet>? _previous;
   DecorationImage? _thumb;
   String? _thumbUrl;
 
@@ -1005,6 +1079,24 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
   void initState() {
     super.initState();
     _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
+    _noteController = TextEditingController(text: widget.exercise.note ?? '');
+    _noteOpen = _noteController.text.trim().isNotEmpty;
+    unawaited(_loadPrevious());
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPrevious() async {
+    final loader = widget.loadPreviousSets;
+    if (loader == null) return;
+    final exercise = widget.exercise;
+    final sets = await loader(exercise);
+    if (!mounted || widget.exercise.id != exercise.id) return;
+    setState(() => _previous = sets);
   }
 
   @override
@@ -1019,6 +1111,12 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
     if (oldWidget.exercise.id != widget.exercise.id ||
         widget.exercise.sets.length != _sets.length) {
       _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
+    }
+    if (oldWidget.exercise.id != widget.exercise.id) {
+      _previous = null;
+      _noteController.text = widget.exercise.note ?? '';
+      _noteOpen = _noteController.text.trim().isNotEmpty;
+      unawaited(_loadPrevious());
     }
     if (oldWidget.exercise.exerciseImageUrl !=
         widget.exercise.exerciseImageUrl) {
@@ -1047,6 +1145,323 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
       _sets[setIndex] = set;
     });
     widget.onSetChanged(setIndex, set);
+  }
+
+  Future<void> _pickSetType(int setIndex) async {
+    final picked = await showSetTypePicker(context, _sets[setIndex].setType);
+    if (picked == null || !mounted || setIndex >= _sets.length) return;
+    if (picked == _sets[setIndex].setType) return;
+    _handleSetChanged(setIndex, _sets[setIndex].copyWith(setType: picked));
+  }
+
+  /// Przepisuje ciężar i powtórzenia poprzedniego wyniku do serii.
+  void _fillFromPrevious(int setIndex, TrainingSessionSet previous) {
+    final weight = previous.actualWeight?.trim() ?? '';
+    final reps = previous.actualReps?.trim() ?? '';
+    _handleSetChanged(
+      setIndex,
+      _sets[setIndex].copyWith(
+        actualWeight: weight.isEmpty ? null : weight,
+        actualReps: reps.isEmpty ? null : reps,
+      ),
+    );
+  }
+
+  /// Czy kolumna „POPRZ.” mieści się obok pól — kolumny: SET, POPRZ., pola,
+  /// OK, usuń.
+  bool _fitsPreviousColumn(
+    double width, {
+    required bool showRir,
+    required bool showTempo,
+  }) {
+    final previous = _previous;
+    if (previous == null || previous.isEmpty) return false;
+    final inputs = 2 + (showRir ? 1 : 0) + (showTempo ? 1 : 0);
+    final gaps = 3 + inputs;
+    final fixed =
+        _setColumnWidth +
+        _previousColumnWidth +
+        _checkColumnWidth +
+        _deleteColumnWidth +
+        gaps * _columnGap;
+    return (width - fixed) / inputs >= _minInputWidth;
+  }
+
+  Widget _buildNote(int exerciseIndex) {
+    if (!_noteOpen) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: ValueKey('add-exercise-note-button-$exerciseIndex'),
+          onPressed: () => setState(() {
+            _noteOpen = true;
+            _noteAutofocus = true;
+          }),
+          icon: const Icon(Icons.sticky_note_2_outlined, size: 16),
+          label: const Text('Dodaj notatkę'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            minimumSize: const Size(0, 32),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+    return TextField(
+      key: ValueKey('exercise-note-field-$exerciseIndex'),
+      controller: _noteController,
+      autofocus: _noteAutofocus,
+      onChanged: widget.onNoteChanged,
+      maxLength: maxExerciseNoteLength,
+      minLines: 1,
+      maxLines: 4,
+      textCapitalization: TextCapitalization.sentences,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+      decoration: InputDecoration(
+        hintText: 'Notatka do ćwiczenia (np. ustawienie ławki)',
+        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+        counterText: '',
+        isDense: true,
+        filled: true,
+        fillColor: AppColors.surfaceVariant,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSetTable(
+    int exerciseIndex, {
+    required bool showRirColumn,
+    required bool showTempoColumn,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showPrevious = _fitsPreviousColumn(
+          constraints.maxWidth,
+          showRir: showRirColumn,
+          showTempo: showTempoColumn,
+        );
+        final labels = setRowLabels(_sets.map((set) => set.setType));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const SizedBox(
+                  width: _setColumnWidth,
+                  child: _HeaderText('SET'),
+                ),
+                if (showPrevious) ...[
+                  const SizedBox(width: _columnGap),
+                  const SizedBox(
+                    width: _previousColumnWidth,
+                    child: _HeaderText('POPRZ.'),
+                  ),
+                ],
+                const SizedBox(width: _columnGap),
+                const Expanded(child: _HeaderText('KG')),
+                const SizedBox(width: _columnGap),
+                const Expanded(child: _HeaderText('POWT.')),
+                if (showRirColumn) ...[
+                  const SizedBox(width: _columnGap),
+                  const Expanded(child: _HeaderText('RIR')),
+                ],
+                if (showTempoColumn) ...[
+                  const SizedBox(width: _columnGap),
+                  const Expanded(child: _HeaderText('TEMPO')),
+                ],
+                const SizedBox(width: _columnGap),
+                const SizedBox(
+                  width: _checkColumnWidth,
+                  child: _HeaderText('OK'),
+                ),
+                const SizedBox(width: _columnGap),
+                const SizedBox(width: _deleteColumnWidth),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var setIndex = 0; setIndex < _sets.length; setIndex++)
+              _buildSetRow(
+                exerciseIndex,
+                setIndex,
+                label: labels[setIndex],
+                showPrevious: showPrevious,
+                showRirColumn: showRirColumn,
+                showTempoColumn: showTempoColumn,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSetRow(
+    int exerciseIndex,
+    int setIndex, {
+    required String label,
+    required bool showPrevious,
+    required bool showRirColumn,
+    required bool showTempoColumn,
+  }) {
+    final set = _sets[setIndex];
+    final previousSet = showPrevious
+        ? previousSetFor(_sets, setIndex, _previous!)
+        : null;
+    final previousText = formatPreviousSet(previousSet);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: set.completed
+              ? AppColors.primary.withValues(alpha: 0.10)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: set.completed
+              ? Border.all(color: AppColors.primary.withValues(alpha: 0.35))
+              : null,
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: _setColumnWidth,
+              child: SetTypeBadge(
+                key: ValueKey('session-set-type-$exerciseIndex-$setIndex'),
+                label: label,
+                type: set.setType,
+                completed: set.completed,
+                onTap: () => unawaited(_pickSetType(setIndex)),
+              ),
+            ),
+            if (showPrevious) ...[
+              const SizedBox(width: _columnGap),
+              SizedBox(
+                width: _previousColumnWidth,
+                child: _PreviousCell(
+                  key: ValueKey(
+                    'session-set-previous-$exerciseIndex-$setIndex',
+                  ),
+                  text: previousText,
+                  onTap: previousSet == null || previousText == null
+                      ? null
+                      : () => _fillFromPrevious(setIndex, previousSet),
+                ),
+              ),
+            ],
+            const SizedBox(width: _columnGap),
+            Expanded(
+              child: TableCellInput(
+                value: set.actualWeight ?? '',
+                hint: set.plannedWeight ?? '',
+                onChanged: (value) => _handleSetChanged(
+                  setIndex,
+                  set.copyWith(
+                    actualWeight: value,
+                    clearActualWeight: value.trim().isEmpty,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: _columnGap),
+            Expanded(
+              child: TableCellInput(
+                value: set.actualReps ?? '',
+                hint: set.plannedReps,
+                onChanged: (value) => _handleSetChanged(
+                  setIndex,
+                  set.copyWith(
+                    actualReps: value,
+                    clearActualReps: value.trim().isEmpty,
+                  ),
+                ),
+              ),
+            ),
+            if (showRirColumn) ...[
+              const SizedBox(width: _columnGap),
+              Expanded(
+                child: TableCellInput(
+                  value: set.actualRir ?? '',
+                  hint: set.plannedRir?.isNotEmpty == true
+                      ? set.plannedRir!
+                      : '-',
+                  onChanged: (value) => _handleSetChanged(
+                    setIndex,
+                    set.copyWith(
+                      actualRir: value,
+                      clearActualRir: value.trim().isEmpty,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (showTempoColumn) ...[
+              const SizedBox(width: _columnGap),
+              Expanded(
+                child: TableCellInput(
+                  key: ValueKey('session-set-tempo-$exerciseIndex-$setIndex'),
+                  value: set.actualTempo ?? '',
+                  hint: set.plannedTempo?.isNotEmpty == true
+                      ? set.plannedTempo!
+                      : '-',
+                  keyboardType: TextInputType.text,
+                  onChanged: (value) => _handleSetChanged(
+                    setIndex,
+                    set.copyWith(
+                      actualTempo: value,
+                      clearActualTempo: value.trim().isEmpty,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: _columnGap),
+            SizedBox(
+              width: _checkColumnWidth,
+              child: Checkbox(
+                value: set.completed,
+                activeColor: AppColors.primary,
+                onChanged: (value) => _handleSetChanged(
+                  setIndex,
+                  set.copyWith(
+                    completed: value ?? false,
+                    completedAt: value == true ? DateTime.now().toUtc() : null,
+                    clearCompletedAt: value != true,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: _columnGap),
+            SizedBox(
+              width: _deleteColumnWidth,
+              child: IconButton(
+                tooltip: 'Usuń serię',
+                onPressed: _sets.length > 1
+                    ? () => widget.onRemoveSet(setIndex)
+                    : null,
+                padding: EdgeInsets.zero,
+                iconSize: 22,
+                icon: const Icon(Icons.delete_outline_rounded),
+                color: AppColors.textSecondary,
+                disabledColor: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1132,171 +1547,14 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
               ],
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const SizedBox(width: 34, child: _HeaderText('SET')),
-              const SizedBox(width: 8),
-              const Expanded(child: _HeaderText('KG')),
-              const SizedBox(width: 8),
-              const Expanded(child: _HeaderText('POWT.')),
-              if (showRirColumn) ...[
-                const SizedBox(width: 8),
-                const Expanded(child: _HeaderText('RIR')),
-              ],
-              if (showTempoColumn) ...[
-                const SizedBox(width: 8),
-                const Expanded(child: _HeaderText('TEMPO')),
-              ],
-              const SizedBox(width: 8),
-              const SizedBox(width: 44, child: _HeaderText('OK')),
-              const SizedBox(width: 8),
-              const SizedBox(width: 44),
-            ],
+          const SizedBox(height: 6),
+          _buildNote(exerciseIndex),
+          const SizedBox(height: 10),
+          _buildSetTable(
+            exerciseIndex,
+            showRirColumn: showRirColumn,
+            showTempoColumn: showTempoColumn,
           ),
-          const SizedBox(height: 8),
-          ..._sets.asMap().entries.map((entry) {
-            final setIndex = entry.key;
-            final set = entry.value;
-            final rowTextStyle = TextStyle(
-              color: set.completed ? AppColors.textMuted : Colors.white,
-              fontWeight: FontWeight.w700,
-              decoration: set.completed
-                  ? TextDecoration.lineThrough
-                  : TextDecoration.none,
-              decorationColor: AppColors.primaryVariant,
-              decorationThickness: 2,
-            );
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                decoration: BoxDecoration(
-                  color: set.completed
-                      ? AppColors.primary.withValues(alpha: 0.10)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: set.completed
-                      ? Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.35),
-                        )
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 34,
-                      child: Text(
-                        '${setIndex + 1}',
-                        textAlign: TextAlign.center,
-                        style: rowTextStyle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TableCellInput(
-                        value: set.actualWeight ?? '',
-                        hint: set.plannedWeight ?? '',
-                        onChanged: (value) => _handleSetChanged(
-                          setIndex,
-                          set.copyWith(
-                            actualWeight: value,
-                            clearActualWeight: value.trim().isEmpty,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TableCellInput(
-                        value: set.actualReps ?? '',
-                        hint: set.plannedReps,
-                        onChanged: (value) => _handleSetChanged(
-                          setIndex,
-                          set.copyWith(
-                            actualReps: value,
-                            clearActualReps: value.trim().isEmpty,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (showRirColumn) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TableCellInput(
-                          value: set.actualRir ?? '',
-                          hint: set.plannedRir?.isNotEmpty == true
-                              ? set.plannedRir!
-                              : '-',
-                          onChanged: (value) => _handleSetChanged(
-                            setIndex,
-                            set.copyWith(
-                              actualRir: value,
-                              clearActualRir: value.trim().isEmpty,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (showTempoColumn) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TableCellInput(
-                          key: ValueKey(
-                            'session-set-tempo-$exerciseIndex-$setIndex',
-                          ),
-                          value: set.actualTempo ?? '',
-                          hint: set.plannedTempo?.isNotEmpty == true
-                              ? set.plannedTempo!
-                              : '-',
-                          keyboardType: TextInputType.text,
-                          onChanged: (value) => _handleSetChanged(
-                            setIndex,
-                            set.copyWith(
-                              actualTempo: value,
-                              clearActualTempo: value.trim().isEmpty,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 44,
-                      child: Checkbox(
-                        value: set.completed,
-                        activeColor: AppColors.primary,
-                        onChanged: (value) => _handleSetChanged(
-                          setIndex,
-                          set.copyWith(
-                            completed: value ?? false,
-                            completedAt: value == true
-                                ? DateTime.now().toUtc()
-                                : null,
-                            clearCompletedAt: value != true,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 44,
-                      child: IconButton(
-                        tooltip: 'Usuń serię',
-                        onPressed: _sets.length > 1
-                            ? () => widget.onRemoveSet(setIndex)
-                            : null,
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        color: AppColors.textSecondary,
-                        disabledColor: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
           const SizedBox(height: 4),
           SizedBox(
             width: double.infinity,
@@ -1315,6 +1573,39 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Poprzedni wynik tej serii (`82,5×8`); dotknięcie wpisuje go w pola.
+class _PreviousCell extends StatelessWidget {
+  const _PreviousCell({super.key, required this.text, required this.onTap});
+
+  final String? text;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = Text(
+      text ?? '—',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: text == null ? AppColors.textMuted : AppColors.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    if (onTap == null) return Center(child: label);
+    return Semantics(
+      button: true,
+      label: 'Użyj poprzedniego wyniku: $text',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(height: 36, child: Center(child: label)),
       ),
     );
   }

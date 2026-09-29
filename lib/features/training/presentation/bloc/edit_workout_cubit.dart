@@ -179,6 +179,19 @@ class EditWorkoutCubit extends Cubit<EditWorkoutState> {
         : set.copyWith(actualRir: value),
   );
 
+  void setSetType(int exerciseIndex, int setIndex, SetType type) =>
+      _updateSet(exerciseIndex, setIndex, (set) => set.copyWith(setType: type));
+
+  void setExerciseNote(int exerciseIndex, String value) =>
+      _updateExercises((exercises) {
+        if (exerciseIndex >= exercises.length) return exercises;
+        final exercise = exercises[exerciseIndex];
+        exercises[exerciseIndex] = value.trim().isEmpty
+            ? exercise.copyWith(clearNote: true)
+            : exercise.copyWith(note: value);
+        return exercises;
+      });
+
   void toggleCompleted(int exerciseIndex, int setIndex) => _updateSet(
     exerciseIndex,
     setIndex,

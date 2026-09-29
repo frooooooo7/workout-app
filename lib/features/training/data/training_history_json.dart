@@ -19,6 +19,7 @@ TrainingExerciseDetail trainingExerciseDetailFromJson(
         .whereType<MuscleGroup>()
         .toList(growable: false),
     imageUrl: json['imageUrl'] as String?,
+    note: json['note'] as String?,
     sets: setsRaw
         .whereType<Map<String, dynamic>>()
         .map(trainingExerciseSetDetailFromJson)
@@ -31,6 +32,7 @@ TrainingExerciseSetDetail trainingExerciseSetDetailFromJson(
 ) {
   return TrainingExerciseSetDetail(
     setIndex: (json['setIndex'] as num?)?.toInt() ?? 0,
+    setType: SetType.parse(json['setType']),
     planned: trainingSetMetricsFromJson(
       json['planned'] as Map<String, dynamic>?,
     ),

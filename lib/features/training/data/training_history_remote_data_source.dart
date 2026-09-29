@@ -70,9 +70,11 @@ class TrainingHistoryRemoteDataSource {
           'exerciseName': exercise.exerciseName,
           'muscles': exercise.muscles.map((m) => m.name).toList(),
           'imageUrl': exercise.imageUrl,
+          'note': exercise.note,
           'sets': exercise.sets.map((set) {
             return {
               'setIndex': set.setIndex,
+              'setType': set.setType.apiName,
               'planned': _metricsToJson(set.planned),
               'actual': _metricsToJson(set.actual),
               'completed': set.completed,

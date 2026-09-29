@@ -3,12 +3,13 @@ import '../models/training_session.dart';
 /// Nowa aktywna sesja na wzór [source] („Powtórz trening”):
 ///
 /// * te same ćwiczenia w tej samej kolejności (snapshot nazwy, mięśni,
-///   kategorii i obrazka) i ta sama liczba serii,
+///   kategorii i obrazka) i ta sama liczba serii, z zachowanym rodzajem
+///   każdej (rozgrzewka zostaje rozgrzewką),
 /// * wartości planowane = poprzednie wykonanie, a gdy go brak — poprzedni
 ///   plan; pola wykonania są nimi wstępnie wypełnione (jak przy starcie
 ///   z planu), serie nieukończone,
-/// * nowe identyfikatory sesji, ćwiczeń i serii; bez notatki i bez
-///   udostępnienia na profilu,
+/// * nowe identyfikatory sesji, ćwiczeń i serii; bez notatki sesji ani
+///   notatek do ćwiczeń i bez udostępnienia na profilu,
 /// * powiązanie z planem tylko wtedy, gdy plan nadal istnieje ([planLocalId]
 ///   / [planServerId] podaje wywołujący), nazwa zostaje zawsze.
 TrainingSession buildRepeatedSession(
@@ -42,6 +43,7 @@ TrainingSessionSet _repeatSet(TrainingSessionSet previous) {
   final rir = _preferActual(previous.actualRir, previous.plannedRir);
   final tempo = _preferActual(previous.actualTempo, previous.plannedTempo);
   return TrainingSessionSet(
+    setType: previous.setType,
     plannedWeight: weight,
     plannedReps: reps ?? '',
     plannedRir: rir,

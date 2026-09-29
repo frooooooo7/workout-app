@@ -15,7 +15,7 @@ class WorkoutSummaryStatsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed = detail.completedSetsCount;
-    final planned = detail.exercises.fold(0, (sum, e) => sum + e.sets.length);
+    final planned = detail.workingSetsCount;
     final ratio = planned == 0 ? 0.0 : completed / planned;
 
     return Container(
