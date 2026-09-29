@@ -208,7 +208,7 @@ void main() {
       );
 
       expect(find.text('cel: 4 / tydz.'), findsOneWidget);
-      expect(find.text('Wykonany w 4 z 8 ostatnich tygodni'), findsOneWidget);
+      expect(find.text('Wykonany w 4 z 7 ostatnich tygodni'), findsOneWidget);
       expect(_rich('Seria celu: 2 tyg.'), findsOneWidget);
       expect(find.text('najdłuższa: 5 tyg.'), findsOneWidget);
 
@@ -315,7 +315,7 @@ void main() {
       expect(_rich('2 / 3'), findsOneWidget);
       expect(find.text('Brakuje 1 treningu'), findsOneWidget);
       expect(find.text('do końca tygodnia: 5 dni'), findsOneWidget);
-      expect(find.text('Wykonany w 0 z 8 ostatnich tygodni'), findsOneWidget);
+      expect(find.text('Wykonany w 0 z 7 ostatnich tygodni'), findsOneWidget);
       expect(find.text('14 wrz'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -324,11 +324,12 @@ void main() {
       tester,
     ) async {
       await _pump(tester, StatsGoalCard(goal: _goal(history: const [4])));
-      expect(find.text('Wykonany w 1 z 2 ostatnich tygodni'), findsOneWidget);
+      expect(find.text('Wykonany w 1 z 1 ostatnich tygodni'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       await _pump(tester, StatsGoalCard(goal: _goal(history: const [])));
-      expect(find.text('Wykonany w 0 z 1 ostatnich tygodni'), findsOneWidget);
+      // Tylko trwający tydzień — nie ma jeszcze ukończonych do podsumowania.
+      expect(find.textContaining('ostatnich tygodni'), findsNothing);
       expect(tester.takeException(), isNull);
 
       const bare = WeeklyGoalProgress(

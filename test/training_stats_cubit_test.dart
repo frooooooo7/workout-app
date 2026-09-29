@@ -142,28 +142,31 @@ void main() {
       await cubit.close();
     });
 
-    test('load() fetches the goal again, data changes do not', () async {
-      var fetched = 0;
-      final changes = ChangeNotifier();
-      final repo = _Repo([_session(DateTime(2026, 9, 15, 18))]);
-      final cubit = TrainingStatsCubit(
-        repo,
-        clock: () => _now,
-        dataChanges: changes,
-        weeklyGoalLoader: () async => ++fetched,
-      );
-      await cubit.load();
-      await _until(() => cubit.state.snapshot!.goal?.goal == 1);
+    test(
+      'a goal changed in the profile is picked up on the next change',
+      () async {
+        var fetched = 0;
+        final changes = ChangeNotifier();
+        final repo = _Repo([_session(DateTime(2026, 9, 15, 18))]);
+        final cubit = TrainingStatsCubit(
+          repo,
+          clock: () => _now,
+          dataChanges: changes,
+          weeklyGoalLoader: () async => ++fetched,
+        );
+        await cubit.load();
+        await _until(() => cubit.state.snapshot!.goal?.goal == 1);
 
-      // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
-      changes.notifyListeners();
-      await _until(() => repo.reads == 2);
-      expect(fetched, 1);
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        changes.notifyListeners();
+        await _until(() => cubit.state.snapshot!.goal?.goal == 2);
+        expect(repo.reads, 2);
 
-      await cubit.load();
-      await _until(() => cubit.state.snapshot!.goal?.goal == 2);
-      await cubit.close();
-    });
+        await cubit.load();
+        await _until(() => cubit.state.snapshot!.goal?.goal == 3);
+        await cubit.close();
+      },
+    );
   });
 
   group('large history is computed off the main isolate', () {

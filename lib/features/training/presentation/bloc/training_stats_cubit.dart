@@ -272,6 +272,10 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
 
   void _onDataChanged() {
     if (isClosed) return;
+    // Cubit Historii żyje całą sesję aplikacji — cel zmieniony w profilu (albo
+    // niewczytany, gdy pierwszy odczyt był offline) musi dołączyć się przy
+    // najbliższej zmianie danych, nie dopiero po przeciągnięciu.
+    unawaited(_refreshGoal());
     unawaited(_loadSessions());
   }
 

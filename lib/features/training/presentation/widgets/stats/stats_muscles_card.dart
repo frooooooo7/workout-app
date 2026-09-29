@@ -69,7 +69,12 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                 if (m.regions.isNotEmpty) ...[
                   const _SubHeader('PODZIAŁ NA PARTIE'),
                   const SizedBox(height: AppSpacing.sm),
-                  _RegionDonut(regions: m.regions),
+                  _RegionDonut(
+                    regions: m.regions,
+                    totalSets: m.taggedSets > 0
+                        ? m.taggedSets.toDouble()
+                        : null,
+                  ),
                   const SizedBox(height: AppSpacing.lg),
                 ],
                 const _SubHeader('MAPA OBCIĄŻENIA'),
@@ -82,6 +87,11 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                   muscles: _expanded
                       ? m.muscles
                       : m.muscles.take(_collapsedRows).toList(),
+                  // Procenty liczone dla całego rankingu, nie tylko dla
+                  // widocznych wierszy — inaczej zwijanie zmieniałoby liczby.
+                  percents: roundedPercents([
+                    for (final stat in m.muscles) stat.share,
+                  ]),
                   leaderSets: m.muscles.first.sets,
                 ),
                 if (m.muscles.length > _collapsedRows)
@@ -144,15 +154,19 @@ class _SubHeader extends StatelessWidget {
 }
 
 class _RegionDonut extends StatelessWidget {
-  const _RegionDonut({required this.regions});
+  const _RegionDonut({required this.regions, this.totalSets});
 
   final List<RegionStat> regions;
+
+  /// Serie do napisu w środku; bez niej suma ważonych serii partii.
+  final double? totalSets;
 
   static const _size = 120.0;
 
   @override
   Widget build(BuildContext context) {
-    final total = regions.fold<double>(0, (a, r) => a + r.sets);
+    final total = totalSets ?? regions.fold<double>(0, (a, r) => a + r.sets);
+    final percents = roundedPercents([for (final r in regions) r.share]);
     return Row(
       children: [
         SizedBox.square(
@@ -177,28 +191,36 @@ class _RegionDonut extends StatelessWidget {
                   ],
                 ),
               ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    formatStatsDecimal(total),
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.4,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
+              // Otwór koła ma ~84 px — tysiące serii albo duża czcionka
+              // zmniejszają napis zamiast wychodzić na pierścień.
+              SizedBox(
+                width: 76,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formatStatsDecimal(total),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        _setsLabel(total),
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    _setsLabel(total),
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -208,7 +230,7 @@ class _RegionDonut extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final r in regions)
+              for (final (i, r) in regions.indexed)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
@@ -235,7 +257,7 @@ class _RegionDonut extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${(r.share * 100).round()}%',
+                        formatStatsPercent(percents[i], nonZero: r.share > 0),
                         style: const TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 12.5,
@@ -369,18 +391,26 @@ class _Figure extends StatelessWidget {
 }
 
 class _MuscleRanking extends StatelessWidget {
-  const _MuscleRanking({required this.muscles, required this.leaderSets});
+  const _MuscleRanking({
+    required this.muscles,
+    required this.percents,
+    required this.leaderSets,
+  });
 
   final List<MuscleStat> muscles;
+
+  /// Procenty całego rankingu; widoczne wiersze to jego początek.
+  final List<int> percents;
   final double leaderSets;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final m in muscles)
+        for (final (i, m) in muscles.indexed)
           _MuscleBar(
             stat: m,
+            percent: percents[i],
             fill: leaderSets > 0 ? (m.sets / leaderSets).clamp(0, 1) : 0,
           ),
       ],
@@ -389,15 +419,20 @@ class _MuscleRanking extends StatelessWidget {
 }
 
 class _MuscleBar extends StatelessWidget {
-  const _MuscleBar({required this.stat, required this.fill});
+  const _MuscleBar({
+    required this.stat,
+    required this.percent,
+    required this.fill,
+  });
 
   final MuscleStat stat;
+  final int percent;
   final double fill;
 
   @override
   Widget build(BuildContext context) {
     final sets = formatStatsDecimal(stat.sets);
-    final percent = (stat.share * 100).round();
+    final percentText = formatStatsPercent(percent, nonZero: stat.share > 0);
     final region = stat.muscle.region;
     final color = region == null
         ? AppColors.primaryVariant
@@ -407,7 +442,7 @@ class _MuscleBar extends StatelessWidget {
       excludeSemantics: true,
       label:
           '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
-          '$percent procent',
+          '${percentText == '<1%' ? 'poniżej 1' : percent} procent',
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Column(
@@ -451,7 +486,7 @@ class _MuscleBar extends StatelessWidget {
                   // pole rośnie zamiast łamać „33%” na kilka linii.
                   constraints: const BoxConstraints(minWidth: 40),
                   child: Text(
-                    '$percent%',
+                    percentText,
                     maxLines: 1,
                     textAlign: TextAlign.right,
                     style: const TextStyle(

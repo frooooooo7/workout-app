@@ -308,7 +308,12 @@ class MuscleDistribution {
     required this.regions,
     required this.neglected,
     this.bodyMap = const {},
+    this.taggedSets = 0,
   });
+
+  /// Ukończone serie ćwiczeń z co najmniej jednym otagowanym mięśniem — to
+  /// „prawdziwa” liczba serii rankingu (same udziały są ważone po pół).
+  final int taggedSets;
 
   /// Od najmocniej trenowanej pozycji.
   final List<MuscleStat> muscles;

@@ -178,3 +178,31 @@ class StatsDelta {
     return StatsDelta._('${diff > 0 ? '+' : '−'}${diff.abs()}', diff.sign);
   }
 }
+
+/// Procenty z udziałów 0..1 zaokrąglone tak, żeby dawały razem 100 (metoda
+/// największej reszty) — trzy równe części to 34 + 33 + 33, nie 33 × 3.
+/// Przy sumie udziałów innej niż 1 (albo samych zerach) zwykłe zaokrąglenie.
+List<int> roundedPercents(List<double> shares) {
+  final total = shares.fold<double>(0, (a, b) => a + b);
+  if (total <= 0 || (total - 1).abs() > 1e-6) {
+    return [for (final s in shares) (s * 100).round()];
+  }
+  final floors = [for (final s in shares) (s * 100).floor()];
+  final order = List<int>.generate(shares.length, (i) => i)
+    ..sort((a, b) {
+      final ra = shares[a] * 100 - floors[a];
+      final rb = shares[b] * 100 - floors[b];
+      final byRemainder = rb.compareTo(ra);
+      return byRemainder != 0 ? byRemainder : a.compareTo(b);
+    });
+  final missing = 100 - floors.fold<int>(0, (a, b) => a + b);
+  for (var i = 0; i < missing && i < order.length; i++) {
+    floors[order[i]]++;
+  }
+  return floors;
+}
+
+/// `34%`; niezerowy udział, który zaokrągla się do zera, to `<1%`, żeby obok
+/// niepustego paska nie stało „0%”.
+String formatStatsPercent(int percent, {required bool nonZero}) =>
+    nonZero && percent == 0 ? '<1%' : '$percent%';

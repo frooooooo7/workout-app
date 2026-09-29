@@ -46,6 +46,7 @@ abstract final class MuscleDistributionCalculator {
     final bodySets = <MuscleGroup, double>{};
     final setsByRegion = <MuscleRegion, double>{};
     var workouts = 0;
+    var taggedSets = 0;
 
     for (final session in sessions) {
       if (session.status != TrainingSessionStatus.completed) continue;
@@ -60,6 +61,7 @@ abstract final class MuscleDistributionCalculator {
         if (sets == 0) continue;
 
         final muscles = taggedMuscles(exercise);
+        if (muscles.isNotEmpty) taggedSets += sets;
         final regionShare = <MuscleRegion, double>{};
         for (var i = 0; i < muscles.length; i++) {
           final share = i == 0 ? _primaryShare : _secondaryShare;
@@ -138,6 +140,7 @@ abstract final class MuscleDistributionCalculator {
     return MuscleDistribution(
       muscles: List.unmodifiable(muscles),
       bodyMap: Map.unmodifiable(bodyMap),
+      taggedSets: taggedSets,
       regions: List.unmodifiable(regions),
       neglected: workouts >= neglectedMinWorkouts
           ? [

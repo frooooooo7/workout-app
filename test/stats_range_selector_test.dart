@@ -270,13 +270,28 @@ void main() {
         onPickCustom: () => picks++,
       );
 
-      await tester.tap(find.bySemanticsLabel('Wybierz własny zakres dat'));
+      // Prawdziwa akcja semantyczna (jak z czytnika ekranu), nie dotyk
+      // w środek węzła — ten drugi przechodzi także bez `onTap` w Semantics.
+      Future<void> tapBySemantics(String label) async {
+        final node = find.semantics.byLabel(label);
+        expect(
+          node.evaluate().single.getSemanticsData().hasAction(
+            SemanticsAction.tap,
+          ),
+          isTrue,
+          reason: label,
+        );
+        tester.semantics.performAction(node, SemanticsAction.tap);
+        await tester.pump();
+      }
+
+      await tapBySemantics('Wybierz własny zakres dat');
       expect(picks, 1);
 
-      await tester.tap(find.bySemanticsLabel('Zakres 7 dni'));
+      await tapBySemantics('Zakres 7 dni');
       expect(changes, [StatsRange.week]);
 
-      await tester.tap(find.bySemanticsLabel('Wyjdź z własnego zakresu dat'));
+      await tapBySemantics('Wyjdź z własnego zakresu dat');
       expect(changes, [StatsRange.week, StatsRange.month]);
 
       expect(

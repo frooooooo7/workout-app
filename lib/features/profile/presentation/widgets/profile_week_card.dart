@@ -71,13 +71,26 @@ class ProfileWeekCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (hasGoal) ...[
-                      _GoalPill(done: stats.workouts, goal: goal),
-                      if (summary.streakWeeks > 0)
-                        const SizedBox(width: AppSpacing.xs),
-                    ],
-                    if (summary.streakWeeks > 0)
-                      _StreakPill(weeks: summary.streakWeeks),
+                    // Plakietki są stałej szerokości — przy dużej czcionce
+                    // systemowej kurczą się razem, zamiast przepełniać wiersz.
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (hasGoal) ...[
+                              _GoalPill(done: stats.workouts, goal: goal),
+                              if (summary.streakWeeks > 0)
+                                const SizedBox(width: AppSpacing.xs),
+                            ],
+                            if (summary.streakWeeks > 0)
+                              _StreakPill(weeks: summary.streakWeeks),
+                          ],
+                        ),
+                      ),
+                    ),
                     if (onTap != null) ...[
                       const SizedBox(width: AppSpacing.xxs),
                       const Icon(

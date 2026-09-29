@@ -64,7 +64,9 @@ class _GoalHero extends StatelessWidget {
               const SizedBox(height: 2),
               Semantics(
                 container: true,
-                label: '${g.workoutsThisWeek} z ${g.goal} treningów',
+                label:
+                    '${g.workoutsThisWeek} z ${g.goal} '
+                    '${polishPlural(g.goal, 'treningu', 'treningów', 'treningów')}',
                 excludeSemantics: true,
                 child: Text.rich(
                   TextSpan(
@@ -303,15 +305,19 @@ class _GoalHistory extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         _GoalBars(goal: g),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Wykonany w ${g.weeksMet} z ${g.weeks.length} ostatnich tygodni',
-          style: const TextStyle(
-            color: AppColors.textMuted,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+        // Trwającego tygodnia bez wykonanego celu nie liczymy jako porażki —
+        // tak samo jak seria celu. Bez ukończonych tygodni nie ma czego liczyć.
+        if (_weeksSummary(g) case final summary?) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            summary,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -624,4 +630,15 @@ class _StreakRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// „Wykonany w 5 z 7 ostatnich tygodni”; bieżący tydzień wlicza się dopiero,
+/// gdy cel jest już wykonany.
+String? _weeksSummary(WeeklyGoalProgress g) {
+  final counted = g.met || g.weeks.isEmpty
+      ? g.weeks
+      : g.weeks.sublist(0, g.weeks.length - 1);
+  if (counted.isEmpty) return null;
+  final met = counted.where((w) => w.workouts >= g.goal).length;
+  return 'Wykonany w $met z ${counted.length} ostatnich tygodni';
 }

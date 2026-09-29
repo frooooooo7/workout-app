@@ -242,11 +242,14 @@ class _LegendRow extends StatelessWidget {
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
-            SizedBox(
-              width: 44,
+            ConstrainedBox(
+              // Minimalna szerokość wyrównuje kolumnę; „100%” przy dużej
+              // czcionce rośnie, zamiast zawijać się i tracić „%”.
+              constraints: const BoxConstraints(minWidth: 44),
               child: Text(
                 percentText,
                 textAlign: TextAlign.right,
+                softWrap: false,
                 maxLines: 1,
                 style: TextStyle(
                   color: empty
