@@ -56,6 +56,134 @@ TrainingSession _session(
 final _now = DateTime(2026, 9, 16, 12);
 
 void main() {
+  group('warm-up sets', () {
+    TrainingSession withWarmup() => _session(
+      DateTime(2026, 9, 15, 8),
+      exercises: [
+        TrainingSessionExercise(
+          exerciseId: '',
+          exerciseName: 'Wyciskanie',
+          exerciseMuscles: const ['chest'],
+          exerciseCategory: 'compound',
+          sets: [
+            TrainingSessionSet(
+              actualWeight: '40',
+              actualReps: '12',
+              completed: true,
+              setType: SetType.warmup,
+            ),
+            TrainingSessionSet(
+              actualWeight: '100',
+              actualReps: '5',
+              completed: true,
+            ),
+            TrainingSessionSet(
+              actualWeight: '90',
+              actualReps: '6',
+              completed: true,
+              setType: SetType.drop,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    test('never count towards sets, volume, reps, muscles or records', () {
+      final snapshot = TrainingStatsCalculator.compute(
+        [withWarmup()],
+        range: StatsRange.week,
+        now: _now,
+      );
+
+      // Robocza + drop: 2 serie, 100×5 + 90×6.
+      expect(snapshot.current.completedSets, 2);
+      expect(snapshot.current.volumeKg, 500 + 540);
+      expect(snapshot.series.fold<double>(0, (a, p) => a + p.volumeKg), 1040);
+      expect(snapshot.series.fold<int>(0, (a, p) => a + p.sets), 2);
+      expect(snapshot.repRanges.total, 2);
+      expect(snapshot.repRanges.endurance, 0, reason: '12 powt. z rozgrzewki');
+      expect(snapshot.muscles.taggedSets, 2);
+      expect(snapshot.habits.avgSetsPerWorkout, 2);
+      expect(snapshot.exercises.single.sets, 2);
+      expect(snapshot.exercises.single.points.single.topWeightKg, 100);
+      expect(snapshot.sessionRecords.of(SessionRecordKind.sets)!.value, 2);
+      expect(snapshot.sessionRecords.of(SessionRecordKind.volume)!.value, 1040);
+      // Kafelki i wykresy liczą tak samo jak podsumowanie historii.
+      final summary = TrainingSummaryCalculator.aggregate([withWarmup()]);
+      expect(snapshot.current.completedSets, summary.completedSets);
+      expect(snapshot.current.volumeKg, summary.volumeKg);
+    });
+
+    test('a warm-up heavier than the working sets is not a record', () {
+      TrainingSession session(DateTime at, String warmupKg, String workKg) =>
+          _session(
+            at,
+            exercises: [
+              TrainingSessionExercise(
+                exerciseId: '',
+                exerciseName: 'Martwy ciąg',
+                exerciseMuscles: const ['back'],
+                exerciseCategory: 'compound',
+                sets: [
+                  TrainingSessionSet(
+                    actualWeight: warmupKg,
+                    actualReps: '3',
+                    completed: true,
+                    setType: SetType.warmup,
+                  ),
+                  TrainingSessionSet(
+                    actualWeight: workKg,
+                    actualReps: '5',
+                    completed: true,
+                  ),
+                ],
+              ),
+            ],
+          );
+      final snapshot = TrainingStatsCalculator.compute(
+        [
+          session(DateTime(2026, 9, 1, 8), '60', '100'),
+          // Rozgrzewka 200 kg to błąd danych/zły typ — robocza się nie poprawiła.
+          session(DateTime(2026, 9, 8, 8), '200', '100'),
+        ],
+        range: StatsRange.month,
+        now: _now,
+      );
+      expect(snapshot.records, isEmpty);
+      expect(snapshot.bests.single.bestWeightKg, 100);
+    });
+
+    test('an exercise done only as warm-up leaves no trace in the ranking', () {
+      final snapshot = TrainingStatsCalculator.compute(
+        [
+          _session(
+            DateTime(2026, 9, 15, 8),
+            exercises: [
+              TrainingSessionExercise(
+                exerciseId: '',
+                exerciseName: 'Rozciąganie',
+                exerciseMuscles: const ['back'],
+                exerciseCategory: 'mobility',
+                sets: [
+                  TrainingSessionSet(
+                    actualReps: '10',
+                    completed: true,
+                    setType: SetType.warmup,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+        range: StatsRange.week,
+        now: _now,
+      );
+      expect(snapshot.exercises, isEmpty);
+      expect(snapshot.muscles.isEmpty, isTrue);
+      expect(snapshot.recovery, isEmpty);
+    });
+  });
+
   group('session duration', () {
     test('is end minus start for a normal session', () {
       expect(

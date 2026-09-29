@@ -2,7 +2,7 @@ import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
 import '../training_session_detail_mapper.dart' show parseReps, parseWeightKg;
 
-/// Ukończona seria z wartościami rozparsowanymi z tekstu klawiatury. Liczymy
+/// Ukończona seria (bez rozgrzewek) z wartościami rozparsowanymi z tekstu klawiatury. Liczymy
 /// wyłącznie wykonanie (`actual*`) — tak jak kafelki historii.
 class CompletedSetValues {
   const CompletedSetValues({this.weightKg, this.reps, this.rir});
@@ -21,7 +21,9 @@ Iterable<CompletedSetValues> completedSetsOf(
   TrainingSessionExercise exercise,
 ) sync* {
   for (final set in exercise.sets) {
-    if (!set.completed) continue;
+    // Rozgrzewki (SetType.warmup) nie liczą się do serii, objętości ani
+    // rekordów — tak samo jak w kafelkach historii i statystykach ćwiczenia.
+    if (!set.completed || !set.countsTowardStats) continue;
     yield CompletedSetValues(
       weightKg: parseWeightKg(set.actualWeight),
       reps: parseReps(set.actualReps),
