@@ -7,10 +7,14 @@ import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import 'stats_activity_card.dart';
+import 'stats_exercise_progress_card.dart';
 import 'stats_habits_card.dart';
 import 'stats_kpi_grid.dart';
+import 'stats_muscles_card.dart';
 import 'stats_range_selector.dart';
+import 'stats_records_card.dart';
 import 'stats_states.dart';
+import 'stats_top_exercises_card.dart';
 import 'stats_trend_chart_card.dart';
 
 /// Treść statystyk: zakres, kafelki i karty z wykresami. Wymaga
@@ -88,13 +92,27 @@ class TrainingStatsView extends StatelessWidget {
         gap,
         StatsTrendChartCard(snapshot: snapshot),
       ],
-      // Heatmapa i seria tygodni mają sens także przy pustym zakresie.
+      // Rekordy wszech czasów i heatmapa mają sens także przy pustym zakresie.
       gap,
-      StatsActivityCard(activity: snapshot.activity),
+      StatsRecordsCard(
+        records: snapshot.records,
+        bests: snapshot.bests,
+        now: snapshot.activity.today,
+      ),
       if (!snapshot.isEmpty) ...[
         gap,
-        StatsHabitsCard(habits: snapshot.habits),
+        StatsMusclesCard(muscles: snapshot.muscles),
+        gap,
+        StatsExerciseProgressCard(
+          exercises: snapshot.exercises,
+          progressFrom: snapshot.progressFrom,
+        ),
+        gap,
+        StatsTopExercisesCard(exercises: snapshot.exercises),
       ],
+      gap,
+      StatsActivityCard(activity: snapshot.activity),
+      if (!snapshot.isEmpty) ...[gap, StatsHabitsCard(habits: snapshot.habits)],
     ];
   }
 }

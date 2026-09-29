@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/training_stats_screen.dart';
+import 'package:gym/features/training/presentation/widgets/session_details/session_section_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_kpi_grid.dart';
 
 class _FakeStatsRepository implements TrainingStatsRepository {
@@ -69,10 +70,8 @@ Future<void> _pump(
   await tester.pump(const Duration(milliseconds: 300));
 }
 
-Finder _tile(String label) => find.ancestor(
-  of: find.text(label),
-  matching: find.byType(StatsKpiTile),
-);
+Finder _tile(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(StatsKpiTile));
 
 void main() {
   testWidgets('shows KPIs for 30 days with change vs previous period', (
@@ -94,10 +93,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: _tile('Objętość'),
-        matching: find.text('+100%'),
-      ),
+      find.descendant(of: _tile('Objętość'), matching: find.text('+100%')),
       findsOneWidget,
     );
     expect(
@@ -124,6 +120,39 @@ void main() {
       findsOneWidget,
     );
     expect(repository.allReads, 1, reason: 'range change reuses loaded data');
+  });
+
+  testWidgets('renders every section card without layout errors', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([
+        _session(DateTime(2026, 9, 15, 18), weight: '85'),
+        _session(DateTime(2026, 9, 10, 18)),
+        _session(DateTime(2026, 9, 3, 18), weight: '75'),
+      ]),
+    );
+
+    for (final title in [
+      'Przebieg w czasie',
+      'Rekordy',
+      'Partie mięśni',
+      'Progres ćwiczeń',
+      'Najczęstsze ćwiczenia',
+      'Aktywność',
+      'Nawyki treningowe',
+    ]) {
+      // „Rekordy” to też etykieta kafelka — szukamy tytułu karty sekcji.
+      final card = find.widgetWithText(SessionSectionCard, title);
+      await tester.scrollUntilVisible(
+        card,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(card, findsOneWidget, reason: title);
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('"all" range has no comparison, shows captions instead', (
