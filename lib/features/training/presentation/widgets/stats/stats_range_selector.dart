@@ -65,6 +65,9 @@ class _RangeOption extends StatelessWidget {
       selected: selected,
       label: 'Zakres ${range.label}',
       excludeSemantics: true,
+      // excludeSemantics usuwa akcję GestureDetectora — bez onTap czytnik
+      // ekranu ogłasza przycisk, którego nie da się użyć.
+      onTap: onTap,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,

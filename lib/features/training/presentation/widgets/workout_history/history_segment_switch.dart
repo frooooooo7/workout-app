@@ -73,6 +73,7 @@ class HistorySegmentSwitch extends StatelessWidget {
                     selected: segment == selected,
                     excludeSemantics: true,
                     label: segment.label,
+                    onTap: () => onChanged(segment),
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {

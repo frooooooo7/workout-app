@@ -6,9 +6,12 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
+import 'stats_activity_card.dart';
+import 'stats_habits_card.dart';
 import 'stats_kpi_grid.dart';
 import 'stats_range_selector.dart';
 import 'stats_states.dart';
+import 'stats_trend_chart_card.dart';
 
 /// Treść statystyk: zakres, kafelki i karty z wykresami. Wymaga
 /// [TrainingStatsCubit] w kontekście.
@@ -71,15 +74,26 @@ class TrainingStatsView extends StatelessWidget {
     TrainingStatsSnapshot snapshot,
     TrainingStatsCubit cubit,
   ) {
+    const gap = SizedBox(height: AppSpacing.md);
     return [
       StatsKpiGrid(snapshot: snapshot),
       if (snapshot.isEmpty) ...[
-        const SizedBox(height: AppSpacing.md),
+        gap,
         StatsEmptyRangeNotice(
           onShowAll: snapshot.range == StatsRange.all
               ? null
               : () => cubit.selectRange(StatsRange.all),
         ),
+      ] else ...[
+        gap,
+        StatsTrendChartCard(snapshot: snapshot),
+      ],
+      // Heatmapa i seria tygodni mają sens także przy pustym zakresie.
+      gap,
+      StatsActivityCard(activity: snapshot.activity),
+      if (!snapshot.isEmpty) ...[
+        gap,
+        StatsHabitsCard(habits: snapshot.habits),
       ],
     ];
   }
