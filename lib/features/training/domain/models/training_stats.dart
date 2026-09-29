@@ -132,12 +132,31 @@ class ActivityDay {
     this.workouts = 0,
     this.sets = 0,
     this.volumeKg = 0,
+    this.sessions = const [],
   });
 
   final DateTime day;
   final int workouts;
   final int sets;
   final double volumeKg;
+
+  /// Sesje tego dnia, od najwcześniejszej — do otwarcia ze szczegółami.
+  final List<ActivitySession> sessions;
+}
+
+/// Sesja w podsumowaniu dnia na heatmapie.
+class ActivitySession {
+  const ActivitySession({
+    required this.id,
+    required this.name,
+    required this.startedAt,
+  });
+
+  final String id;
+
+  /// Nazwa planu.
+  final String name;
+  final DateTime startedAt;
 }
 
 /// Heatmapa: pełne tygodnie (od poniedziałku) kończące się bieżącym

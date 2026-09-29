@@ -621,9 +621,17 @@ class _DayAccumulator {
   int workouts = 0;
   int sets = 0;
   double volumeKg = 0;
+  final sessions = <ActivitySession>[];
 
   void add(TrainingSession session) {
     workouts++;
+    sessions.add(
+      ActivitySession(
+        id: session.id,
+        name: session.planName,
+        startedAt: session.startedAt,
+      ),
+    );
     for (final exercise in session.exercises) {
       for (final set in completedSetsOf(exercise)) {
         sets++;
@@ -632,8 +640,15 @@ class _DayAccumulator {
     }
   }
 
-  ActivityDay toDay(DateTime day) =>
-      ActivityDay(day: day, workouts: workouts, sets: sets, volumeKg: volumeKg);
+  ActivityDay toDay(DateTime day) => ActivityDay(
+    day: day,
+    workouts: workouts,
+    sets: sets,
+    volumeKg: volumeKg,
+    sessions: List.unmodifiable(
+      sessions..sort((a, b) => a.startedAt.compareTo(b.startedAt)),
+    ),
+  );
 }
 
 class _ExerciseAccumulator {

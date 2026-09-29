@@ -204,6 +204,13 @@ void main() {
       expect(activity.weeks, 12);
       expect(activity.start, DateTime(2026, 6, 29));
       expect(activity.dayAt(DateTime(2026, 9, 16))!.workouts, 2);
+      // Sesje dnia od najwcześniejszej — do otwarcia ze szczegółami.
+      final sessions = activity.dayAt(DateTime(2026, 9, 16))!.sessions;
+      expect(sessions.map((s) => s.name), ['Push', 'Push']);
+      expect(
+        sessions.first.startedAt.isBefore(sessions.last.startedAt),
+        isTrue,
+      );
       expect(activity.trainingDays, 1);
     });
 
