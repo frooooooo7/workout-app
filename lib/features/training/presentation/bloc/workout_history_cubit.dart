@@ -326,7 +326,8 @@ class WorkoutHistoryCubit extends Cubit<WorkoutHistoryState> {
       firstDate: DateTime(2020, 1, 1),
       lastDate: DateTime(now.year, now.month + 1, 0),
       initialDatePickerMode: DatePickerMode.year,
-      locale: const Locale('pl', 'PL'),
+      // Język bierze się z aplikacji (AppLocalization) — wymuszony tu
+      // `Locale('pl')` bez zarejestrowanych delegatów wywracał kalendarz.
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(

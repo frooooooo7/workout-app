@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'core/navigation/app_router.dart';
 import 'core/services/service_locator.dart';
 import 'core/session/app_user_bootstrap.dart';
+import 'core/theme/app_localization.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -50,6 +51,9 @@ class _GymAppState extends State<GymApp> {
       title: 'Stronger',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      locale: AppLocalization.locale,
+      supportedLocales: AppLocalization.supportedLocales,
+      localizationsDelegates: AppLocalization.delegates,
       routerConfig: _router,
     );
   }
