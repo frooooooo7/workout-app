@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/services/service_locator.dart';
+import 'package:gym/core/theme/app_localization.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart'
     as session;
@@ -113,7 +114,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(StatsRangeSelector), findsOneWidget);
   });
+
+  group('month picker', () {
+    Future<void> openPicker(WidgetTester tester, MaterialApp app) async {
+      await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Wybierz rok/miesiąc'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('opens in Polish with the app localization', (tester) async {
+      await openPicker(
+        tester,
+        const MaterialApp(
+          locale: AppLocalization.locale,
+          supportedLocales: AppLocalization.supportedLocales,
+          localizationsDelegates: AppLocalization.delegates,
+          home: HistoryScreen(),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      expect(find.text('Anuluj'), findsOneWidget);
+    });
+
+    // Wcześniej wymuszony `Locale('pl')` bez delegatów kończył się
+    // „No MaterialLocalizations found”.
+    testWidgets('does not crash without Polish delegates', (tester) async {
+      await openPicker(tester, const MaterialApp(home: HistoryScreen()));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+    });
+  });
 }
+
 
 class _FakeStatsRepository implements TrainingStatsRepository {
   final _sessions = [
