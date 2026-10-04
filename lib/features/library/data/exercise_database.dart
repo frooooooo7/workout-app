@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 13;
+  static const _dbVersion = 14;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -41,6 +41,9 @@ class ExerciseDatabase {
   /// Dziennik masy ciała — jeden wiersz na dzień (`date` = `YYYY-MM-DD`).
   static const tableBodyWeightEntries = 'body_weight_entries';
 
+  /// Dziennik pomiarów ciała — jeden wiersz na dzień (`date` = `YYYY-MM-DD`).
+  static const tableBodyMeasurementEntries = 'body_measurement_entries';
+
   /// Klucz → wartość dla silników synchronizacji (np. znacznik ostatniego
   /// pobrania sesji). Baza jest per użytkownik, więc stan też.
   static const tableSyncState = 'sync_state';
@@ -51,6 +54,7 @@ class ExerciseDatabase {
     tableTrainingPlans,
     tableTrainingSessions,
     tableBodyWeightEntries,
+    tableBodyMeasurementEntries,
   ];
 
   /// Tabele, którym migracja v9 dodała `sync_error`. Zamrożone — nowsze
@@ -179,11 +183,14 @@ class ExerciseDatabase {
                  WHERE e.session_local_id = s.local_id
                )))
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries
+             WHERE pending_op IS NOT NULL AND sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries
              WHERE pending_op IS NOT NULL AND sync_error IS NULL) AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;
@@ -286,6 +293,7 @@ class ExerciseDatabase {
     await _createPerformanceIndexes(db);
     await _createSyncStateTable(db);
     await _createBodyWeightTable(db);
+    await _createBodyMeasurementsTable(db);
   }
 
   /// `pending_op`: `upsert` albo `delete` (nagrobek, ukryty w odczytach).
@@ -295,6 +303,27 @@ class ExerciseDatabase {
       CREATE TABLE IF NOT EXISTS $tableBodyWeightEntries (
         date TEXT PRIMARY KEY NOT NULL,
         weight_kg REAL NOT NULL,
+        updated_at INTEGER NOT NULL,
+        pending_op TEXT,
+        sync_error TEXT
+      )
+    ''');
+  }
+
+  /// Jak [_createBodyWeightTable]; wartości pomiarów są opcjonalne
+  /// (obwody w cm, `body_fat_pct` w %).
+  Future<void> _createBodyMeasurementsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableBodyMeasurementEntries (
+        date TEXT PRIMARY KEY NOT NULL,
+        waist_cm REAL,
+        chest_cm REAL,
+        hips_cm REAL,
+        neck_cm REAL,
+        arm_cm REAL,
+        thigh_cm REAL,
+        calf_cm REAL,
+        body_fat_pct REAL,
         updated_at INTEGER NOT NULL,
         pending_op TEXT,
         sync_error TEXT
@@ -594,6 +623,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 13) {
       await _createBodyWeightTable(db);
+    }
+    if (oldVersion < 14) {
+      await _createBodyMeasurementsTable(db);
     }
   }
 
