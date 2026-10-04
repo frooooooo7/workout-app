@@ -375,6 +375,7 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - **onboarding profilu** (spec `docs/superpowers/specs/2026-09-23-registration-onboarding-design.md`) — po rejestracji zdjęcie, nick, bio, prywatne dane o sobie (płeć, data urodzenia, wzrost, waga) i cel; edycja później w „Dane i cele”.
 - **karta ćwiczenia** (`/app/exercises/:id`, 2026-09-28) — ilustracja, mapa zaangażowanych mięśni, Twoje wyniki liczone lokalnie z historii (rekord, szacowany 1RM wg Epleya, treningi, objętość, wykres progresu), opis; edycja i usuwanie własnych ćwiczeń. Otwierana z siatki biblioteki i z menu ćwiczenia w szczegółach planu.
 - feed „nowe od ostatniej wizyty” (2026-09-28) — `FeedSeenStore` (shared_preferences, per konto) pamięta obejrzane id postów; nad listą licznik nowych albo „Brak nowych treningów”, plakietka „Nowy” na kartach, separator „Przejrzałeś wszystkie nowe” przed starszymi, komunikat po pull-to-refresh. Nowe są tylko cudze posty z pierwszej strony; pierwsza wizyta na urządzeniu nie pokazuje podsumowania.
+- listy obserwowanych/obserwujących (własne i cudze) i arkusz kudosów doładowują kolejne strony przy przewijaniu (`profile/presentation/utils/paged_users.dart` + `PagedListFooter`; `limit`/`offset`, duplikaty po przesunięciu offsetu pomijane, błąd strony → „Spróbuj ponownie” w stopce).
 - **dziennik masy ciała** (2026-10-04) — `/app/profile/body-weight` (wejście z Ustawień → „Masa ciała” i z karty w Statystykach): aktualna waga, zmiana w okresie (30 dni / 3 mies. / rok / całość), wykres `fl_chart`, lista pomiarów z edycją i usuwaniem; jeden pomiar na dzień (`PUT /profile/me/body-weight/:date`, data lokalna). `BodyWeightRepository` (`ApiBodyWeightRepository`, `ServiceLocator.bodyWeightRepository`, `null` przed `init`) + `BodyWeightCubit`. Najnowszy pomiar to aktualna waga w „Dane i cele”; zmiana wagi w „Dane i cele” lub onboardingu dopisuje dzisiejszy pomiar (`logProfileWeightChange`, błąd pomijany). Tylko online.
 - biblioteka: sortowanie (Popularne z historii, A–Z, Najnowsze, Ulubione), filtr typu ćwiczenia pod ikoną „tune”, menu „⋯” i długie przytrzymanie kafelka; szczegóły planu: edytuj / duplikuj / usuń plan, przesuwanie i usuwanie ćwiczeń z planu. Wspólny arkusz akcji: `core/widgets/app_action_sheet.dart`.
 
@@ -382,7 +383,6 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - „Zapomniałeś hasła?” → `/login/forgot-password`: pełne UI, ale wysyłkę obsługuje `PlaceholderPasswordResetRepository` (backend nie ma endpointu); ekran mówi, że e-mail jeszcze nie dotrze. Prawdziwą implementację podpina się w `ServiceLocator.passwordResetRepository`.
 
 **Braki (gap'e):**
-- listy obserwowanych/obserwujących i lista kudosów ładują tylko pierwszą stronę, bez doładowywania,
 - cache awatarów usuwanego konta obejmuje tylko adresy widziane w bieżącej sesji aplikacji (po restarcie — dopiero po wejściu na profil),
 - test integracyjny nie działa na webie (sqflite ffi) — web weryfikuje job `build-web`; Windows desktop wymaga Visual Studio,
 - job E2E w CI wymaga zewnętrznej instancji backendu (`E2E_BASE_URL`),
