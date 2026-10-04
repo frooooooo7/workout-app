@@ -8,8 +8,12 @@ import '../../../../core/widgets/app_header.dart';
 import '../../../auth/domain/models/auth_models.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/training_session_repository.dart';
+import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/training_session_detail_mapper.dart';
+import '../widgets/new_records_banner.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
@@ -19,13 +23,22 @@ import '../widgets/workout_summary/workout_summary_hero.dart';
 import '../widgets/workout_summary/workout_summary_stats_card.dart';
 
 class WorkoutSummaryArgs {
-  const WorkoutSummaryArgs({required this.session, this.repository, this.user});
+  const WorkoutSummaryArgs({
+    required this.session,
+    this.repository,
+    this.statsRepository,
+    this.user,
+  });
 
   /// Ukończona sesja — źródło wszystkich metryk na ekranie.
   final TrainingSession session;
 
   /// Test seam; domyślnie [ServiceLocator.trainingSessionRepository].
   final TrainingSessionRepository? repository;
+
+  /// Test seam; domyślnie [ServiceLocator.trainingStatsRepository] — historia,
+  /// na tle której szukamy rekordów pobitych w tym treningu.
+  final TrainingStatsRepository? statsRepository;
 
   /// Test seam; domyślnie [ServiceLocator.currentUser].
   final AuthUser? user;
@@ -49,6 +62,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   late TrainingSession _session;
   late TrainingSessionDetail _detail;
   WorkoutShareStatus _shareStatus = WorkoutShareStatus.notShared;
+  List<PersonalRecord> _records = const [];
 
   @override
   void initState() {
@@ -60,6 +74,26 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     _shareStatus = _session.sharedToProfile
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
+    unawaited(_loadRecords());
+  }
+
+  /// Rekordy liczymy z lokalnej historii (offline-first) — bez sieci
+  /// „Nowy rekord!” pojawia się tak samo. Błąd odczytu po prostu chowa sekcję.
+  Future<void> _loadRecords() async {
+    try {
+      final repository =
+          widget.args?.statsRepository ??
+          ServiceLocator.trainingStatsRepository;
+      final history = await repository.allCompletedSessions();
+      final records = PersonalRecordsCalculator.recordsOfSession(
+        _session,
+        history,
+      );
+      if (!mounted || records.isEmpty) return;
+      setState(() => _records = records);
+    } catch (_) {
+      /* bez rekordów — reszta podsumowania działa */
+    }
   }
 
   TrainingSessionRepository get _repository =>
@@ -148,6 +182,20 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                           startedAt: _session.startedAt,
                           endedAt: _session.finishedAt,
                         ),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _records.isEmpty
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 22),
+                                child: StaggeredReveal(
+                                  index: 0,
+                                  child: NewRecordsBanner(records: _records),
+                                ),
+                              ),
                       ),
                       const SizedBox(height: 22),
                       StaggeredReveal(

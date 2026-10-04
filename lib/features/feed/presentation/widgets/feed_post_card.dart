@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/duration_formatter.dart';
+import '../../../training/presentation/widgets/new_records_banner.dart';
 import '../../../training/presentation/widgets/session_details/session_details_formatters.dart';
 import '../../domain/models/feed_post.dart';
 import '../utils/feed_formatters.dart';
@@ -12,7 +13,8 @@ import 'post_muscle_chips.dart';
 import 'post_social_bar.dart';
 
 /// Karta posta w feedzie: autor, tytuł, notatka, panel statystyk,
-/// najlepsza seria, partie mięśni i stopka społecznościowa.
+/// „Nowy rekord!” albo najlepsza seria, partie mięśni i stopka
+/// społecznościowa.
 ///
 /// Czysto prezentacyjna — wszystkie akcje przychodzą z zewnątrz.
 class FeedPostCard extends StatelessWidget {
@@ -143,7 +145,15 @@ class FeedPostCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (bestSet != null) ...[
+                // Rekordy mówią więcej niż najlepsza seria (zwykle to ta
+                // sama seria), więc zajmują jej miejsce.
+                if (post.personalRecords.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  NewRecordsBanner(
+                    records: post.personalRecords,
+                    maxVisible: 2,
+                  ),
+                ] else if (bestSet != null) ...[
                   const SizedBox(height: 10),
                   PostBestSet(exercise: bestSet),
                 ],
