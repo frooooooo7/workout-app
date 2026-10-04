@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
@@ -42,7 +43,12 @@ class TrainingStatsScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => TrainingStatsCubit(
         repository ?? ServiceLocator.trainingStatsRepository,
-        dataChanges: dataChanges ?? ServiceLocator.trainingSessionDataChanges,
+        dataChanges:
+            dataChanges ??
+            Listenable.merge([
+              ServiceLocator.trainingSessionDataChanges,
+              WeightUnits.notifier,
+            ]),
         clock: clock,
         weeklyGoalLoader: weeklyGoalLoader ?? loadOwnWeeklyGoal,
       )..load(),

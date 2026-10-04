@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../domain/models/profile_details.dart';
 
@@ -107,13 +108,37 @@ String formatAge(int years) =>
 /// `182 cm`
 String formatHeightCm(int cm) => '$cm cm';
 
-/// `82,5 kg`, `80 kg`
-String formatWeightKg(double kg) => '${formatWeightValue(kg)} kg';
+/// Masa ciała: `82,5 kg`, `80 kg`, w funtach `182 lb`.
+String formatWeightKg(double kg) =>
+    '${formatWeightValue(kg)} ${WeightUnits.current.label}';
 
-/// `82,5`, `80` — bez jednostki.
-String formatWeightValue(double kg) => kg == kg.roundToDouble()
-    ? kg.toInt().toString()
-    : kg.toStringAsFixed(1).replaceAll('.', ',');
+/// `82,5`, `80` — bez jednostki, w aktualnej jednostce. Funty bez ułamka:
+/// masa ciała leży w bazie z dokładnością do 0,1 kg (~0,2 lb), więc wpisane
+/// 180 lb wróciłoby jako 179,9.
+String formatWeightValue(double kg) {
+  final unit = WeightUnits.current;
+  if (unit == WeightUnit.lb) return unit.fromKg(kg).round().toString();
+  return kg == kg.roundToDouble()
+      ? kg.toInt().toString()
+      : kg.toStringAsFixed(1).replaceAll('.', ',');
+}
+
+/// Zakres masy ciała w jednostce [unit]. W funtach zaokrąglony do dziesiątek
+/// do środka zakresu z API (30–300 kg), żeby linijka miała okrągłe podpisy.
+({double min, double max}) bodyWeightRange(WeightUnit unit) {
+  if (unit == WeightUnit.kg) return (min: kMinWeightKg, max: kMaxWeightKg);
+  return (
+    min: (unit.fromKg(kMinWeightKg) / 10).ceilToDouble() * 10,
+    max: (unit.fromKg(kMaxWeightKg) / 10).floorToDouble() * 10,
+  );
+}
+
+/// Dozwolony zakres masy ciała: `30–300 kg`, `70–660 lb`.
+String formatWeightRange() {
+  final unit = WeightUnits.current;
+  final range = bodyWeightRange(unit);
+  return '${range.min.toInt()}–${range.max.toInt()} ${unit.label}';
+}
 
 /// `4× w tygodniu`
 String formatWeeklyTrainingDays(int days) => '$days× w tygodniu';

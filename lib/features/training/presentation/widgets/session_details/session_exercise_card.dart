@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../library/presentation/widgets/exercise_thumbnail.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
@@ -332,7 +333,9 @@ class _SetRow extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    weight == null ? '—' : '${formatWeight(weight)} kg',
+                    weight == null
+                        ? '—'
+                        : '${formatWeight(weight)} ${WeightUnits.current.label}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: valueStyle,

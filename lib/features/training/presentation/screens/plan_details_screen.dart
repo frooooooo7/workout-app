@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/data/exercise_image_uri.dart';
 import '../../../library/presentation/screens/exercise_details_screen.dart';
@@ -610,7 +611,8 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                           Expanded(
                             child: Text(
                               set.weight != null && set.weight!.isNotEmpty
-                                  ? '${set.weight} kg'
+                                  ? '${weightTextForInput(set.weight)} '
+                                        '${WeightUnits.current.label}'
                                   : '-',
                               textAlign: TextAlign.center,
                               style: const TextStyle(

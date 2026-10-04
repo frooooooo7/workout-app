@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../../domain/services/stats/training_stats_calculator.dart';
@@ -24,9 +25,9 @@ enum _TrendMetric {
   final String label;
   final Color color;
 
-  /// Wartość słupka w jednostce osi: kg, serie, minuty, treningi.
+  /// Wartość słupka w jednostce osi: kg (lb), serie, minuty, treningi.
   double valueOf(StatsSeriesPoint p) => switch (this) {
-    _TrendMetric.volume => p.volumeKg,
+    _TrendMetric.volume => WeightUnits.current.fromKg(p.volumeKg),
     _TrendMetric.sets => p.sets.toDouble(),
     _TrendMetric.duration => p.durationSec / 60,
     _TrendMetric.workouts => p.workouts.toDouble(),
@@ -38,7 +39,7 @@ enum _TrendMetric {
   /// Pełna wartość do podsumowania i dymka.
   String format(double value) => switch (this) {
     _TrendMetric.volume => () {
-      final v = formatStatsVolume(value);
+      final v = formatStatsVolume(WeightUnits.current.toKg(value));
       return '${v.value} ${v.unit}';
     }(),
     _TrendMetric.sets => formatStatsDecimal(value),
@@ -46,10 +47,14 @@ enum _TrendMetric {
     _TrendMetric.workouts => formatStatsDecimal(value),
   };
 
-  /// Zwięzły podpis osi Y: „800 kg”, „1,5 t”, „2 h”, „40”.
+  /// Zwięzły podpis osi Y: „800 kg”, „1,5 t”, „20k lb”, „2 h”, „40”.
   String formatAxis(double value) {
     switch (this) {
       case _TrendMetric.volume:
+        if (WeightUnits.current == WeightUnit.lb) {
+          if (value >= 1000) return '${formatStatsDecimal(value / 1000)}k lb';
+          return '${formatStatsDecimal(value)} lb';
+        }
         if (value >= 1000) return '${formatStatsDecimal(value / 1000)} t';
         return '${formatStatsDecimal(value)} kg';
       case _TrendMetric.duration:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/utils/duration_formatter.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../training/domain/models/training_summary_stats.dart';
@@ -143,7 +144,8 @@ class ProfileWeekCard extends StatelessWidget {
                     Expanded(
                       child: _Metric(
                         value:
-                            '${formatTrainingVolumeKg(stats.volumeKg.round())} kg',
+                            '${formatTrainingVolumeKg(WeightUnits.current.fromKg(stats.volumeKg).round())} '
+                            '${WeightUnits.current.label}',
                         label: 'objętość',
                       ),
                     ),

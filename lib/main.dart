@@ -9,6 +9,8 @@ import 'core/services/service_locator.dart';
 import 'core/session/app_user_bootstrap.dart';
 import 'core/theme/app_localization.dart';
 import 'core/theme/app_theme.dart';
+import 'core/units/weight_unit.dart';
+import 'core/units/weight_unit_scope.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +20,7 @@ void main() async {
   }
 
   ServiceLocator.init();
+  await WeightUnits.load();
   runApp(const GymApp());
 }
 
@@ -55,6 +58,8 @@ class _GymAppState extends State<GymApp> {
       supportedLocales: AppLocalization.supportedLocales,
       localizationsDelegates: AppLocalization.delegates,
       routerConfig: _router,
+      builder: (context, child) =>
+          WeightUnitScope(child: child ?? const SizedBox.shrink()),
     );
   }
 }

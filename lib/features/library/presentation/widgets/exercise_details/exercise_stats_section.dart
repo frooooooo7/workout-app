@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../../../core/widgets/skeleton.dart';
 import '../../../../training/presentation/widgets/session_details/session_details_formatters.dart';
@@ -40,7 +41,7 @@ class _StatsContent extends StatelessWidget {
         ? _StatTile(
             label: 'Rekord',
             value: formatWeight(stats.bestWeightKg!),
-            unit: 'kg',
+            unit: WeightUnits.current.label,
             caption: stats.bestWeightReps == null
                 ? null
                 : '× ${stats.bestWeightReps} '
@@ -75,7 +76,7 @@ class _StatsContent extends StatelessWidget {
               child: _StatTile(
                 label: 'Szac. 1RM',
                 value: oneRm == null ? '—' : formatWeight(_roundHalf(oneRm)),
-                unit: oneRm == null ? null : 'kg',
+                unit: oneRm == null ? null : WeightUnits.current.label,
                 caption: 'wzór Epleya',
                 icon: Icons.bolt_rounded,
                 accent: AppColors.primaryVariant,
@@ -116,7 +117,7 @@ class _StatsContent extends StatelessWidget {
                 : 'Serie na trening',
             first: chartValues.first,
             last: chartValues.last,
-            unit: stats.hasWeights ? 'kg' : null,
+            unit: stats.hasWeights ? WeightUnits.current.label : null,
           ),
           const SizedBox(height: 10),
           ExerciseProgressChart(values: chartValues),
@@ -285,7 +286,11 @@ class _ChartHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final delta = last - first;
+    // Ciężary (unit != null) przychodzą w kg — różnicę liczymy w jednostce,
+    // którą widzi użytkownik.
+    final delta = unit == null
+        ? last - first
+        : WeightUnits.current.fromKg(last) - WeightUnits.current.fromKg(first);
     final rounded = (delta * 2).round() / 2;
     final positive = rounded > 0;
     final negative = rounded < 0;
@@ -296,7 +301,7 @@ class _ChartHeader extends StatelessWidget {
         : AppColors.textMuted;
     final sign = positive ? '+' : (negative ? '−' : '±');
     final text =
-        '$sign${formatWeight(rounded.abs())}${unit == null ? '' : ' $unit'}';
+        '$sign${formatDisplayNumber(rounded.abs())}${unit == null ? '' : ' $unit'}';
 
     return Row(
       children: [

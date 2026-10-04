@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../training/presentation/widgets/stats/stats_format.dart';
-import '../../domain/models/profile_details.dart';
 import '../utils/profile_details_labels.dart';
-import 'ruler_picker.dart';
+import 'body_weight_ruler.dart';
 
 const bodyWeightSheetSaveKey = Key('body-weight-sheet-save');
 const bodyWeightSheetDateKey = Key('body-weight-sheet-date');
@@ -192,9 +192,9 @@ class _BodyWeightEntrySheetState extends State<_BodyWeightEntrySheet> {
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const TextSpan(
-                      text: ' kg',
-                      style: TextStyle(
+                    TextSpan(
+                      text: ' ${WeightUnits.current.label}',
+                      style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -205,17 +205,10 @@ class _BodyWeightEntrySheetState extends State<_BodyWeightEntrySheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            RulerPicker(
+            BodyWeightRuler(
               key: bodyWeightSheetRulerKey,
-              min: kMinWeightKg,
-              max: kMaxWeightKg,
-              step: 0.1,
-              majorEvery: 10,
-              tickGap: 8,
               initial: widget.initialWeightKg,
               value: _weight,
-              semanticsLabel: 'Waga',
-              formatValue: formatWeightKg,
               onChanged: (kg) => setState(() => _weight = kg),
             ),
             const SizedBox(height: AppSpacing.lg),

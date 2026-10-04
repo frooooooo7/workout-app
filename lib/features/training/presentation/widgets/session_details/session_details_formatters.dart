@@ -1,9 +1,17 @@
+import '../../../../../core/units/weight_unit.dart';
 import '../../../domain/models/training_history_models.dart';
 
 /// Objętość treningowa: `8 450 kg`, a od tony `12,4 t`. Spacja nierozdzielająca
 /// jako separator tysięcy, żeby liczba nie łamała się na końcu wiersza.
+/// W funtach bez ton: `18 630 lb`, od 100 tys. `123 tys. lb`.
 String formatVolumeKg(double volumeKg) {
   if (volumeKg <= 0) return '—';
+  final unit = WeightUnits.current;
+  if (unit == WeightUnit.lb) {
+    final lb = unit.fromKg(volumeKg).round();
+    if (lb >= 100000) return '${_groupThousands((lb / 1000).round())} tys. lb';
+    return '${_groupThousands(lb)} lb';
+  }
   if (volumeKg >= 1000) {
     final tons = volumeKg / 1000;
     return '${tons.toStringAsFixed(tons >= 10 ? 1 : 2).replaceAll('.', ',')} t';
@@ -71,13 +79,10 @@ String formatSetMetrics(TrainingSetMetrics? metrics) {
   final reps = metrics.reps;
   if (weight == null && reps == null) return '—';
   if (weight == null) return '$reps powt.';
-  if (reps == null) return '${formatWeight(weight)} kg';
-  return '${formatWeight(weight)} kg × $reps';
+  final unit = WeightUnits.current.label;
+  if (reps == null) return '${formatWeight(weight)} $unit';
+  return '${formatWeight(weight)} $unit × $reps';
 }
 
-/// Ciężar bez zbędnego zera: `80`, `82,5`.
-String formatWeight(double weight) {
-  final rounded = weight.roundToDouble();
-  if (weight == rounded) return rounded.toInt().toString();
-  return weight.toStringAsFixed(1).replaceAll('.', ',');
-}
+/// Ciężar (w kg) w aktualnej jednostce, bez zbędnego zera: `80`, `82,5`.
+String formatWeight(double weightKg) => formatWeightNumber(weightKg);

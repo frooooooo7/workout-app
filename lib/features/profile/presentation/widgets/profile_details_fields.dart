@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../domain/models/profile_details.dart';
 import '../utils/profile_details_draft.dart';
 import '../utils/profile_details_labels.dart';
 import 'birth_date_sheet.dart';
+import 'body_weight_ruler.dart';
 import 'ruler_picker.dart';
 
 const profileBirthDateTileKey = Key('profile-details-birth-date');
@@ -110,23 +112,16 @@ class ProfileBodyFields extends StatelessWidget {
         _MeasureCard(
           key: profileWeightRulerKey,
           label: 'Waga',
-          unit: 'kg',
+          unit: WeightUnits.current.label,
           valueText: draft.weightKg == null
               ? null
               : formatWeightValue(draft.weightKg!),
           enabled: enabled,
           onClear: () => onWeightChanged(null),
-          ruler: RulerPicker(
-            min: kMinWeightKg,
-            max: kMaxWeightKg,
-            step: 0.1,
-            majorEvery: 10,
-            tickGap: 8,
+          ruler: BodyWeightRuler(
             initial: weightStart,
             value: draft.weightKg,
             enabled: enabled,
-            semanticsLabel: 'Waga',
-            formatValue: formatWeightKg,
             onChanged: onWeightChanged,
           ),
         ),
