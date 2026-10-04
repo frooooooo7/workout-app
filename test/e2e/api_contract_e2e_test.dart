@@ -21,8 +21,10 @@ import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/feed/data/api_feed_repository.dart';
 import 'package:gym/features/library/data/exercise_remote_data_source.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
+import 'package:gym/features/profile/data/api_body_measurements_repository.dart';
 import 'package:gym/features/profile/data/api_body_weight_repository.dart';
 import 'package:gym/features/profile/data/api_profile_repository.dart';
+import 'package:gym/features/profile/domain/models/body_measurement_entry.dart';
 import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
 import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/training/data/training_history_remote_data_source.dart';
@@ -638,6 +640,50 @@ void main() {
       await expectLater(
         repo.save(DateTime.now().add(const Duration(days: 3)), 60),
         throwsA(isApiError('invalid_date', status: 400)),
+      );
+    });
+
+    test('body measurements log: replace by day, delete', () async {
+      final repo = ApiBodyMeasurementsRepository(alice.api);
+      const waist = BodyMeasurementField.waist;
+      const fat = BodyMeasurementField.bodyFat;
+      expect(await repo.list(), isEmpty);
+
+      final saved = await repo.save(
+        BodyMeasurementEntry(
+          date: DateTime(2026, 9, 1),
+          values: {waist: 72.04, fat: 21},
+        ),
+      );
+      expect(saved.values, {waist: 72.0, fat: 21.0});
+      // Zapis zastępuje cały dzień — brakujące pola znikają.
+      await repo.save(
+        BodyMeasurementEntry(date: DateTime(2026, 9, 1), values: {fat: 20.5}),
+      );
+      await repo.save(
+        BodyMeasurementEntry(date: DateTime(2026, 8, 1), values: {waist: 74}),
+      );
+
+      expect(await repo.list(), [
+        BodyMeasurementEntry(date: DateTime(2026, 8, 1), values: {waist: 74}),
+        BodyMeasurementEntry(date: DateTime(2026, 9, 1), values: {fat: 20.5}),
+      ]);
+      expect(await ApiBodyMeasurementsRepository(bob.api).list(), isEmpty);
+
+      await repo.delete(DateTime(2026, 9, 1));
+      // Brak wpisu (404) też jest sukcesem.
+      await repo.delete(DateTime(2026, 9, 1));
+      expect((await repo.list()).map((e) => e.date), [DateTime(2026, 8, 1)]);
+
+      await expectLater(
+        repo.save(BodyMeasurementEntry(date: DateTime(2026, 9, 2), values: {})),
+        throwsA(isApiError('no_measurements', status: 400)),
+      );
+      await expectLater(
+        repo.save(
+          BodyMeasurementEntry(date: DateTime(2026, 9, 2), values: {fat: 90}),
+        ),
+        throwsA(isApiError('invalid_measurement', status: 400)),
       );
     });
 

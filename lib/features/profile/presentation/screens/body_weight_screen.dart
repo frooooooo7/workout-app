@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -12,9 +13,11 @@ import '../bloc/body_weight_cubit.dart';
 import '../utils/profile_details_labels.dart';
 import '../widgets/body_weight_chart.dart';
 import '../widgets/body_weight_entry_sheet.dart';
+import 'body_measurements_screen.dart';
 
 const kBodyWeightRoute = '/app/profile/body-weight';
 const bodyWeightAddButtonKey = Key('body-weight-add');
+const bodyWeightMeasurementsButtonKey = Key('body-weight-measurements');
 
 /// Waga startowa linijki, gdy nie ma jeszcze żadnego pomiaru.
 const _kDefaultWeightKg = 75.0;
@@ -116,7 +119,17 @@ class _BodyWeightScreenState extends State<BodyWeightScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('MASA CIAŁA')),
+        appBar: AppBar(
+          title: const Text('MASA CIAŁA'),
+          actions: [
+            IconButton(
+              key: bodyWeightMeasurementsButtonKey,
+              tooltip: 'Pomiary ciała',
+              onPressed: () => context.push(kBodyMeasurementsRoute),
+              icon: const Icon(Icons.straighten_rounded),
+            ),
+          ],
+        ),
         floatingActionButton: BlocBuilder<BodyWeightCubit, BodyWeightState>(
           buildWhen: (previous, current) =>
               (previous.entries == null) != (current.entries == null) ||
