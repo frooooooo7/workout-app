@@ -98,6 +98,9 @@ TrainingSession _session(DateTime date, String weight, String reps) =>
 Future<_FakeRepository> _pump(
   WidgetTester tester, {
   List<TrainingSession> sessions = const [],
+  Exercise initialExercise = _exercise,
+  String exerciseId = 'bench',
+  bool initialIsSnapshot = false,
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -110,8 +113,9 @@ Future<_FakeRepository> _pump(
         create: (_) => ExerciseDetailsCubit(
           repository: repository,
           statsRepository: _FakeStats(sessions),
-          exerciseId: _exercise.id,
-          initialExercise: _exercise,
+          exerciseId: exerciseId,
+          initialExercise: initialExercise,
+          initialIsSnapshot: initialIsSnapshot,
         )..load(),
         child: const ExerciseDetailsScreen(),
       ),
@@ -159,5 +163,84 @@ void main() {
 
     expect(repository.favourites['bench'], isTrue);
     expect(find.byTooltip('Usuń z ulubionych'), findsOneWidget);
+  });
+
+  testWidgets('historia pokazuje poprzednie treningi od najnowszego', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      sessions: [
+        for (var day = 1; day <= 7; day++)
+          _session(DateTime(2026, 9, day), '${70 + day * 2}', '5'),
+      ],
+    );
+
+    await tester.scrollUntilVisible(find.text('Historia'), 200);
+    expect(find.text('7 treningów'), findsOneWidget);
+
+    // Najnowszy trening (84 kg) jest na górze i pobił poprzedni rekord.
+    await tester.scrollUntilVisible(find.text('84 × 5'), 200);
+    expect(find.text('Rekord'), findsWidgets);
+    // Domyślnie widać 5 ostatnich treningów, reszta po rozwinięciu.
+    expect(find.text('72 × 5'), findsNothing);
+    final toggle = find.byKey(const ValueKey('exercise-history-toggle'));
+    await tester.scrollUntilVisible(toggle, 200);
+    expect(find.text('Pokaż wszystkie (7)'), findsOneWidget);
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('72 × 5'), 200);
+    expect(find.text('Pokaż mniej'), findsOneWidget);
+  });
+
+  testWidgets('wykres przełącza metrykę', (tester) async {
+    await _pump(
+      tester,
+      sessions: [
+        _session(DateTime(2026, 9, 1), '80', '8'),
+        _session(DateTime(2026, 9, 8), '90', '5'),
+      ],
+    );
+
+    await tester.scrollUntilVisible(find.text('Progres szacowanego 1RM'), 200);
+    final topWeight = find.byKey(
+      const ValueKey('exercise-chart-metric-topWeight'),
+    );
+    await tester.ensureVisible(topWeight);
+    await tester.pumpAndSettle();
+    await tester.tap(topWeight);
+    await tester.pumpAndSettle();
+    expect(find.text('Najcięższa seria'), findsOneWidget);
+    expect(find.text('+10 kg'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('exercise-chart-metric-volume')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Objętość na trening'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('z treningu dociąga ćwiczenie z biblioteki po nazwie', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      exerciseId: 'server-uuid',
+      initialIsSnapshot: true,
+      initialExercise: Exercise(
+        id: 'server-uuid',
+        name: _exercise.name.toUpperCase(),
+        muscles: const [MuscleGroup.chest],
+        category: ExerciseCategory.compound,
+      ),
+      sessions: [_session(DateTime(2026, 9, 1), '80', '8')],
+    );
+
+    // Opis jest tylko w bibliotece — snapshot z treningu go nie ma.
+    await tester.scrollUntilVisible(find.text(_exercise.description), 200);
+    expect(find.text(_exercise.name), findsWidgets);
   });
 }

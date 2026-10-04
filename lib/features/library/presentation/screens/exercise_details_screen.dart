@@ -4,12 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/utils/polish_plural.dart';
+import '../../../training/domain/models/training_session.dart';
 import '../../../training/presentation/widgets/session_details/session_section_card.dart';
+import '../../../training/presentation/widgets/stats/stats_navigation.dart';
 import '../../domain/models/exercise.dart';
 import '../bloc/exercise_details_cubit.dart';
 import '../widgets/exercise_actions_sheet.dart';
 import '../widgets/exercise_category_badge.dart';
 import '../widgets/exercise_details/exercise_details_hero.dart';
+import '../widgets/exercise_details/exercise_history_section.dart';
 import '../widgets/exercise_details/exercise_muscle_map.dart';
 import '../widgets/exercise_details/exercise_stats_section.dart';
 import '../widgets/library_add_exercise_sheet.dart';
@@ -17,8 +21,9 @@ import '../widgets/library_add_exercise_sheet.dart';
 /// Wynik zamknięcia karty ćwiczenia — lista wie, czy coś zmieniono.
 enum ExerciseDetailsResult { changed, deleted }
 
-/// Karta ćwiczenia: ilustracja, zaangażowane mięśnie, Twoje rekordy
-/// i opis techniki. Własne ćwiczenia można tu edytować i usuwać.
+/// Karta ćwiczenia: ilustracja, zaangażowane mięśnie, Twoje rekordy z
+/// wykresem, historia poprzednich treningów i opis techniki. Własne ćwiczenia
+/// można tu edytować i usuwać.
 class ExerciseDetailsScreen extends StatefulWidget {
   const ExerciseDetailsScreen({super.key});
 
@@ -237,6 +242,27 @@ class _ExerciseDetailsScreenState extends State<ExerciseDetailsScreen> {
                   title: 'Twoje wyniki',
                   child: ExerciseStatsSection(stats: state.stats),
                 ),
+                if (state.stats?.hasData ?? false) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  SessionSectionCard(
+                    icon: Icons.history_rounded,
+                    title: 'Historia',
+                    trailing: Text(
+                      '${state.stats!.sessionsCount} '
+                      '${polishPlural(state.stats!.sessionsCount, 'trening', 'treningi', 'treningów')}',
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                    child: ExerciseHistorySection(
+                      history: state.stats!.history,
+                      onOpenSession: (id) => openStatsSession(context, id),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
                 SessionSectionCard(
                   icon: Icons.menu_book_rounded,
@@ -460,5 +486,44 @@ Future<ExerciseDetailsResult?> openExerciseDetails(
   return context.push<ExerciseDetailsResult>(
     '/app/exercises/${Uri.encodeComponent(exercise.id)}',
     extra: exercise,
+  );
+}
+
+/// Ćwiczenie z treningu — sesja zna tylko snapshot (nazwę, mięśnie, obrazek),
+/// więc karta dociąga pełne ćwiczenie z biblioteki po id albo nazwie.
+class ExerciseDetailsSnapshot {
+  const ExerciseDetailsSnapshot(this.exercise);
+
+  final Exercise exercise;
+}
+
+/// Otwiera kartę ćwiczenia (wykres i historia) prosto z treningu. Bez routera
+/// (testy widgetów) nic się nie dzieje.
+Future<void> openExerciseDetailsFromSession(
+  BuildContext context,
+  TrainingSessionExercise entry,
+) async {
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return;
+  final id = entry.exerciseId.trim().isNotEmpty
+      ? entry.exerciseId.trim()
+      : 'session-${entry.id}';
+  final snapshot = Exercise(
+    id: id,
+    name: entry.exerciseName,
+    muscles: entry.exerciseMuscles
+        .map(MuscleGroup.tryParse)
+        .whereType<MuscleGroup>()
+        .toList(growable: false),
+    category:
+        ExerciseCategory.values
+            .where((c) => c.name == entry.exerciseCategory)
+            .firstOrNull ??
+        ExerciseCategory.compound,
+    imageUrl: entry.exerciseImageUrl,
+  );
+  await router.push<ExerciseDetailsResult>(
+    '/app/exercises/${Uri.encodeComponent(id)}',
+    extra: ExerciseDetailsSnapshot(snapshot),
   );
 }

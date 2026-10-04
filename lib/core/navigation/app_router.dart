@@ -518,7 +518,12 @@ GoRouter buildRouter({
               repository: ServiceLocator.exerciseRepository,
               statsRepository: ServiceLocator.trainingStatsRepository,
               exerciseId: state.pathParameters['exerciseId']!,
-              initialExercise: extra is Exercise ? extra : null,
+              initialExercise: switch (extra) {
+                final Exercise exercise => exercise,
+                final ExerciseDetailsSnapshot snapshot => snapshot.exercise,
+                _ => null,
+              },
+              initialIsSnapshot: extra is ExerciseDetailsSnapshot,
               dataChanges: ServiceLocator.exerciseDataChanges,
             )..load(),
             child: const ExerciseDetailsScreen(),
