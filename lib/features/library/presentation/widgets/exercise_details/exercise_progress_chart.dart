@@ -108,7 +108,7 @@ class _ExerciseProgressChartState extends State<ExerciseProgressChart> {
             metric: _metric,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -289,7 +289,7 @@ class _LineChart extends StatelessWidget {
     final lo = values.reduce(math.min);
     final hi = values.reduce(math.max);
     // Płaska seria (ten sam wynik) rysuje się pośrodku, a nie przy krawędzi.
-    final pad = math.max((hi - lo) * 0.15, hi == 0 ? 1.0 : hi * 0.05);
+    final pad = math.max((hi - lo) * 0.08, hi == 0 ? 1.0 : hi * 0.05);
     // Okrągły krok osi (1, 2, 2,5, 5 × 10ⁿ) — podpisy typu 80, 85, 90.
     final yInterval = _niceStep((hi - lo + pad * 2) / 3);
     final minY = math.max(
@@ -309,7 +309,7 @@ class _LineChart extends StatelessWidget {
         maxX: math.max(spots.length - 1, 1).toDouble(),
         minY: minY,
         maxY: maxY,
-        clipData: const FlClipData.horizontal(),
+        clipData: const FlClipData.none(),
         borderData: FlBorderData(show: false),
         gridData: FlGridData(
           drawVerticalLine: false,
@@ -330,9 +330,6 @@ class _LineChart extends StatelessWidget {
               reservedSize: 38,
               interval: yInterval,
               getTitlesWidget: (value, meta) {
-                if (value == meta.max || value == meta.min) {
-                  return const SizedBox.shrink();
-                }
                 return SideTitleWidget(
                   meta: meta,
                   space: 6,

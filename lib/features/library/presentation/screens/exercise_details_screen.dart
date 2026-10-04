@@ -256,7 +256,7 @@ class _ExerciseDetailsScreenState extends State<ExerciseDetailsScreen> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     child: ExerciseHistorySection(
                       history: state.stats!.history,
                       onOpenSession: (id) => openStatsSession(context, id),
