@@ -35,6 +35,7 @@ import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
+import '../../features/profile/presentation/bloc/body_measurements_cubit.dart';
 import '../../features/profile/presentation/bloc/body_weight_cubit.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
@@ -42,6 +43,7 @@ import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
+import '../../features/profile/presentation/screens/body_measurements_screen.dart';
 import '../../features/profile/presentation/screens/body_weight_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
@@ -429,6 +431,17 @@ GoRouter buildRouter({
                         dataChanges: ServiceLocator.bodyWeightDataChanges,
                       ),
                       child: const BodyWeightScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'body-measurements',
+                    builder: (_, s) => BlocProvider(
+                      create: (_) => BodyMeasurementsCubit(
+                        ServiceLocator.bodyMeasurementsRepository!,
+                        dataChanges: ServiceLocator.bodyMeasurementsDataChanges,
+                      ),
+                      child: const BodyMeasurementsScreen(),
                     ),
                   ),
                   GoRoute(
