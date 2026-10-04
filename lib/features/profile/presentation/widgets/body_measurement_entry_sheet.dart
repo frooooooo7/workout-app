@@ -302,6 +302,8 @@ class _BodyMeasurementEntrySheetState
       style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
       decoration: InputDecoration(
         labelText: field.label,
+        // Etykieta zawsze u góry — widać jednostkę i ostatnią wartość.
+        floatingLabelBehavior: FloatingLabelBehavior.always,
         labelStyle: const TextStyle(color: AppColors.textSecondary),
         floatingLabelStyle: const TextStyle(color: AppColors.textSecondary),
         hintText: hint == null ? null : formatWeightValue(hint),
