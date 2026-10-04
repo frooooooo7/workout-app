@@ -118,6 +118,24 @@ abstract final class PersonalRecordsCalculator {
 
     return PersonalRecordsResult(records: records, bests: bestList);
   }
+
+  /// Rekordy pobite w [session] — na tle całej wcześniejszej historii
+  /// ([history]). Sesja nie musi jeszcze być w [history] (świeżo zakończony
+  /// trening); jej wersja z [history] jest zastępowana przekazaną.
+  static List<PersonalRecord> recordsOfSession(
+    TrainingSession session,
+    Iterable<TrainingSession> history,
+  ) {
+    final sessions = [
+      for (final s in history)
+        if (s.id != session.id) s,
+      session,
+    ];
+    return [
+      for (final record in compute(sessions).records)
+        if (record.sessionId == session.id) record,
+    ];
+  }
 }
 
 /// Najlepsze wartości ćwiczenia w jednej sesji.
