@@ -70,7 +70,11 @@ class _StatsContent extends StatelessWidget {
             Expanded(
               child: _StatTile(
                 label: 'Szac. 1RM',
-                value: oneRm == null ? '—' : formatWeight(_roundHalf(oneRm)),
+                value: oneRm == null
+                    ? '—'
+                    : formatDisplayNumber(
+                        _roundHalf(WeightUnits.current.fromKg(oneRm)),
+                      ),
                 unit: oneRm == null ? null : WeightUnits.current.label,
                 caption: 'wzór Epleya',
                 icon: Icons.bolt_rounded,
