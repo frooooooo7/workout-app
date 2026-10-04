@@ -1,7 +1,7 @@
 import '../models/body_weight_entry.dart';
 
-/// Prywatny dziennik masy ciała (`/profile/me/body-weight`). Tylko online —
-/// jak pozostałe dane o sobie.
+/// Prywatny dziennik masy ciała (`/profile/me/body-weight`). W aplikacji
+/// offline-first — zapis trafia do bazy konta i wysyła się po powrocie sieci.
 abstract class BodyWeightRepository {
   /// Najnowsze [limit] pomiarów, od najstarszego.
   Future<List<BodyWeightEntry>> list({int limit = 1000});

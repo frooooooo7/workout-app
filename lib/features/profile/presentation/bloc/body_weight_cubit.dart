@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_client.dart';
@@ -60,10 +63,44 @@ class BodyWeightState {
 /// Dziennik masy ciała: lista pomiarów, zakres wykresu, dodawanie,
 /// edycja i usuwanie.
 class BodyWeightCubit extends Cubit<BodyWeightState> {
-  BodyWeightCubit(this._repository, {this.onChanged})
-    : super(const BodyWeightState(loading: true));
+  /// [dataChanges] — sygnał synchronizacji; pomiary z innych urządzeń
+  /// pojawiają się bez ponownego wchodzenia na ekran.
+  BodyWeightCubit(this._repository, {this.onChanged, Listenable? dataChanges})
+    : _dataChanges = dataChanges,
+      super(const BodyWeightState(loading: true)) {
+    _dataChanges?.addListener(_onDataChanged);
+  }
 
   final BodyWeightRepository _repository;
+  final Listenable? _dataChanges;
+
+  @override
+  Future<void> close() {
+    _dataChanges?.removeListener(_onDataChanged);
+    return super.close();
+  }
+
+  void _onDataChanged() {
+    if (isClosed || state.saving) return;
+    unawaited(_reload());
+  }
+
+  Future<void> _reload() async {
+    try {
+      final entries = await _repository.list();
+      if (isClosed) return;
+      emit(
+        state.copyWith(
+          entries: entries,
+          loading: false,
+          offline: false,
+          clearLoadError: true,
+        ),
+      );
+    } catch (_) {
+      /* zostaje poprzednia lista */
+    }
+  }
 
   /// Po udanym zapisie lub usunięciu (np. odświeżenie profilu).
   final void Function()? onChanged;

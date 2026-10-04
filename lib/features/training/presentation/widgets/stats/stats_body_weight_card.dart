@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/services/service_locator.dart';
 import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../../profile/domain/services/body_weight_trend.dart';
 import '../../../../profile/presentation/bloc/body_weight_cubit.dart';
@@ -34,8 +35,10 @@ class StatsBodyWeightCard extends StatefulWidget {
 }
 
 class _StatsBodyWeightCardState extends State<StatsBodyWeightCard> {
-  late final BodyWeightCubit _cubit = BodyWeightCubit(widget.repository)
-    ..load();
+  late final BodyWeightCubit _cubit = BodyWeightCubit(
+    widget.repository,
+    dataChanges: ServiceLocator.bodyWeightDataChanges,
+  )..load();
 
   @override
   void dispose() {
