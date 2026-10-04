@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
+import '../notifications/local_notifications.dart';
 import '../network/api_client.dart';
 import '../session/session_manager.dart';
 import '../storage/token_storage.dart';
@@ -35,6 +36,7 @@ import '../../features/training/data/offline_first_training_session_repository.d
 import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/settings_aware_rest_timer_scheduler.dart';
 import '../../features/training/data/shared_preferences_rest_timer_notification_settings.dart';
+import '../../features/training/data/shared_preferences_workout_reminder_settings.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
 import '../../features/training/data/sync/training_session_sync_engine.dart';
 import '../../features/training/data/training_history_local_cache.dart';
@@ -42,6 +44,7 @@ import '../../features/training/data/training_history_remote_data_source.dart';
 import '../../features/training/data/training_plan_remote_data_source.dart';
 import '../../features/training/data/training_session_local_history.dart';
 import '../../features/training/data/training_session_remote_data_source.dart';
+import '../../features/training/data/workout_reminder_notification_scheduler.dart';
 import '../../features/training/domain/repositories/previous_performance_repository.dart';
 import '../../features/training/domain/repositories/training_history_repository.dart';
 import '../../features/training/domain/repositories/training_plan_repository.dart';
@@ -49,6 +52,8 @@ import '../../features/training/domain/repositories/training_session_repository.
 import '../../features/training/domain/repositories/training_stats_repository.dart';
 import '../../features/training/domain/services/rest_timer_notification_settings.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
+import '../../features/training/domain/services/workout_reminder_scheduler.dart';
+import '../../features/training/domain/services/workout_reminder_settings.dart';
 import '../../features/profile/data/api_body_weight_repository.dart';
 import '../../features/profile/data/api_profile_repository.dart';
 import '../../features/profile/data/offline_first_body_weight_repository.dart';
@@ -70,6 +75,8 @@ class ServiceLocator {
   _trainingSessionRemoteDataSource;
   static late final RestTimerScheduler restTimerScheduler;
   static late final RestTimerNotificationSettings restTimerNotificationSettings;
+  static late final WorkoutReminderSettings workoutReminderSettings;
+  static late final WorkoutReminderScheduler workoutReminderScheduler;
 
   /// Wymuszone wylogowanie (unieważniony token), odświeżenie tokenu,
   /// sprzątanie po usunięciu konta.
@@ -249,10 +256,16 @@ class ServiceLocator {
     _feedRepository = ApiFeedRepository(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
+    final localNotifications = LocalNotifications();
     restTimerScheduler = SettingsAwareRestTimerScheduler(
-      inner: RestTimerNotificationScheduler(),
+      inner: RestTimerNotificationScheduler(notifications: localNotifications),
       settings: restTimerNotificationSettings,
     );
+    workoutReminderSettings = const SharedPreferencesWorkoutReminderSettings();
+    workoutReminderScheduler = WorkoutReminderNotificationScheduler(
+      notifications: localNotifications,
+    );
+    unawaited(_restoreWorkoutReminder());
 
     currentUser.addListener(_onUserChanged);
   }
@@ -283,6 +296,17 @@ class ServiceLocator {
     _feedRepository = repository;
     _feedCache = cache ?? const SharedPreferencesFeedCache();
     _feedSeenStore = seenStore ?? const SharedPreferencesFeedSeenStore();
+  }
+
+  /// Odświeża zaplanowane przypomnienia (np. po zmianie strefy czasowej).
+  /// Nieaktywne nie dotykają pluginu ani uprawnień.
+  static Future<void> _restoreWorkoutReminder() async {
+    try {
+      final reminder = await workoutReminderSettings.load();
+      if (reminder.isActive) await workoutReminderScheduler.apply(reminder);
+    } catch (_) {
+      /* best-effort; ponowi się przy następnym starcie */
+    }
   }
 
   static void _onUserChanged() {
