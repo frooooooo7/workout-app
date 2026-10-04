@@ -6,6 +6,7 @@ import '../../../../core/network/api_client.dart';
 import '../../domain/models/profile_details.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/profile_repository.dart';
+import '../utils/handle_availability.dart';
 import '../utils/profile_details_draft.dart';
 import 'edit_profile_state.dart';
 
@@ -14,13 +15,19 @@ class EditProfileCubit extends Cubit<EditProfileState> {
     this._repository, {
     UserProfile? initialProfile,
     this.onNamesChanged,
-  }) : super(
+    Duration handleCheckDelay = const Duration(milliseconds: 400),
+  }) : _handleChecker = HandleAvailabilityChecker(
+         (handle) => _repository.isHandleAvailable(handle),
+         delay: handleCheckDelay,
+       ),
+       super(
          initialProfile == null
              ? const EditProfileState(loading: true)
              : EditProfileState.fromProfile(initialProfile),
        );
 
   final ProfileRepository _repository;
+  final HandleAvailabilityChecker _handleChecker;
 
   /// Po zmianie imienia/nazwiska — np. aktualizacja zapamiętanego
   /// użytkownika sesji. Błąd tutaj nie psuje zapisu profilu.
@@ -53,8 +60,16 @@ class EditProfileCubit extends Cubit<EditProfileState> {
   void lastNameChanged(String value) =>
       emit(state.copyWith(lastName: value, clearError: true));
 
-  void handleChanged(String value) =>
-      emit(state.copyWith(handle: value, clearError: true));
+  void handleChanged(String value) {
+    emit(
+      state.copyWith(
+        handle: value,
+        handleAvailability: HandleAvailability.unknown,
+        clearError: true,
+      ),
+    );
+    _checkHandle();
+  }
 
   void bioChanged(String value) =>
       emit(state.copyWith(bio: value, clearError: true));
@@ -142,10 +157,37 @@ class EditProfileCubit extends Cubit<EditProfileState> {
         state.copyWith(
           initial: latest,
           saving: false,
+          handleAvailability: _isHandleTaken(error)
+              ? HandleAvailability.taken
+              : null,
           error: editProfileErrorMessage(error),
         ),
       );
     }
+  }
+
+  /// Po pauzie w pisaniu pyta serwer, czy zmieniony nick jest wolny.
+  void _checkHandle() {
+    final snapshot = state;
+    if (!snapshot.handleChanged || handleInputError(snapshot.handle) != null) {
+      _handleChecker.cancel();
+      return;
+    }
+    final handle = normalizeHandle(snapshot.handle);
+    emit(snapshot.copyWith(handleAvailability: HandleAvailability.checking));
+    _handleChecker.check(handle, (result) {
+      if (isClosed || normalizeHandle(state.handle) != handle) return;
+      emit(state.copyWith(handleAvailability: result));
+    });
+  }
+
+  static bool _isHandleTaken(Object error) =>
+      error is ApiException && error.message == 'handle_taken';
+
+  @override
+  Future<void> close() {
+    _handleChecker.cancel();
+    return super.close();
   }
 
   Future<void> _notifyNamesChanged(UserProfile profile) async {
@@ -172,7 +214,7 @@ class EditProfileCubit extends Cubit<EditProfileState> {
           return 'Nieprawidłowy nick — 3–30 znaków: małe litery, cyfry, '
               'kropka i podkreślenie.';
         case 'handle_taken':
-          return 'Ten nick jest już zajęty. Wybierz inny.';
+          return kHandleTakenMessage;
         case 'invalid_birth_date':
           return 'Sprawdź datę urodzenia — wiek musi mieścić się '
               'w przedziale $kMinUserAge–$kMaxUserAge lat.';
