@@ -10,6 +10,7 @@ import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/edit_profile_cubit.dart';
 import 'package:gym/features/profile/presentation/screens/edit_profile_screen.dart';
+import 'package:gym/features/profile/presentation/utils/handle_availability.dart';
 
 const _profile = UserProfile(
   id: 'me',
@@ -26,6 +27,16 @@ class _FakeEditRepository extends Fake implements ProfileRepository {
   var removeCalls = 0;
   Object? uploadError;
   Object? updateError;
+  final takenHandles = <String>{};
+  final availabilityChecks = <String>[];
+  Object? availabilityError;
+
+  @override
+  Future<bool> isHandleAvailable(String handle) async {
+    availabilityChecks.add(handle);
+    if (availabilityError != null) throw availabilityError!;
+    return !takenHandles.contains(handle);
+  }
 
   @override
   Future<UserProfile> updateProfile({
@@ -271,6 +282,80 @@ void main() {
 
     expect(cubit.state.error, 'Ten nick jest już zajęty. Wybierz inny.');
     expect(cubit.state.saved, isNull);
+    await cubit.close();
+  });
+
+  testWidgets('nickname availability is shown while typing', (tester) async {
+    final repo = _FakeEditRepository()..takenHandles.add('anna.nowak');
+    final cubit = EditProfileCubit(repo, initialProfile: _profile);
+    addTearDown(cubit.close);
+    await pumpScreen(tester, cubit);
+
+    await tester.enterText(find.byKey(editProfileHandleFieldKey), 'Jan.Silny');
+    await tester.pump();
+    expect(find.text('Sprawdzam dostępność…'), findsOneWidget);
+    expect(repo.availabilityChecks, isEmpty);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Nick jest wolny'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(_saveButton(tester).onPressed, isNotNull);
+
+    await tester.enterText(find.byKey(editProfileHandleFieldKey), 'anna.nowak');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Ten nick jest już zajęty. Wybierz inny.'),
+      findsOneWidget,
+    );
+    expect(find.text('Nick jest wolny'), findsNothing);
+    expect(_saveButton(tester).onPressed, isNull);
+
+    expect(repo.availabilityChecks, ['jan.silny', 'anna.nowak']);
+  });
+
+  test('only the nickname typed last is checked', () async {
+    final repo = _FakeEditRepository();
+    final cubit = EditProfileCubit(
+      repo,
+      initialProfile: _profile,
+      handleCheckDelay: const Duration(milliseconds: 20),
+    );
+
+    cubit.handleChanged('ja');
+    expect(cubit.state.handleStatus, HandleAvailability.unknown);
+    cubit.handleChanged('jan.s');
+    cubit.handleChanged('jan.silny');
+    expect(cubit.state.handleStatus, HandleAvailability.checking);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(repo.availabilityChecks, ['jan.silny']);
+    expect(cubit.state.handleStatus, HandleAvailability.available);
+
+    // Powrót do obecnego nicku — nic do sprawdzania.
+    cubit.handleChanged('Jan.Kowalski');
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(repo.availabilityChecks, ['jan.silny']);
+    expect(cubit.state.handleStatus, HandleAvailability.unknown);
+    await cubit.close();
+  });
+
+  test('a failed nickname check does not block saving', () async {
+    final repo = _FakeEditRepository()
+      ..availabilityError = const ApiException('offline');
+    final cubit = EditProfileCubit(
+      repo,
+      initialProfile: _profile,
+      handleCheckDelay: Duration.zero,
+    );
+
+    cubit.handleChanged('jan.silny');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(cubit.state.handleStatus, HandleAvailability.unknown);
+    expect(cubit.state.handleError, isNull);
+    expect(cubit.state.canSave, isTrue);
     await cubit.close();
   });
 }

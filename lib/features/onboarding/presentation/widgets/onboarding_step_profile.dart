@@ -9,6 +9,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../feed/presentation/widgets/post_author_row.dart';
 import '../../../profile/presentation/bloc/edit_profile_state.dart';
 import '../../../profile/presentation/utils/profile_details_draft.dart';
+import '../../../profile/presentation/widgets/handle_availability_hint.dart';
 import '../../../profile/presentation/widgets/profile_details_fields.dart';
 import '../bloc/onboarding_cubit.dart';
 import '../bloc/onboarding_state.dart';
@@ -88,7 +89,11 @@ class _OnboardingStepProfileState extends State<OnboardingStepProfile> {
             style: _inputStyle,
             decoration: onboardingInputDecoration(
               prefixText: '@',
-              helperText: '3–30 znaków: małe litery, cyfry, kropka i _',
+              helperText:
+                  handleAvailabilityHelperText(state.handleStatus) ??
+                  '3–30 znaków: małe litery, cyfry, kropka i _',
+              helperColor: handleAvailabilityHelperColor(state.handleStatus),
+              suffixIcon: handleAvailabilitySuffix(state.handleStatus),
               errorText: state.handleError,
             ),
           ),
@@ -124,6 +129,8 @@ InputDecoration onboardingInputDecoration({
   String? hintText,
   String? prefixText,
   String? helperText,
+  Color? helperColor,
+  Widget? suffixIcon,
   String? errorText,
 }) {
   OutlineInputBorder border(Color color, [double width = 1]) =>
@@ -142,7 +149,11 @@ InputDecoration onboardingInputDecoration({
       fontWeight: FontWeight.w600,
     ),
     helperText: helperText,
-    helperStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+    helperStyle: TextStyle(
+      color: helperColor ?? AppColors.textSecondary,
+      fontSize: 12,
+    ),
+    suffixIcon: suffixIcon,
     helperMaxLines: 2,
     errorText: errorText,
     errorMaxLines: 2,

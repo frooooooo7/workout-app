@@ -62,6 +62,16 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
+  Future<bool> isHandleAvailable(String handle) async {
+    final path = Uri(
+      path: '/profile/handle-availability',
+      queryParameters: {'handle': handle},
+    ).toString();
+    final data = await _api.get(path, auth: true) as Map<String, dynamic>;
+    return data['available'] == true;
+  }
+
+  @override
   Future<UserProfile> updateBio(String bio) => updateProfile(bio: bio);
 
   @override
