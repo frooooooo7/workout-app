@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/account/presentation/bloc/notification_settings_cubit.dart';
+import 'package:gym/features/account/presentation/bloc/workout_reminder_cubit.dart';
 import 'package:gym/features/account/presentation/screens/help_screen.dart';
 import 'package:gym/features/account/presentation/screens/notification_settings_screen.dart';
 import 'package:gym/features/training/data/settings_aware_rest_timer_scheduler.dart';
 import 'package:gym/features/training/data/shared_preferences_rest_timer_notification_settings.dart';
+import 'package:gym/features/training/data/shared_preferences_workout_reminder_settings.dart';
+import 'package:gym/features/training/domain/models/workout_reminder.dart';
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
+import 'package:gym/features/training/domain/services/workout_reminder_scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _RecordingScheduler implements RestTimerScheduler {
@@ -22,6 +26,11 @@ class _RecordingScheduler implements RestTimerScheduler {
 
   @override
   Future<void> warmUp() async {}
+}
+
+class _NoopReminderScheduler implements WorkoutReminderScheduler {
+  @override
+  Future<bool> apply(WorkoutReminder reminder) async => true;
 }
 
 void main() {
@@ -68,11 +77,21 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: BlocProvider(
-          create: (_) => NotificationSettingsCubit(
-            settings,
-            onRestTimerNotificationsDisabled: inner.cancelRestFinished,
-          ),
+        home: MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => NotificationSettingsCubit(
+                settings,
+                onRestTimerNotificationsDisabled: inner.cancelRestFinished,
+              ),
+            ),
+            BlocProvider(
+              create: (_) => WorkoutReminderCubit(
+                const SharedPreferencesWorkoutReminderSettings(),
+                _NoopReminderScheduler(),
+              ),
+            ),
+          ],
           child: const NotificationSettingsScreen(),
         ),
       ),
@@ -80,8 +99,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Powiadomienie o końcu przerwy'), findsOneWidget);
-    SwitchListTile tile() =>
-        tester.widget<SwitchListTile>(find.byKey(restTimerNotificationSwitchKey));
+    SwitchListTile tile() => tester.widget<SwitchListTile>(
+      find.byKey(restTimerNotificationSwitchKey),
+    );
     expect(tile().value, isTrue);
 
     await tester.tap(find.byKey(restTimerNotificationSwitchKey));
