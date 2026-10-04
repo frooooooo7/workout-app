@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/units/weight_unit.dart';
 import 'package:gym/core/units/weight_unit_scope.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
+import 'package:gym/features/library/domain/models/exercise_stats.dart';
+import 'package:gym/features/library/presentation/widgets/exercise_details/exercise_progress_chart.dart';
 import 'package:gym/features/profile/domain/models/body_measurement_entry.dart';
 import 'package:gym/features/profile/presentation/screens/profile_settings_screen.dart';
 import 'package:gym/features/profile/presentation/utils/body_measurement_format.dart';
@@ -103,6 +105,24 @@ void main() {
       );
       expect(personalRecordValue(record), '220,5 lb × 3');
       expect(personalRecordImprovement(record), '+5,5 lb');
+    });
+
+    test('exercise history chart works in pounds', () {
+      final point = ExerciseSessionPoint(
+        date: DateTime(2026, 10, 4),
+        topWeightKg: 100,
+        estimatedOneRepMaxKg: 110,
+        sets: 3,
+        volumeKg: 1000,
+      );
+      const top = ExerciseChartMetric.topWeight;
+      expect(top.valueOf(point), closeTo(220.46, 0.01));
+      expect(top.format(top.valueOf(point)), '220,5 lb');
+      expect(top.unit, 'lb');
+      const orm = ExerciseChartMetric.oneRepMax;
+      expect(orm.format(orm.valueOf(point)), '242,5 lb');
+      const volume = ExerciseChartMetric.volume;
+      expect(_plain(volume.format(volume.valueOf(point))), '2 205 lb');
     });
 
     test('body measurements stay in centimetres', () {

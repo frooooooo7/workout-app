@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../library/data/exercise_image_uri.dart';
 import '../../../library/domain/models/exercise.dart';
+import '../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
@@ -1485,30 +1486,54 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
         children: [
           Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
-                  borderRadius: BorderRadius.circular(10),
-                  image: _thumb,
-                ),
-                child: exercise.exerciseImageUrl == null
-                    ? const Icon(
-                        Icons.fitness_center,
-                        color: AppColors.textMuted,
-                        size: 22,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
+              // Dotknięcie miniatury lub nazwy otwiera kartę ćwiczenia z
+              // wykresem i poprzednimi wynikami.
               Expanded(
-                child: Text(
-                  exercise.exerciseName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                child: InkWell(
+                  key: ValueKey('session-exercise-details-$exerciseIndex'),
+                  onTap: () => unawaited(
+                    openExerciseDetailsFromSession(context, exercise),
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceVariant,
+                          borderRadius: BorderRadius.circular(10),
+                          image: _thumb,
+                        ),
+                        child: exercise.exerciseImageUrl == null
+                            ? const Icon(
+                                Icons.fitness_center,
+                                color: AppColors.textMuted,
+                                size: 22,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          exercise.exerciseName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: Icon(
+                          Icons.insights_rounded,
+                          size: 16,
+                          color: AppColors.primaryVariant,
+                          semanticLabel: 'Historia ćwiczenia',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

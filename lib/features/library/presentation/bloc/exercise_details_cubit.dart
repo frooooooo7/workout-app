@@ -49,6 +49,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     required this.exerciseId,
     Exercise? initialExercise,
     Listenable? dataChanges,
+    this.initialIsSnapshot = false,
   }) : _repository = repository,
        _statsRepository = statsRepository,
        _dataChanges = dataChanges,
@@ -62,6 +63,10 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
   }
 
   final String exerciseId;
+
+  /// [initialExercise] to tylko snapshot z treningu (nazwa, mięśnie, obrazek)
+  /// — przed pokazaniem wyników dociągamy pełne ćwiczenie z biblioteki.
+  final bool initialIsSnapshot;
   final ExerciseRepository _repository;
   final TrainingStatsRepository _statsRepository;
   final Listenable? _dataChanges;
@@ -81,7 +86,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
   }
 
   Future<void> load() async {
-    if (state.exercise == null) await _reloadExercise();
+    if (state.exercise == null || initialIsSnapshot) await _reloadExercise();
     await _loadStats();
   }
 
@@ -89,7 +94,16 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     try {
       final all = await _repository.getAll();
       if (isClosed) return;
-      final found = all.where((e) => e.id == exerciseId).firstOrNull;
+      // Z treningu przychodzi czasem id serwera albo ćwiczenie spoza
+      // biblioteki — wtedy szukamy po nazwie ze snapshotu sesji.
+      final name = state.exercise?.name.trim().toLowerCase();
+      final found =
+          all.where((e) => e.id == exerciseId).firstOrNull ??
+          (name == null || name.isEmpty
+              ? null
+              : all
+                    .where((e) => e.name.trim().toLowerCase() == name)
+                    .firstOrNull);
       if (found == null) {
         emit(state.copyWith(loading: false, notFound: state.exercise == null));
         return;
@@ -140,7 +154,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     required String description,
   }) async {
     final updated = await _repository.update(
-      id: exerciseId,
+      id: state.exercise?.id ?? exerciseId,
       name: name,
       muscles: muscles,
       category: category,
@@ -154,5 +168,5 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     return updated;
   }
 
-  Future<void> delete() => _repository.delete(exerciseId);
+  Future<void> delete() => _repository.delete(state.exercise?.id ?? exerciseId);
 }
