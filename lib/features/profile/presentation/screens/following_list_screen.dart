@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/following_user.dart';
 import '../../domain/repositories/profile_repository.dart';
 import '../bloc/follow_cubit.dart';
+import '../utils/paged_users.dart';
 import '../widgets/follow_button.dart';
+import '../widgets/paged_list_footer.dart';
 import '../widgets/user_list_tile.dart';
 
 /// Obserwowani — własni (bez [userId]) albo innego użytkownika.
@@ -31,9 +33,13 @@ class FollowingListScreen extends StatelessWidget {
           ? 'Nie obserwujesz jeszcze nikogo.'
           : 'Ten użytkownik nikogo jeszcze nie obserwuje.',
       currentUserId: currentUserId,
-      fetch: () => userId == null
-          ? repository.getFollowing()
-          : repository.getUserFollowing(userId!),
+      fetchPage: (limit, offset) => userId == null
+          ? repository.getFollowing(limit: limit, offset: offset)
+          : repository.getUserFollowing(
+              userId!,
+              limit: limit,
+              offset: offset,
+            ),
     );
   }
 }
@@ -60,9 +66,13 @@ class FollowersListScreen extends StatelessWidget {
           ? 'Brak obserwujących.'
           : 'Tego użytkownika nikt jeszcze nie obserwuje.',
       currentUserId: currentUserId,
-      fetch: () => userId == null
-          ? repository.getFollowers()
-          : repository.getUserFollowers(userId!),
+      fetchPage: (limit, offset) => userId == null
+          ? repository.getFollowers(limit: limit, offset: offset)
+          : repository.getUserFollowers(
+              userId!,
+              limit: limit,
+              offset: offset,
+            ),
     );
   }
 }
@@ -71,13 +81,13 @@ class _UserConnectionsScreen extends StatefulWidget {
   const _UserConnectionsScreen({
     required this.title,
     required this.emptyMessage,
-    required this.fetch,
+    required this.fetchPage,
     required this.currentUserId,
   });
 
   final String title;
   final String emptyMessage;
-  final Future<List<FollowingUser>> Function() fetch;
+  final Future<List<FollowingUser>> Function(int limit, int offset) fetchPage;
   final String? currentUserId;
 
   @override
@@ -85,26 +95,21 @@ class _UserConnectionsScreen extends StatefulWidget {
 }
 
 class _UserConnectionsScreenState extends State<_UserConnectionsScreen> {
-  late final FollowCubit _followCubit;
-  late Future<List<FollowingUser>> _future;
+  late final PagedUsers _pager = PagedUsers(
+    fetchPage: widget.fetchPage,
+    onPage: context.read<FollowCubit>().seedUsers,
+  );
 
   @override
   void initState() {
     super.initState();
-    _followCubit = context.read<FollowCubit>();
-    _future = _load();
+    _pager.refresh();
   }
 
-  Future<List<FollowingUser>> _load() async {
-    final users = await widget.fetch();
-    _followCubit.seedUsers(users);
-    return users;
-  }
-
-  void _retry() {
-    setState(() {
-      _future = _load();
-    });
+  @override
+  void dispose() {
+    _pager.dispose();
+    super.dispose();
   }
 
   @override
@@ -113,18 +118,19 @@ class _UserConnectionsScreenState extends State<_UserConnectionsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(title: Text(widget.title)),
       body: FollowFailureListener(
-        child: FutureBuilder<List<FollowingUser>>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+        child: ListenableBuilder(
+          listenable: _pager,
+          builder: (context, _) {
+            final pager = _pager;
+            if (pager.loadingFirst) {
               return const Center(
                 child: CircularProgressIndicator(color: AppColors.primary),
               );
             }
-            if (snapshot.hasError) {
-              return _ListError(onRetry: _retry);
+            if (pager.firstFailed) {
+              return _ListError(onRetry: pager.refresh);
             }
-            final users = snapshot.data ?? const <FollowingUser>[];
+            final users = pager.users;
             if (users.isEmpty) {
               return Center(
                 child: Padding(
@@ -137,14 +143,17 @@ class _UserConnectionsScreenState extends State<_UserConnectionsScreen> {
                 ),
               );
             }
+            final showFooter = pager.hasMore || pager.moreFailed;
             return ListView.separated(
-              itemCount: users.length,
+              itemCount: users.length + (showFooter ? 1 : 0),
               separatorBuilder: (_, _) =>
                   const Divider(height: 1, color: AppColors.border, indent: 90),
-              itemBuilder: (_, i) => FollowableUserListTile(
-                user: users[i],
-                currentUserId: widget.currentUserId,
-              ),
+              itemBuilder: (_, i) => i == users.length
+                  ? PagedListFooter(pager: pager)
+                  : FollowableUserListTile(
+                      user: users[i],
+                      currentUserId: widget.currentUserId,
+                    ),
             );
           },
         ),

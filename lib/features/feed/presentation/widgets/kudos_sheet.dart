@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../profile/domain/models/following_user.dart';
 import '../../../profile/presentation/bloc/follow_cubit.dart';
+import '../../../profile/presentation/utils/paged_users.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
+import '../../../profile/presentation/widgets/paged_list_footer.dart';
 import '../../../profile/presentation/widgets/user_list_tile.dart';
 import '../../domain/repositories/feed_repository.dart';
 import '../utils/feed_navigation.dart';
@@ -80,21 +82,24 @@ class KudosSheet extends StatefulWidget {
 }
 
 class _KudosSheetState extends State<KudosSheet> {
-  late Future<List<FollowingUser>> _future;
+  late final PagedUsers _pager = PagedUsers(
+    pageSize: 50,
+    fetchPage: (limit, offset) =>
+        widget.repository.getKudos(widget.postId, limit: limit, offset: offset),
+    onPage: widget.followCubit?.seedUsers,
+  );
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _pager.refresh();
   }
 
-  Future<List<FollowingUser>> _load() async {
-    final users = await widget.repository.getKudos(widget.postId);
-    widget.followCubit?.seedUsers(users);
-    return users;
+  @override
+  void dispose() {
+    _pager.dispose();
+    super.dispose();
   }
-
-  void _retry() => setState(() => _future = _load());
 
   @override
   Widget build(BuildContext context) {
@@ -131,10 +136,11 @@ class _KudosSheetState extends State<KudosSheet> {
               ),
             ),
             Flexible(
-              child: FutureBuilder<List<FollowingUser>>(
-                future: _future,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
+              child: ListenableBuilder(
+                listenable: _pager,
+                builder: (context, _) {
+                  final pager = _pager;
+                  if (pager.loadingFirst) {
                     return const Padding(
                       padding: EdgeInsets.all(32),
                       child: Center(
@@ -144,7 +150,7 @@ class _KudosSheetState extends State<KudosSheet> {
                       ),
                     );
                   }
-                  if (snapshot.hasError) {
+                  if (pager.firstFailed) {
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                       child: Column(
@@ -157,14 +163,14 @@ class _KudosSheetState extends State<KudosSheet> {
                           ),
                           const SizedBox(height: 12),
                           OutlinedButton(
-                            onPressed: _retry,
+                            onPressed: pager.refresh,
                             child: const Text('Spróbuj ponownie'),
                           ),
                         ],
                       ),
                     );
                   }
-                  final users = snapshot.data ?? const [];
+                  final users = pager.users;
                   if (users.isEmpty) {
                     return const Padding(
                       padding: EdgeInsets.fromLTRB(24, 8, 24, 28),
@@ -177,8 +183,13 @@ class _KudosSheetState extends State<KudosSheet> {
                   return ListView.builder(
                     shrinkWrap: true,
                     padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: users.length,
+                    itemCount:
+                        users.length +
+                        (pager.hasMore || pager.moreFailed ? 1 : 0),
                     itemBuilder: (context, index) {
+                      if (index == users.length) {
+                        return PagedListFooter(pager: pager);
+                      }
                       final user = users[index];
                       final showFollow = widget.followCubit != null &&
                           user.id != widget.currentUserId;
