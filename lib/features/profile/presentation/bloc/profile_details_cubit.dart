@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/models/profile_details.dart';
 import '../../domain/models/user_profile.dart';
+import '../../domain/repositories/body_weight_repository.dart';
 import '../../domain/repositories/profile_repository.dart';
 import '../utils/profile_details_draft.dart';
 import 'edit_profile_cubit.dart';
@@ -62,10 +63,13 @@ class ProfileDetailsState {
 /// Edycja prywatnych danych o sobie i celu (Ustawienia → „Dane i cele”).
 class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
     with ProfileDetailsDraftEditor<ProfileDetailsState> {
-  ProfileDetailsCubit(this._repository)
+  ProfileDetailsCubit(this._repository, {this.bodyWeight})
     : super(const ProfileDetailsState(loading: true));
 
   final ProfileRepository _repository;
+
+  /// Zmieniona waga trafia też do dziennika masy ciała.
+  final BodyWeightRepository? bodyWeight;
 
   @override
   ProfileDetailsDraft get draft => state.draft;
@@ -103,8 +107,14 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
     if (!state.canSave) return;
     emit(state.copyWith(saving: true, clearError: true));
     try {
+      final previousWeight = state.savedDetails.weightKg;
       final updated = await _repository.updateProfile(
         details: state.draft.toDetails(),
+      );
+      await logProfileWeightChange(
+        bodyWeight,
+        previous: previousWeight,
+        current: updated.details?.weightKg,
       );
       if (isClosed) return;
       emit(state.copyWith(initial: updated, saving: false, saved: updated));
