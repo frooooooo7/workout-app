@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import '../workout_summary/staggered_reveal.dart';
 import 'stats_activity_card.dart';
+import 'stats_body_weight_card.dart';
 import 'stats_date_range_picker.dart';
 import 'stats_exercise_progress_card.dart';
 import 'stats_goal_card.dart';
@@ -27,10 +29,17 @@ import 'stats_trend_chart_card.dart';
 /// Treść statystyk: zakres, kafelki i karty z wykresami. Wymaga
 /// [TrainingStatsCubit] w kontekście.
 class TrainingStatsView extends StatelessWidget {
-  const TrainingStatsView({super.key, this.onStartWorkout});
+  const TrainingStatsView({
+    super.key,
+    this.onStartWorkout,
+    this.bodyWeightRepository,
+  });
 
   /// Przycisk w pustym stanie (brak historii).
   final VoidCallback? onStartWorkout;
+
+  /// Źródło karty „Masa ciała”; bez niego karty nie ma.
+  final BodyWeightRepository? bodyWeightRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +124,11 @@ class TrainingStatsView extends StatelessWidget {
       if (snapshot.insights.isNotEmpty)
         ('insights', StatsInsightsCard(insights: snapshot.insights)),
       if (goal != null) ('goal', StatsGoalCard(goal: goal)),
+      if (bodyWeightRepository case final repository?)
+        (
+          'body-weight',
+          StatsBodyWeightCard(repository: repository, window: snapshot.window),
+        ),
       if (empty)
         (
           'empty-range',

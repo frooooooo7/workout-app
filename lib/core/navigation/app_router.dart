@@ -35,12 +35,14 @@ import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
+import '../../features/profile/presentation/bloc/body_weight_cubit.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
+import '../../features/profile/presentation/screens/body_weight_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
@@ -150,6 +152,7 @@ GoRouter buildRouter({
           return BlocProvider(
             create: (_) => OnboardingCubit(
               _profileRepositoryForCurrentUser(),
+              bodyWeight: ServiceLocator.bodyWeightRepository,
               onCompleted: (_) =>
                   ServiceLocator.markOnboardingCompleted(user.id),
             )..load(),
@@ -276,7 +279,9 @@ GoRouter buildRouter({
                     parentNavigatorKey: appRootNavigatorKey,
                     name: 'training-stats',
                     path: 'stats',
-                    builder: (_, s) => const TrainingStatsScreen(),
+                    builder: (_, s) => TrainingStatsScreen(
+                      bodyWeightRepository: ServiceLocator.bodyWeightRepository,
+                    ),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
@@ -410,8 +415,18 @@ GoRouter buildRouter({
                     builder: (_, s) => BlocProvider(
                       create: (_) => ProfileDetailsCubit(
                         _profileRepositoryForCurrentUser(),
+                        bodyWeight: ServiceLocator.bodyWeightRepository,
                       ),
                       child: const ProfileDetailsScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'body-weight',
+                    builder: (_, s) => BlocProvider(
+                      create: (_) =>
+                          BodyWeightCubit(ServiceLocator.bodyWeightRepository!),
+                      child: const BodyWeightScreen(),
                     ),
                   ),
                   GoRoute(

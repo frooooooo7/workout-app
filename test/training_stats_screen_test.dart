@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
+import 'package:gym/features/profile/domain/repositories/body_weight_repository.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/training_stats_screen.dart';
 import 'package:gym/features/training/presentation/widgets/session_details/session_section_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_kpi_grid.dart';
+
+import 'body_weight_test.dart' show FakeBodyWeightRepository;
 
 class _FakeStatsRepository implements TrainingStatsRepository {
   _FakeStatsRepository(this.sessions, {this.fail = false});
@@ -54,6 +58,7 @@ Future<void> _pump(
   _FakeStatsRepository repository, {
   ChangeNotifier? changes,
   int? weeklyGoal,
+  BodyWeightRepository? bodyWeight,
 }) async {
   tester.view.physicalSize = const Size(390, 1600);
   tester.view.devicePixelRatio = 1;
@@ -65,6 +70,7 @@ Future<void> _pump(
         dataChanges: changes ?? ChangeNotifier(),
         clock: () => DateTime(2026, 9, 16, 12),
         weeklyGoalLoader: () async => weeklyGoal,
+        bodyWeightRepository: bodyWeight,
       ),
     ),
   );
@@ -76,6 +82,38 @@ Finder _tile(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(StatsKpiTile));
 
 void main() {
+  testWidgets('body weight card shows the change within the stats range', (
+    tester,
+  ) async {
+    final repository = _FakeStatsRepository([
+      _session(DateTime(2026, 9, 15, 18)),
+    ]);
+    final bodyWeight = FakeBodyWeightRepository([
+      BodyWeightEntry(date: DateTime(2026, 7, 1), weightKg: 90),
+      BodyWeightEntry(date: DateTime(2026, 8, 20), weightKg: 84),
+      BodyWeightEntry(date: DateTime(2026, 9, 14), weightKg: 82.8),
+    ]);
+    await _pump(tester, repository, bodyWeight: bodyWeight);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Masa ciała'), findsOneWidget);
+    expect(find.text('82,8 kg'), findsOneWidget);
+    expect(find.text('−1,2 kg w tym okresie'), findsOneWidget);
+  });
+
+  testWidgets('body weight card hides when weights cannot load', (
+    tester,
+  ) async {
+    final repository = _FakeStatsRepository([
+      _session(DateTime(2026, 9, 15, 18)),
+    ]);
+    final bodyWeight = FakeBodyWeightRepository()..listError = Exception('x');
+    await _pump(tester, repository, bodyWeight: bodyWeight);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Masa ciała'), findsNothing);
+  });
+
   testWidgets('shows KPIs for 30 days with change vs previous period', (
     tester,
   ) async {

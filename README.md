@@ -16,7 +16,9 @@ Backend (Node.js + Express + PostgreSQL) jest w osobnym repozytorium `gym_backen
 - **Plany treningowe** — dni tygodnia, ćwiczenia i serie; „Dzisiejszy trening” na ekranie głównym.
 - **Historia** — oś czasu z filtrami, kalendarz/heatmapa, szczegóły z mapą mięśni; edycja,
   powtórzenie i usunięcie zakończonego treningu.
-- **Statystyki** (podzakładka w Historii) liczone lokalnie: kafelki ze zmianą vs poprzedni okres, wykres objętości, rekordy, partie mięśni, progres ćwiczeń, cel tygodniowy, heatmapa aktywności i wnioski; zakresy 7 dni – całość oraz własny.
+- **Statystyki** (podzakładka w Historii) liczone lokalnie: kafelki ze zmianą vs poprzedni okres, wykres objętości, rekordy, partie mięśni, progres ćwiczeń, cel tygodniowy, masa ciała, heatmapa aktywności i wnioski; zakresy 7 dni – całość oraz własny.
+- **Masa ciała** — dziennik pomiarów (jeden na dzień) z wykresem, zmianą w okresie, edycją
+  i usuwaniem; najnowszy pomiar to aktualna waga w „Dane i cele”. Wymaga internetu.
 - **Biblioteka ćwiczeń** — ćwiczenia systemowe i własne (zdjęcia, ulubione).
 - **Społeczność** — profile (bio, awatar), obserwowanie, wyszukiwarka i propozycje osób,
   feed aktywności z kudosami i komentarzami, szczegóły posta.
