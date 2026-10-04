@@ -1,11 +1,14 @@
 import '../../domain/models/body_measurement_entry.dart';
-import 'profile_details_labels.dart';
+import '../../../../core/units/weight_unit.dart';
+
+/// `84,5`, `80` — obwody i tłuszcz nie zależą od jednostki ciężaru.
+String formatMeasurementValue(double value) => formatDisplayNumber(value);
 
 /// `84,5 cm`, `15,2%`
 String formatMeasurement(BodyMeasurementField field, double value) =>
     field.isPercent
-    ? '${formatWeightValue(value)}%'
-    : '${formatWeightValue(value)} cm';
+    ? '${formatMeasurementValue(value)}%'
+    : '${formatMeasurementValue(value)} cm';
 
 /// `−1,5 cm`, `+0,4%`, `0 cm` — znak zawsze widoczny przy zmianie.
 String formatMeasurementChange(BodyMeasurementField field, double change) {

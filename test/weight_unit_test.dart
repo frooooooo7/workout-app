@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/units/weight_unit.dart';
 import 'package:gym/core/units/weight_unit_scope.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
+import 'package:gym/features/profile/domain/models/body_measurement_entry.dart';
 import 'package:gym/features/profile/presentation/screens/profile_settings_screen.dart';
+import 'package:gym/features/profile/presentation/utils/body_measurement_format.dart';
 import 'package:gym/features/profile/presentation/utils/profile_details_labels.dart';
 import 'package:gym/features/profile/presentation/widgets/body_weight_chart.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
@@ -101,6 +103,11 @@ void main() {
       );
       expect(personalRecordValue(record), '220,5 lb × 3');
       expect(personalRecordImprovement(record), '+5,5 lb');
+    });
+
+    test('body measurements stay in centimetres', () {
+      expect(formatMeasurement(BodyMeasurementField.waist, 84.5), '84,5 cm');
+      expect(formatMeasurementValue(80), '80');
     });
 
     test('previous set column converts the stored kg text', () {

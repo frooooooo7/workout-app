@@ -6,7 +6,6 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../training/presentation/widgets/stats/stats_format.dart';
 import '../../domain/models/body_measurement_entry.dart';
 import '../utils/body_measurement_format.dart';
-import '../utils/profile_details_labels.dart';
 
 const bodyMeasurementSheetSaveKey = Key('body-measurement-sheet-save');
 const bodyMeasurementSheetDateKey = Key('body-measurement-sheet-date');
@@ -80,7 +79,7 @@ class _BodyMeasurementEntrySheetState
     for (final field in BodyMeasurementField.values)
       field: TextEditingController(
         text: switch (widget.initial?[field]) {
-          final value? => formatWeightValue(value),
+          final value? => formatMeasurementValue(value),
           null => '',
         },
       ),
@@ -133,7 +132,7 @@ class _BodyMeasurementEntrySheetState
       if (value == null) continue;
       if (value.isNaN || !field.accepts(value)) {
         errors[field] =
-            'Od ${formatWeightValue(field.min)} do '
+            'Od ${formatMeasurementValue(field.min)} do '
             '${formatMeasurement(field, field.max)}';
         continue;
       }
@@ -306,7 +305,7 @@ class _BodyMeasurementEntrySheetState
         floatingLabelBehavior: FloatingLabelBehavior.always,
         labelStyle: const TextStyle(color: AppColors.textSecondary),
         floatingLabelStyle: const TextStyle(color: AppColors.textSecondary),
-        hintText: hint == null ? null : formatWeightValue(hint),
+        hintText: hint == null ? null : formatMeasurementValue(hint),
         suffixText: field.unit,
         suffixStyle: const TextStyle(color: AppColors.textMuted),
         errorText: _errors[field],
