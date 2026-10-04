@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
@@ -456,15 +457,23 @@ class _ExerciseEditor extends StatelessWidget {
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.only(right: 6, bottom: 6),
+          Padding(
+            padding: const EdgeInsets.only(right: 6, bottom: 6),
             child: Row(
               children: [
-                SizedBox(width: 34, child: Text('SERIA', style: headerStyle)),
+                const SizedBox(
+                  width: 34,
+                  child: Text('SERIA', style: headerStyle),
+                ),
                 SizedBox(width: 6),
                 Expanded(
                   flex: 3,
-                  child: Center(child: Text('KG', style: headerStyle)),
+                  child: Center(
+                    child: Text(
+                      WeightUnits.current.columnLabel,
+                      style: headerStyle,
+                    ),
+                  ),
                 ),
                 SizedBox(width: 6),
                 Expanded(
@@ -506,10 +515,11 @@ class _ExerciseEditor extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     flex: 3,
-                    child: TableCellInput(
+                    child: WeightCellInput(
                       key: ValueKey('edit-set-$exerciseIndex-$s-weight'),
-                      value: exercise.sets[s].actualWeight ?? '',
-                      hint: exercise.sets[s].plannedWeight ?? '—',
+                      valueKg: exercise.sets[s].actualWeight,
+                      hintKg: exercise.sets[s].plannedWeight,
+                      fallbackHint: '—',
                       onChanged: (v) => cubit.setWeight(exerciseIndex, s, v),
                     ),
                   ),

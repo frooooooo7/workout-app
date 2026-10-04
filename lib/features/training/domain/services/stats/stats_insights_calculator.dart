@@ -1,3 +1,4 @@
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../models/training_stats.dart';
 import '../../models/training_summary_stats.dart';
@@ -224,7 +225,8 @@ abstract final class StatsInsightsCalculator {
     if (leader == null) return null;
     final text = leader.hasWeights
         ? '${leader.exerciseName}: szacowane 1RM wzrosło o '
-              '${_decimal(leaderChange)} kg.'
+              '${_decimal(WeightUnits.current.fromKg(leaderChange))} '
+              '${WeightUnits.current.label}.'
         : '${leader.exerciseName}: rekord powtórzeń wzrósł o '
               '${leaderChange.round()}.';
     return StatsInsight(

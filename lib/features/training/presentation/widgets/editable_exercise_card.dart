@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../library/data/exercise_image_uri.dart';
 import '../../domain/models/custom_training_plan.dart';
 import 'table_cell_input.dart';
@@ -260,10 +261,10 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: TableCellInput(
-                      hint: '-',
-                      value: set.weight ?? '',
-                      suffixText: ' kg',
+                    child: WeightCellInput(
+                      fallbackHint: '-',
+                      valueKg: set.weight,
+                      suffixText: ' ${WeightUnits.current.label}',
                       onChanged: (val) {
                         final newSets = List<ExerciseSet>.from(planExercise.sets);
                         newSets[setIndex] = set.copyWith(

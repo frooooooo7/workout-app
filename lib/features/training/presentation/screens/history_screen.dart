@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
@@ -34,7 +35,12 @@ class HistoryScreen extends StatelessWidget {
         BlocProvider(
           create: (_) => TrainingStatsCubit(
             ServiceLocator.trainingStatsRepository,
-            dataChanges: ServiceLocator.trainingSessionDataChanges,
+            // Wnioski to gotowy tekst z jednostką — po zmianie kg/lb liczymy je
+            // od nowa.
+            dataChanges: Listenable.merge([
+              ServiceLocator.trainingSessionDataChanges,
+              WeightUnits.notifier,
+            ]),
             weeklyGoalLoader: loadOwnWeeklyGoal,
           )..load(),
         ),

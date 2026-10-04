@@ -8,7 +8,6 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../training/presentation/widgets/stats/stats_format.dart';
 import '../../domain/models/body_measurement_entry.dart';
 import '../utils/body_measurement_format.dart';
-import '../utils/profile_details_labels.dart';
 
 /// Linia jednego pomiaru ciała w czasie — oś X w dniach, jak wykres masy
 /// ciała. Wymaga co najmniej dwóch punktów, od najstarszego.
@@ -77,7 +76,7 @@ class BodyMeasurementChart extends StatelessWidget {
                 return SideTitleWidget(
                   meta: meta,
                   space: 6,
-                  child: Text(formatWeightValue(value), style: _axisStyle),
+                  child: Text(formatMeasurementValue(value), style: _axisStyle),
                 );
               },
             ),

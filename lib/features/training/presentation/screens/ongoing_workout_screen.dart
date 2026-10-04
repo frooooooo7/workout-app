@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../library/data/exercise_image_uri.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/exercise_details_screen.dart';
@@ -1272,7 +1273,7 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
                   ),
                 ],
                 const SizedBox(width: _columnGap),
-                const Expanded(child: _HeaderText('KG')),
+                Expanded(child: _HeaderText(WeightUnits.current.columnLabel)),
                 const SizedBox(width: _columnGap),
                 const Expanded(child: _HeaderText('POWT.')),
                 if (showRirColumn) ...[
@@ -1364,9 +1365,9 @@ class _SessionExerciseCardState extends State<_SessionExerciseCard> {
             ],
             const SizedBox(width: _columnGap),
             Expanded(
-              child: TableCellInput(
-                value: set.actualWeight ?? '',
-                hint: set.plannedWeight ?? '',
+              child: WeightCellInput(
+                valueKg: set.actualWeight,
+                hintKg: set.plannedWeight,
                 onChanged: (value) => _handleSetChanged(
                   setIndex,
                   set.copyWith(

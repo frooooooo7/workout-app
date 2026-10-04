@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../domain/models/training_stats.dart';
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
@@ -19,22 +20,31 @@ enum _Metric {
 
   final String label;
 
+  /// Wartość punktu w jednostce osi — ciężary w aktualnej jednostce.
   double? valueOf(ExerciseProgressPoint p) {
+    final unit = WeightUnits.current;
     final v = switch (this) {
-      _Metric.oneRepMax => p.oneRepMaxKg,
-      _Metric.weight => p.topWeightKg,
-      _Metric.volume => p.volumeKg,
+      _Metric.oneRepMax => switch (p.oneRepMaxKg) {
+        final kg? => unit.fromKg(kg),
+        null => null,
+      },
+      _Metric.weight => switch (p.topWeightKg) {
+        final kg? => unit.fromKg(kg),
+        null => null,
+      },
+      _Metric.volume => unit.fromKg(p.volumeKg),
       _Metric.reps => p.maxReps?.toDouble(),
     };
     return v == null || v <= 0 ? null : v;
   }
 
-  /// Pełna wartość z jednostką.
+  /// Pełna wartość z jednostką; [v] w jednostce osi (patrz [valueOf]).
   String format(double v) => switch (this) {
-    _Metric.volume => _joinUnit(formatStatsVolume(v)),
+    _Metric.volume => _joinUnit(formatStatsVolume(WeightUnits.current.toKg(v))),
     _Metric.reps => '${v.round()} powt.',
-    _Metric.oneRepMax => '${formatStatsDecimal(v, digits: 0)} kg',
-    _Metric.weight => '${formatStatsDecimal(v)} kg',
+    _Metric.oneRepMax =>
+      '${formatStatsDecimal(v, digits: 0)} ${WeightUnits.current.label}',
+    _Metric.weight => '${formatStatsDecimal(v)} ${WeightUnits.current.label}',
   };
 
   /// Zmiana ze znakiem: `+5 kg`, `−2 powt.`
@@ -47,7 +57,9 @@ enum _Metric {
   String axis(double v) => switch (this) {
     _Metric.volume =>
       v >= 10000
-          ? '${formatStatsDecimal(v / 1000)} t'
+          ? (WeightUnits.current == WeightUnit.lb
+                ? '${formatStatsDecimal(v / 1000)}k'
+                : '${formatStatsDecimal(v / 1000)} t')
           : formatStatsDecimal(v, digits: 0),
     _ => formatStatsDecimal(v, digits: v.abs() < 10 ? 1 : 0),
   };

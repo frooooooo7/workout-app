@@ -1,3 +1,4 @@
+import '../../../../../core/units/weight_unit.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../../domain/models/training_summary_stats.dart'
     show formatTrainingVolumeKg;
@@ -66,11 +67,26 @@ String formatStatsDecimal(double value, {int digits = 1}) {
 }
 
 /// Objętość: do 10 t w kilogramach (`8 450 kg`), wyżej w tonach (`48,2 t`).
+/// W funtach bez ton: `18 630 lb`, od 100 tys. `123,4 tys. lb`.
 StatsValue formatStatsVolume(double kg) {
+  final unit = WeightUnits.current;
+  if (unit == WeightUnit.lb) {
+    final lb = unit.fromKg(kg);
+    if (lb.abs() < 100000) {
+      return (value: formatTrainingVolumeKg(lb.round()), unit: 'lb');
+    }
+    return (value: formatStatsDecimal(lb / 1000), unit: 'tys. lb');
+  }
   if (kg.abs() < 10000) {
     return (value: formatTrainingVolumeKg(kg.round()), unit: 'kg');
   }
   return (value: formatStatsDecimal(kg / 1000), unit: 't');
+}
+
+/// Ciężar (w kg) w aktualnej jednostce z dopiskiem: `82,5 kg`, `182 lb`.
+String formatStatsWeight(double kg, {int digits = 1}) {
+  final unit = WeightUnits.current;
+  return '${formatStatsDecimal(unit.fromKg(kg), digits: digits)} ${unit.label}';
 }
 
 /// Czas w kafelku: `45 min`, `17 h 40 min`, powyżej 100 h same godziny.

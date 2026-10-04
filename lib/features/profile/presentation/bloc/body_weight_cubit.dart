@@ -7,6 +7,7 @@ import '../../../../core/network/api_client.dart';
 import '../../domain/models/body_weight_entry.dart';
 import '../../domain/repositories/body_weight_repository.dart';
 import '../../domain/services/body_weight_trend.dart';
+import '../utils/profile_details_labels.dart';
 
 class BodyWeightState {
   const BodyWeightState({
@@ -195,7 +196,7 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
       return 'Brak połączenia — pomiar nie został zapisany.';
     }
     if (error is ApiException && error.message == 'invalid_weight') {
-      return 'Waga musi mieścić się w zakresie 30–300 kg.';
+      return 'Waga musi mieścić się w zakresie ${formatWeightRange()}.';
     }
     if (error is ApiException && error.message == 'invalid_date') {
       return 'Nie można zapisać pomiaru z przyszłości.';

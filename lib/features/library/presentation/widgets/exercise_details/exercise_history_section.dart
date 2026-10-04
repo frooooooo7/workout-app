@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../../training/presentation/widgets/session_details/session_details_formatters.dart';
 import '../../../../training/presentation/widgets/stats/stats_format.dart';
 import '../../../domain/models/exercise_stats.dart';
-import 'exercise_progress_chart.dart' show formatExerciseHistoryDate;
+import 'exercise_progress_chart.dart'
+    show ExerciseChartMetric, formatExerciseHistoryDate;
 
 /// „Historia”: poprzednie treningi z tym ćwiczeniem, od najnowszego, z każdą
 /// serią. Dotknięcie wiersza otwiera szczegóły treningu.
@@ -94,7 +96,7 @@ class _HistoryRow extends StatelessWidget {
       '${point.sets} ${polishPlural(point.sets, 'seria', 'serie', 'serii')}',
       if (point.volumeKg > 0) formatVolumeKg(point.volumeKg),
       if (point.estimatedOneRepMaxKg > 0)
-        '1RM ${formatWeight((point.estimatedOneRepMaxKg * 2).round() / 2)} kg'
+        '1RM ${ExerciseChartMetric.oneRepMax.format(ExerciseChartMetric.oneRepMax.valueOf(point))}'
       else if (point.totalReps > 0)
         '${point.totalReps} powt.',
     ].join('  ·  ');
@@ -299,7 +301,7 @@ class _SetChip extends StatelessWidget {
     final reps = set.reps;
     final text = switch ((weight, reps)) {
       (final w?, final r?) => '${formatWeight(w)} × $r',
-      (final w?, null) => '${formatWeight(w)} kg',
+      (final w?, null) => formatWeightWithUnit(w),
       (null, final r?) => '× $r',
       (null, null) => '—',
     };

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../account/domain/repositories/account_repository.dart';
 import '../../../account/presentation/account_settings_routes.dart';
@@ -19,6 +22,9 @@ const settingsBodyMeasurementsRowKey = Key('settings-body-measurements');
 const settingsChangePasswordRowKey = Key('settings-change-password');
 const settingsLogoutAllRowKey = Key('settings-logout-all');
 const settingsNotificationsRowKey = Key('settings-notifications');
+const settingsWeightUnitRowKey = Key('settings-weight-unit');
+Key settingsWeightUnitOptionKey(WeightUnit unit) =>
+    Key('settings-weight-unit-${unit.name}');
 const settingsHelpRowKey = Key('settings-help');
 const settingsDeleteAccountRowKey = Key('settings-delete-account');
 
@@ -252,6 +258,8 @@ class _ProfileSettingsView extends StatelessWidget {
                 const SizedBox(height: 32),
                 const _SectionLabel(label: 'Ustawienia'),
                 const SizedBox(height: 12),
+                const _WeightUnitRow(key: settingsWeightUnitRowKey),
+                const SizedBox(height: 10),
                 _MenuRow(
                   key: settingsNotificationsRowKey,
                   icon: Icons.notifications_outlined,
@@ -428,6 +436,116 @@ class _InfoCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Jednostka ciężaru (kg / lb) — przełącznik zapisany na urządzeniu.
+class _WeightUnitRow extends StatelessWidget {
+  const _WeightUnitRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.fitness_center_rounded,
+            color: AppColors.textSecondary,
+            size: 20,
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Jednostka ciężaru',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Ciężary, objętość i masa ciała',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          ValueListenableBuilder<WeightUnit>(
+            valueListenable: WeightUnits.notifier,
+            builder: (context, selected, _) => Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final unit in WeightUnit.values)
+                    _UnitOption(
+                      key: settingsWeightUnitOptionKey(unit),
+                      label: unit.label,
+                      selected: unit == selected,
+                      onTap: () => unawaited(WeightUnits.set(unit)),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnitOption extends StatelessWidget {
+  const _UnitOption({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: selected ? null : onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : AppColors.textSecondary,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -288,13 +288,13 @@ class _BestTile extends StatelessWidget {
         (
           label: 'Ciężar',
           value: b.bestWeightReps == null
-              ? '${formatStatsDecimal(b.bestWeightKg!)} kg'
-              : '${formatStatsDecimal(b.bestWeightKg!)} kg × ${b.bestWeightReps}',
+              ? formatStatsWeight(b.bestWeightKg!)
+              : '${formatStatsWeight(b.bestWeightKg!)} × ${b.bestWeightReps}',
         ),
       if (b.bestOneRepMaxKg != null)
         (
           label: 'e1RM',
-          value: '${formatStatsDecimal(b.bestOneRepMaxKg!, digits: 0)} kg',
+          value: formatStatsWeight(b.bestOneRepMaxKg!, digits: 0),
         ),
       if (b.maxReps != null)
         (label: 'Bez ciężaru', value: '${b.maxReps} powt.'),

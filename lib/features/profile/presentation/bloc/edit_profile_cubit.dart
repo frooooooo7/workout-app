@@ -8,6 +8,7 @@ import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/profile_repository.dart';
 import '../utils/handle_availability.dart';
 import '../utils/profile_details_draft.dart';
+import '../utils/profile_details_labels.dart';
 import 'edit_profile_state.dart';
 
 class EditProfileCubit extends Cubit<EditProfileState> {
@@ -223,7 +224,7 @@ class EditProfileCubit extends Cubit<EditProfileState> {
               '$kMinHeightCm–$kMaxHeightCm cm.';
         case 'invalid_weight':
           return 'Waga musi mieścić się w przedziale '
-              '${kMinWeightKg.toInt()}–${kMaxWeightKg.toInt()} kg.';
+              '${formatWeightRange()}.';
         case 'bio_too_long':
           return 'Opis może mieć maksymalnie $kProfileBioMaxLength znaków.';
         case 'no_fields_to_update':

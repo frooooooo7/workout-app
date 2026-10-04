@@ -5,22 +5,30 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/units/weight_unit.dart';
 import '../../../../training/presentation/widgets/session_details/session_details_formatters.dart';
 import '../../../../training/presentation/widgets/stats/stats_format.dart';
 import '../../../domain/models/exercise_stats.dart';
 
 /// Co pokazuje wykres historii ćwiczenia.
 enum ExerciseChartMetric {
-  oneRepMax('Szac. 1RM', 'kg'),
-  topWeight('Ciężar', 'kg'),
-  volume('Objętość', 'kg'),
-  maxReps('Powtórzenia', 'powt.'),
-  sets('Serie', null);
+  oneRepMax('Szac. 1RM'),
+  topWeight('Ciężar'),
+  volume('Objętość'),
+  maxReps('Powtórzenia'),
+  sets('Serie');
 
-  const ExerciseChartMetric(this.label, this.unit);
+  const ExerciseChartMetric(this.label);
 
   final String label;
-  final String? unit;
+
+  bool get _isWeight =>
+      this == oneRepMax || this == topWeight || this == volume;
+
+  /// Ciężary w aktualnej jednostce (kg / lb).
+  String? get unit => _isWeight
+      ? WeightUnits.current.label
+      : (this == maxReps ? 'powt.' : null);
 
   /// Metryki z sensem dla ćwiczenia: z ciężarem albo z masą ciała.
   static List<ExerciseChartMetric> forStats(ExerciseStats stats) =>
@@ -28,18 +36,20 @@ enum ExerciseChartMetric {
       ? const [oneRepMax, topWeight, volume]
       : const [maxReps, sets];
 
+  /// Wartość punktu — ciężary już w aktualnej jednostce.
   double valueOf(ExerciseSessionPoint point) => switch (this) {
-    oneRepMax => point.estimatedOneRepMaxKg,
-    topWeight => point.topWeightKg,
-    volume => point.volumeKg,
+    oneRepMax => WeightUnits.current.fromKg(point.estimatedOneRepMaxKg),
+    topWeight => WeightUnits.current.fromKg(point.topWeightKg),
+    volume => WeightUnits.current.fromKg(point.volumeKg),
     maxReps => point.maxReps.toDouble(),
     sets => point.sets.toDouble(),
   };
 
+  /// [value] w jednostce z [valueOf].
   String format(double value) => switch (this) {
-    oneRepMax => '${formatWeight((value * 2).round() / 2)} kg',
-    topWeight => '${formatWeight(value)} kg',
-    volume => formatVolumeKg(value),
+    oneRepMax => '${formatDisplayNumber((value * 2).round() / 2)} $unit',
+    topWeight => '${formatDisplayNumber(value)} $unit',
+    volume => formatVolumeKg(WeightUnits.current.toKg(value)),
     maxReps => '${value.round()} powt.',
     sets => '${value.round()}',
   };
@@ -215,8 +225,8 @@ class _ChartHeader extends StatelessWidget {
         : AppColors.textMuted;
     final sign = positive ? '+' : (negative ? '−' : '±');
     final magnitude = metric == ExerciseChartMetric.volume
-        ? formatVolumeKg(rounded.abs())
-        : '${formatWeight(rounded.abs())}'
+        ? formatVolumeKg(WeightUnits.current.toKg(rounded.abs()))
+        : '${formatDisplayNumber(rounded.abs())}'
               '${metric.unit == null ? '' : ' ${metric.unit}'}';
     final text = rounded == 0 ? '±0' : '$sign$magnitude';
 
@@ -445,7 +455,8 @@ class _LineChart extends StatelessWidget {
 
   String _axisValue(double value) {
     if (metric == ExerciseChartMetric.volume && value >= 1000) {
-      return '${formatStatsDecimal(value / 1000)} t';
+      final suffix = WeightUnits.current == WeightUnit.kg ? ' t' : 'k';
+      return '${formatStatsDecimal(value / 1000)}$suffix';
     }
     return formatStatsDecimal(value);
   }

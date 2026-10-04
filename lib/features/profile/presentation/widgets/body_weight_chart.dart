@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/units/weight_unit.dart';
 import '../../../training/presentation/widgets/stats/stats_format.dart';
 import '../../domain/models/body_weight_entry.dart';
 import '../utils/profile_details_labels.dart';
@@ -35,8 +36,13 @@ class BodyWeightChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final spots = [for (final e in entries) FlSpot(_dayOf(e.date), e.weightKg)];
-    final values = [for (final e in entries) e.weightKg];
+    // Oś Y w jednostce, którą widzi użytkownik — podziałka wypada na
+    // okrągłych liczbach także w funtach.
+    final unit = WeightUnits.current;
+    final spots = [
+      for (final e in entries) FlSpot(_dayOf(e.date), unit.fromKg(e.weightKg)),
+    ];
+    final values = [for (final s in spots) s.y];
     final lo = values.reduce(math.min);
     final hi = values.reduce(math.max);
     final pad = math.max((hi - lo) * 0.25, 0.5);
@@ -81,7 +87,7 @@ class BodyWeightChart extends StatelessWidget {
                         meta: meta,
                         space: 6,
                         child: Text(
-                          formatWeightValue(value),
+                          formatDisplayNumber(value),
                           style: _axisStyle,
                         ),
                       );
@@ -210,9 +216,10 @@ const _axisStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
-/// `−1,2 kg`, `+0,4 kg`, `0 kg` — znak zawsze widoczny przy zmianie.
+/// `−1,2 kg`, `+0,4 kg`, `0 kg` (albo w funtach `+0,9 lb`) — znak zawsze
+/// widoczny przy zmianie.
 String formatWeightChange(double kg) {
-  if (kg == 0) return '0 kg';
+  if (kg == 0) return '0 ${WeightUnits.current.label}';
   final sign = kg > 0 ? '+' : '−';
-  return '$sign${formatWeightKg(kg.abs())}';
+  return '$sign${formatWeightWithUnit(kg.abs())}';
 }

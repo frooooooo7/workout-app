@@ -16,12 +16,12 @@ String personalRecordValue(PersonalRecord r) {
     case PersonalRecordKind.weight:
       final w = r.weightKg;
       if (w == null) break;
-      final kg = '${formatStatsDecimal(w)} kg';
-      return r.reps == null ? kg : '$kg × ${r.reps}';
+      final weight = formatStatsWeight(w);
+      return r.reps == null ? weight : '$weight × ${r.reps}';
     case PersonalRecordKind.oneRepMax:
       final orm = r.oneRepMaxKg;
       if (orm == null) break;
-      return 'e1RM ${formatStatsDecimal(orm, digits: 0)} kg';
+      return 'e1RM ${formatStatsWeight(orm, digits: 0)}';
     case PersonalRecordKind.reps:
       if (r.reps == null) break;
       return '${r.reps} powt.';
@@ -34,6 +34,6 @@ String? personalRecordImprovement(PersonalRecord r) {
   if (diff == null || diff <= 0) return null;
   return switch (r.primaryKind) {
     PersonalRecordKind.reps => '+${diff.round()} powt.',
-    _ => '+${formatStatsDecimal(diff)} kg',
+    _ => '+${formatStatsWeight(diff)}',
   };
 }

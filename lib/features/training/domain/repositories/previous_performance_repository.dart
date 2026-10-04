@@ -1,3 +1,4 @@
+import '../../../../core/units/weight_unit.dart';
 import '../models/training_session.dart';
 
 /// Poprzedni wynik ćwiczenia — kolumna „POPRZ.” w treningu na żywo.
@@ -34,10 +35,11 @@ TrainingSessionSet? previousSetFor(
 }
 
 /// `82,5×8`, `×12` (bez ciężaru), `60` (bez powtórzeń); `null`, gdy seria nie
-/// ma żadnej z liczb. Surowy tekst z klawiatury, bez zamiany separatora.
+/// ma żadnej z liczb. W kg surowy tekst z klawiatury, bez zamiany separatora;
+/// w funtach ciężar przeliczony.
 String? formatPreviousSet(TrainingSessionSet? set) {
   if (set == null) return null;
-  final weight = set.actualWeight?.trim() ?? '';
+  final weight = weightTextForInput(set.actualWeight?.trim());
   final reps = set.actualReps?.trim() ?? '';
   if (weight.isEmpty && reps.isEmpty) return null;
   if (reps.isEmpty) return weight;
