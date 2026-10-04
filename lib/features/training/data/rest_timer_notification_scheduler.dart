@@ -1,15 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_10y.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../../core/notifications/local_notifications.dart';
 import '../domain/services/rest_timer_scheduler.dart';
 
 class RestTimerNotificationScheduler implements RestTimerScheduler {
-  RestTimerNotificationScheduler({
-    FlutterLocalNotificationsPlugin? notifications,
-  }) : _notifications = notifications ?? FlutterLocalNotificationsPlugin();
+  RestTimerNotificationScheduler({LocalNotifications? notifications})
+    : _local = notifications ?? LocalNotifications();
 
   static const int _notificationId = 9001;
   static const String _channelId = 'rest_timer_alarm';
@@ -17,16 +15,15 @@ class RestTimerNotificationScheduler implements RestTimerScheduler {
   static const String _channelDescription =
       'Powiadomienia o końcu przerwy w aktywnym treningu';
 
-  final FlutterLocalNotificationsPlugin _notifications;
-  bool _initialized = false;
-  bool _initializing = false;
-  bool _timezoneInitialized = false;
+  final LocalNotifications _local;
+
+  FlutterLocalNotificationsPlugin get _notifications => _local.plugin;
 
   @override
   Future<void> scheduleRestFinished({required Duration duration}) async {
     if (kIsWeb || duration <= Duration.zero) return;
 
-    await _ensureInitialized();
+    await _local.ensureInitialized();
     await _requestPermissions();
     await cancelRestFinished();
 
@@ -63,56 +60,13 @@ class RestTimerNotificationScheduler implements RestTimerScheduler {
   @override
   Future<void> warmUp() async {
     if (kIsWeb) return;
-    await _ensureInitialized();
-  }
-
-  Future<void> _ensureInitialized() async {
-    if (!_timezoneInitialized) {
-      tz.initializeTimeZones();
-      final localTimezone = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(localTimezone.identifier));
-      _timezoneInitialized = true;
-    }
-
-    if (_initialized) return;
-    if (_initializing) {
-      while (_initializing) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-      return;
-    }
-    
-    _initializing = true;
-    try {
-      await _notifications.initialize(
-        settings: const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-          iOS: DarwinInitializationSettings(
-            requestAlertPermission: false,
-            requestBadgePermission: false,
-            requestSoundPermission: false,
-          ),
-        ),
-      );
-      _initialized = true;
-    } finally {
-      _initializing = false;
-    }
+    await _local.ensureInitialized();
   }
 
   Future<void> _requestPermissions() async {
-    final android = _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    await android?.requestNotificationsPermission();
+    await _local.requestNotificationsPermission();
+    final android = _local.android;
     await android?.requestExactAlarmsPermission();
     await android?.requestFullScreenIntentPermission();
-
-    final ios = _notifications
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >();
-    await ios?.requestPermissions(alert: true, sound: true);
   }
 }
