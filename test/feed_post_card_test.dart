@@ -12,6 +12,7 @@ import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/follow_cubit.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
+import 'package:gym/features/training/domain/models/training_stats.dart';
 
 class _NoOpProfileRepository extends Fake implements ProfileRepository {}
 
@@ -20,6 +21,7 @@ FeedPost _post({
   bool hasKudoed = false,
   int kudos = 3,
   int comments = 1,
+  List<PersonalRecord> personalRecords = const [],
 }) {
   return FeedPost(
     id: 'p1',
@@ -39,6 +41,7 @@ FeedPost _post({
         bestSet: TrainingSetMetrics(weightKg: 82.5, reps: 8),
       ),
     ],
+    personalRecords: personalRecords,
     kudosCount: kudos,
     commentCount: comments,
     hasKudoed: hasKudoed,
@@ -181,6 +184,66 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('feed-kudos-summary-p1')), findsNothing);
+    });
+
+    testWidgets('new records replace the best set and collapse past two', (
+      tester,
+    ) async {
+      PersonalRecord record(String name, double kg, double improvement) =>
+          PersonalRecord(
+            exerciseKey: 'name:${name.toLowerCase()}',
+            exerciseName: name,
+            exerciseId: '',
+            sessionId: 'p1',
+            date: DateTime(2026, 9, 15, 18, 5),
+            kinds: const {PersonalRecordKind.weight},
+            weightKg: kg,
+            reps: 5,
+            improvement: improvement,
+          );
+      await _pumpCard(
+        tester,
+        _post(
+          personalRecords: [
+            record('Wyciskanie sztangi na ławce', 85, 2.5),
+            record('Przysiad', 120, 5),
+            record('Martwy ciąg', 150, 10),
+          ],
+        ),
+      );
+
+      expect(find.text('3 nowe rekordy!'), findsOneWidget);
+      expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
+      expect(find.text('85 kg × 5'), findsOneWidget);
+      expect(find.text('+2,5 kg'), findsOneWidget);
+      expect(find.text('Przysiad'), findsOneWidget);
+      expect(find.text('Martwy ciąg'), findsNothing);
+      expect(find.text('i jeszcze 1'), findsOneWidget);
+      expect(find.text('NAJLEPSZA SERIA'), findsNothing);
+    });
+
+    testWidgets('a single record reads "Nowy rekord!"', (tester) async {
+      await _pumpCard(
+        tester,
+        _post(
+          personalRecords: [
+            PersonalRecord(
+              exerciseKey: 'name:pompki',
+              exerciseName: 'Pompki',
+              exerciseId: '',
+              sessionId: 'p1',
+              date: DateTime(2026, 9, 15, 18, 5),
+              kinds: const {PersonalRecordKind.reps},
+              reps: 40,
+              improvement: 4,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.text('Nowy rekord!'), findsOneWidget);
+      expect(find.text('40 powt.'), findsOneWidget);
+      expect(find.text('+4 powt.'), findsOneWidget);
     });
   });
 

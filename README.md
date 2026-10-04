@@ -12,7 +12,8 @@ Backend (Node.js + Express + PostgreSQL) jest w osobnym repozytorium `gym_backen
 ## Funkcje
 
 - **Trening na żywo** — sesja z planu lub od zera, serie (planowane i wykonane: ciężar, powtórzenia,
-  RIR, tempo), timer przerwy z lokalnym powiadomieniem (wyłączalnym), podsumowanie po treningu.
+  RIR, tempo), timer przerwy z lokalnym powiadomieniem (wyłączalnym), podsumowanie po treningu
+  z rekordami pobitymi w tej sesji („Nowy rekord!”, liczone lokalnie — działa offline).
 - **Plany treningowe** — dni tygodnia, ćwiczenia i serie; „Dzisiejszy trening” na ekranie głównym.
 - **Historia** — oś czasu z filtrami, kalendarz/heatmapa, szczegóły z mapą mięśni; edycja,
   powtórzenie i usunięcie zakończonego treningu.
@@ -21,7 +22,8 @@ Backend (Node.js + Express + PostgreSQL) jest w osobnym repozytorium `gym_backen
   i usuwaniem; najnowszy pomiar to aktualna waga w „Dane i cele”. Działa offline (sync po powrocie sieci).
 - **Biblioteka ćwiczeń** — ćwiczenia systemowe i własne (zdjęcia, ulubione).
 - **Społeczność** — profile (bio, awatar), obserwowanie, wyszukiwarka i propozycje osób,
-  feed aktywności z kudosami i komentarzami, szczegóły posta.
+  feed aktywności z kudosami i komentarzami (post pokazuje „Nowy rekord!” z rekordami autora,
+  liczonymi przez serwer), szczegóły posta.
 - **Konto** — zmiana hasła, wylogowanie ze wszystkich urządzeń, usunięcie konta, obsługa
   unieważnionej sesji.
 - **Offline-first** — lokalna baza SQLite per użytkownik, kolejka zmian, synchronizacja po

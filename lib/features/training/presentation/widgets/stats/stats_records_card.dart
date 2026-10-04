@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../domain/models/training_stats.dart';
+import '../personal_record_format.dart';
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
 import 'stats_personal_bests_screen.dart';
@@ -98,8 +99,8 @@ class _RecordRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = record;
     final kind = r.primaryKind;
-    final value = _recordValue(r);
-    final improvement = _improvementText(r);
+    final value = personalRecordValue(r);
+    final improvement = personalRecordImprovement(r);
     final date = formatStatsRelativeDay(r.date.toLocal(), now);
     final canOpen = canOpenStatsExercise(r.exerciseId);
 
@@ -209,7 +210,7 @@ class _RecordRow extends StatelessWidget {
       label: [
         r.exerciseName,
         value,
-        _kindLabel(kind),
+        personalRecordKindLabel(kind),
         ?improvement,
         date,
       ].join(', '),
@@ -240,7 +241,7 @@ class _KindBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm - 2),
       ),
       child: Text(
-        _kindLabel(kind),
+        personalRecordKindLabel(kind),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
@@ -309,38 +310,4 @@ class _Empty extends StatelessWidget {
       ],
     );
   }
-}
-
-String _kindLabel(PersonalRecordKind kind) => switch (kind) {
-  PersonalRecordKind.weight => 'Ciężar',
-  PersonalRecordKind.oneRepMax => '1RM',
-  PersonalRecordKind.reps => 'Powtórzenia',
-};
-
-/// „85 kg × 3”, „e1RM 101 kg”, „15 powt.”
-String _recordValue(PersonalRecord r) {
-  switch (r.primaryKind) {
-    case PersonalRecordKind.weight:
-      final w = r.weightKg;
-      if (w == null) break;
-      final kg = '${formatStatsDecimal(w)} kg';
-      return r.reps == null ? kg : '$kg × ${r.reps}';
-    case PersonalRecordKind.oneRepMax:
-      final orm = r.oneRepMaxKg;
-      if (orm == null) break;
-      return 'e1RM ${formatStatsDecimal(orm, digits: 0)} kg';
-    case PersonalRecordKind.reps:
-      if (r.reps == null) break;
-      return '${r.reps} powt.';
-  }
-  return '—';
-}
-
-String? _improvementText(PersonalRecord r) {
-  final diff = r.improvement;
-  if (diff == null || diff <= 0) return null;
-  return switch (r.primaryKind) {
-    PersonalRecordKind.reps => '+${diff.round()} powt.',
-    _ => '+${formatStatsDecimal(diff)} kg',
-  };
 }

@@ -4,6 +4,7 @@ import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
+import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/workout_summary_screen.dart';
 import 'package:gym/features/training/presentation/widgets/workout_summary/workout_share_card.dart';
 
@@ -24,12 +25,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Widget buildScreen(_FakeTrainingSessionRepository repository) {
+  Widget buildScreen(
+    _FakeTrainingSessionRepository repository, {
+    List<TrainingSession> history = const [],
+  }) {
     return MaterialApp(
       home: WorkoutSummaryScreen(
         args: WorkoutSummaryArgs(
           session: repository.session,
           repository: repository,
+          statsRepository: _FakeStatsRepository(history),
           user: user,
         ),
       ),
@@ -76,6 +81,66 @@ void main() {
       find.byKey(const ValueKey('summary-highlight-volume')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('shows "Nowy rekord!" when the workout beats earlier bests', (
+    tester,
+  ) async {
+    final current = _completedSession();
+    // Tydzień wcześniej: 60 kg × 8 — dziś 62,5 kg × 8 bije rekord ciężaru.
+    final earlier = _benchSession(
+      DateTime.utc(2026, 9, 6, 15),
+      weight: '60',
+      reps: '8',
+    );
+    final repository = _FakeTrainingSessionRepository(current);
+
+    await tester.pumpWidget(
+      buildScreen(repository, history: [earlier, current]),
+    );
+    await tester.pumpAndSettle();
+
+    final banner = find.byKey(const ValueKey('new-records-banner'));
+    expect(banner, findsOneWidget);
+    expect(
+      find.descendant(of: banner, matching: find.text('Nowy rekord!')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: banner, matching: find.text('Bench press')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: banner, matching: find.text('62,5 kg × 8')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: banner, matching: find.text('+2,5 kg')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('no record banner without a better result or earlier history', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+
+    // Pierwsze wykonanie ćwiczenia ustala punkt odniesienia — to nie rekord.
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('new-records-banner')), findsNothing);
+
+    // Wcześniej było ciężej — dziś bez rekordu.
+    await tester.pumpWidget(
+      buildScreen(
+        repository,
+        history: [
+          _benchSession(DateTime.utc(2026, 9, 6, 15), weight: '70', reps: '8'),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('new-records-banner')), findsNothing);
   });
 
   testWidgets('share button persists flag and switches card to shared state', (
@@ -227,6 +292,49 @@ TrainingSession _completedSession() {
       ),
     ],
   );
+}
+
+TrainingSession _benchSession(
+  DateTime startedAt, {
+  required String weight,
+  required String reps,
+}) {
+  return TrainingSession(
+    planName: 'Push',
+    status: TrainingSessionStatus.completed,
+    startedAt: startedAt,
+    finishedAt: startedAt.add(const Duration(minutes: 40)),
+    exercises: [
+      TrainingSessionExercise(
+        exerciseId: 'bench',
+        exerciseName: 'Bench press',
+        exerciseMuscles: const ['chest'],
+        exerciseCategory: 'compound',
+        sets: [
+          TrainingSessionSet(
+            actualWeight: weight,
+            actualReps: reps,
+            completed: true,
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+class _FakeStatsRepository implements TrainingStatsRepository {
+  _FakeStatsRepository(this.sessions);
+
+  final List<TrainingSession> sessions;
+
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async => sessions;
+
+  @override
+  Future<List<TrainingSession>> completedSessionsSince(DateTime from) async => [
+    for (final s in sessions)
+      if (!s.startedAt.isBefore(from)) s,
+  ];
 }
 
 class _FakeTrainingSessionRepository implements TrainingSessionRepository {
