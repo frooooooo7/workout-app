@@ -6,6 +6,7 @@ import '../../../core/services/service_locator.dart';
 import 'bloc/change_password_cubit.dart';
 import 'bloc/delete_account_cubit.dart';
 import 'bloc/notification_settings_cubit.dart';
+import 'bloc/workout_reminder_cubit.dart';
 import 'screens/change_password_screen.dart';
 import 'screens/delete_account_screen.dart';
 import 'screens/help_screen.dart';
@@ -32,12 +33,22 @@ List<RouteBase> buildAccountSettingsRoutes(
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
       path: 'notifications',
-      builder: (_, _) => BlocProvider(
-        create: (_) => NotificationSettingsCubit(
-          ServiceLocator.restTimerNotificationSettings,
-          onRestTimerNotificationsDisabled:
-              ServiceLocator.restTimerScheduler.cancelRestFinished,
-        ),
+      builder: (_, _) => MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (_) => NotificationSettingsCubit(
+              ServiceLocator.restTimerNotificationSettings,
+              onRestTimerNotificationsDisabled:
+                  ServiceLocator.restTimerScheduler.cancelRestFinished,
+            ),
+          ),
+          BlocProvider(
+            create: (_) => WorkoutReminderCubit(
+              ServiceLocator.workoutReminderSettings,
+              ServiceLocator.workoutReminderScheduler,
+            ),
+          ),
+        ],
         child: const NotificationSettingsScreen(),
       ),
     ),
