@@ -94,6 +94,79 @@ void main() {
       expect(stats.bestWeightKg, isNull);
     });
 
+    test('historia treningu: serie z rozgrzewką, najlepsza seria i rekord', () {
+      final first = _session(DateTime.utc(2026, 9, 1), [
+        _entry([_set('80', '8'), _set('85', '5')]),
+      ]);
+      final second = _session(DateTime.utc(2026, 9, 8), [
+        _entry([
+          TrainingSessionSet(
+            setType: SetType.warmup,
+            actualWeight: '40',
+            actualReps: '10',
+            completed: true,
+          ),
+          _set('90', '3'),
+          _set('80', '10'),
+        ]).copyWith(note: '  ławka niżej '),
+      ]);
+      final third = _session(DateTime.utc(2026, 9, 15), [
+        _entry([_set('85', '6')]),
+      ]);
+
+      final stats = ExerciseStats.fromSessions(_bench, [third, first, second]);
+      final history = stats.history;
+
+      expect(history.map((p) => p.sessionId), [first.id, second.id, third.id]);
+      expect(history.map((p) => p.sessionName), everyElement('Push'));
+      // Pierwszy trening nie jest rekordem, drugi bije 85 kg, trzeci nie.
+      expect(history.map((p) => p.isRecord), [false, true, false]);
+
+      final middle = history[1];
+      expect(middle.setDetails, hasLength(3));
+      expect(middle.setDetails.first.type, SetType.warmup);
+      expect(middle.setDetails.first.weightKg, 40);
+      // Rozgrzewka nie wchodzi do serii, objętości ani najlepszej serii.
+      expect(middle.sets, 2);
+      expect(middle.volumeKg, 90 * 3 + 80 * 10);
+      expect(middle.totalReps, 13);
+      expect(middle.maxReps, 10);
+      // 80 × 10 ≈ 106,7 kg 1RM bije 90 × 3 = 99 kg.
+      expect(middle.bestSetIndex, 2);
+      expect(middle.note, 'ławka niżej');
+      expect(stats.totalVolumeKg, 80 * 8 + 85 * 5 + 90 * 3 + 80 * 10 + 85 * 6);
+    });
+
+    test('historia nie jest przycinana', () {
+      final stats = ExerciseStats.fromSessions(_bench, [
+        for (var i = 0; i < 20; i++)
+          _session(DateTime.utc(2026, 1, 1 + i), [
+            _entry([_set('${60 + i}', '5')]),
+          ]),
+      ]);
+
+      expect(stats.history, hasLength(20));
+      expect(stats.history.last.topWeightKg, 79);
+    });
+
+    test('bez ciężaru rekordem jest więcej powtórzeń', () {
+      final stats = ExerciseStats.fromSessions(_bench, [
+        _session(DateTime.utc(2026, 9, 1), [
+          _entry([_set('', '12')]),
+        ]),
+        _session(DateTime.utc(2026, 9, 2), [
+          _entry([_set('', '15')]),
+        ]),
+        _session(DateTime.utc(2026, 9, 3), [
+          _entry([_set('', '14')]),
+        ]),
+      ]);
+
+      expect(stats.history.map((p) => p.isRecord), [false, true, false]);
+      expect(stats.history[1].setDetails.single.weightKg, isNull);
+      expect(stats.history[1].bestSetIndex, 0);
+    });
+
     test('ćwiczenie bez ciężaru ma rekord powtórzeń zamiast kilogramów', () {
       final stats = ExerciseStats.fromSessions(_bench, [
         _session(DateTime.utc(2026, 9, 1), [

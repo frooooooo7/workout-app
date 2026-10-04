@@ -58,11 +58,6 @@ class _StatsContent extends StatelessWidget {
           );
 
     final oneRm = stats.bestEstimatedOneRepMaxKg;
-    final history = stats.history;
-    final chartValues = [
-      for (final point in history)
-        stats.hasWeights ? point.estimatedOneRepMaxKg : point.sets.toDouble(),
-    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -108,26 +103,9 @@ class _StatsContent extends StatelessWidget {
             ),
           ],
         ),
-        if (chartValues.length >= 2) ...[
+        if (stats.history.length >= 2) ...[
           const SizedBox(height: 18),
-          _ChartHeader(
-            title: stats.hasWeights
-                ? 'Progres szacowanego 1RM'
-                : 'Serie na trening',
-            first: chartValues.first,
-            last: chartValues.last,
-            unit: stats.hasWeights ? 'kg' : null,
-          ),
-          const SizedBox(height: 10),
-          ExerciseProgressChart(values: chartValues),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _AxisLabel(date: history.first.date),
-              _AxisLabel(date: history.last.date),
-            ],
-          ),
+          ExerciseProgressChart(stats: stats),
         ],
         if (stats.lastPerformedAt != null) ...[
           const SizedBox(height: 14),
@@ -140,7 +118,7 @@ class _StatsContent extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'Ostatnio: ${_formatDate(stats.lastPerformedAt!)}',
+                'Ostatnio: ${formatExerciseHistoryDate(stats.lastPerformedAt!)}',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 12.5,
@@ -155,13 +133,6 @@ class _StatsContent extends StatelessWidget {
   }
 
   static double _roundHalf(double value) => (value * 2).round() / 2;
-}
-
-String _formatDate(DateTime date) {
-  final local = date.toLocal();
-  final now = DateTime.now();
-  final base = '${formatDayNumber(local)} ${formatMonthShort(local)}';
-  return local.year == now.year ? base : '$base ${local.year}';
 }
 
 class _StatTile extends StatelessWidget {
@@ -265,99 +236,6 @@ class _StatTile extends StatelessWidget {
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ChartHeader extends StatelessWidget {
-  const _ChartHeader({
-    required this.title,
-    required this.first,
-    required this.last,
-    this.unit,
-  });
-
-  final String title;
-  final double first;
-  final double last;
-  final String? unit;
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = last - first;
-    final rounded = (delta * 2).round() / 2;
-    final positive = rounded > 0;
-    final negative = rounded < 0;
-    final color = positive
-        ? AppColors.success
-        : negative
-        ? AppColors.strengthWeak
-        : AppColors.textMuted;
-    final sign = positive ? '+' : (negative ? '−' : '±');
-    final text =
-        '$sign${formatWeight(rounded.abs())}${unit == null ? '' : ' $unit'}';
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                positive
-                    ? Icons.trending_up_rounded
-                    : negative
-                    ? Icons.trending_down_rounded
-                    : Icons.trending_flat_rounded,
-                size: 14,
-                color: color,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                text,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AxisLabel extends StatelessWidget {
-  const _AxisLabel({required this.date});
-
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      _formatDate(date),
-      style: const TextStyle(
-        color: AppColors.textMuted,
-        fontSize: 10.5,
-        fontWeight: FontWeight.w500,
       ),
     );
   }
