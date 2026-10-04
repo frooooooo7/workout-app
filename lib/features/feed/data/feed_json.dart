@@ -2,6 +2,7 @@ import '../../../core/network/api_client.dart';
 import '../../library/domain/models/exercise.dart';
 import '../../training/data/training_history_json.dart';
 import '../../training/domain/models/training_history_models.dart';
+import '../../training/domain/models/training_stats.dart';
 import '../domain/models/cursor_page.dart';
 import '../domain/models/feed_author.dart';
 import '../domain/models/feed_post.dart';
@@ -30,12 +31,14 @@ abstract final class FeedJson {
   };
 
   static FeedPost postFromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String;
+    final startedAt = DateTime.parse(json['startedAt'] as String).toUtc();
     return FeedPost(
-      id: json['id'] as String,
+      id: id,
       author: authorFromJson(json['author'] as Map<String, dynamic>),
       title: json['title'] as String? ?? 'Trening',
       note: _nonBlank(json['note'] as String?),
-      startedAt: DateTime.parse(json['startedAt'] as String).toUtc(),
+      startedAt: startedAt,
       finishedAt: DateTime.tryParse(json['finishedAt'] as String? ?? '')
           ?.toUtc(),
       durationSec: (json['durationSec'] as num?)?.toInt() ?? 0,
@@ -47,6 +50,11 @@ abstract final class FeedJson {
           .whereType<Map<String, dynamic>>()
           .map(_topExerciseFromJson)
           .toList(growable: false),
+      personalRecords: _personalRecordsFromJson(
+        json['personalRecords'],
+        sessionId: id,
+        date: startedAt,
+      ),
       kudosCount: (json['kudosCount'] as num?)?.toInt() ?? 0,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
       hasKudoed: json['hasKudoed'] as bool? ?? false,
@@ -78,6 +86,18 @@ abstract final class FeedJson {
             'bestSet': e.bestSet == null
                 ? null
                 : {'weightKg': e.bestSet!.weightKg, 'reps': e.bestSet!.reps},
+          },
+        )
+        .toList(),
+    'personalRecords': post.personalRecords
+        .map(
+          (r) => {
+            'exerciseName': r.exerciseName,
+            'kinds': r.kinds.map((k) => k.name).toList(),
+            'weightKg': r.weightKg,
+            'reps': r.reps,
+            'oneRepMaxKg': r.oneRepMaxKg,
+            'improvement': r.improvement,
           },
         )
         .toList(),
@@ -185,6 +205,40 @@ abstract final class FeedJson {
           ? null
           : TrainingSetMetrics(weightKg: metrics.weightKg, reps: metrics.reps),
     );
+  }
+
+  /// Rekordy bez znanego rodzaju (nowszy serwer) są pomijane.
+  static List<PersonalRecord> _personalRecordsFromJson(
+    Object? raw, {
+    required String sessionId,
+    required DateTime date,
+  }) {
+    if (raw is! List) return const [];
+    final records = <PersonalRecord>[];
+    for (final item in raw) {
+      if (item is! Map<String, dynamic>) continue;
+      final name = (item['exerciseName'] as String? ?? '').trim();
+      final kinds = <PersonalRecordKind>{
+        for (final k in item['kinds'] as List? ?? const [])
+          ?PersonalRecordKind.values.asNameMap()[k],
+      };
+      if (name.isEmpty || kinds.isEmpty) continue;
+      records.add(
+        PersonalRecord(
+          exerciseKey: 'name:${name.toLowerCase()}',
+          exerciseName: name,
+          exerciseId: '',
+          sessionId: sessionId,
+          date: date,
+          kinds: kinds,
+          weightKg: (item['weightKg'] as num?)?.toDouble(),
+          reps: (item['reps'] as num?)?.toInt(),
+          oneRepMaxKg: (item['oneRepMaxKg'] as num?)?.toDouble(),
+          improvement: (item['improvement'] as num?)?.toDouble(),
+        ),
+      );
+    }
+    return List.unmodifiable(records);
   }
 
   static List<MuscleGroup> _musclesFromJson(Object? raw) {

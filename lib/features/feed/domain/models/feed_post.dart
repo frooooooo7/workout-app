@@ -1,5 +1,6 @@
 import '../../../library/domain/models/exercise.dart';
 import '../../../training/domain/models/training_history_models.dart';
+import '../../../training/domain/models/training_stats.dart';
 import 'feed_author.dart';
 
 /// Najważniejsze ćwiczenie posta — linia na karcie w feedzie.
@@ -32,6 +33,7 @@ class FeedPost {
     this.totalVolumeKg = 0,
     this.muscles = const [],
     this.topExercises = const [],
+    this.personalRecords = const [],
     this.kudosCount = 0,
     this.commentCount = 0,
     this.hasKudoed = false,
@@ -51,6 +53,10 @@ class FeedPost {
   final double totalVolumeKg;
   final List<MuscleGroup> muscles;
   final List<TopExercise> topExercises;
+
+  /// Rekordy autora pobite w tym treningu („Nowy rekord!”), w kolejności
+  /// ćwiczeń. Liczy je serwer na tle całej historii autora.
+  final List<PersonalRecord> personalRecords;
   final int kudosCount;
   final int commentCount;
   final bool hasKudoed;
@@ -78,6 +84,7 @@ class FeedPost {
       totalVolumeKg: totalVolumeKg,
       muscles: muscles,
       topExercises: topExercises,
+      personalRecords: personalRecords,
       kudosCount: kudosCount ?? this.kudosCount,
       commentCount: commentCount ?? this.commentCount,
       hasKudoed: hasKudoed ?? this.hasKudoed,
