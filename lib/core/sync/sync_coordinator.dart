@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../features/library/data/exercise_database.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
+import '../../features/profile/data/sync/body_measurements_sync_engine.dart';
 import '../../features/profile/data/sync/body_weight_sync_engine.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
 import '../../features/training/data/sync/training_session_sync_engine.dart';
@@ -16,7 +17,7 @@ import 'sync_status.dart';
 ///
 /// * pełny cykl w bezpiecznej kolejności — ćwiczenia, plany (odwołują się
 ///   do ćwiczeń), sesje (odwołują się do jednych i drugich), na końcu
-///   niezależny dziennik masy ciała,
+///   niezależne dzienniki masy ciała i pomiarów ciała,
 /// * synchronizacja chwilę po powrocie sieci ([networkAvailability]),
 /// * ponawianie z narastającym odstępem, dopóki są niewysłane zmiany — na
 ///   wypadek, gdy sieć „jest”, ale internet jeszcze nie działa,
@@ -29,6 +30,7 @@ class SyncCoordinator {
     required TrainingPlanSyncEngine plans,
     required TrainingSessionSyncEngine sessions,
     BodyWeightSyncEngine? bodyWeight,
+    BodyMeasurementsSyncEngine? bodyMeasurements,
     required ValueNotifier<SyncStatus> status,
     Stream<bool>? networkAvailability,
     this.initialRetryDelay = const Duration(seconds: 15),
@@ -40,6 +42,7 @@ class SyncCoordinator {
        _plans = plans,
        _sessions = sessions,
        _bodyWeight = bodyWeight,
+       _bodyMeasurements = bodyMeasurements,
        _status = status,
        _networkAvailability = networkAvailability,
        _retryDelay = initialRetryDelay;
@@ -49,6 +52,7 @@ class SyncCoordinator {
   final TrainingPlanSyncEngine _plans;
   final TrainingSessionSyncEngine _sessions;
   final BodyWeightSyncEngine? _bodyWeight;
+  final BodyMeasurementsSyncEngine? _bodyMeasurements;
   final ValueNotifier<SyncStatus> _status;
   final Stream<bool>? _networkAvailability;
 
@@ -71,6 +75,7 @@ class SyncCoordinator {
     _plans,
     _sessions,
     ?_bodyWeight,
+    ?_bodyMeasurements,
   ];
 
   AppLifecycleListener? _lifecycleListener;
@@ -237,6 +242,10 @@ class SyncCoordinator {
       if (_bodyWeight case final bodyWeight?) {
         await _step('bodyWeight.flush', bodyWeight.flush);
         await _step('bodyWeight.pull', bodyWeight.pull);
+      }
+      if (_bodyMeasurements case final bodyMeasurements?) {
+        await _step('bodyMeasurements.flush', bodyMeasurements.flush);
+        await _step('bodyMeasurements.pull', bodyMeasurements.pull);
       }
 
       // Pełny cykl bez błędów sieci — jesteśmy online.
