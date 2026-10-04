@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
 import '../../../training/domain/models/training_history_models.dart';
+import '../../../training/presentation/widgets/new_records_banner.dart';
 import '../../../training/presentation/widgets/session_details/session_exercise_card.dart';
 import '../../../training/presentation/widgets/session_details/session_muscle_map.dart';
 import '../../../training/presentation/widgets/session_details/session_summary_header.dart';
@@ -285,6 +286,10 @@ class _PostDetailsBody extends StatelessWidget {
         const SizedBox(height: 12),
         SessionSummaryHeader(detail: sessionDetail),
         const SizedBox(height: 12),
+        if (post.personalRecords.isNotEmpty) ...[
+          NewRecordsBanner(records: post.personalRecords),
+          const SizedBox(height: 12),
+        ],
         _KudosPanel(
           post: post,
           onKudosTap: context.read<PostDetailsCubit>().toggleKudos,

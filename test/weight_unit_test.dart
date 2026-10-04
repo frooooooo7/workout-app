@@ -8,7 +8,9 @@ import 'package:gym/features/profile/presentation/utils/profile_details_labels.d
 import 'package:gym/features/profile/presentation/widgets/body_weight_chart.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/repositories/previous_performance_repository.dart';
+import 'package:gym/features/training/presentation/widgets/personal_record_format.dart';
 import 'package:gym/features/training/presentation/widgets/session_details/session_details_formatters.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_format.dart';
 import 'package:gym/features/training/presentation/widgets/table_cell_input.dart';
@@ -83,6 +85,22 @@ void main() {
       expect(formatWeightChange(0.2), '+0,4 lb');
       expect(formatWeightChange(0), '0 lb');
       expect(formatWeightRange(), '70–660 lb');
+    });
+
+    test('new records in the summary and the feed', () {
+      final record = PersonalRecord(
+        exerciseKey: 'bench',
+        exerciseName: 'Wyciskanie',
+        exerciseId: 'bench',
+        sessionId: 's1',
+        date: DateTime(2026, 10, 4),
+        kinds: const {PersonalRecordKind.weight},
+        weightKg: 100,
+        reps: 3,
+        improvement: 2.5,
+      );
+      expect(personalRecordValue(record), '220,5 lb × 3');
+      expect(personalRecordImprovement(record), '+5,5 lb');
     });
 
     test('previous set column converts the stored kg text', () {
