@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../../../profile/domain/models/user_profile.dart';
 import '../../../profile/presentation/bloc/edit_profile_state.dart';
+import '../../../profile/presentation/utils/handle_availability.dart';
 import '../../../profile/presentation/utils/profile_details_draft.dart';
 
 /// Kroki po założeniu konta: profil publiczny → dane o sobie → cel.
@@ -14,6 +15,7 @@ class OnboardingState {
     this.loading = false,
     this.loadError,
     this.handle = '',
+    this.handleAvailability = HandleAvailability.unknown,
     this.bio = '',
     this.avatarBytes,
     this.avatarFilename,
@@ -39,6 +41,10 @@ class OnboardingState {
   final String? loadError;
 
   final String handle;
+
+  /// Wynik sprawdzania na żywo — dotyczy tylko zmienionego nicku.
+  final HandleAvailability handleAvailability;
+
   final String bio;
 
   /// Wybrane, jeszcze niewysłane zdjęcie.
@@ -55,7 +61,16 @@ class OnboardingState {
 
   bool get bioChanged => profile != null && bio.trim() != (profile!.bio ?? '');
 
-  String? get handleError => handleChanged ? handleInputError(handle) : null;
+  String? get handleError => handleChanged
+      ? handleInputError(handle) ??
+            (handleAvailability == HandleAvailability.taken
+                ? kHandleTakenMessage
+                : null)
+      : null;
+
+  /// Stan sprawdzania pokazywany przy polu nicku.
+  HandleAvailability get handleStatus =>
+      handleChanged ? handleAvailability : HandleAvailability.unknown;
 
   String? get bioError => bio.trim().length > kProfileBioMaxLength
       ? 'Opis może mieć maksymalnie $kProfileBioMaxLength znaków.'
@@ -80,6 +95,7 @@ class OnboardingState {
     String? loadError,
     bool clearLoadError = false,
     String? handle,
+    HandleAvailability? handleAvailability,
     String? bio,
     Uint8List? avatarBytes,
     String? avatarFilename,
@@ -95,6 +111,7 @@ class OnboardingState {
       loading: loading ?? this.loading,
       loadError: clearLoadError ? null : (loadError ?? this.loadError),
       handle: handle ?? this.handle,
+      handleAvailability: handleAvailability ?? this.handleAvailability,
       bio: bio ?? this.bio,
       avatarBytes: clearAvatar ? null : (avatarBytes ?? this.avatarBytes),
       avatarFilename: clearAvatar

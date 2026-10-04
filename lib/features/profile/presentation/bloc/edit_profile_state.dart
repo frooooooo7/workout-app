@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../domain/models/user_profile.dart';
+import '../utils/handle_availability.dart';
 import '../utils/profile_details_draft.dart';
 
 const kProfileNameMaxLength = 50;
@@ -15,6 +16,7 @@ class EditProfileState {
     this.firstName = '',
     this.lastName = '',
     this.handle = '',
+    this.handleAvailability = HandleAvailability.unknown,
     this.bio = '',
     this.avatarBytes,
     this.avatarFilename,
@@ -42,6 +44,10 @@ class EditProfileState {
   final String firstName;
   final String lastName;
   final String handle;
+
+  /// Wynik sprawdzania na żywo — dotyczy tylko zmienionego nicku.
+  final HandleAvailability handleAvailability;
+
   final String bio;
 
   /// Nowo wybrane zdjęcie (jeszcze niewysłane).
@@ -65,7 +71,16 @@ class EditProfileState {
 
   /// Tylko zmieniony nick — stare, generowane nicki bywają dłuższe niż
   /// obecny limit i nie mogą blokować zapisu innych pól.
-  String? get handleError => handleChanged ? handleInputError(handle) : null;
+  String? get handleError => handleChanged
+      ? handleInputError(handle) ??
+            (handleAvailability == HandleAvailability.taken
+                ? kHandleTakenMessage
+                : null)
+      : null;
+
+  /// Stan sprawdzania pokazywany przy polu nicku.
+  HandleAvailability get handleStatus =>
+      handleChanged ? handleAvailability : HandleAvailability.unknown;
 
   String? get bioError => bio.trim().length > kProfileBioMaxLength
       ? 'Opis może mieć maksymalnie $kProfileBioMaxLength znaków.'
@@ -124,6 +139,7 @@ class EditProfileState {
     String? firstName,
     String? lastName,
     String? handle,
+    HandleAvailability? handleAvailability,
     String? bio,
     Uint8List? avatarBytes,
     String? avatarFilename,
@@ -141,6 +157,7 @@ class EditProfileState {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       handle: handle ?? this.handle,
+      handleAvailability: handleAvailability ?? this.handleAvailability,
       bio: bio ?? this.bio,
       avatarBytes: clearAvatarBytes ? null : (avatarBytes ?? this.avatarBytes),
       avatarFilename:

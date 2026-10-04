@@ -45,6 +45,10 @@ abstract class ProfileRepository {
     ProfileDetails? details,
   });
 
+  /// `GET /profile/handle-availability` — czy znormalizowany [handle] jest
+  /// wolny. Własny, obecny nick też liczy się jako wolny.
+  Future<bool> isHandleAvailable(String handle);
+
   /// `POST /profile/me/onboarding/complete` (idempotentne).
   Future<UserProfile> completeOnboarding();
 

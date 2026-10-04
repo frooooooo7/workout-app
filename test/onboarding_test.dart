@@ -14,6 +14,7 @@ import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
+import 'package:gym/features/profile/presentation/utils/handle_availability.dart';
 import 'package:gym/features/profile/presentation/widgets/birth_date_sheet.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_details_fields.dart';
 import 'package:gym/features/profile/presentation/widgets/ruler_picker.dart';
@@ -39,6 +40,11 @@ class _FakeRepository extends Fake implements ProfileRepository {
   Object? loadError;
   Object? updateError;
   Object? completeError;
+  final takenHandles = <String>{};
+
+  @override
+  Future<bool> isHandleAvailable(String handle) async =>
+      !takenHandles.contains(handle);
 
   @override
   Future<UserProfile> getOwnProfile() async {
@@ -149,6 +155,27 @@ void main() {
       expect(cubit.state.step, OnboardingStep.profile);
       expect(cubit.state.error, 'Ten nick jest już zajęty. Wybierz inny.');
       expect(cubit.state.saving, isFalse);
+      await cubit.close();
+    });
+
+    test('taken nickname blocks Dalej while typing', () async {
+      final repo = _FakeRepository()..takenHandles.add('anna.nowak');
+      final cubit = OnboardingCubit(repo, handleCheckDelay: Duration.zero);
+      await cubit.load();
+
+      cubit.handleChanged('anna.nowak');
+      expect(cubit.state.handleStatus, HandleAvailability.checking);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(
+        cubit.state.handleError,
+        'Ten nick jest już zajęty. Wybierz inny.',
+      );
+      expect(cubit.state.canContinue, isFalse);
+
+      cubit.handleChanged('jan.silny');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(cubit.state.handleStatus, HandleAvailability.available);
+      expect(cubit.state.canContinue, isTrue);
       await cubit.close();
     });
 

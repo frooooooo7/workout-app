@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../bloc/edit_profile_cubit.dart';
 import '../bloc/edit_profile_state.dart';
 import '../widgets/avatar_picker_field.dart';
+import '../widgets/handle_availability_hint.dart';
 
 const editProfileFirstNameFieldKey = Key('edit-profile-first-name');
 const editProfileLastNameFieldKey = Key('edit-profile-last-name');
@@ -179,6 +180,9 @@ class _EditProfileForm extends StatelessWidget {
               controller: handleController,
               enabled: enabled,
               errorText: state.handleError,
+              helperText: handleAvailabilityHelperText(state.handleStatus),
+              helperColor: handleAvailabilityHelperColor(state.handleStatus),
+              suffixIcon: handleAvailabilitySuffix(state.handleStatus),
               showCounter: false,
               prefixText: '@',
               textInputAction: TextInputAction.next,
@@ -267,6 +271,9 @@ class _ProfileTextField extends StatelessWidget {
     this.minLines,
     this.maxLines = 1,
     this.hintText,
+    this.helperText,
+    this.helperColor,
+    this.suffixIcon,
     this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
   });
@@ -282,6 +289,9 @@ class _ProfileTextField extends StatelessWidget {
   final int? minLines;
   final int maxLines;
   final String? hintText;
+  final String? helperText;
+  final Color? helperColor;
+  final Widget? suffixIcon;
   final TextCapitalization textCapitalization;
   final TextInputAction? textInputAction;
 
@@ -309,6 +319,12 @@ class _ProfileTextField extends StatelessWidget {
         hintStyle: const TextStyle(color: AppColors.textMuted),
         prefixText: prefixText,
         prefixStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+        suffixIcon: suffixIcon,
+        helperText: helperText,
+        helperStyle: TextStyle(
+          color: helperColor ?? AppColors.textMuted,
+          fontSize: 12,
+        ),
         errorMaxLines: 2,
         errorText: errorText,
         counterText: showCounter ? null : '',

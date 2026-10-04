@@ -10,6 +10,7 @@ import '../../../profile/domain/repositories/profile_repository.dart';
 import '../../../profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../../profile/presentation/bloc/edit_profile_state.dart';
 import '../../../profile/presentation/bloc/profile_details_draft_editor.dart';
+import '../../../profile/presentation/utils/handle_availability.dart';
 import '../../../profile/presentation/utils/profile_details_draft.dart';
 import 'onboarding_state.dart';
 
@@ -18,10 +19,19 @@ import 'onboarding_state.dart';
 /// zapisu. Ostatni krok oznacza onboarding jako zakończony.
 class OnboardingCubit extends Cubit<OnboardingState>
     with ProfileDetailsDraftEditor<OnboardingState> {
-  OnboardingCubit(this._repository, {this.onCompleted, this.bodyWeight})
-    : super(const OnboardingState(loading: true));
+  OnboardingCubit(
+    this._repository, {
+    this.onCompleted,
+    this.bodyWeight,
+    Duration handleCheckDelay = const Duration(milliseconds: 400),
+  }) : _handleChecker = HandleAvailabilityChecker(
+         (handle) => _repository.isHandleAvailable(handle),
+         delay: handleCheckDelay,
+       ),
+       super(const OnboardingState(loading: true));
 
   final ProfileRepository _repository;
+  final HandleAvailabilityChecker _handleChecker;
 
   /// Podana waga staje się pierwszym pomiarem w dzienniku masy ciała.
   final BodyWeightRepository? bodyWeight;
@@ -49,8 +59,16 @@ class OnboardingCubit extends Cubit<OnboardingState>
     }
   }
 
-  void handleChanged(String value) =>
-      emit(state.copyWith(handle: value, clearError: true));
+  void handleChanged(String value) {
+    emit(
+      state.copyWith(
+        handle: value,
+        handleAvailability: HandleAvailability.unknown,
+        clearError: true,
+      ),
+    );
+    _checkHandle();
+  }
 
   void bioChanged(String value) =>
       emit(state.copyWith(bio: value, clearError: true));
@@ -174,6 +192,9 @@ class OnboardingCubit extends Cubit<OnboardingState>
       emit(
         state.copyWith(
           saving: false,
+          handleAvailability: _isHandleTaken(error)
+              ? HandleAvailability.taken
+              : null,
           error: EditProfileCubit.editProfileErrorMessage(error),
         ),
       );
@@ -192,6 +213,30 @@ class OnboardingCubit extends Cubit<OnboardingState>
   @override
   void updateDraft(ProfileDetailsDraft draft) =>
       emit(state.copyWith(draft: draft, clearError: true));
+
+  /// Po pauzie w pisaniu pyta serwer, czy zmieniony nick jest wolny.
+  void _checkHandle() {
+    final snapshot = state;
+    if (!snapshot.handleChanged || handleInputError(snapshot.handle) != null) {
+      _handleChecker.cancel();
+      return;
+    }
+    final handle = normalizeHandle(snapshot.handle);
+    emit(snapshot.copyWith(handleAvailability: HandleAvailability.checking));
+    _handleChecker.check(handle, (result) {
+      if (isClosed || normalizeHandle(state.handle) != handle) return;
+      emit(state.copyWith(handleAvailability: result));
+    });
+  }
+
+  static bool _isHandleTaken(Object error) =>
+      error is ApiException && error.message == 'handle_taken';
+
+  @override
+  Future<void> close() {
+    _handleChecker.cancel();
+    return super.close();
+  }
 
   Future<void> _notifyCompleted(UserProfile profile) async {
     final callback = onCompleted;
