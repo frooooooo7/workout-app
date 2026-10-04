@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../features/library/data/exercise_database.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
+import '../../features/profile/data/sync/body_weight_sync_engine.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
 import '../../features/training/data/sync/training_session_sync_engine.dart';
 import 'sync_engine_base.dart';
@@ -14,7 +15,8 @@ import 'sync_status.dart';
 /// Dyryguje synchronizacją zalogowanego użytkownika:
 ///
 /// * pełny cykl w bezpiecznej kolejności — ćwiczenia, plany (odwołują się
-///   do ćwiczeń), na końcu sesje (odwołują się do jednych i drugich),
+///   do ćwiczeń), sesje (odwołują się do jednych i drugich), na końcu
+///   niezależny dziennik masy ciała,
 /// * synchronizacja chwilę po powrocie sieci ([networkAvailability]),
 /// * ponawianie z narastającym odstępem, dopóki są niewysłane zmiany — na
 ///   wypadek, gdy sieć „jest”, ale internet jeszcze nie działa,
@@ -26,6 +28,7 @@ class SyncCoordinator {
     required ExerciseSyncEngine exercises,
     required TrainingPlanSyncEngine plans,
     required TrainingSessionSyncEngine sessions,
+    BodyWeightSyncEngine? bodyWeight,
     required ValueNotifier<SyncStatus> status,
     Stream<bool>? networkAvailability,
     this.initialRetryDelay = const Duration(seconds: 15),
@@ -36,6 +39,7 @@ class SyncCoordinator {
        _exercises = exercises,
        _plans = plans,
        _sessions = sessions,
+       _bodyWeight = bodyWeight,
        _status = status,
        _networkAvailability = networkAvailability,
        _retryDelay = initialRetryDelay;
@@ -44,6 +48,7 @@ class SyncCoordinator {
   final ExerciseSyncEngine _exercises;
   final TrainingPlanSyncEngine _plans;
   final TrainingSessionSyncEngine _sessions;
+  final BodyWeightSyncEngine? _bodyWeight;
   final ValueNotifier<SyncStatus> _status;
   final Stream<bool>? _networkAvailability;
 
@@ -61,7 +66,12 @@ class SyncCoordinator {
   /// że przyszło zdarzenie „online” (np. początkowe przy starcie).
   static const _freshSyncWindow = Duration(seconds: 30);
 
-  late final List<SyncEngineBase> _engines = [_exercises, _plans, _sessions];
+  late final List<SyncEngineBase> _engines = [
+    _exercises,
+    _plans,
+    _sessions,
+    ?_bodyWeight,
+  ];
 
   AppLifecycleListener? _lifecycleListener;
   StreamSubscription<bool>? _networkSubscription;
@@ -224,6 +234,10 @@ class SyncCoordinator {
       await _step('sessions.flush', _sessions.flush);
       // Treningi i usunięcia z innych urządzeń (historia, statystyki).
       await _step('sessions.pull', _sessions.pull);
+      if (_bodyWeight case final bodyWeight?) {
+        await _step('bodyWeight.flush', bodyWeight.flush);
+        await _step('bodyWeight.pull', bodyWeight.pull);
+      }
 
       // Pełny cykl bez błędów sieci — jesteśmy online.
       _offline = _drainNetworkFailure();

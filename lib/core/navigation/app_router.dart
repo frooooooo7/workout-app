@@ -424,8 +424,10 @@ GoRouter buildRouter({
                     parentNavigatorKey: appRootNavigatorKey,
                     path: 'body-weight',
                     builder: (_, s) => BlocProvider(
-                      create: (_) =>
-                          BodyWeightCubit(ServiceLocator.bodyWeightRepository!),
+                      create: (_) => BodyWeightCubit(
+                        ServiceLocator.bodyWeightRepository!,
+                        dataChanges: ServiceLocator.bodyWeightDataChanges,
+                      ),
                       child: const BodyWeightScreen(),
                     ),
                   ),

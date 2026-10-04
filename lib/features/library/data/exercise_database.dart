@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 12;
+  static const _dbVersion = 13;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -38,12 +38,24 @@ class ExerciseDatabase {
   static const tableTrainingSessionExercises = 'training_session_exercises';
   static const tableTrainingSessionSets = 'training_session_sets';
 
+  /// Dziennik masy ciała — jeden wiersz na dzień (`date` = `YYYY-MM-DD`).
+  static const tableBodyWeightEntries = 'body_weight_entries';
+
   /// Klucz → wartość dla silników synchronizacji (np. znacznik ostatniego
   /// pobrania sesji). Baza jest per użytkownik, więc stan też.
   static const tableSyncState = 'sync_state';
 
   /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
   static const syncedTables = [
+    tableExercises,
+    tableTrainingPlans,
+    tableTrainingSessions,
+    tableBodyWeightEntries,
+  ];
+
+  /// Tabele, którym migracja v9 dodała `sync_error`. Zamrożone — nowsze
+  /// tabele z [syncedTables] w bazie v8 jeszcze nie istnieją.
+  static const _v9SyncedTables = [
     tableExercises,
     tableTrainingPlans,
     tableTrainingSessions,
@@ -165,10 +177,13 @@ class ExerciseDatabase {
                AND (s.pending_op = 'delete' OR EXISTS (
                  SELECT 1 FROM $tableTrainingSessionExercises e
                  WHERE e.session_local_id = s.local_id
-               ))) AS pending,
+               )))
+          + (SELECT COUNT(*) FROM $tableBodyWeightEntries
+             WHERE pending_op IS NOT NULL AND sync_error IS NULL) AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;
@@ -270,6 +285,21 @@ class ExerciseDatabase {
     await _createTrainingSessionTables(db);
     await _createPerformanceIndexes(db);
     await _createSyncStateTable(db);
+    await _createBodyWeightTable(db);
+  }
+
+  /// `pending_op`: `upsert` albo `delete` (nagrobek, ukryty w odczytach).
+  /// `updated_at` pozwala wysyłce rozpoznać edycję zrobioną w trakcie żądania.
+  Future<void> _createBodyWeightTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tableBodyWeightEntries (
+        date TEXT PRIMARY KEY NOT NULL,
+        weight_kg REAL NOT NULL,
+        updated_at INTEGER NOT NULL,
+        pending_op TEXT,
+        sync_error TEXT
+      )
+    ''');
   }
 
   Future<void> _createSyncStateTable(Database db) async {
@@ -516,7 +546,7 @@ class ExerciseDatabase {
       );
     }
     if (oldVersion < 9) {
-      for (final table in syncedTables) {
+      for (final table in _v9SyncedTables) {
         await _addColumnIfMissing(
           db,
           table: table,
@@ -561,6 +591,9 @@ class ExerciseDatabase {
         column: 'note',
         definition: 'TEXT',
       );
+    }
+    if (oldVersion < 13) {
+      await _createBodyWeightTable(db);
     }
   }
 

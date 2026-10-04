@@ -51,6 +51,8 @@ import '../../features/training/domain/services/rest_timer_notification_settings
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
 import '../../features/profile/data/api_body_weight_repository.dart';
 import '../../features/profile/data/api_profile_repository.dart';
+import '../../features/profile/data/offline_first_body_weight_repository.dart';
+import '../../features/profile/data/sync/body_weight_sync_engine.dart';
 import '../../features/profile/domain/repositories/body_weight_repository.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 
@@ -108,9 +110,14 @@ class ServiceLocator {
   static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
 
-  /// Dziennik masy ciała — tylko online, jak dane o sobie. `null` przed
-  /// [init] (testy bez API) — karty i zapisy wagi wtedy się pomijają.
-  static BodyWeightRepository? bodyWeightRepository;
+  /// Dziennik masy ciała w bazie konta (offline-first). `null` bez
+  /// zalogowanego użytkownika (i w testach bez bazy) — karty i zapisy wagi
+  /// wtedy się pomijają.
+  static BodyWeightRepository? get bodyWeightRepository =>
+      _bodyWeightRepository;
+  static BodyWeightRepository? _bodyWeightRepository;
+  static BodyWeightSyncEngine? _bodyWeightSyncEngine;
+  static late final ApiBodyWeightRepository _bodyWeightRemote;
   static ApiProfileRepository? _apiProfileRepository;
   static final profileRefreshTick = ValueNotifier(0);
 
@@ -124,6 +131,7 @@ class ServiceLocator {
   static final _exerciseDataChanges = ValueNotifier<int>(0);
   static final _trainingPlanDataChanges = ValueNotifier<int>(0);
   static final _trainingSessionDataChanges = ValueNotifier<int>(0);
+  static final _bodyWeightDataChanges = ValueNotifier<int>(0);
 
   /// Stan synchronizacji dla wskaźnika w nagłówkach. Przeżywa zmianę konta.
   static ValueListenable<SyncStatus> get syncStatus => _syncStatus;
@@ -132,6 +140,7 @@ class ServiceLocator {
   /// z bazy, zamiast czekać na ponowne wejście.
   static Listenable get exerciseDataChanges => _exerciseDataChanges;
   static Listenable get trainingPlanDataChanges => _trainingPlanDataChanges;
+  static Listenable get bodyWeightDataChanges => _bodyWeightDataChanges;
 
   /// Tylko zakończone lub anulowane sesje — zapis w trakcie treningu nie
   /// odświeża historii co serię.
@@ -236,7 +245,7 @@ class ServiceLocator {
     final apiProfileRepository = ApiProfileRepository(apiClient);
     _apiProfileRepository = apiProfileRepository;
     profileRepository = apiProfileRepository;
-    bodyWeightRepository = ApiBodyWeightRepository(apiClient);
+    _bodyWeightRemote = ApiBodyWeightRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
@@ -311,6 +320,9 @@ class ServiceLocator {
     _trainingPlanSyncEngine?.stop();
     _trainingSessionSyncEngine?.stop();
     _trainingSessionSyncEngine = null;
+    _bodyWeightSyncEngine?.stop();
+    _bodyWeightSyncEngine = null;
+    _bodyWeightRepository = null;
     _trainingSessionRepository = null;
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
@@ -346,9 +358,21 @@ class ServiceLocator {
       localDb: database,
       onDataChanged: () => _trainingSessionDataChanges.value++,
     );
+    final bodyWeightSync = BodyWeightSyncEngine(
+      remote: _bodyWeightRemote,
+      localDb: database,
+      onDataChanged: () => _bodyWeightDataChanges.value++,
+      // Serwer ustawia najnowszy pomiar jako aktualną wagę profilu.
+      onUploaded: requestProfileRefresh,
+    );
     _exerciseSyncEngine = exerciseSync;
     _trainingPlanSyncEngine = planSync;
     _trainingSessionSyncEngine = sessionSync;
+    _bodyWeightSyncEngine = bodyWeightSync;
+    _bodyWeightRepository = OfflineFirstBodyWeightRepository(
+      localDb: database,
+      syncEngine: bodyWeightSync,
+    );
 
     _exerciseRepository = OfflineFirstExerciseRepository(
       localDb: database,
@@ -387,13 +411,14 @@ class ServiceLocator {
     );
 
     // Zastępuje osobne „bootstrapy” silników: pełny cykl w kolejności
-    // ćwiczenia → plany → sesje, sync po powrocie sieci i aplikacji,
-    // a ponawianie jako zabezpieczenie.
+    // ćwiczenia → plany → sesje → masa ciała, sync po powrocie sieci
+    // i aplikacji, a ponawianie jako zabezpieczenie.
     _syncCoordinator = SyncCoordinator(
       localDb: database,
       exercises: exerciseSync,
       plans: planSync,
       sessions: sessionSync,
+      bodyWeight: bodyWeightSync,
       status: _syncStatus,
       networkAvailability: networkAvailabilityChanges(),
     )..start();
