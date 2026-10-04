@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
+import '../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
 import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
@@ -19,6 +20,7 @@ class TrainingStatsScreen extends StatelessWidget {
     this.dataChanges,
     this.clock,
     this.weeklyGoalLoader,
+    this.bodyWeightRepository,
   });
 
   /// Test seam; domyślnie [ServiceLocator.trainingStatsRepository].
@@ -30,6 +32,10 @@ class TrainingStatsScreen extends StatelessWidget {
 
   /// Test seam; domyślnie cel z profilu ([loadOwnWeeklyGoal]).
   final Future<int?> Function()? weeklyGoalLoader;
+
+  /// Karta „Masa ciała”; router podaje [ServiceLocator.bodyWeightRepository],
+  /// testy mogą ją pominąć.
+  final BodyWeightRepository? bodyWeightRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +66,7 @@ class TrainingStatsScreen extends StatelessWidget {
                 Expanded(
                   child: TrainingStatsView(
                     onStartWorkout: () => context.go('/app/training'),
+                    bodyWeightRepository: bodyWeightRepository,
                   ),
                 ),
               ],

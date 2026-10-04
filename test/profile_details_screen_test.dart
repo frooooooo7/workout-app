@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
 import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
@@ -8,6 +9,8 @@ import 'package:gym/features/profile/domain/repositories/profile_repository.dart
 import 'package:gym/features/profile/presentation/bloc/profile_details_cubit.dart';
 import 'package:gym/features/profile/presentation/screens/profile_details_screen.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_details_fields.dart';
+
+import 'body_weight_test.dart' show FakeBodyWeightRepository;
 
 const _profile = UserProfile(
   id: 'me',
@@ -107,5 +110,31 @@ void main() {
     );
     expect(find.byType(ProfileDetailsScreen), findsNothing);
     expect((result! as UserProfile).details?.weightKg, isNull);
+  });
+
+  test('a changed weight is also logged as today\'s measurement', () async {
+    final bodyWeight = FakeBodyWeightRepository();
+    final cubit = ProfileDetailsCubit(
+      _FakeRepository(),
+      bodyWeight: bodyWeight,
+    );
+    await cubit.load();
+
+    cubit.heightChanged(181);
+    await cubit.save();
+    expect(bodyWeight.saved, isEmpty);
+
+    final edit = ProfileDetailsCubit(_FakeRepository(), bodyWeight: bodyWeight);
+    await edit.load();
+    edit.weightChanged(82.5);
+    await edit.save();
+
+    final now = DateTime.now();
+    expect(bodyWeight.saved, [
+      BodyWeightEntry(
+        date: DateTime(now.year, now.month, now.day),
+        weightKg: 82.5,
+      ),
+    ]);
   });
 }

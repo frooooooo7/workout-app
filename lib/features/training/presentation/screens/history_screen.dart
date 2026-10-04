@@ -153,6 +153,8 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                     Expanded(
                       child: TrainingStatsView(
                         onStartWorkout: () => context.go('/app/training'),
+                        bodyWeightRepository:
+                            ServiceLocator.bodyWeightRepository,
                       ),
                     ),
                   ] else ...[

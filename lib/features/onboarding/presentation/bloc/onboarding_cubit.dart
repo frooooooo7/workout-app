@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../profile/domain/models/profile_details.dart';
 import '../../../profile/domain/models/user_profile.dart';
+import '../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../profile/domain/repositories/profile_repository.dart';
 import '../../../profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../../profile/presentation/bloc/edit_profile_state.dart';
@@ -17,10 +18,13 @@ import 'onboarding_state.dart';
 /// zapisu. Ostatni krok oznacza onboarding jako zakończony.
 class OnboardingCubit extends Cubit<OnboardingState>
     with ProfileDetailsDraftEditor<OnboardingState> {
-  OnboardingCubit(this._repository, {this.onCompleted})
+  OnboardingCubit(this._repository, {this.onCompleted, this.bodyWeight})
     : super(const OnboardingState(loading: true));
 
   final ProfileRepository _repository;
+
+  /// Podana waga staje się pierwszym pomiarem w dzienniku masy ciała.
+  final BodyWeightRepository? bodyWeight;
 
   /// Po zakończeniu na serwerze — np. zapis flagi w sesji. Błąd tutaj nie
   /// cofa zakończenia.
@@ -142,6 +146,11 @@ class OnboardingCubit extends Cubit<OnboardingState>
     final details = merge(saved);
     if (details == saved) return;
     final updated = await _repository.updateProfile(details: details);
+    await logProfileWeightChange(
+      bodyWeight,
+      previous: saved.weightKg,
+      current: updated.details?.weightKg,
+    );
     if (isClosed) return;
     emit(state.copyWith(profile: updated));
   }

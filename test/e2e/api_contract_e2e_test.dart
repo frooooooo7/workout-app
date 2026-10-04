@@ -21,7 +21,9 @@ import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/feed/data/api_feed_repository.dart';
 import 'package:gym/features/library/data/exercise_remote_data_source.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
+import 'package:gym/features/profile/data/api_body_weight_repository.dart';
 import 'package:gym/features/profile/data/api_profile_repository.dart';
+import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
 import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/training/data/training_history_remote_data_source.dart';
 import 'package:gym/features/training/data/training_plan_remote_data_source.dart';
@@ -604,6 +606,39 @@ void main() {
         await alice.api.get('/auth/me', auth: true) as Map<String, dynamic>,
       );
       expect(me.onboardingCompleted, isTrue);
+    });
+
+    test('body weight log: upsert, current weight, delete', () async {
+      final repo = ApiBodyWeightRepository(alice.api);
+      final profiles = ApiProfileRepository(alice.api);
+      expect(await repo.list(), isEmpty);
+
+      await repo.save(DateTime(2026, 9, 1), 63.04);
+      await repo.save(DateTime(2026, 8, 1), 64);
+      final latest = await repo.save(DateTime(2026, 9, 20), 62.5);
+      expect(
+        latest,
+        BodyWeightEntry(date: DateTime(2026, 9, 20), weightKg: 62.5),
+      );
+      await repo.save(DateTime(2026, 9, 20), 62.2);
+
+      expect(await repo.list(), [
+        BodyWeightEntry(date: DateTime(2026, 8, 1), weightKg: 64),
+        BodyWeightEntry(date: DateTime(2026, 9, 1), weightKg: 63),
+        BodyWeightEntry(date: DateTime(2026, 9, 20), weightKg: 62.2),
+      ]);
+      expect((await profiles.getOwnProfile()).details?.weightKg, 62.2);
+
+      await repo.delete(DateTime(2026, 9, 20));
+      // Brak pomiaru (404) też jest sukcesem.
+      await repo.delete(DateTime(2026, 9, 20));
+      expect((await profiles.getOwnProfile()).details?.weightKg, 63);
+      expect(await ApiBodyWeightRepository(bob.api).list(), isEmpty);
+
+      await expectLater(
+        repo.save(DateTime.now().add(const Duration(days: 3)), 60),
+        throwsA(isApiError('invalid_date', status: 400)),
+      );
     });
 
     test('user search + suggested', () async {

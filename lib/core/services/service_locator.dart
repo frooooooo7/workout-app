@@ -49,7 +49,9 @@ import '../../features/training/domain/repositories/training_session_repository.
 import '../../features/training/domain/repositories/training_stats_repository.dart';
 import '../../features/training/domain/services/rest_timer_notification_settings.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
+import '../../features/profile/data/api_body_weight_repository.dart';
 import '../../features/profile/data/api_profile_repository.dart';
+import '../../features/profile/domain/repositories/body_weight_repository.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 
 class ServiceLocator {
@@ -105,6 +107,10 @@ class ServiceLocator {
   static final feedPostEvents = FeedPostEvents();
   static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
+
+  /// Dziennik masy ciała — tylko online, jak dane o sobie. `null` przed
+  /// [init] (testy bez API) — karty i zapisy wagi wtedy się pomijają.
+  static BodyWeightRepository? bodyWeightRepository;
   static ApiProfileRepository? _apiProfileRepository;
   static final profileRefreshTick = ValueNotifier(0);
 
@@ -230,6 +236,7 @@ class ServiceLocator {
     final apiProfileRepository = ApiProfileRepository(apiClient);
     _apiProfileRepository = apiProfileRepository;
     profileRepository = apiProfileRepository;
+    bodyWeightRepository = ApiBodyWeightRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
