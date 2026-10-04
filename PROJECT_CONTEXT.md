@@ -173,7 +173,7 @@ CI backendu: GitHub Actions (typecheck, Vitest, build, smoke E2E na Postgresie).
 | Token JWT | `flutter_secure_storage` |
 | Offline DB | **sqflite** (+ `sqflite_common_ffi_web` na weba, `sqflite_common_ffi` w testach) |
 | DI | własny statyczny `ServiceLocator` (nie get_it) |
-| Inne | image_picker, flutter_svg, uuid, shared_preferences, flutter_local_notifications + timezone (timer odpoczynku), connectivity_plus (sync po powrocie sieci) |
+| Inne | image_picker, flutter_svg, uuid, shared_preferences, flutter_local_notifications + timezone (timer odpoczynku, przypomnienia o treningu; wspólna inicjalizacja w `core/notifications/local_notifications.dart`), connectivity_plus (sync po powrocie sieci) |
 | Lint | flutter_lints ^6 |
 
 Stack docelowy w `PROJECT.md` (push, Sentry) może się rozszerzać — **bez** map, GPS i aktywności cardio.
@@ -225,7 +225,7 @@ Konwencja w feature: `domain/models/` + `domain/repositories/` (kontrakty), `dat
 | `/app/library` | LibraryScreen, pick exercise |
 | `/app/profile` (+ nested) | profil, `settings`, `edit` (EditProfileScreen: awatar z galerii/aparatu, imię, nazwisko, nick, bio), `details` (ProfileDetailsScreen — „Dane i cele”, prywatne), `body-weight` (BodyWeightScreen — dziennik masy ciała), `body-measurements` (BodyMeasurementsScreen — obwody i % tkanki tłuszczowej), `following` / `followers`, `find-people` |
 | `/app/profile/settings/change-password` | ChangePasswordScreen (`ChangePasswordCubit`; walidacja jak przy rejestracji + powtórzenie + inne niż obecne) |
-| `/app/profile/settings/notifications` | NotificationSettingsScreen — przełącznik „Powiadomienie o końcu przerwy” (`shared_preferences`, klucz `rest_timer_notifications_enabled`) |
+| `/app/profile/settings/notifications` | NotificationSettingsScreen — „Przypomnienie o treningu” (dni tygodnia + godzina, `WorkoutReminderCubit`, klucze `workout_reminder_*`) oraz przełącznik „Powiadomienie o końcu przerwy” (`shared_preferences`, klucz `rest_timer_notifications_enabled`) |
 | `/app/profile/settings/help` | HelpScreen — statyczne FAQ |
 | `/app/profile/settings/delete-account` | DeleteAccountScreen (`DeleteAccountCubit`: hasło + checkbox, ostrzeżenie o niewysłanych zmianach) |
 | `/app/users/:userId` | profil innego użytkownika (przycisk Obserwuj, „Obserwuje Cię”) |
@@ -248,6 +248,7 @@ Konto i sesja (`features/account/`, `core/session/session_manager.dart`): podtra
 - **Rotacja tokenu:** zmiana hasła i „wyloguj wszędzie” działają w `SessionManager.guardTokenRotation` — 401 na stary token przychodzące w trakcie są oceniane dopiero po zapisaniu nowego tokenu (`applyRefreshedSession`: `TokenStorage` + `currentUser` z tym samym id, bez przebudowy bazy).
 - **Usunięcie konta:** `POST /auth/delete-account` `{password}` (klient nie używa `DELETE` z treścią — proxy potrafią ją gubić) → po 204 koniec sesji (komunikat „Konto zostało usunięte.” — baner na `/login` i `/login/form`), zamknięcie i usunięcie pliku `gym_library_<userId>.db` (ćwiczenia, plany, sesje, kolejka sync, cache historii), kluczy `shared_preferences` z sufiksem `_<userId>` (cache feedu) oraz plików awatarów konta w cache obrazków (adresy zapamiętane w tej sesji aplikacji przez `ApiProfileRepository.ownAvatarUrlsFor`) — `LocalAccountDataCleaner`. Ustawienia urządzenia i pozostałe obrazki (ćwiczenia, inne osoby) zostają.
 - **Powiadomienie timera:** `ServiceLocator.restTimerScheduler` to `SettingsAwareRestTimerScheduler` — przy wyłączonym ustawieniu nie planuje powiadomienia (timer w aplikacji działa); wyłączenie odwołuje zaplanowane.
+- **Przypomnienia o treningu:** `ServiceLocator.workoutReminderScheduler` (`WorkoutReminderNotificationScheduler`) planuje jedno cotygodniowe powiadomienie na każdy wybrany dzień (`DateTimeComponents.dayOfWeekAndTime`, id 9101–9107, kanał `workout_reminder`, bez dokładnych alarmów). Ustawienie urządzenia, nie konta; przy starcie aplikacji aktywne przypomnienia są planowane ponownie.
 - **Offline-first:** po zalogowaniu otwierana jest baza per-user `gym_library_<userId>.db` (schema **v13**). Scope bazy jest przebudowywany tylko przy zmianie **id** użytkownika (odświeżenie `/auth/me` go nie rusza); wylogowanie ustawia `currentUser = null` i zamyka bazę (z ostrzeżeniem o niewysłanych zmianach).
   - Repozytoria `OfflineFirst*Repository` zapisują lokalnie i od razu wołają `flush`; odczyty wołają `pullIfDue` (najwyżej raz na 30 s).
   - Silniki (`ExerciseSyncEngine`, `TrainingPlanSyncEngine`, `TrainingSessionSyncEngine`, `BodyWeightSyncEngine`) dziedziczą po `core/sync/SyncEngineBase` (kolejka, zlewanie zdublowanych żądań, licznik aktywności). Pull **nie nadpisuje** wierszy z `pending_op`; rekordy utworzone offline są parowane po `clientId`; edycja w trakcie żądania zostaje jako `update`.
@@ -287,7 +288,7 @@ Mappery DB↔domain: `exercise_dto.dart`, `training_plan_local_mapper.dart`, `tr
 - Platformy: `android/`, `ios/`, `web/`, `linux/`, `macos/`, `windows/`.
 - Android: uprawnienia pod rest-timer (exact alarm, boot, full-screen intent), package `com.gym.app.gym`, Java 17.
 - Web: `sqflite_sw.js` + `sqlite3.wasm` (WASM SQLite).
-- Testy konta/sesji: `session_manager_test.dart`, `api_account_repository_test.dart`, `change_password_test.dart`, `delete_account_screen_test.dart`, `profile_settings_screen_test.dart`, `notification_settings_test.dart`, `local_account_data_cleaner_test.dart`.
+- Testy konta/sesji: `session_manager_test.dart`, `api_account_repository_test.dart`, `change_password_test.dart`, `delete_account_screen_test.dart`, `profile_settings_screen_test.dart`, `notification_settings_test.dart`, `workout_reminder_test.dart`, `local_account_data_cleaner_test.dart`.
 - **Testy E2E** (`test/e2e/`, pomijane bez `E2E_BASE_URL`): `api_contract_e2e_test.dart` — prawdziwy `ApiClient` + remote data sources / repozytoria API przeciw działającemu backendowi (rejestracja, ćwiczenia, plany, sesje, follow, feed, kudosy, komentarze, profil, search, historia, usuwanie + `deleted[]` + 410, uploady, zmiana hasła / `token_revoked`, logout-all, usunięcie konta); `offline_sync_e2e_test.dart` — dwa „urządzenia” (osobne bazy sqflite) z prawdziwymi silnikami sync. Uruchomienie: `flutter test test/e2e --dart-define=E2E_BASE_URL=http://localhost:3102` (backend na bazie `gym_smoke`; limit rejestracji 10/h na IP, każde uruchomienie tworzy 3 konta).
 - **Integracyjny UI** (`integration_test/workout_flow_test.dart`): prawdziwe drzewo aplikacji (router, ekrany, cubity, repozytoria offline-first na sqflite ffi) z podmienionym HTTP: logowanie → start treningu z planu → ukończenie serii → zakończenie → historia → menu szczegółów. `flutter test integration_test -d flutter-tester` (CI) albo `-d windows` (wymaga Visual Studio C++).
 - **CI** (`.github/workflows/ci.yml`): `analyze-test` (pub get, analyze, test, integration_test na flutter-tester), `build-web` (`flutter build web --release`), `e2e` tylko przy zmiennej repozytorium `E2E_BASE_URL`.
@@ -366,6 +367,7 @@ CI: `.github/workflows/ci.yml` (sekcja 4.6).
 - biblioteka ćwiczeń (CRUD, ulubione, upload obrazków, offline sync),
 - plany treningowe (CRUD, sync),
 - sesje na żywo z timerem odpoczynku (lokalne powiadomienia, wyłączalne w ustawieniach),
+- przypomnienia o treningu w wybrane dni tygodnia o wybranej godzinie,
 - historia treningów (timeline, filtry, paginacja, cache offline) + statystyki tygodnia/miesiąca liczone lokalnie,
 - **faza 1** — profil social: edycja profilu (imię, nazwisko, bio, awatar z uploadem), obserwowanie (listy własne i innych użytkowników, wyszukiwarka, profil innej osoby),
 - **faza 2** — feed społecznościowy (zakładka Aktywność): posty moje i obserwowanych, kudosy, komentarze, szczegóły posta, propozycje osób,
