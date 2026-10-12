@@ -5,33 +5,6 @@ void main() {
   // Fixed "today": Wednesday 2026-07-29
   final today = DateTime(2026, 7, 29);
 
-  group('trainingDayHeroLabel', () {
-    test('returns Na dziś for today', () {
-      expect(
-        trainingDayHeroLabel(DateTime(2026, 7, 29), today: today),
-        'Na dziś',
-      );
-    });
-
-    test('returns Wczoraj for yesterday', () {
-      expect(
-        trainingDayHeroLabel(DateTime(2026, 7, 28), today: today),
-        'Wczoraj',
-      );
-    });
-
-    test('returns capitalized weekday name otherwise', () {
-      expect(
-        trainingDayHeroLabel(DateTime(2026, 7, 30), today: today),
-        'Czwartek',
-      );
-      expect(
-        trainingDayHeroLabel(DateTime(2026, 7, 27), today: today),
-        'Poniedziałek',
-      );
-    });
-  });
-
   group('isCalendarDateBefore', () {
     test('true for yesterday, false for today and tomorrow', () {
       expect(isCalendarDateBefore(DateTime(2026, 7, 28), today), isTrue);

@@ -4,14 +4,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_tab_header.dart';
+import '../../../auth/domain/models/auth_models.dart';
 import '../bloc/training_history_cubit.dart';
+import '../bloc/training_home_cubit.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
+import '../bloc/weekly_goal_source.dart';
 import '../widgets/training_header.dart';
 import '../widgets/training_session_tab.dart';
-import 'ongoing_workout_screen.dart';
 
 class TrainingScreen extends StatelessWidget {
   const TrainingScreen({super.key});
@@ -30,6 +31,13 @@ class TrainingScreen extends StatelessWidget {
           create: (_) => TrainingHistoryCubit(
             ServiceLocator.trainingHistoryRepository,
             dataChanges: ServiceLocator.trainingSessionDataChanges,
+          ),
+        ),
+        BlocProvider(
+          create: (_) => TrainingHomeCubit(
+            ServiceLocator.trainingStatsRepository,
+            dataChanges: ServiceLocator.trainingSessionDataChanges,
+            weeklyGoalLoader: loadOwnWeeklyGoal,
           ),
         ),
       ],
@@ -71,6 +79,7 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
       context.read<TrainingSessionCubit>().refresh();
       context.read<TrainingPlansCubit>().refresh();
       context.read<TrainingHistoryCubit>().refresh();
+      context.read<TrainingHomeCubit>().refresh();
     }
   }
 
@@ -91,33 +100,13 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              BlocBuilder<TrainingSessionCubit, TrainingSessionState>(
-                builder: (context, sessionState) {
-                  final active = sessionState.activeSession;
-                  return TrainingHeader(
-                    activePlanName: active?.planName,
-                    onActiveTap: active == null
-                        ? null
-                        : () {
-                            final cubit = context.read<TrainingSessionCubit>();
-                            context.push(
-                              '/app/training/ongoing-workout',
-                              extra: OngoingWorkoutArgs(
-                                initialSession: active,
-                                sessionCubit: cubit,
-                              ),
-                            );
-                          },
-                    onLibraryTap: () {
-                      context.push('/app/training/library');
-                    },
-                    onAddTap: () {
-                      context.push('/app/training/pick-activity-type');
-                    },
-                  );
-                },
+              ValueListenableBuilder<AuthUser?>(
+                valueListenable: ServiceLocator.currentUser,
+                builder: (context, user, _) => TrainingHeader(
+                  firstName: user?.firstName,
+                  onLibraryTap: () => context.push('/app/training/library'),
+                ),
               ),
-              const SizedBox(height: AppSpacing.sm),
               const Expanded(child: TrainingSessionTab()),
             ],
           ),
