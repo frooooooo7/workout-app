@@ -13,6 +13,7 @@ class BodyMeasurementsState {
     this.loading = false,
     this.loadError,
     this.selectedField = BodyMeasurementField.waist,
+    this.comparedDates,
     this.saving = false,
     this.message,
     this.messageId = 0,
@@ -25,6 +26,9 @@ class BodyMeasurementsState {
 
   /// Pomiar pokazany na wykresie.
   final BodyMeasurementField selectedField;
+
+  /// Wpisy wybrane do porównania; `null` — pierwszy z ostatnim.
+  final ({DateTime from, DateTime to})? comparedDates;
   final bool saving;
 
   /// Komunikat do pokazania raz (snackbar) — nowy przy każdej zmianie [messageId].
@@ -37,6 +41,7 @@ class BodyMeasurementsState {
     String? loadError,
     bool clearLoadError = false,
     BodyMeasurementField? selectedField,
+    ({DateTime from, DateTime to})? comparedDates,
     bool? saving,
     String? message,
   }) {
@@ -45,6 +50,7 @@ class BodyMeasurementsState {
       loading: loading ?? this.loading,
       loadError: clearLoadError ? null : (loadError ?? this.loadError),
       selectedField: selectedField ?? this.selectedField,
+      comparedDates: comparedDates ?? this.comparedDates,
       saving: saving ?? this.saving,
       message: message ?? this.message,
       messageId: message == null ? messageId : messageId + 1,
@@ -52,8 +58,8 @@ class BodyMeasurementsState {
   }
 }
 
-/// Dziennik pomiarów ciała: lista wpisów, pomiar na wykresie, dodawanie,
-/// edycja i usuwanie.
+/// Dziennik pomiarów ciała: lista wpisów, porównywane daty, pomiar na
+/// wykresie, dodawanie, edycja i usuwanie.
 class BodyMeasurementsCubit extends Cubit<BodyMeasurementsState> {
   /// [dataChanges] — sygnał synchronizacji; wpisy z innych urządzeń
   /// pojawiają się bez ponownego wchodzenia na ekran.
@@ -128,6 +134,10 @@ class BodyMeasurementsCubit extends Cubit<BodyMeasurementsState> {
 
   void selectField(BodyMeasurementField field) =>
       emit(state.copyWith(selectedField: field));
+
+  /// Porównuje wpis z [from] z wpisem z [to].
+  void compare(DateTime from, DateTime to) =>
+      emit(state.copyWith(comparedDates: (from: from, to: to)));
 
   /// Zapisuje wpis (nowy albo zastępujący ten z tego dnia).
   Future<bool> save(BodyMeasurementEntry entry) async {
