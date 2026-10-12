@@ -5,36 +5,55 @@ import 'package:gym/features/training/presentation/bloc/training_history_cubit.d
 import 'package:gym/features/training/presentation/widgets/training_last_session_section.dart';
 
 void main() {
-  testWidgets('shows last session with actions', (tester) async {
-    final item = _session('s1', 'Push Power', '+320 kg objętości');
+  testWidgets('shows the last session in one row and opens details', (
+    tester,
+  ) async {
+    final item = _session('s1', 'Push Power', volumeKg: 8290);
     TrainingSessionListItem? opened;
-    TrainingSessionListItem? repeated;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingLastSessionSection(
             state: TrainingHistoryState(loading: false, items: [item]),
+            recordsBySession: const {'s1': 2},
             onOpenDetails: (value) => opened = value,
-            onRepeat: (value) => repeated = value,
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    expect(find.text('Push Power'), findsOneWidget);
-    expect(find.text('Czas'), findsOneWidget);
-    expect(find.text('Ćwiczenia'), findsOneWidget);
-    expect(find.text('Serie'), findsOneWidget);
-    expect(find.text('Klatka'), findsOneWidget);
+    expect(find.text('Ostatnio: Push Power'), findsOneWidget);
+    expect(find.text('pn 27 lip · 52 min · 18 serii'), findsOneWidget);
+    expect(find.text('8,29 t'), findsOneWidget);
+    expect(find.text('2 rekordy'), findsOneWidget);
+    expect(find.text('P'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('last-session-details')));
     await tester.pump();
     expect(opened, same(item));
+  });
 
-    await tester.tap(find.byKey(const ValueKey('last-session-repeat')));
-    await tester.pump();
-    expect(repeated, same(item));
+  testWidgets('omits volume and records when unknown', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrainingLastSessionSection(
+            state: TrainingHistoryState(
+              loading: false,
+              items: [_session('s1', 'Pull')],
+            ),
+            onOpenDetails: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ostatnio: Pull'), findsOneWidget);
+    expect(find.byKey(const ValueKey('last-session-volume')), findsNothing);
+    expect(find.textContaining('rekord'), findsNothing);
   });
 
   testWidgets('shows empty state when there are no completed sessions', (
@@ -46,7 +65,6 @@ void main() {
           body: TrainingLastSessionSection(
             state: TrainingHistoryState(loading: false, items: const []),
             onOpenDetails: (_) {},
-            onRepeat: (_) {},
           ),
         ),
       ),
@@ -58,38 +76,44 @@ void main() {
     );
   });
 
-  test('relativeTrainingDayLabel formats recent days', () {
-    final now = DateTime(2026, 7, 29);
-    expect(
-      relativeTrainingDayLabel(DateTime(2026, 7, 29, 10), now: now),
-      'Dzisiaj',
+  testWidgets('shows an error row when loading failed', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrainingLastSessionSection(
+            state: TrainingHistoryState(loading: false, error: 'offline'),
+            onOpenDetails: (_) {},
+          ),
+        ),
+      ),
     );
+
     expect(
-      relativeTrainingDayLabel(DateTime(2026, 7, 28, 10), now: now),
-      'Wczoraj',
+      find.text('Nie udało się załadować ostatniego treningu.'),
+      findsOneWidget,
     );
-    expect(
-      relativeTrainingDayLabel(DateTime(2026, 7, 27, 10), now: now),
-      '2 dni temu',
-    );
+  });
+
+  test('volume formatter keeps one unit while counting up', () {
+    final tonnes = volumeFormatterFor(8290);
+    expect(tonnes(8290), '8,29 t');
+    expect(tonnes(500), '0,5 t');
+    expect(volumeFormatterFor(850)(850), '850 kg');
   });
 }
 
-TrainingSessionListItem _session(String id, String name, String highlight) {
+TrainingSessionListItem _session(String id, String name, {double? volumeKg}) {
   return TrainingSessionListItem(
     id: id,
-    startedAt: DateTime.utc(2026, 7, 27, 16),
-    endedAt: DateTime.utc(2026, 7, 27, 17),
+    startedAt: DateTime(2026, 7, 27, 16),
+    endedAt: DateTime(2026, 7, 27, 17),
     durationSec: 3120,
     status: TrainingSessionStatus.completed,
     plan: TrainingPlanSummary(id: 'p-$id', name: name),
     exercisesCount: 6,
     completedSetsCount: 18,
     hasNote: false,
-    progressHighlight: TrainingProgressHighlight(
-      type: TrainingProgressHighlightType.volumeIncrease,
-      label: highlight,
-    ),
-    updatedAt: DateTime.utc(2026, 7, 27, 17),
+    totalVolumeKg: volumeKg,
+    updatedAt: DateTime(2026, 7, 27, 17),
   );
 }

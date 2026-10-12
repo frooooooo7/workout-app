@@ -24,7 +24,6 @@ class TrainingHistoryState {
     DateTime? focusedMonth,
     this.calendarSessions = const [],
     this.isCalendarLoading = false,
-    this.weekCompletedWeekdays = const {},
   }) : focusedMonth = focusedMonth ?? DateTime(DateTime.now().year, DateTime.now().month, 1);
 
   final List<TrainingSessionListItem> items;
@@ -41,9 +40,6 @@ class TrainingHistoryState {
   final DateTime focusedMonth;
   final List<TrainingSessionListItem> calendarSessions;
   final bool isCalendarLoading;
-
-  /// Weekdays (1–7) of the current week that already have a completed session.
-  final Set<int> weekCompletedWeekdays;
 
   TrainingHistoryState copyWith({
     List<TrainingSessionListItem>? items,
@@ -63,7 +59,6 @@ class TrainingHistoryState {
     DateTime? focusedMonth,
     List<TrainingSessionListItem>? calendarSessions,
     bool? isCalendarLoading,
-    Set<int>? weekCompletedWeekdays,
   }) {
     return TrainingHistoryState(
       items: items ?? this.items,
@@ -80,8 +75,6 @@ class TrainingHistoryState {
       focusedMonth: focusedMonth ?? this.focusedMonth,
       calendarSessions: calendarSessions ?? this.calendarSessions,
       isCalendarLoading: isCalendarLoading ?? this.isCalendarLoading,
-      weekCompletedWeekdays:
-          weekCompletedWeekdays ?? this.weekCompletedWeekdays,
     );
   }
 
@@ -102,8 +95,7 @@ class TrainingHistoryState {
         other.viewMode == viewMode &&
         other.focusedMonth == focusedMonth &&
         listEquals(other.calendarSessions, calendarSessions) &&
-        other.isCalendarLoading == isCalendarLoading &&
-        setEquals(other.weekCompletedWeekdays, weekCompletedWeekdays);
+        other.isCalendarLoading == isCalendarLoading;
   }
 
   @override
@@ -122,13 +114,12 @@ class TrainingHistoryState {
     focusedMonth,
     Object.hashAll(calendarSessions),
     isCalendarLoading,
-    Object.hashAll(weekCompletedWeekdays),
   );
 }
 
 class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
   /// [dataChanges] — sygnał synchronizacji sesji; trening wysłany na serwer
-  /// odświeża listę, znaczniki tygodnia i „ostatnią sesję”.
+  /// odświeża listę i „ostatnią sesję”.
   TrainingHistoryCubit(this._repository, {Listenable? dataChanges})
     : _dataChanges = dataChanges,
       super(TrainingHistoryState()) {
@@ -151,7 +142,6 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
   }
 
   Future<void> refresh() async {
-    unawaited(_loadCurrentWeekCompletion());
     if (state.viewMode == HistoryViewMode.calendar) {
       await loadCalendarSessions();
       return;
@@ -183,35 +173,6 @@ class TrainingHistoryCubit extends Cubit<TrainingHistoryState> {
     final nextMonth = DateTime(state.focusedMonth.year, state.focusedMonth.month + offset, 1);
     emit(state.copyWith(focusedMonth: nextMonth));
     unawaited(loadCalendarSessions());
-  }
-
-  /// Week markers cover the whole current week, so they cannot be derived from
-  /// the paginated [state.items] list.
-  Future<void> _loadCurrentWeekCompletion() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final weekStart = today.subtract(Duration(days: today.weekday - 1));
-    final weekEnd = weekStart.add(
-      const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
-    );
-    try {
-      final page = await _repository.getSessions(
-        limit: 50,
-        status: TrainingSessionStatus.completed,
-        from: weekStart,
-        to: weekEnd,
-      );
-      if (isClosed) return;
-      emit(
-        state.copyWith(
-          weekCompletedWeekdays: {
-            for (final item in page.items) item.startedAt.toLocal().weekday,
-          },
-        ),
-      );
-    } catch (_) {
-      // Markers are decorative — keep the last known value when offline.
-    }
   }
 
   Future<void> loadCalendarSessions() async {

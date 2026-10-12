@@ -450,7 +450,7 @@ class _NoSeenStore implements FeedSeenStore {
   Future<void> write(String userId, List<String> postIds) async {}
 }
 
-/// Historia liczy serię tygodni i rekordy sesji ze statystyk.
+/// Trening i Historia liczą serię tygodni i rekordy ze statystyk.
 class _FakeTrainingStatsRepository implements TrainingStatsRepository {
   @override
   Future<List<TrainingSession>> allCompletedSessions() async => const [];

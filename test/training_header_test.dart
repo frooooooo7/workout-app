@@ -3,21 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/presentation/widgets/training_header.dart';
 
 void main() {
-  testWidgets('allows the add button tooltip to be customized', (tester) async {
+  testWidgets('shows the date and greets by first name', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TrainingHeader(
-            addTooltip: 'Dodaj trening',
-            onAddTap: () {},
+            firstName: 'Damian',
+            today: DateTime(2026, 10, 15),
+            showSync: false,
           ),
         ),
       ),
     );
 
-    // Wskaźnik synchronizacji jest ostatni w pasku — szukamy po treści.
-    expect(find.byTooltip('Dodaj trening'), findsOneWidget);
-    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+    expect(find.text('CZWARTEK, 15 PAŹDZIERNIKA'), findsOneWidget);
+    expect(find.text('Cześć, Damian'), findsOneWidget);
+  });
+
+  testWidgets('falls back to a plain greeting without a name', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: TrainingHeader(showSync: false))),
+    );
+
+    expect(find.text('Cześć'), findsOneWidget);
   });
 
   testWidgets('shows library button and delegates taps', (tester) async {
@@ -27,15 +35,12 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: TrainingHeader(
+            showSync: false,
             onLibraryTap: () => libraryTapped = true,
-            onAddTap: () {},
           ),
         ),
       ),
     );
-
-    expect(find.byIcon(Icons.format_list_bulleted_rounded), findsNothing);
-    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.menu_book_rounded));
     await tester.pump();
