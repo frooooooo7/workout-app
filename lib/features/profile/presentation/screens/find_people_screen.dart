@@ -64,7 +64,7 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('ZNAJDŹ OSOBY')),
+      appBar: AppBar(title: const Text('Znajdź osoby')),
       body: FollowFailureListener(
         child: Column(
           children: [

@@ -82,7 +82,7 @@ class HelpScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('POMOC')),
+      appBar: AppBar(title: const Text('Pomoc')),
       body: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),

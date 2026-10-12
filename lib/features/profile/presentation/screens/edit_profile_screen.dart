@@ -69,7 +69,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('EDYTUJ PROFIL')),
+      appBar: AppBar(title: const Text('Edytuj profil')),
       body: BlocConsumer<EditProfileCubit, EditProfileState>(
         listenWhen: (previous, current) =>
             (!_seeded && current.initial != null) ||

@@ -32,7 +32,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('USUŃ KONTO')),
+      appBar: AppBar(title: const Text('Usuń konto')),
       body: SafeArea(
         child: BlocBuilder<DeleteAccountCubit, DeleteAccountState>(
           builder: (context, state) {

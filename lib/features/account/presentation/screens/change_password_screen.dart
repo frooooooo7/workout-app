@@ -38,7 +38,7 @@ class ChangePasswordScreen extends StatelessWidget {
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('ZMIANA HASŁA')),
+        appBar: AppBar(title: const Text('Zmiana hasła')),
         body: SafeArea(
           child: BlocBuilder<ChangePasswordCubit, ChangePasswordState>(
             builder: (context, state) {
