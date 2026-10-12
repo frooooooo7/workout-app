@@ -113,7 +113,8 @@ GoRouter buildRouter({
 
       // Świeże konto najpierw przechodzi onboarding profilu (chyba że
       // w tej sesji odłożyło go na później).
-      final needsOnboarding = !user.onboardingCompleted &&
+      final needsOnboarding =
+          !user.onboardingCompleted &&
           !ServiceLocator.isOnboardingDeferred(user.id);
       if (isProtectedRoute && needsOnboarding) return '/onboarding';
       if (isOnboarding && user.onboardingCompleted) return '/app/training';
@@ -441,7 +442,13 @@ GoRouter buildRouter({
                         ServiceLocator.bodyMeasurementsRepository!,
                         dataChanges: ServiceLocator.bodyMeasurementsDataChanges,
                       ),
-                      child: const BodyMeasurementsScreen(),
+                      child: BodyMeasurementsScreen(
+                        loadGender: () async =>
+                            (await _profileRepositoryForCurrentUser()
+                                    .getOwnProfile())
+                                .details
+                                ?.gender,
+                      ),
                     ),
                   ),
                   GoRoute(

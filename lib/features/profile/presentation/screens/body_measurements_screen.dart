@@ -1,40 +1,78 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
-import '../../../../core/widgets/app_action_sheet.dart';
-import '../../../training/presentation/widgets/stats/stats_format.dart';
+import '../../../../core/widgets/app_tab_header.dart';
+import '../../../body_highlighter/models/body_gender.dart';
 import '../../domain/models/body_measurement_entry.dart';
+import '../../domain/models/profile_details.dart';
 import '../bloc/body_measurements_cubit.dart';
+import '../utils/body_measurement_comparison.dart';
 import '../utils/body_measurement_format.dart';
-import '../widgets/body_measurement_chart.dart';
+import '../widgets/body_fat_summary.dart';
+import '../widgets/body_measurement_change_card.dart';
+import '../widgets/body_measurement_compare_pill.dart';
+import '../widgets/body_measurement_compare_sheet.dart';
 import '../widgets/body_measurement_entry_sheet.dart';
+import '../widgets/body_measurement_history_link.dart';
+import '../widgets/body_measurement_silhouette.dart';
+import '../widgets/body_measurements_empty_state.dart';
+import 'body_measurement_history_screen.dart';
 
 const kBodyMeasurementsRoute = '/app/profile/body-measurements';
 const bodyMeasurementsAddButtonKey = Key('body-measurements-add');
 
-/// Kafelek ostatniej wartości pomiaru (testy).
-Key bodyMeasurementTileKey(BodyMeasurementField field) =>
-    ValueKey('body-measurement-tile-${field.name}');
-
-/// Dziennik pomiarów ciała: ostatnie wartości ze zmianą, wykres wybranego
-/// pomiaru i historia wpisów. Wymaga [BodyMeasurementsCubit] w kontekście.
+/// Pomiary ciała: porównanie dwóch wpisów na sylwetce (obwody w miejscu
+/// pomiaru), tkanka tłuszczowa, zmiana wszystkich obwodów naraz i przejście
+/// do historii wpisów. Wymaga [BodyMeasurementsCubit] w kontekście.
 class BodyMeasurementsScreen extends StatefulWidget {
-  const BodyMeasurementsScreen({super.key, this.clock = DateTime.now});
+  const BodyMeasurementsScreen({
+    super.key,
+    this.clock = DateTime.now,
+    this.loadGender,
+  });
 
   final DateTime Function() clock;
+
+  /// Płeć z profilu — kobieca sylwetka dla [Gender.female]. Bez niej (albo
+  /// gdy się nie wczyta) sylwetka męska.
+  final Future<Gender?> Function()? loadGender;
 
   @override
   State<BodyMeasurementsScreen> createState() => _BodyMeasurementsScreenState();
 }
 
 class _BodyMeasurementsScreenState extends State<BodyMeasurementsScreen> {
+  /// `null`, dopóki płeć z profilu się wczytuje.
+  BodyGender? _bodyGender;
+
   @override
   void initState() {
     super.initState();
     context.read<BodyMeasurementsCubit>().load();
+    if (widget.loadGender == null) {
+      _bodyGender = BodyGender.male;
+    } else {
+      unawaited(_resolveGender(widget.loadGender!));
+    }
+  }
+
+  Future<void> _resolveGender(Future<Gender?> Function() load) async {
+    Gender? gender;
+    try {
+      gender = await load().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      /* offline albo brak profilu — sylwetka męska */
+    }
+    if (!mounted) return;
+    setState(
+      () => _bodyGender = gender == Gender.female
+          ? BodyGender.female
+          : BodyGender.male,
+    );
   }
 
   DateTime get _today {
@@ -44,6 +82,7 @@ class _BodyMeasurementsScreenState extends State<BodyMeasurementsScreen> {
 
   Future<void> _addEntry() async {
     final cubit = context.read<BodyMeasurementsCubit>();
+    if (cubit.state.saving) return;
     final entries = cubit.state.entries ?? const <BodyMeasurementEntry>[];
     final entry = await showBodyMeasurementEntrySheet(
       context,
@@ -56,45 +95,22 @@ class _BodyMeasurementsScreenState extends State<BodyMeasurementsScreen> {
     await cubit.save(entry);
   }
 
-  Future<void> _editEntry(BodyMeasurementEntry entry) async {
+  Future<void> _pickComparison(BodyMeasurementComparison comparison) async {
     final cubit = context.read<BodyMeasurementsCubit>();
-    final edited = await showBodyMeasurementEntrySheet(
+    final picked = await showBodyMeasurementCompareSheet(
       context,
-      initialDate: entry.date,
-      initial: entry,
-      clock: widget.clock,
+      dates: [for (final e in cubit.state.entries!) e.date],
+      from: comparison.from,
+      to: comparison.to,
+      today: _today,
     );
-    if (edited == null || edited == entry) return;
-    await cubit.save(edited);
+    if (picked == null) return;
+    cubit.compare(picked.from, picked.to);
   }
 
-  Future<void> _showEntryActions(BodyMeasurementEntry entry) async {
-    final action = await showAppActionSheet<_EntryAction>(
-      context,
-      title: formatStatsLongDate(entry.date),
-      actions: const [
-        AppSheetAction(
-          value: _EntryAction.edit,
-          icon: Icons.edit_outlined,
-          label: 'Edytuj',
-        ),
-        AppSheetAction(
-          value: _EntryAction.delete,
-          icon: Icons.delete_outline_rounded,
-          label: 'Usuń pomiary',
-          destructive: true,
-        ),
-      ],
-    );
-    if (!mounted) return;
-    switch (action) {
-      case _EntryAction.edit:
-        await _editEntry(entry);
-      case _EntryAction.delete:
-        await context.read<BodyMeasurementsCubit>().delete(entry);
-      case null:
-        break;
-    }
+  void _openHistory([BodyMeasurementField? field]) {
+    if (field != null) context.read<BodyMeasurementsCubit>().selectField(field);
+    BodyMeasurementHistoryScreen.open(context, clock: widget.clock);
   }
 
   @override
@@ -114,60 +130,74 @@ class _BodyMeasurementsScreenState extends State<BodyMeasurementsScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('POMIARY CIAŁA')),
-        floatingActionButton:
-            BlocBuilder<BodyMeasurementsCubit, BodyMeasurementsState>(
-              buildWhen: (previous, current) =>
-                  (previous.entries == null) != (current.entries == null) ||
-                  previous.saving != current.saving,
-              builder: (context, state) {
-                if (state.entries == null) return const SizedBox.shrink();
-                return FloatingActionButton.extended(
-                  key: bodyMeasurementsAddButtonKey,
-                  onPressed: state.saving ? null : _addEntry,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.onPrimary,
-                          ),
-                        )
-                      : const Icon(Icons.add_rounded),
-                  label: const Text('Dodaj pomiary'),
-                );
-              },
-            ),
-        body: BlocBuilder<BodyMeasurementsCubit, BodyMeasurementsState>(
-          builder: (context, state) {
-            final cubit = context.read<BodyMeasurementsCubit>();
-            final entries = state.entries;
-            if (entries == null) {
-              if (state.loadError != null) {
-                return _LoadError(
-                  message: state.loadError!,
-                  onRetry: cubit.load,
-                );
-              }
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              );
-            }
-            return RefreshIndicator(
-              color: AppColors.primary,
-              onRefresh: cubit.load,
-              child: entries.isEmpty
-                  ? const _EmptyState()
-                  : _Content(
-                      state: state,
-                      today: _today,
-                      onFieldSelected: cubit.selectField,
-                      onEntryTap: _editEntry,
-                      onEntryMore: _showEntryActions,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              AppTabHeader(
+                title: 'Pomiary ciała',
+                showSync: false,
+                leading: AppTabHeaderButton.back(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+                actions: [
+                  AppTabHeaderButton(
+                    key: bodyMeasurementsAddButtonKey,
+                    icon: Icons.add_rounded,
+                    tooltip: 'Dodaj pomiary',
+                    accent: true,
+                    onPressed: _addEntry,
+                  ),
+                ],
+              ),
+              Expanded(
+                child:
+                    BlocBuilder<BodyMeasurementsCubit, BodyMeasurementsState>(
+                      builder: (context, state) {
+                        final cubit = context.read<BodyMeasurementsCubit>();
+                        final entries = state.entries;
+                        if (entries == null) {
+                          if (state.loadError != null) {
+                            return _LoadError(
+                              message: state.loadError!,
+                              onRetry: cubit.load,
+                            );
+                          }
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          );
+                        }
+                        final comparison = BodyMeasurementComparison.of(
+                          entries,
+                          from: state.comparedDates?.from,
+                          to: state.comparedDates?.to,
+                        );
+                        return RefreshIndicator(
+                          color: AppColors.primary,
+                          onRefresh: cubit.load,
+                          child: comparison == null
+                              ? BodyMeasurementsEmptyState(
+                                  gender: _bodyGender,
+                                  onAdd: _addEntry,
+                                )
+                              : _Content(
+                                  comparison: comparison,
+                                  entryCount: entries.length,
+                                  today: _today,
+                                  gender: _bodyGender,
+                                  onPickComparison: entries.length < 2
+                                      ? null
+                                      : () => _pickComparison(comparison),
+                                  onOpenHistory: _openHistory,
+                                ),
+                        );
+                      },
                     ),
-            );
-          },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -179,361 +209,90 @@ Map<BodyMeasurementField, double> _latestValues(
   List<BodyMeasurementEntry> sorted,
 ) => {for (final e in sorted) ...e.values};
 
-enum _EntryAction { edit, delete }
-
 class _Content extends StatelessWidget {
   const _Content({
-    required this.state,
+    required this.comparison,
+    required this.entryCount,
     required this.today,
-    required this.onFieldSelected,
-    required this.onEntryTap,
-    required this.onEntryMore,
+    required this.gender,
+    required this.onPickComparison,
+    required this.onOpenHistory,
   });
 
-  final BodyMeasurementsState state;
+  final BodyMeasurementComparison comparison;
+  final int entryCount;
   final DateTime today;
-  final ValueChanged<BodyMeasurementField> onFieldSelected;
-  final ValueChanged<BodyMeasurementEntry> onEntryTap;
-  final ValueChanged<BodyMeasurementEntry> onEntryMore;
+  final BodyGender? gender;
+  final VoidCallback? onPickComparison;
+  final void Function([BodyMeasurementField? field]) onOpenHistory;
 
   @override
   Widget build(BuildContext context) {
-    final entries = state.entries!;
-    final selected = state.selectedField;
-    final series = {
-      for (final field in BodyMeasurementField.values)
-        field: bodyMeasurementSeries(entries, field),
+    final deltas = comparison.deltas;
+    final bodyFat = deltas[BodyMeasurementField.bodyFat];
+    final changes = {
+      for (final MapEntry(:key, :value) in deltas.entries)
+        if (!key.isPercent && value.change != null) key: value.change!,
     };
-    final measured = [
-      for (final field in BodyMeasurementField.values)
-        if (series[field]!.isNotEmpty) field,
-    ];
-    final selectedSeries = series[selected]!;
-    final newestFirst = entries.reversed.toList();
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pageGutter,
-        AppSpacing.xs,
+        AppSpacing.xxs,
         AppSpacing.pageGutter,
-        // Miejsce na przycisk „Dodaj pomiary”.
-        96 + MediaQuery.paddingOf(context).bottom,
+        AppSpacing.xl + MediaQuery.paddingOf(context).bottom,
       ),
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final width = (constraints.maxWidth - AppSpacing.sm) / 2;
-            return Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final field in measured)
-                  SizedBox(
-                    width: width,
-                    child: _LatestTile(
-                      key: bodyMeasurementTileKey(field),
-                      field: field,
-                      series: series[field]!,
-                      selected: field == selected,
-                      onTap: () {
-                        if (field == selected) return;
-                        HapticFeedback.selectionClick();
-                        onFieldSelected(field);
-                      },
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: AppSpacing.md),
-        _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.xxs,
-                  bottom: AppSpacing.sm,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        selected.label,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    if (selectedSeries.length >= 2)
-                      Text(
-                        '${formatMeasurementChange(selected, _change(selectedSeries.first.value, selectedSeries.last.value))}'
-                        ' od ${formatStatsDayMonth(selectedSeries.first.date)}',
-                        key: const Key('body-measurements-change'),
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: 190,
-                child: selectedSeries.length >= 2
-                    ? Padding(
-                        padding: const EdgeInsets.only(right: AppSpacing.xs),
-                        child: BodyMeasurementChart(
-                          field: selected,
-                          points: selectedSeries,
-                        ),
-                      )
-                    : const Center(
-                        child: Text(
-                          'Dodaj co najmniej dwa pomiary, żeby zobaczyć wykres.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        const Padding(
-          padding: EdgeInsets.only(left: AppSpacing.xxs),
-          child: Text(
-            'Historia',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        for (final entry in newestFirst)
-          _EntryTile(
-            key: ValueKey('body-measurements-entry-${entry.date}'),
-            entry: entry,
-            today: today,
-            onTap: () => onEntryTap(entry),
-            onMore: () => onEntryMore(entry),
-          ),
-      ],
-    );
-  }
-}
-
-/// Zaokrąglona do 0,1, jak same pomiary.
-double _change(double from, double to) => ((to - from) * 10).round() / 10;
-
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 16, 16, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _LatestTile extends StatelessWidget {
-  const _LatestTile({
-    super.key,
-    required this.field,
-    required this.series,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final BodyMeasurementField field;
-  final List<BodyMeasurementPoint> series;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final latest = series.last;
-    final change = series.length >= 2
-        ? _change(series[series.length - 2].value, latest.value)
-        : null;
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(
-                color: selected
-                    ? AppColors.statTeal
-                    : AppColors.border.withValues(alpha: 0.8),
-                width: selected ? 1.5 : 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  field.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  formatMeasurement(field, latest.value),
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  change == null
-                      ? formatStatsDayMonth(latest.date)
-                      : '${formatMeasurementChange(field, change)} · '
-                            '${formatStatsDayMonth(latest.date)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EntryTile extends StatelessWidget {
-  const _EntryTile({
-    super.key,
-    required this.entry,
-    required this.today,
-    required this.onTap,
-    required this.onMore,
-  });
-
-  final BodyMeasurementEntry entry;
-  final DateTime today;
-  final VoidCallback onTap;
-  final VoidCallback onMore;
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = [
-      for (final field in BodyMeasurementField.values)
-        if (entry[field] case final value?)
-          '${measurementShortLabel(field)} ${formatMeasurement(field, value)}',
-    ].join(' · ');
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onMore,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Padding(
-        padding: const EdgeInsets.only(left: AppSpacing.xxs, top: 4, bottom: 4),
-        child: Row(
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    formatStatsLongDate(entry.date),
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    summary,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.5,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
+            // Wąski ekran albo duża czcionka — pigułka się zmniejsza.
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: BodyMeasurementComparePill(
+                  from: comparison.from,
+                  to: comparison.to,
+                  today: today,
+                  onTap: onPickComparison,
+                ),
               ),
             ),
-            IconButton(
-              tooltip: 'Więcej',
-              onPressed: onMore,
-              icon: const Icon(
-                Icons.more_vert_rounded,
-                size: 20,
-                color: AppColors.textMuted,
-              ),
-            ),
+            if (bodyFat != null) ...[
+              const SizedBox(width: AppSpacing.sm),
+              BodyFatSummary(delta: bodyFat),
+            ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    // ListView, żeby pull-to-refresh działał też przy pustej liście.
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(32, 96, 32, 32),
-      children: const [
-        Icon(Icons.straighten_rounded, size: 48, color: AppColors.textMuted),
-        SizedBox(height: AppSpacing.md),
-        Text(
-          'Brak pomiarów',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+        const SizedBox(height: 6),
+        if (gender == null)
+          const SizedBox(height: BodyMeasurementSilhouette.height)
+        else
+          BodyMeasurementSilhouette(
+            gender: gender!,
+            deltas: deltas,
+            onFieldTap: onOpenHistory,
           ),
-        ),
-        SizedBox(height: AppSpacing.xs),
-        Text(
-          'Mierz obwody co kilka tygodni, rano i w tym samym miejscu — '
-          'tutaj zobaczysz, jak zmienia się sylwetka.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+        const SizedBox(height: 6),
+        // Bez wspólnych obwodów w obu datach (np. sam tłuszcz) karta nie
+        // ma czego pokazać; przy jednym wpisie zapowiada porównanie.
+        if (changes.isNotEmpty || !comparison.hasRange)
+          BodyMeasurementChangeCard(
+            title: comparison.hasRange
+                ? 'Zmiana od ${formatMeasurementDate(comparison.from, today)}'
+                : 'Zmiana',
+            changes: changes,
+            emptyMessage:
+                'Dodaj kolejne pomiary, a zobaczysz tu, jak zmienia się '
+                'każdy obwód.',
+            onFieldTap: onOpenHistory,
+          ),
+        const SizedBox(height: 10),
+        BodyMeasurementHistoryLink(
+          entryCount: entryCount,
+          onTap: onOpenHistory,
         ),
       ],
     );
