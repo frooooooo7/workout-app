@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import 'sync_status_indicator.dart';
 
 /// Nagłówek zakładki głównej (Historia, Plany, Trening, Aktywność, Profil,
@@ -64,12 +65,10 @@ class AppTabHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                  ),
+                  // Zakładka: duży tytuł; podstrona (z „Wstecz”): mniejszy.
+                  style: leading == null
+                      ? AppTextStyles.screenTitle.copyWith(fontSize: 28)
+                      : AppTextStyles.screenTitle.copyWith(fontSize: 20),
                 ),
               ),
             ),
@@ -112,17 +111,19 @@ class AppTabHeaderButton extends StatelessWidget {
       onPressed: onPressed,
       tooltip: tooltip,
       icon: Icon(icon, size: accent ? 24 : 21),
-      color: accent ? AppColors.onPrimary : AppColors.textSecondary,
+      color: accent ? AppColors.onPrimary : AppColors.iconOnTile,
       style: IconButton.styleFrom(
-        backgroundColor: accent ? AppColors.primary : AppColors.surface,
+        backgroundColor: accent ? AppColors.primary : AppColors.tile,
         fixedSize: const Size.square(AppSpacing.minTapTarget),
         minimumSize: const Size.square(AppSpacing.minTapTarget),
         padding: EdgeInsets.zero,
+        shadowColor: AppColors.primary,
+        elevation: accent ? 6 : 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.tile),
           side: accent
               ? BorderSide.none
-              : const BorderSide(color: AppColors.border),
+              : const BorderSide(color: AppColors.borderStrong),
         ),
       ),
     );
@@ -143,9 +144,8 @@ class AppTabBackground extends StatefulWidget {
   static const glowHeight = 360.0;
 
   /// `true`, gdy treść zakładki jest przewinięta poniżej początku.
-  static ValueListenable<bool>? scrolledOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<_TabScrollScope>()
-      ?.scrolled;
+  static ValueListenable<bool>? scrolledOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_TabScrollScope>()?.scrolled;
 
   @override
   State<AppTabBackground> createState() => _AppTabBackgroundState();

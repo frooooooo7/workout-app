@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../services/service_locator.dart';
 import '../sync/sync_status.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
 import '../utils/polish_plural.dart';
 
 /// Stan synchronizacji w prawym górnym rogu ekranu.
@@ -213,7 +214,8 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
       return;
     }
 
-    final hadSomethingToSync = _visual == _Visual.syncing ||
+    final hadSomethingToSync =
+        _visual == _Visual.syncing ||
         _visual == _Visual.pending ||
         _visual == _Visual.offline ||
         _visual == _Visual.error;
@@ -223,8 +225,7 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
 
     final shownAt = _syncingShownAt;
     if (_visual == _Visual.syncing && shownAt != null) {
-      final remaining =
-          _minSyncingVisible - DateTime.now().difference(shownAt);
+      final remaining = _minSyncingVisible - DateTime.now().difference(shownAt);
       if (remaining > Duration.zero) {
         _timer = Timer(remaining, () => _settle(target));
         return;
@@ -278,7 +279,7 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
         ? Duration.zero
         : const Duration(milliseconds: 280);
     final iconSize = widget.size * 0.48;
-    final radius = BorderRadius.circular(12);
+    final radius = BorderRadius.circular(AppRadius.tile);
 
     final Widget glyph = _visual == _Visual.syncing
         ? RotationTransition(
@@ -299,7 +300,7 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
         message: spec.tooltip,
         child: RepaintBoundary(
           child: Material(
-            color: AppColors.surface,
+            color: AppColors.tile,
             borderRadius: radius,
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -309,62 +310,62 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
                 curve: Curves.easeOut,
                 width: widget.size,
                 height: widget.size,
-              decoration: BoxDecoration(
-                color: spec.highlight
-                    ? spec.color.withValues(alpha: 0.14)
-                    : Colors.transparent,
-                borderRadius: radius,
-                border: Border.all(
+                decoration: BoxDecoration(
                   color: spec.highlight
-                      ? spec.color.withValues(alpha: 0.55)
-                      : AppColors.border,
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  AnimatedSwitcher(
-                    duration: duration,
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: ScaleTransition(
-                        scale: Tween<double>(
-                          begin: 0.55,
-                          end: 1,
-                        ).animate(animation),
-                        child: child,
-                      ),
-                    ),
-                    child: glyph,
+                      ? spec.color.withValues(alpha: 0.14)
+                      : Colors.transparent,
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: spec.highlight
+                        ? spec.color.withValues(alpha: 0.55)
+                        : AppColors.borderStrong,
                   ),
-                  Positioned(
-                    top: widget.size * 0.2,
-                    right: widget.size * 0.2,
-                    child: AnimatedScale(
-                      scale: spec.badgeColor == null ? 0 : 1,
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    AnimatedSwitcher(
                       duration: duration,
-                      curve: Curves.easeOutBack,
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          color: spec.badgeColor ?? AppColors.strengthMedium,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.surface,
-                            width: 1.5,
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(
+                          scale: Tween<double>(
+                            begin: 0.55,
+                            end: 1,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      ),
+                      child: glyph,
+                    ),
+                    Positioned(
+                      top: widget.size * 0.2,
+                      right: widget.size * 0.2,
+                      child: AnimatedScale(
+                        scale: spec.badgeColor == null ? 0 : 1,
+                        duration: duration,
+                        curve: Curves.easeOutBack,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: spec.badgeColor ?? AppColors.strengthMedium,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.surface,
+                              width: 1.5,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         ),
       ),
     );
@@ -386,10 +387,8 @@ Future<void> showSyncStatusSheet(
     ),
     builder: (sheetContext) => ValueListenableBuilder<SyncStatus>(
       valueListenable: status,
-      builder: (context, value, _) => _SyncStatusSheet(
-        status: value,
-        onSyncRequested: onSyncRequested,
-      ),
+      builder: (context, value, _) =>
+          _SyncStatusSheet(status: value, onSyncRequested: onSyncRequested),
     ),
   );
 }
@@ -425,30 +424,30 @@ _SheetCopy _sheetCopyFor(SyncPhase phase) => switch (phase) {
     icon: Icons.cloud_upload_outlined,
     color: AppColors.strengthMedium,
     title: 'Zmiany czekają na wysłanie',
-    body: 'Wyślemy je automatycznie za chwilę. Możesz dalej korzystać '
+    body:
+        'Wyślemy je automatycznie za chwilę. Możesz dalej korzystać '
         'z aplikacji.',
   ),
   SyncPhase.offline => const _SheetCopy(
     icon: Icons.cloud_off_rounded,
     color: AppColors.textSecondary,
     title: 'Brak połączenia z serwerem',
-    body: 'Możesz normalnie trenować — wszystko zapisuje się na telefonie. '
+    body:
+        'Możesz normalnie trenować — wszystko zapisuje się na telefonie. '
         'Wyślemy zmiany, gdy wróci internet.',
   ),
   SyncPhase.error => const _SheetCopy(
     icon: Icons.sync_problem_rounded,
     color: AppColors.strengthWeak,
     title: 'Część zmian nie przeszła',
-    body: 'Serwer odrzucił niektóre zmiany. Spróbuj ponownie — jeśli błąd '
+    body:
+        'Serwer odrzucił niektóre zmiany. Spróbuj ponownie — jeśli błąd '
         'wróci, edytuj element, którego dotyczy.',
   ),
 };
 
 class _SyncStatusSheet extends StatelessWidget {
-  const _SyncStatusSheet({
-    required this.status,
-    required this.onSyncRequested,
-  });
+  const _SyncStatusSheet({required this.status, required this.onSyncRequested});
 
   final SyncStatus status;
   final VoidCallback onSyncRequested;
@@ -461,7 +460,8 @@ class _SyncStatusSheet extends StatelessWidget {
     final now = DateTime.now();
     final hh = local.hour.toString().padLeft(2, '0');
     final mm = local.minute.toString().padLeft(2, '0');
-    final isToday = local.year == now.year &&
+    final isToday =
+        local.year == now.year &&
         local.month == now.month &&
         local.day == now.day;
     if (isToday) return 'dziś, $hh:$mm';

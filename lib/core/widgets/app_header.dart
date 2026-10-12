@@ -1,35 +1,34 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 
-/// Uniwersalny, czysty i minimalistyczny header aplikacji.
-///
-/// Komponent służy jako spójny nagłówek na różnych ekranach aplikacji.
-/// Posiada idealnie wycentrowany tytuł względem pełnej szerokości kontenera
-/// (niezależnie od obecności przycisku powrotu czy akcji po prawej stronie).
+/// Nagłówek podstrony: przycisk „Wstecz”, tytuł wyrównany do lewej i akcje
+/// po prawej — ten sam wzór co [AppTabHeader] z przyciskiem powrotu, żeby
+/// cała aplikacja miała jeden styl nagłówków.
 class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   const AppHeader({
     super.key,
     required this.title,
     this.onBack,
     this.actions,
-    this.height = 54.0,
+    this.height = 52.0,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
 
-  /// Dynamiczny tytuł wyświetlany w ścisłym centrum headera.
   final String title;
 
-  /// Opcjonalny callback przycisku powrotu. Gdy obecny, wyświetla okrągły przycisk ze strzałką.
+  /// Opcjonalny callback przycisku powrotu.
   final VoidCallback? onBack;
 
-  /// Opcjonalne akcje po prawej stronie (np. przyciski menu, edycji, filtrowania).
+  /// Opcjonalne akcje po prawej stronie (np. przyciski menu, edycji).
   final List<Widget>? actions;
 
-  /// Wysokość wewnętrznego kontenera headera.
+  /// Wysokość wiersza nagłówka.
   final double height;
 
-  /// Zewnętrzny margines wokół pływającego kontenera headera.
+  /// Zewnętrzny margines wokół nagłówka.
   final EdgeInsetsGeometry margin;
 
   @override
@@ -39,94 +38,36 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasBack = onBack != null;
-    final hasActions = actions != null && actions!.isNotEmpty;
-
-    // Obliczamy bezpieczny margines boczny dla tytułu, aby długi tekst
-    // ulegał obcięciu (ellipsis) zanim dotknie przycisków lewych/prawych.
-    final double actionsWidth = hasActions
-        ? (actions!.length * 44.0 + 8.0)
-        : 16.0;
-    final double leftWidth = hasBack ? 52.0 : 16.0;
-    final double maxSidePadding = actionsWidth > leftWidth
-        ? actionsWidth
-        : leftWidth;
-
+    final actions = this.actions ?? const <Widget>[];
     return Padding(
       padding: margin,
-      child: Container(
+      child: SizedBox(
         height: height,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: AppColors.border.withValues(alpha: 0.7),
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 14,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          alignment: Alignment.center,
+        child: Row(
           children: [
-            // 1. Tytuł — Absolutnie wycentrowany względem całej szerokości kontenera
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: maxSidePadding),
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16.0,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
+            if (onBack != null) ...[
+              AppHeaderIconButton(
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Wstecz',
+                onTap: onBack!,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.screenTitle.copyWith(fontSize: 20),
                 ),
               ),
             ),
-
-            // 2. Przyciski po lewej i prawej stronie w osobnej warstwie
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Przycisk powrotu po lewej stronie
-                  if (hasBack)
-                    AppHeaderIconButton(
-                      icon: Icons.arrow_back_rounded,
-                      onTap: onBack!,
-                    )
-                  else
-                    const SizedBox.shrink(),
-
-                  // Przycisk(i) akcji po prawej stronie
-                  if (hasActions)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: actions!
-                          .map(
-                            (action) => Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: action,
-                            ),
-                          )
-                          .toList(),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                ],
-              ),
-            ),
+            for (final action in actions) ...[
+              const SizedBox(width: AppSpacing.xs),
+              action,
+            ],
           ],
         ),
       ),
@@ -134,14 +75,14 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// Standaryzowany, okrągły przycisk akcji dla [AppHeader] z mikroadaptacyjną animacją wciśnięcia.
+/// Kafelek-przycisk 44 px dla [AppHeader] z animacją wciśnięcia.
 class AppHeaderIconButton extends StatefulWidget {
   const AppHeaderIconButton({
     super.key,
     required this.icon,
     required this.onTap,
     this.iconColor,
-    this.size = 38.0,
+    this.size = AppSpacing.minTapTarget,
     this.tooltip,
     this.active = false,
   });
@@ -187,12 +128,13 @@ class _AppHeaderIconButtonState extends State<AppHeaderIconButton>
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.active ? AppColors.success : AppColors.border;
+    final accent = widget.active ? AppColors.success : AppColors.borderStrong;
     final fill = widget.active
         ? AppColors.success.withValues(alpha: 0.16)
-        : AppColors.surfaceVariant.withValues(alpha: 0.6);
+        : AppColors.tile;
     final iconColor =
-        widget.iconColor ?? (widget.active ? AppColors.success : Colors.white);
+        widget.iconColor ??
+        (widget.active ? AppColors.success : AppColors.iconOnTile);
 
     final button = GestureDetector(
       onTapDown: _onTapDown,
@@ -206,16 +148,13 @@ class _AppHeaderIconButtonState extends State<AppHeaderIconButton>
           width: widget.size,
           height: widget.size,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(AppRadius.tile),
             color: fill,
             border: Border.all(
-              color: accent.withValues(alpha: widget.active ? 0.7 : 0.6),
-              width: 1.0,
+              color: widget.active ? accent.withValues(alpha: 0.7) : accent,
             ),
           ),
-          child: Center(
-            child: Icon(widget.icon, size: 19, color: iconColor),
-          ),
+          child: Center(child: Icon(widget.icon, size: 20, color: iconColor)),
         ),
       ),
     );
