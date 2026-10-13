@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import 'rest_timer_controller.dart';
 
 String formatRestDurationOption(Duration duration) {
   if (duration.inSeconds < 90) return '${duration.inSeconds}s';
@@ -9,82 +10,99 @@ String formatRestDurationOption(Duration duration) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
+/// Pozostały czas przerwy: `1:24`, `0:05`.
 String formatRestRemaining(Duration remaining) {
-  final minutes = remaining.inMinutes.toString().padLeft(2, '0');
   final seconds = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
+  return '${remaining.inMinutes}:$seconds';
 }
 
-/// Baner odpoczynku napędzany [ValueNotifier] — tyknięcie nie woła setState
-/// na całym ekranie sesji.
-class RestTimerBannerHost extends StatelessWidget {
-  const RestTimerBannerHost({
-    super.key,
-    required this.remaining,
-    required this.onStop,
-  });
+/// Arkusz wyboru długości przerwy: gotowe czasy, ostatni własny i „Własny”
+/// (cyfrowy wybierak). Zwraca wybraną długość albo `null`.
+Future<Duration?> showRestDurationPicker(
+  BuildContext context, {
+  required RestTimerController controller,
+}) {
+  const options = <Duration>[
+    Duration(seconds: 60),
+    Duration(seconds: 90),
+    Duration(seconds: 120),
+    Duration(seconds: 180),
+  ];
+  final selected = controller.selectedDuration;
+  final lastCustom = controller.lastCustomDuration;
 
-  final ValueNotifier<Duration> remaining;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<Duration>(
-      valueListenable: remaining,
-      builder: (context, value, _) => RestTimerBanner(
-        remaining: formatRestRemaining(value),
-        onStop: onStop,
-      ),
-    );
-  }
-}
-
-class RestTimerBanner extends StatelessWidget {
-  const RestTimerBanner({
-    super.key,
-    required this.remaining,
-    required this.onStop,
-  });
-
-  final String remaining;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.timer_outlined,
-              color: AppColors.primaryVariant,
-              size: 22,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                key: const ValueKey('rest-timer-remaining-label'),
-                remaining,
-                style: const TextStyle(
+  return showModalBottomSheet<Duration>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Czas odpoczynku',
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-            ),
-            TextButton(onPressed: onStop, child: const Text('Zatrzymaj')),
-          ],
+              const SizedBox(height: 4),
+              const Text(
+                'Przerwa startuje sama po odhaczeniu serii.',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final option in options)
+                    RestDurationOption(
+                      key: ValueKey('rest-duration-option-${option.inSeconds}'),
+                      label: formatRestDurationOption(option),
+                      selected: option == selected,
+                      onTap: () => Navigator.of(sheetContext).pop(option),
+                    ),
+                  if (lastCustom != null)
+                    RestDurationOption(
+                      key: const ValueKey('rest-duration-last-custom'),
+                      label: formatRestDurationOption(lastCustom),
+                      eyebrow: 'Ostatni własny',
+                      selected: lastCustom == selected,
+                      onTap: () => Navigator.of(sheetContext).pop(lastCustom),
+                    ),
+                  RestDurationOption(
+                    key: const ValueKey('rest-duration-custom-option'),
+                    label: 'Własny',
+                    selected: !options.contains(selected),
+                    onTap: () async {
+                      final duration = await showDialog<Duration>(
+                        context: sheetContext,
+                        builder: (_) =>
+                            CustomRestDurationDialog(initialDuration: selected),
+                      );
+                      if (!sheetContext.mounted || duration == null) return;
+                      controller.rememberCustomDuration(duration);
+                      Navigator.of(sheetContext).pop(duration);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 class RestDurationOption extends StatelessWidget {
