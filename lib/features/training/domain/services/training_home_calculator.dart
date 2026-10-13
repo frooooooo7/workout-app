@@ -52,23 +52,6 @@ abstract final class TrainingHomeCalculator {
     }
 
     final records = PersonalRecordsCalculator.compute(completed);
-    final recordsBySession = <String, int>{};
-    for (final record in records.records) {
-      recordsBySession.update(
-        record.sessionId,
-        (v) => v + 1,
-        ifAbsent: () => 1,
-      );
-    }
-    // Lista historii przychodzi z serwera — jej sesje mają identyfikator
-    // serwerowy, więc liczbę rekordów udostępniamy pod obydwoma.
-    for (final session in completed) {
-      final count = recordsBySession[session.id];
-      final serverId = session.serverId;
-      if (count != null && serverId != null) {
-        recordsBySession[serverId] = count;
-      }
-    }
 
     return TrainingHomeInsights(
       weekDonePlans: weekDone,
@@ -80,7 +63,7 @@ abstract final class TrainingHomeCalculator {
             entry.key:
                 entry.value.reduce((a, b) => a + b) ~/ entry.value.length,
       },
-      recordsBySession: recordsBySession,
+      recordsBySession: records.countsBySession(completed),
       weeklyGoal: WeeklyGoalCalculator.compute(
         completed,
         today: today,

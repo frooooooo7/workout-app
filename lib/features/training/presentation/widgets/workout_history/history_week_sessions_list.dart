@@ -50,6 +50,7 @@ class HistoryWeekSessionsList extends StatelessWidget {
               SliverToBoxAdapter(
                 child: _WeekHeader(
                   group: group,
+                  selectedDay: day,
                   title: group.weekStart == thisWeek
                       ? 'Ten tydzień'
                       : group.weekStart == lastWeek
@@ -78,16 +79,34 @@ class HistoryWeekSessionsList extends StatelessWidget {
 
 /// Nagłówek tygodnia: nazwa (albo sam zakres dat) i suma tygodnia.
 class _WeekHeader extends StatelessWidget {
-  const _WeekHeader({required this.group, this.title});
+  const _WeekHeader({required this.group, this.title, this.selectedDay});
 
   final HistoryWeekGroup group;
 
   /// „Ten tydzień” / „Poprzedni tydzień”; starsze tygodnie mają tylko daty.
   final String? title;
 
+  /// Dzień wybrany w kalendarzu — suma dotyczy wtedy tylko jego.
+  final DateTime? selectedDay;
+
+  /// Lista pokazuje jeden miesiąc, więc tydzień na przełomie miesięcy ma
+  /// zakres przycięty do tego miesiąca — tak, żeby daty zgadzały się z sumą.
+  String _range() {
+    final day = selectedDay;
+    if (day != null) return formatSessionDay(day);
+    final month = group.sessions.first.startedAt;
+    final monthStart = DateTime(month.year, month.month);
+    final monthEnd = DateTime(month.year, month.month + 1, 0);
+    final from = group.weekStart.isBefore(monthStart)
+        ? monthStart
+        : group.weekStart;
+    final to = group.weekEnd.isAfter(monthEnd) ? monthEnd : group.weekEnd;
+    return formatWeekRange(from, to);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final range = formatWeekRange(group.weekStart, group.weekEnd);
+    final range = _range();
     final volume = group.totalVolumeKg;
     final summary = [
       formatWorkoutCount(group.sessions.length),

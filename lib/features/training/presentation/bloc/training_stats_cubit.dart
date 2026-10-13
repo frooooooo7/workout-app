@@ -153,7 +153,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           snapshot: snapshot,
           loading: false,
           failed: false,
-          recordsBySession: _recordsBySession(valid, records),
+          recordsBySession: records.countsBySession(valid),
         ),
       );
     } catch (_) {
@@ -301,24 +301,6 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
     _dataChanges?.removeListener(_onDataChanged);
     return super.close();
   }
-}
-
-/// Liczba rekordów na sesję — pod identyfikatorem lokalnym i serwerowym.
-Map<String, int> _recordsBySession(
-  List<TrainingSession> sessions,
-  PersonalRecordsResult records,
-) {
-  final byLocalId = <String, int>{};
-  for (final record in records.records) {
-    byLocalId[record.sessionId] = (byLocalId[record.sessionId] ?? 0) + 1;
-  }
-  return {
-    for (final session in sessions)
-      if (byLocalId[session.id] case final count?) ...{
-        session.id: count,
-        ?session.serverId: count,
-      },
-  };
 }
 
 PersonalRecordsResult _recordsJob(List<TrainingSession> sessions) =>

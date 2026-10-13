@@ -592,38 +592,16 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _finish(BuildContext context, TrainingSession session) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Zakończyć trening?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Zakończyć trening?',
+      message:
           'Czy na pewno chcesz zakończyć ten trening? Sesja zostanie zapisana w historii.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Anuluj',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Zakończ',
-              style: TextStyle(color: AppColors.primaryVariant),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Zakończ',
+      destructive: false,
     );
 
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
@@ -667,38 +645,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     BuildContext context,
     TrainingSession session,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Odrzucić trening?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Odrzucić trening?',
+      message:
           'Czy na pewno chcesz odrzucić ten trening? Wszystkie zapisane postępy zostaną utracone.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Anuluj',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Odrzuć',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Odrzuć',
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       final cubit = context.read<TrainingSessionCubit>();
       _saveDebounce?.cancel();
       await cubit.cancel(session.id);

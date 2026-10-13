@@ -5,15 +5,13 @@ import '../../../../core/units/weight_unit.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/training_stats.dart';
 import '../../domain/models/training_home_insights.dart';
+import '../../domain/services/live_workout_insights.dart'
+    show progressionStepKg;
 
 /// Rekord, który można dziś poprawić: [target] to najbliższy krok ponad
 /// [record] (o jeden krążek więcej przy tych samych powtórzeniach albo jedno
 /// powtórzenie więcej bez ciężaru).
 typedef RecordToBeat = ({String exercise, String target, String record});
-
-/// Najmniejszy przyrost ciężaru — para najmniejszych krążków.
-const _kgStep = 2.5;
-const _lbStepInKg = 5 / 2.20462;
 
 /// Pierwsze ćwiczenie planu z rekordem ciężarowym (zwykle bój główny),
 /// a gdy plan ma tylko ćwiczenia z masą własną — pierwsze z rekordem
@@ -29,7 +27,7 @@ RecordToBeat? recordToBeatFor(
     final b = best(exercise);
     final weight = b?.bestWeightKg;
     if (b == null || weight == null || weight <= 0) continue;
-    final step = WeightUnits.current == WeightUnit.lb ? _lbStepInKg : _kgStep;
+    final step = progressionStepKg(WeightUnits.current);
     final reps = b.bestWeightReps;
     final target = formatWeightWithUnit(weight + step);
     return (

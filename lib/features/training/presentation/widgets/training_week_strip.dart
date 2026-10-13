@@ -73,7 +73,8 @@ class TrainingWeekStrip extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: _WeekSummary(
-              done: donePlans.length,
+              // Cel liczy treningi, nie dni — dwa treningi jednego dnia to dwa.
+              done: weeklyGoal?.workoutsThisWeek ?? donePlans.length,
               target: weeklyGoal?.goal ?? scheduledPlans.length,
               streakWeeks: weeklyGoal?.streakWeeks ?? 0,
             ),
@@ -84,7 +85,16 @@ class TrainingWeekStrip extends StatelessWidget {
               for (var i = 0; i < 7; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
                 Expanded(
-                  child: _buildDay(weekStart.add(Duration(days: i)), now),
+                  child: _buildDay(
+                    // Konstruktor, nie `add(Duration)` — doba przy zmianie
+                    // czasu nie ma 24 h.
+                    DateTime(
+                      weekStart.year,
+                      weekStart.month,
+                      weekStart.day + i,
+                    ),
+                    now,
+                  ),
                 ),
               ],
             ],
