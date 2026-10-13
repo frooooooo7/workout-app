@@ -14,6 +14,7 @@ class WeightCellInput extends StatelessWidget {
     this.hintKg,
     this.fallbackHint = '',
     this.suffixText,
+    this.look = TableCellInputLook.compact,
   });
 
   final String? valueKg;
@@ -24,6 +25,7 @@ class WeightCellInput extends StatelessWidget {
   /// Podpowiedź, gdy [hintKg] jest pusty.
   final String fallbackHint;
   final String? suffixText;
+  final TableCellInputLook look;
   final ValueChanged<String> onChanged;
 
   @override
@@ -34,6 +36,7 @@ class WeightCellInput extends StatelessWidget {
       value: weightTextForInput(valueKg, unit: unit),
       hint: hint.isEmpty ? fallbackHint : hint,
       suffixText: suffixText,
+      look: look,
       onChanged: (text) => onChanged(weightTextFromInput(text, unit: unit)),
       // Przeliczenie w obie strony gubi to, co jest w trakcie pisania
       // („22.” → „22”), więc pole nadpisujemy tylko przy innej liczbie.
@@ -49,6 +52,42 @@ class WeightCellInput extends StatelessWidget {
   }
 }
 
+/// Wygląd pola tabeli serii. [compact] to zwarta tabela edycji planu i
+/// treningu; ekran treningu na żywo podaje własny, większy wygląd.
+class TableCellInputLook {
+  const TableCellInputLook({
+    required this.textStyle,
+    required this.hintStyle,
+    required this.fillColor,
+    this.borderColor,
+    this.radius = 8,
+    this.verticalPadding = 8,
+  });
+
+  static const compact = TableCellInputLook(
+    textStyle: TextStyle(
+      color: Colors.white,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    ),
+    hintStyle: TextStyle(
+      color: AppColors.textMuted,
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    ),
+    fillColor: AppColors.surfaceVariant,
+  );
+
+  final TextStyle textStyle;
+  final TextStyle hintStyle;
+  final Color fillColor;
+
+  /// Krawędź pola; `null` — bez krawędzi.
+  final Color? borderColor;
+  final double radius;
+  final double verticalPadding;
+}
+
 class TableCellInput extends StatefulWidget {
   const TableCellInput({
     super.key,
@@ -58,6 +97,7 @@ class TableCellInput extends StatefulWidget {
     this.suffixText,
     this.keyboardType = const TextInputType.numberWithOptions(decimal: true),
     this.sameValue,
+    this.look = TableCellInputLook.compact,
   });
 
   final String value;
@@ -69,6 +109,7 @@ class TableCellInput extends StatefulWidget {
   /// Czy tekst w polu i nowe [value] znaczą to samo — wtedy pole zostaje
   /// nietknięte. Domyślnie porównanie dosłowne.
   final bool Function(String text, String value)? sameValue;
+  final TableCellInputLook look;
 
   @override
   State<TableCellInput> createState() => _TableCellInputState();
@@ -110,36 +151,42 @@ class _TableCellInputState extends State<TableCellInput> {
 
   @override
   Widget build(BuildContext context) {
+    final look = widget.look;
+    final radius = BorderRadius.circular(look.radius);
+    final borderColor = look.borderColor;
+    OutlineInputBorder outline(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: radius,
+          borderSide: BorderSide(color: color, width: width),
+        );
     return TextField(
       controller: _controller,
       onChanged: widget.onChanged,
       keyboardType: widget.keyboardType,
       textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
+      style: look.textStyle,
       decoration: InputDecoration(
         hintText: widget.hint,
-        hintStyle: const TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        hintStyle: look.hintStyle,
         suffixText: widget.suffixText,
         suffixStyle: const TextStyle(
           color: AppColors.textSecondary,
           fontSize: 12,
         ),
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        contentPadding: EdgeInsets.symmetric(vertical: look.verticalPadding),
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: look.fillColor,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: radius,
           borderSide: BorderSide.none,
         ),
+        // Bez własnej krawędzi pole bierze krawędzie (spoczynek / fokus)
+        // z motywu.
+        enabledBorder: borderColor == null ? null : outline(borderColor),
+        focusedBorder: borderColor == null
+            ? null
+            : outline(AppColors.primaryVariant, 1.5),
       ),
     );
   }

@@ -139,6 +139,15 @@ Future<_FakeTrainingSessionRepository> _pump(
   return repository;
 }
 
+Future<void> _chooseFromMenu(WidgetTester tester, String label) async {
+  await tester.tap(find.byKey(const Key('workout-more-button')));
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(of: find.byType(BottomSheet), matching: find.text(label)),
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Zapis szkicu jest odroczony o ~0,9 s.
 Future<void> _flushDraftSave(WidgetTester tester) =>
     tester.pump(const Duration(seconds: 1));
@@ -227,7 +236,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.format_list_bulleted_rounded));
+      await tester.tap(find.byKey(const Key('exercise-list-button')));
       await tester.pumpAndSettle();
 
       // Rozgrzewka jest ukończona, ale nie liczy się do „x / y serii”
@@ -253,8 +262,8 @@ void main() {
         }),
       );
 
-      expect(find.text('POPRZ.'), findsOneWidget);
-      expect(find.text('80×8'), findsOneWidget);
+      expect(find.text('POPRZEDNIO'), findsOneWidget);
+      expect(find.text('80 × 8'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('session-set-previous-0-0')));
       await tester.pump();
@@ -288,14 +297,14 @@ void main() {
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('session-set-previous-0-0')),
-            matching: find.text('60×10'),
+            matching: find.text('60 × 10'),
           ),
           findsOneWidget,
         );
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('session-set-previous-0-1')),
-            matching: find.text('100×5'),
+            matching: find.text('100 × 5'),
           ),
           findsOneWidget,
         );
@@ -339,7 +348,7 @@ void main() {
         }),
       );
 
-      expect(find.text('POPRZ.'), findsNothing);
+      expect(find.text('POPRZEDNIO'), findsNothing);
     });
 
     testWidgets('a failing lookup just means no column, never an error', (
@@ -348,7 +357,7 @@ void main() {
       await _pump(tester, previous: _ThrowingPreviousPerformance());
 
       expect(tester.takeException(), isNull);
-      expect(find.text('POPRZ.'), findsNothing);
+      expect(find.text('POPRZEDNIO'), findsNothing);
       expect(find.text('KG'), findsOneWidget);
     });
 
@@ -358,15 +367,6 @@ void main() {
       tester.view.physicalSize = const Size(360, 800);
       addTearDown(tester.view.reset);
 
-      // Stopka ekranu (przyciski „Odpoczynek” / „Dodaj ćwiczenie”) przepełnia
-      // się w testach na 360 dp niezależnie od tej zmiany — czcionka testowa
-      // jest szersza niż prawdziwa. Zbieramy błędy renderowania i sprawdzamy,
-      // że żaden nie pochodzi z tabeli serii.
-      final errors = <FlutterErrorDetails>[];
-      final previousHandler = FlutterError.onError;
-      FlutterError.onError = errors.add;
-      addTearDown(() => FlutterError.onError = previousHandler);
-
       await _pump(
         tester,
         previous: _FakePreviousPerformance({
@@ -375,22 +375,18 @@ void main() {
       );
 
       // 360 dp z dwoma polami: kolumna mieści się.
-      expect(find.text('POPRZ.'), findsOneWidget);
+      expect(find.text('POPRZEDNIO'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('show-rir-column-button-0')));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('show-tempo-column-button-0')),
-      );
-      await tester.pumpAndSettle();
+      await _chooseFromMenu(tester, 'Pokaż kolumnę RIR');
+      await _chooseFromMenu(tester, 'Pokaż kolumnę tempo');
 
-      // Z RIR i tempem pola dostałyby < 40 dp — kolumna znika.
+      // Z RIR i tempem zabrakłoby miejsca na pola — kolumna znika.
       expect(find.text('RIR'), findsOneWidget);
       expect(find.text('TEMPO'), findsOneWidget);
-      expect(find.text('POPRZ.'), findsNothing);
+      expect(find.text('POPRZEDNIO'), findsNothing);
       expect(
-        errors.where((e) => !e.toString().contains('ongoing_workout_footer')),
-        isEmpty,
+        tester.takeException(),
+        isNull,
         reason: 'the set table must not overflow at 360 dp',
       );
     });
@@ -403,10 +399,7 @@ void main() {
       final repository = await _pump(tester);
 
       expect(find.byKey(const ValueKey('exercise-note-field-0')), findsNothing);
-      await tester.tap(
-        find.byKey(const ValueKey('add-exercise-note-button-0')),
-      );
-      await tester.pump();
+      await _chooseFromMenu(tester, 'Dodaj notatkę');
 
       final field = find.byKey(const ValueKey('exercise-note-field-0'));
       expect(field, findsOneWidget);
@@ -428,10 +421,10 @@ void main() {
       await _pump(tester, session: _session(benchNote: 'z pauzą 2 s'));
 
       expect(find.text('z pauzą 2 s'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('add-exercise-note-button-0')),
-        findsNothing,
-      );
+      // Notatka już jest, więc menu jej nie proponuje.
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Dodaj notatkę'), findsNothing);
     });
   });
 }

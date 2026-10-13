@@ -135,7 +135,7 @@ void main() {
         formatPreviousSet(
           TrainingSessionSet(actualWeight: '100', actualReps: '5'),
         ),
-        '220,5×5',
+        '220,5 × 5',
       );
     });
   });
@@ -151,7 +151,7 @@ void main() {
       formatPreviousSet(
         TrainingSessionSet(actualWeight: '82,5', actualReps: '8'),
       ),
-      '82,5×8',
+      '82,5 × 8',
     );
   });
 

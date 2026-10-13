@@ -308,8 +308,10 @@ void main() {
     });
 
     test('formatPreviousSet shows weight × reps and tolerates gaps', () {
-      expect(formatPreviousSet(_set('82,5', '8')), '82,5×8');
-      expect(formatPreviousSet(_set('', '12')), '×12');
+      expect(formatPreviousSet(_set('82,5', '8')), '82,5 × 8');
+      // Kropka z klawiatury też wychodzi z przecinkiem dziesiętnym.
+      expect(formatPreviousSet(_set('142.5', '5')), '142,5 × 5');
+      expect(formatPreviousSet(_set('', '12')), '× 12');
       expect(formatPreviousSet(_set('60', '')), '60');
       expect(formatPreviousSet(_set('  ', '  ')), isNull);
       expect(formatPreviousSet(null), isNull);
