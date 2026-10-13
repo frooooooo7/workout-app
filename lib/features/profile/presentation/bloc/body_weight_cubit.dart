@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/api_client.dart';
 import '../../domain/models/body_weight_entry.dart';
 import '../../domain/repositories/body_weight_repository.dart';
+import '../../domain/repositories/profile_repository.dart';
 import '../../domain/services/body_weight_trend.dart';
 import '../utils/profile_details_labels.dart';
 
@@ -17,6 +18,9 @@ class BodyWeightState {
     this.offline = false,
     this.range = BodyWeightRange.days90,
     this.saving = false,
+    this.goalLoaded = false,
+    this.goalKg,
+    this.savingGoal = false,
     this.message,
     this.messageId = 0,
   });
@@ -30,6 +34,14 @@ class BodyWeightState {
   final bool offline;
   final BodyWeightRange range;
   final bool saving;
+
+  /// Cel jest znany (profil wczytany). Bez sieci zostaje `false` — ekran
+  /// wtedy nie pokazuje ani celu, ani zachęty do jego ustawienia.
+  final bool goalLoaded;
+
+  /// Cel masy ciała z profilu; `null` — bez celu.
+  final double? goalKg;
+  final bool savingGoal;
 
   /// Komunikat do pokazania raz (snackbar) — nowy przy każdej zmianie [messageId].
   final String? message;
@@ -46,6 +58,10 @@ class BodyWeightState {
     bool? offline,
     BodyWeightRange? range,
     bool? saving,
+    bool? goalLoaded,
+    double? goalKg,
+    bool clearGoal = false,
+    bool? savingGoal,
     String? message,
   }) {
     return BodyWeightState(
@@ -55,6 +71,9 @@ class BodyWeightState {
       offline: offline ?? this.offline,
       range: range ?? this.range,
       saving: saving ?? this.saving,
+      goalLoaded: goalLoaded ?? this.goalLoaded,
+      goalKg: clearGoal ? null : (goalKg ?? this.goalKg),
+      savingGoal: savingGoal ?? this.savingGoal,
       message: message ?? this.message,
       messageId: message == null ? messageId : messageId + 1,
     );
@@ -62,17 +81,24 @@ class BodyWeightState {
 }
 
 /// Dziennik masy ciała: lista pomiarów, zakres wykresu, dodawanie,
-/// edycja i usuwanie.
+/// edycja i usuwanie oraz cel masy ciała z profilu.
 class BodyWeightCubit extends Cubit<BodyWeightState> {
   /// [dataChanges] — sygnał synchronizacji; pomiary z innych urządzeń
-  /// pojawiają się bez ponownego wchodzenia na ekran.
-  BodyWeightCubit(this._repository, {this.onChanged, Listenable? dataChanges})
-    : _dataChanges = dataChanges,
-      super(const BodyWeightState(loading: true)) {
+  /// pojawiają się bez ponownego wchodzenia na ekran. Bez [profile] ekran
+  /// nie pokazuje celu.
+  BodyWeightCubit(
+    this._repository, {
+    ProfileRepository? profile,
+    this.onChanged,
+    Listenable? dataChanges,
+  }) : _profile = profile,
+       _dataChanges = dataChanges,
+       super(const BodyWeightState(loading: true)) {
     _dataChanges?.addListener(_onDataChanged);
   }
 
   final BodyWeightRepository _repository;
+  final ProfileRepository? _profile;
   final Listenable? _dataChanges;
 
   @override
@@ -108,6 +134,7 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
 
   Future<void> load() async {
     emit(state.copyWith(loading: true, clearLoadError: true));
+    unawaited(_loadGoal());
     try {
       final entries = await _repository.list();
       if (isClosed) return;
@@ -124,6 +151,56 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
               : 'Nie udało się wczytać pomiarów. Spróbuj ponownie.',
         ),
       );
+    }
+  }
+
+  /// Cel jest w `/profile/me`, jak pozostałe dane profilu — bez sieci
+  /// po prostu go nie znamy.
+  Future<void> _loadGoal() async {
+    final profile = _profile;
+    if (profile == null) return;
+    try {
+      final own = await profile.getOwnProfile();
+      if (isClosed) return;
+      final goal = own.details?.targetWeightKg;
+      emit(
+        state.copyWith(goalLoaded: true, goalKg: goal, clearGoal: goal == null),
+      );
+    } catch (_) {
+      /* zostaje poprzedni stan celu */
+    }
+  }
+
+  /// Ustawia cel; `null` usuwa go.
+  Future<bool> saveGoal(double? kg) async {
+    final profile = _profile;
+    if (profile == null || state.savingGoal) return false;
+    emit(state.copyWith(savingGoal: true));
+    try {
+      final updated = await profile.updateTargetWeight(kg);
+      if (isClosed) return true;
+      final goal = updated.details?.targetWeightKg;
+      emit(
+        state.copyWith(
+          goalLoaded: true,
+          goalKg: goal,
+          clearGoal: goal == null,
+          savingGoal: false,
+          message: goal == null ? 'Usunięto cel.' : 'Zapisano cel.',
+        ),
+      );
+      return true;
+    } catch (error) {
+      if (isClosed) return false;
+      emit(
+        state.copyWith(
+          savingGoal: false,
+          message: _isOffline(error)
+              ? 'Brak połączenia — cel nie został zapisany.'
+              : 'Nie udało się zapisać celu.',
+        ),
+      );
+      return false;
     }
   }
 

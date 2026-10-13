@@ -43,8 +43,26 @@ void main() {
         trainingGoal: TrainingGoal.muscle,
         experienceLevel: ExperienceLevel.beginner,
         weeklyTrainingDays: 3,
+        targetWeightKg: 76.5,
       );
       expect(ProfileDetailsDraft.fromDetails(details).toDetails(), details);
+    });
+
+    test('keeps the body weight goal it has no field for', () {
+      const saved = ProfileDetails(heightCm: 170, targetWeightKg: 65);
+      final draft = ProfileDetailsDraft.fromDetails(
+        saved,
+      ).copyWith(clearHeight: true);
+
+      expect(draft.toDetails(), const ProfileDetails(targetWeightKg: 65));
+      expect(
+        const ProfileDetailsDraft(heightCm: 180).bodyOnto(saved),
+        const ProfileDetails(heightCm: 180, targetWeightKg: 65),
+      );
+      expect(
+        const ProfileDetailsDraft().goalOnto(saved),
+        const ProfileDetails(heightCm: 170, targetWeightKg: 65),
+      );
     });
 
     test('bodyOnto / goalOnto only replace their own step', () {

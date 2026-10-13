@@ -2,9 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/network/api_client.dart';
 import 'package:gym/features/profile/data/api_body_weight_repository.dart';
 import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
+import 'package:gym/features/profile/domain/models/profile_details.dart';
+import 'package:gym/features/profile/domain/models/profile_stats.dart';
+import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/body_weight_repository.dart';
+import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/domain/services/body_weight_trend.dart';
 import 'package:gym/features/profile/presentation/bloc/body_weight_cubit.dart';
+import 'package:gym/features/profile/presentation/utils/body_weight_format.dart';
 import 'package:gym/features/profile/presentation/widgets/body_weight_chart.dart';
 
 BodyWeightEntry _e(int month, int day, double kg) =>
@@ -84,6 +89,43 @@ class FakeBodyWeightRepository implements BodyWeightRepository {
   }
 }
 
+/// Profil z celem masy ciała — tylko to, czego używa ekran masy ciała.
+class FakeGoalProfileRepository extends Fake implements ProfileRepository {
+  FakeGoalProfileRepository([this.goalKg]);
+
+  double? goalKg;
+  Object? error;
+  final updates = <double?>[];
+
+  UserProfile get _profile => UserProfile(
+    id: 'me',
+    firstName: 'Jan',
+    lastName: 'Kowalski',
+    handle: 'jan',
+    stats: const ProfileStats(
+      followingCount: 0,
+      followersCount: 0,
+      workoutsCount: 0,
+    ),
+    isOwnProfile: true,
+    details: ProfileDetails(heightCm: 180, targetWeightKg: goalKg),
+  );
+
+  @override
+  Future<UserProfile> getOwnProfile() async {
+    if (error != null) throw error!;
+    return _profile;
+  }
+
+  @override
+  Future<UserProfile> updateTargetWeight(double? kg) async {
+    if (error != null) throw error!;
+    updates.add(kg);
+    goalKg = kg;
+    return _profile;
+  }
+}
+
 void main() {
   group('body weight trend', () {
     final entries = [
@@ -118,6 +160,146 @@ void main() {
       expect(trend.first, _e(9, 10, 85.4));
       expect(trend.changeKg, -1.9);
       expect(bodyWeightTrend([_e(9, 1, 80)]), isNull);
+    });
+
+    test('smoothed trend follows the entries without their noise', () {
+      final noisy = [
+        _e(9, 1, 84),
+        _e(9, 2, 85),
+        _e(9, 3, 83.8),
+        _e(9, 4, 84.9),
+        _e(9, 5, 83.7),
+      ];
+      final trend = bodyWeightSmoothedTrend(noisy);
+      expect(trend.first, 84);
+      expect(trend, hasLength(5));
+      for (final t in trend) {
+        expect(t, inInclusiveRange(84, 84.5));
+      }
+      // Po długiej przerwie trend prawie dogania nowy pomiar.
+      final gap = bodyWeightSmoothedTrend([_e(6, 1, 90), _e(9, 1, 80)]);
+      expect(gap.last, closeTo(80, 0.01));
+    });
+
+    test('recent average uses the 7 days ending with the last entry', () {
+      expect(
+        bodyWeightRecentAverage([
+          _e(9, 1, 90),
+          _e(9, 24, 82),
+          _e(9, 28, 81),
+          _e(9, 30, 80),
+        ]),
+        81,
+      );
+      expect(bodyWeightRecentAverage(const []), isNull);
+    });
+
+    test('weekly pace is the fitted slope over the last 4 weeks', () {
+      final steady = [
+        for (var d = 0; d <= 21; d += 3)
+          BodyWeightEntry(
+            date: DateTime(2026, 9, 1 + d),
+            weightKg: 85 - d * 0.5 / 7,
+          ),
+      ];
+      expect(bodyWeightWeeklyPace(steady), closeTo(-0.5, 1e-9));
+      // Mniej niż tydzień danych — bez tempa.
+      expect(bodyWeightWeeklyPace([_e(9, 1, 80), _e(9, 5, 79)]), isNull);
+    });
+
+    test('goal progress, direction and projected date', () {
+      const losing = BodyWeightGoalProgress(
+        startKg: 84.9,
+        currentKg: 81.3,
+        goalKg: 80,
+      );
+      expect(losing.fraction, closeTo(0.735, 0.001));
+      expect(losing.remainingKg, closeTo(1.3, 1e-9));
+      expect(losing.reached, isFalse);
+      expect(losing.isTowardGoal(-0.4), isTrue);
+      expect(losing.isTowardGoal(0.4), isFalse);
+
+      const gaining = BodyWeightGoalProgress(
+        startKg: 70,
+        currentKg: 76,
+        goalKg: 75,
+      );
+      expect(gaining.reached, isTrue);
+      expect(gaining.fraction, 1);
+      expect(gaining.remainingKg, 0);
+
+      final from = DateTime(2026, 10, 12);
+      expect(
+        bodyWeightGoalDate(
+          fromKg: 81.5,
+          goalKg: 80,
+          pacePerWeekKg: -0.5,
+          from: from,
+        ),
+        DateTime(2026, 11, 2),
+      );
+      // Trend w złą stronę albo w miejscu — bez prognozy.
+      expect(
+        bodyWeightGoalDate(
+          fromKg: 81.5,
+          goalKg: 80,
+          pacePerWeekKg: 0.3,
+          from: from,
+        ),
+        isNull,
+      );
+      expect(
+        bodyWeightGoalDate(
+          fromKg: 81.5,
+          goalKg: 80,
+          pacePerWeekKg: 0,
+          from: from,
+        ),
+        isNull,
+      );
+    });
+
+    test('groups entries into weeks with average and change', () {
+      final weeks = bodyWeightWeeks([
+        _e(9, 28, 82),
+        _e(10, 1, 81.6),
+        _e(10, 4, 81.8),
+        _e(10, 6, 81.4),
+        _e(10, 9, 81.2),
+        _e(10, 12, 81.3),
+      ]);
+      expect(
+        [for (final w in weeks) w.start],
+        [DateTime(2026, 10, 12), DateTime(2026, 10, 5), DateTime(2026, 9, 28)],
+      );
+      expect(weeks.last.averageKg, closeTo(81.8, 1e-9));
+      expect(weeks.last.changeKg, isNull);
+      expect(weeks[1].entries, [_e(10, 9, 81.2), _e(10, 6, 81.4)]);
+      expect(weeks[1].changeKg, -0.5);
+      expect(weeks.first.changeKg, 0);
+    });
+
+    test('screen labels', () {
+      final today = DateTime(2026, 10, 12);
+      expect(formatBodyWeightEyebrow(today, today), 'DZIŚ · 12 PAŹ');
+      expect(
+        formatBodyWeightEyebrow(DateTime(2026, 10, 9), today),
+        'PT · 9 PAŹ',
+      );
+      expect(
+        formatBodyWeightWeek(DateTime(2026, 10, 12), DateTime(2026, 10, 18)),
+        '12–18 paź',
+      );
+      expect(
+        formatBodyWeightWeek(DateTime(2026, 9, 28), DateTime(2026, 10, 4)),
+        '28 wrz – 4 paź',
+      );
+      expect(formatBodyWeightCount(1), '1 pomiar');
+      expect(formatBodyWeightCount(42), '42 pomiary');
+      expect(formatBodyWeightCount(15), '15 pomiarów');
+      expect(formatBodyWeightPace(-0.44), '−0,4');
+      expect(formatBodyWeightPace(0.2), '+0,2');
+      expect(formatBodyWeightGoalDate(DateTime(2027, 2, 3), today), 'lut 2027');
     });
 
     test('formats signed changes', () {
@@ -212,6 +394,43 @@ void main() {
       expect(cubit.state.saving, isFalse);
       expect(cubit.state.message, contains('nie został zapisany'));
       expect(cubit.state.messageId, before + 1);
+    });
+
+    test('loads the goal from the profile and saves or clears it', () async {
+      final profile = FakeGoalProfileRepository(80);
+      final cubit = BodyWeightCubit(
+        FakeBodyWeightRepository([_e(9, 1, 82)]),
+        profile: profile,
+      );
+      await cubit.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(cubit.state.goalLoaded, isTrue);
+      expect(cubit.state.goalKg, 80);
+
+      expect(await cubit.saveGoal(78.5), isTrue);
+      expect(cubit.state.goalKg, 78.5);
+      expect(cubit.state.message, 'Zapisano cel.');
+
+      expect(await cubit.saveGoal(null), isTrue);
+      expect(cubit.state.goalKg, isNull);
+      expect(profile.updates, [78.5, null]);
+    });
+
+    test('without the profile offline the goal stays unknown', () async {
+      final profile = FakeGoalProfileRepository(80)
+        ..error = const ApiException('network_error');
+      final cubit = BodyWeightCubit(
+        FakeBodyWeightRepository([_e(9, 1, 82)]),
+        profile: profile,
+      );
+      await cubit.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(cubit.state.entries, [_e(9, 1, 82)]);
+      expect(cubit.state.goalLoaded, isFalse);
+
+      expect(await cubit.saveGoal(79), isFalse);
+      expect(cubit.state.message, 'Brak połączenia — cel nie został zapisany.');
+      expect(cubit.state.savingGoal, isFalse);
     });
 
     test('delete removes at once and restores on failure', () async {

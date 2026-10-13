@@ -428,6 +428,7 @@ GoRouter buildRouter({
                     builder: (_, s) => BlocProvider(
                       create: (_) => BodyWeightCubit(
                         ServiceLocator.bodyWeightRepository!,
+                        profile: _profileRepositoryForCurrentUser(),
                         dataChanges: ServiceLocator.bodyWeightDataChanges,
                       ),
                       child: const BodyWeightScreen(),
