@@ -39,8 +39,8 @@ class WeightCellInput extends StatelessWidget {
       look: look,
       onChanged: (text) => onChanged(weightTextFromInput(text, unit: unit)),
       // Przeliczenie w obie strony gubi to, co jest w trakcie pisania
-      // („22.” → „22”), więc pole nadpisujemy tylko przy innej liczbie.
-      sameValue: unit == WeightUnit.kg ? null : _sameNumber,
+      // („22.” → „22,”), więc pole nadpisujemy tylko przy innej liczbie.
+      sameValue: _sameNumber,
     );
   }
 
