@@ -165,7 +165,7 @@ class _ProfileSettingsView extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          title: const Text('USTAWIENIA'),
+          title: const Text('Ustawienia'),
         ),
         body: SafeArea(
           child: SingleChildScrollView(

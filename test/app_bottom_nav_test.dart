@@ -26,13 +26,15 @@ void main() {
 
     expect(find.text('Historia'), findsOneWidget);
     expect(find.text('Plany'), findsOneWidget);
-    expect(find.text('Trening'), findsOneWidget);
+    expect(find.bySemanticsLabel('Trening'), findsOneWidget);
     expect(find.text('Aktywność'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
 
     final historiaX = tester.getCenter(find.text('Historia')).dx;
     final planyX = tester.getCenter(find.text('Plany')).dx;
-    final treningX = tester.getCenter(find.text('Trening')).dx;
+    final treningX = tester
+        .getCenter(find.byKey(const Key('app-bottom-nav-center')))
+        .dx;
     final aktywnoscX = tester.getCenter(find.text('Aktywność')).dx;
     final profilX = tester.getCenter(find.text('Profil')).dx;
     expect(historiaX < planyX, isTrue);
@@ -66,7 +68,7 @@ void main() {
     await tester.tap(find.byKey(const Key('app-bottom-nav-center')));
     expect(centerTaps, 1);
 
-    await tester.tap(find.text('Trening'));
+    await tester.tap(find.bySemanticsLabel('Trening'));
     expect(centerTaps, 2);
   });
 
@@ -80,11 +82,11 @@ void main() {
     expect(find.byKey(const Key('app-bottom-nav-active-dot')), findsNothing);
   });
 
-  testWidgets('selected center shows white ring, unselected does not', (
+  testWidgets('selected center shows a ring, unselected does not', (
     tester,
   ) async {
     BoxDecoration decorationOf(WidgetTester tester) {
-      final container = tester.widget<Container>(
+      final container = tester.widget<AnimatedContainer>(
         find.byKey(const Key('app-bottom-nav-center')),
       );
       return container.decoration! as BoxDecoration;

@@ -41,7 +41,7 @@ class _NotificationSettingsScreenState
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('POWIADOMIENIA')),
+        appBar: AppBar(title: const Text('Powiadomienia')),
         body: SafeArea(
           child: BlocBuilder<NotificationSettingsCubit, NotificationSettingsState>(
             builder: (context, state) {

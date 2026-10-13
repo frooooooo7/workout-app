@@ -76,10 +76,6 @@ class TrainingPlansCubit extends Cubit<TrainingPlansState> {
     }
   }
 
-  /// History items reference the server plan id, which never equals the local
-  /// id kept in [state], so the lookup has to go through the repository.
-  Future<CustomTrainingPlan?> findPlan(String id) => _repository.getById(id);
-
   Future<void> addPlan(CustomTrainingPlan plan) async {
     final saved = await _repository.create(plan);
     final newPlans = List<CustomTrainingPlan>.from(state.plans)..add(saved);

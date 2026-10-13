@@ -62,6 +62,14 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
+  Future<UserProfile> updateTargetWeight(double? kg) async {
+    final data =
+        await _api.patch('/profile/me', {'targetWeightKg': kg}, auth: true)
+            as Map<String, dynamic>;
+    return _rememberOwn(userProfileFromJson(data));
+  }
+
+  @override
   Future<bool> isHandleAvailable(String handle) async {
     final path = Uri(
       path: '/profile/handle-availability',

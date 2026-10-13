@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/theme/app_typography.dart';
 
 enum HistorySegment {
   sessions,
@@ -11,11 +12,6 @@ enum HistorySegment {
   String get label => switch (this) {
     HistorySegment.sessions => 'Sesje',
     HistorySegment.stats => 'Statystyki',
-  };
-
-  IconData get icon => switch (this) {
-    HistorySegment.sessions => Icons.format_list_bulleted_rounded,
-    HistorySegment.stats => Icons.insights_rounded,
   };
 }
 
@@ -30,15 +26,19 @@ class HistorySegmentSwitch extends StatelessWidget {
   final HistorySegment selected;
   final ValueChanged<HistorySegment> onChanged;
 
+  /// Tło wybranej podzakładki — o ton jaśniejsze od [AppColors.surfaceVariant],
+  /// żeby odcinało się od tła przełącznika.
+  static const _selectedFill = Color(0xFF222A3C);
+
   @override
   Widget build(BuildContext context) {
     const segments = HistorySegment.values;
     return Container(
-      height: 44,
+      height: 46,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md + 2),
+        borderRadius: BorderRadius.circular(AppRadius.tile),
         border: Border.all(color: AppColors.border),
       ),
       child: Stack(
@@ -57,9 +57,8 @@ class HistorySegmentSwitch extends StatelessWidget {
               heightFactor: 1,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
+                  color: _selectedFill,
                   borderRadius: BorderRadius.circular(AppRadius.md - 2),
-                  border: Border.all(color: AppColors.border),
                 ),
               ),
             ),
@@ -104,28 +103,21 @@ class _SegmentLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.textPrimary : AppColors.textSecondary;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(segment.icon, size: 16, color: color),
-        const SizedBox(width: 6),
-        Flexible(
-          child: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 200),
-            style: TextStyle(
-              color: color,
-              fontSize: 13.5,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            ),
-            child: Text(
-              segment.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+    return Center(
+      child: AnimatedDefaultTextStyle(
+        duration: const Duration(milliseconds: 200),
+        style: TextStyle(
+          fontFamily: AppFonts.ui,
+          color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+          fontSize: 14,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
         ),
-      ],
+        child: Text(
+          segment.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
   }
 }

@@ -19,6 +19,9 @@ abstract final class AppSpacing {
 abstract final class AppRadius {
   static const sm = 8.0;
   static const md = 12.0;
+
+  /// Kafelek-przycisk 44 px w nagłówkach.
+  static const tile = 14.0;
   static const lg = 16.0;
   static const xl = 20.0;
   static const card = 24.0;

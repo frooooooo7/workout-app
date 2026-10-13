@@ -28,7 +28,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('DANE I CELE')),
+      appBar: AppBar(title: const Text('Dane i cele')),
       body: BlocConsumer<ProfileDetailsCubit, ProfileDetailsState>(
         listenWhen: (previous, current) =>
             previous.saved == null && current.saved != null,

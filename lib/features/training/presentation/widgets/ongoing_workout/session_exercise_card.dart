@@ -1,0 +1,424 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/units/weight_unit.dart';
+import '../../../../library/presentation/screens/exercise_details_screen.dart';
+import '../../../domain/models/training_session.dart';
+import '../../../domain/repositories/previous_performance_repository.dart';
+import '../../../domain/services/live_workout_insights.dart';
+import '../../../domain/services/stats/stats_sets.dart' show taggedMuscles;
+import '../../../domain/services/training_session_detail_mapper.dart'
+    show parseReps, parseWeightKg;
+import '../../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
+import '../set_type_badge.dart';
+import 'dashed_add_button.dart';
+import 'exercise_stat_chips.dart';
+import 'exercise_thumb.dart';
+import 'record_burst.dart';
+import 'session_set_row.dart';
+import 'set_table_layout.dart';
+import 'workout_colors.dart';
+
+/// Karta bieżącego ćwiczenia: miniatura, nazwa i partie, chipy „Ostatnio” /
+/// „Rekord”, notatka, tabela serii i „Dodaj serię”.
+///
+/// Serie trzyma lokalnie (pisanie w polu nie przebudowuje całego ekranu),
+/// a każdą zmianę oddaje przez [onSetChanged].
+class SessionExerciseCard extends StatefulWidget {
+  const SessionExerciseCard({
+    super.key,
+    required this.exerciseIndex,
+    required this.exercise,
+    required this.history,
+    required this.showRirColumn,
+    required this.showTempoColumn,
+    required this.noteOpen,
+    required this.onSetChanged,
+    required this.onAddSet,
+    required this.onRemoveSet,
+    required this.onNoteChanged,
+    required this.onRecord,
+  });
+
+  final int exerciseIndex;
+  final TrainingSessionExercise exercise;
+
+  /// Poprzedni trening i rekord; `null`, dopóki się wczytują.
+  final ExerciseHistoryInsights? history;
+  final bool showRirColumn;
+  final bool showTempoColumn;
+
+  /// Notatka otwarta z menu ⋯ — pole dostaje fokus.
+  final bool noteOpen;
+  final void Function(int setIndex, TrainingSessionSet set) onSetChanged;
+  final VoidCallback onAddSet;
+  final void Function(int setIndex) onRemoveSet;
+  final ValueChanged<String> onNoteChanged;
+
+  /// Odhaczona seria pobiła rekord.
+  final ValueChanged<RecordBurstData> onRecord;
+
+  @override
+  State<SessionExerciseCard> createState() => _SessionExerciseCardState();
+}
+
+class _SessionExerciseCardState extends State<SessionExerciseCard> {
+  late List<TrainingSessionSet> _sets;
+  late final TextEditingController _noteController;
+  final FocusNode _noteFocus = FocusNode();
+
+  /// Notatka była w sesji od początku — pole widać bez otwierania z menu.
+  late bool _hadNote;
+
+  @override
+  void initState() {
+    super.initState();
+    _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
+    _noteController = TextEditingController(text: widget.exercise.note ?? '');
+    _hadNote = _noteController.text.trim().isNotEmpty;
+  }
+
+  @override
+  void didUpdateWidget(covariant SessionExerciseCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.exercise.id != widget.exercise.id ||
+        widget.exercise.sets.length != _sets.length) {
+      _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
+    }
+    if (oldWidget.exercise.id != widget.exercise.id) {
+      _noteController.text = widget.exercise.note ?? '';
+      _hadNote = _noteController.text.trim().isNotEmpty;
+    }
+    if (widget.noteOpen && !oldWidget.noteOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _noteFocus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    _noteFocus.dispose();
+    super.dispose();
+  }
+
+  ExerciseRecordBaseline? get _record => widget.history?.record;
+
+  void _handleSetChanged(int setIndex, TrainingSessionSet set) {
+    final before = recordSetIndexes(_record, _sets);
+    setState(() {
+      _sets = List<TrainingSessionSet>.from(_sets);
+      _sets[setIndex] = set;
+    });
+    widget.onSetChanged(setIndex, set);
+    final after = recordSetIndexes(_record, _sets);
+    if (after.contains(setIndex) && !before.contains(setIndex)) {
+      _announceRecord(setIndex, set);
+    }
+  }
+
+  void _announceRecord(int setIndex, TrainingSessionSet set) {
+    final baseline = recordBaselineBefore(_record!, _sets, setIndex);
+    final weight = parseWeightKg(set.actualWeight);
+    final reps = parseReps(set.actualReps);
+    final result = (weight ?? 0) > 0
+        ? '${formatWeightWithUnit(weight!)}${reps == null ? '' : ' × $reps'}'
+        : '$reps powt.';
+    widget.onRecord(
+      RecordBurstData(
+        id: set.id,
+        exerciseName: widget.exercise.exerciseName,
+        result: result,
+        improvement: baseline.improvementOf(weight, reps),
+      ),
+    );
+  }
+
+  Future<void> _pickSetType(int setIndex) async {
+    final picked = await showSetTypePicker(context, _sets[setIndex].setType);
+    if (picked == null || !mounted || setIndex >= _sets.length) return;
+    if (picked == _sets[setIndex].setType) return;
+    _handleSetChanged(setIndex, _sets[setIndex].copyWith(setType: picked));
+  }
+
+  /// Przepisuje ciężar i powtórzenia poprzedniego wyniku do serii.
+  void _fillFromPrevious(int setIndex, TrainingSessionSet previous) {
+    final weight = previous.actualWeight?.trim() ?? '';
+    final reps = previous.actualReps?.trim() ?? '';
+    _handleSetChanged(
+      setIndex,
+      _sets[setIndex].copyWith(
+        actualWeight: weight.isEmpty ? null : weight,
+        actualReps: reps.isEmpty ? null : reps,
+      ),
+    );
+  }
+
+  void _removeSet(int setIndex) {
+    // Dismissible musi zniknąć z drzewa w tej samej klatce.
+    setState(
+      () => _sets = List<TrainingSessionSet>.from(_sets)..removeAt(setIndex),
+    );
+    widget.onRemoveSet(setIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final exercise = widget.exercise;
+    final history = widget.history;
+    final previous = history?.previousSets;
+    final muscles = taggedMuscles(exercise).map((m) => m.shortLabel).take(2);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              ExerciseThumb(
+                imageUrl: exercise.exerciseImageUrl,
+                size: 56,
+                radius: 14,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      exercise.exerciseName,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 17,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (muscles.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        muscles.join(' · '),
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _HistoryButton(
+                key: ValueKey(
+                  'session-exercise-details-${widget.exerciseIndex}',
+                ),
+                onTap: () => unawaited(
+                  openExerciseDetailsFromSession(context, exercise),
+                ),
+              ),
+            ],
+          ),
+          ExerciseStatChips(
+            last: history?.lastTopSet(),
+            record: history?.record?.format(),
+          ),
+          if (widget.noteOpen || _hadNote) ...[
+            const SizedBox(height: 10),
+            _NoteField(
+              key: ValueKey('exercise-note-field-${widget.exerciseIndex}'),
+              controller: _noteController,
+              focusNode: _noteFocus,
+              onChanged: widget.onNoteChanged,
+            ),
+          ],
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final layout = SetTableLayout.of(
+                constraints.maxWidth,
+                hasPrevious: previous != null && previous.isNotEmpty,
+                showRir: widget.showRirColumn,
+                showTempo: widget.showTempoColumn,
+              );
+              return _SetTable(
+                exerciseIndex: widget.exerciseIndex,
+                sets: _sets,
+                previous: previous,
+                record: _record,
+                layout: layout,
+                onChanged: _handleSetChanged,
+                onPickType: (i) => unawaited(_pickSetType(i)),
+                onFillPrevious: _fillFromPrevious,
+                onRemove: _sets.length > 1 ? _removeSet : null,
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          DashedAddButton(
+            key: const ValueKey('add-session-set-button'),
+            label: 'Dodaj serię',
+            onTap: widget.onAddSet,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SetTable extends StatelessWidget {
+  const _SetTable({
+    required this.exerciseIndex,
+    required this.sets,
+    required this.previous,
+    required this.record,
+    required this.layout,
+    required this.onChanged,
+    required this.onPickType,
+    required this.onFillPrevious,
+    required this.onRemove,
+  });
+
+  final int exerciseIndex;
+  final List<TrainingSessionSet> sets;
+  final List<TrainingSessionSet>? previous;
+  final ExerciseRecordBaseline? record;
+  final SetTableLayout layout;
+  final void Function(int setIndex, TrainingSessionSet set) onChanged;
+  final ValueChanged<int> onPickType;
+  final void Function(int setIndex, TrainingSessionSet previous) onFillPrevious;
+  final ValueChanged<int>? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final labels = setRowLabels(sets.map((set) => set.setType));
+    final activeIndex = sets.indexWhere((set) => !set.completed);
+    final records = recordSetIndexes(record, sets);
+    final previous = this.previous;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SetTableHeader(layout: layout),
+        for (var i = 0; i < sets.length; i++)
+          Builder(
+            key: ValueKey(sets[i].id),
+            builder: (context) {
+              final previousSet = previous == null || previous.isEmpty
+                  ? null
+                  : previousSetFor(sets, i, previous);
+              final previousText = formatPreviousSet(previousSet);
+              return SessionSetRow(
+                exerciseIndex: exerciseIndex,
+                setIndex: i,
+                label: labels[i],
+                set: sets[i],
+                layout: layout,
+                active: i == activeIndex,
+                record: records.contains(i),
+                previousText: previousText,
+                onFillPrevious: previousSet == null || previousText == null
+                    ? null
+                    : () => onFillPrevious(i, previousSet),
+                progression: i == activeIndex
+                    ? progressionHintFor(sets[i], previousSet)
+                    : null,
+                onChanged: (set) => onChanged(i, set),
+                onPickType: () => onPickType(i),
+                onRemove: onRemove == null ? null : () => onRemove!(i),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _HistoryButton extends StatelessWidget {
+  const _HistoryButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: WorkoutColors.chip,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: const SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.show_chart_rounded,
+            color: AppColors.iconOnTile,
+            size: 20,
+            semanticLabel: 'Historia ćwiczenia',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteField extends StatelessWidget {
+  const _NoteField({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      onChanged: onChanged,
+      maxLength: maxExerciseNoteLength,
+      minLines: 1,
+      maxLines: 4,
+      textCapitalization: TextCapitalization.sentences,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      decoration: InputDecoration(
+        hintText: 'Notatka do ćwiczenia (np. ustawienie ławki)',
+        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+        prefixIcon: const Icon(
+          Icons.sticky_note_2_outlined,
+          size: 16,
+          color: AppColors.textSecondary,
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 36),
+        counterText: '',
+        isDense: true,
+        filled: true,
+        fillColor: WorkoutColors.chip,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}

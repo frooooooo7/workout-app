@@ -1,5 +1,6 @@
-import '../../domain/models/body_measurement_entry.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../training/presentation/widgets/stats/stats_format.dart';
+import '../../domain/models/body_measurement_entry.dart';
 
 /// `84,5`, `80` — obwody i tłuszcz nie zależą od jednostki ciężaru.
 String formatMeasurementValue(double value) => formatDisplayNumber(value);
@@ -23,3 +24,22 @@ String measurementShortLabel(BodyMeasurementField field) => switch (field) {
   BodyMeasurementField.bodyFat => 'Tłuszcz',
   _ => field.label,
 };
+
+/// `39,0`, `105,5` — zawsze jedno miejsce po przecinku, żeby wartości na
+/// sylwetce i w tabeli miały tę samą szerokość.
+String formatMeasurementFixed(double value) =>
+    value.toStringAsFixed(1).replaceAll('.', ',');
+
+/// `+1,3`, `−3,5`, `0,0` — zmiana bez jednostki (kolumny z jednostką
+/// w nagłówku).
+String formatMeasurementDelta(double change) {
+  final text = formatMeasurementFixed(change.abs());
+  if (change == 0) return text;
+  return change > 0 ? '+$text' : '−$text';
+}
+
+/// `3 sie`, a dla innego roku niż [today]: `3 sie 2025`.
+String formatMeasurementDate(DateTime date, DateTime today) {
+  final dayMonth = formatStatsDayMonth(date);
+  return date.year == today.year ? dayMonth : '$dayMonth ${date.year}';
+}

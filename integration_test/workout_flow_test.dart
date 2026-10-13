@@ -40,6 +40,7 @@ import 'package:gym/features/training/data/training_session_remote_data_source.d
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/presentation/screens/training_session_details_screen.dart';
+import 'package:gym/features/training/presentation/widgets/ongoing_workout/set_check_button.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:integration_test/integration_test.dart';
@@ -218,10 +219,10 @@ void main() {
       );
       expect(find.text('Przysiad ze sztangą'), findsWidgets);
 
-      await tester.tap(find.byType(Checkbox).first);
+      final firstSetCheck = find.byKey(const ValueKey('session-set-check-0-0'));
+      await tester.tap(firstSetCheck);
       await _pumpFrames(tester);
-      final checkbox = tester.widget<Checkbox>(find.byType(Checkbox).first);
-      expect(checkbox.value, isTrue);
+      expect(tester.widget<SetCheckButton>(firstSetCheck).completed, isTrue);
 
       await tester.tap(find.byKey(const Key('finish-workout-button')));
       await _pumpUntilFound(tester, find.text('Zakończyć trening?'));
@@ -248,7 +249,12 @@ void main() {
       // ── Historia ─────────────────────────────────────────────────────────
       router.go('/app/history');
       await _pumpUntilFound(tester, find.text('Nogi integracja'));
-      await tester.tap(find.text('Nogi integracja').first);
+      // Nazwa planu jest też w legendzie kalendarza — wiersz sesji jest
+      // ostatni, pod kalendarzem.
+      final sessionRow = find.text('Nogi integracja').last;
+      await tester.ensureVisible(sessionRow);
+      await _pumpFrames(tester);
+      await tester.tap(sessionRow);
 
       await _pumpUntilFound(
         tester,

@@ -13,6 +13,22 @@ class PersonalRecordsResult {
   final List<ExerciseBest> bests;
 
   static const empty = PersonalRecordsResult(records: [], bests: []);
+
+  /// Liczba rekordów pobitych w każdej z [sessions] — pod identyfikatorem
+  /// lokalnym i serwerowym, bo lista historii przychodzi z serwera.
+  Map<String, int> countsBySession(Iterable<TrainingSession> sessions) {
+    final byLocalId = <String, int>{};
+    for (final record in records) {
+      byLocalId.update(record.sessionId, (v) => v + 1, ifAbsent: () => 1);
+    }
+    return {
+      for (final session in sessions)
+        if (byLocalId[session.id] case final count?) ...{
+          session.id: count,
+          ?session.serverId: count,
+        },
+    };
+  }
 }
 
 /// Wykrywa rekordy, przechodząc historię od najstarszej sesji: sesja bije

@@ -34,14 +34,18 @@ TrainingSessionSet? previousSetFor(
   return sameKind.elementAt(ordinal);
 }
 
-/// `82,5×8`, `×12` (bez ciężaru), `60` (bez powtórzeń); `null`, gdy seria nie
-/// ma żadnej z liczb. W kg surowy tekst z klawiatury, bez zamiany separatora;
-/// w funtach ciężar przeliczony.
+/// `82,5 × 8`, `× 12` (bez ciężaru), `60` (bez powtórzeń); `null`, gdy seria
+/// nie ma żadnej z liczb. Ciężar w aktualnej jednostce, z przecinkiem
+/// dziesiętnym — tak jak w reszcie aplikacji; tekst, którego nie da się
+/// odczytać jako liczby, zostaje bez zmian.
 String? formatPreviousSet(TrainingSessionSet? set) {
   if (set == null) return null;
-  final weight = weightTextForInput(set.actualWeight?.trim());
+  final rawWeight = set.actualWeight?.trim() ?? '';
+  final kg = parseWeightNumber(rawWeight);
+  final weight = kg == null ? rawWeight : formatWeightNumber(kg);
   final reps = set.actualReps?.trim() ?? '';
   if (weight.isEmpty && reps.isEmpty) return null;
   if (reps.isEmpty) return weight;
-  return '$weight×$reps';
+  if (weight.isEmpty) return '× $reps';
+  return '$weight × $reps';
 }

@@ -48,6 +48,7 @@ void main() {
     test('kg text passes through untouched', () {
       expect(weightTextFromInput('82,5', unit: WeightUnit.kg), '82,5');
       expect(weightTextForInput(' 60 ', unit: WeightUnit.kg), ' 60 ');
+      expect(weightTextForInput('142.5', unit: WeightUnit.kg), '142,5');
       expect(weightTextForInput(null, unit: WeightUnit.lb), '');
     });
   });
@@ -135,7 +136,7 @@ void main() {
         formatPreviousSet(
           TrainingSessionSet(actualWeight: '100', actualReps: '5'),
         ),
-        '220,5×5',
+        '220,5 × 5',
       );
     });
   });
@@ -151,7 +152,7 @@ void main() {
       formatPreviousSet(
         TrainingSessionSet(actualWeight: '82,5', actualReps: '8'),
       ),
-      '82,5×8',
+      '82,5 × 8',
     );
   });
 

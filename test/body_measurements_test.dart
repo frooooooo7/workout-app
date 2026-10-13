@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/network/api_client.dart';
+import 'package:gym/core/theme/app_colors.dart';
+import 'package:gym/features/body_highlighter/data/body_highlighter_asset_loader.dart';
+import 'package:gym/features/body_highlighter/models/body_gender.dart';
+import 'package:gym/features/body_highlighter/models/body_view.dart';
 import 'package:gym/features/library/data/exercise_database.dart';
 import 'package:gym/features/profile/data/api_body_measurements_repository.dart';
 import 'package:gym/features/profile/data/offline_first_body_measurements_repository.dart';
@@ -13,15 +17,26 @@ import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/repositories/body_measurements_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/body_measurements_cubit.dart';
 import 'package:gym/features/profile/presentation/screens/body_measurements_screen.dart';
+import 'package:gym/features/profile/presentation/utils/body_measurement_comparison.dart';
 import 'package:gym/features/profile/presentation/utils/body_measurement_format.dart';
+import 'package:gym/features/profile/presentation/utils/body_measurement_trend.dart';
+import 'package:gym/features/profile/presentation/widgets/body_fat_summary.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_change_card.dart';
 import 'package:gym/features/profile/presentation/widgets/body_measurement_chart.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_compare_pill.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_compare_sheet.dart';
 import 'package:gym/features/profile/presentation/widgets/body_measurement_entry_sheet.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_entry_tile.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_silhouette.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurement_trend_card.dart';
+import 'package:gym/features/profile/presentation/widgets/body_measurements_empty_state.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 const _waist = BodyMeasurementField.waist;
 const _chest = BodyMeasurementField.chest;
 const _fat = BodyMeasurementField.bodyFat;
+const _arm = BodyMeasurementField.arm;
 
 BodyMeasurementEntry _e(
   int month,
@@ -376,12 +391,77 @@ void main() {
     });
   });
 
+  group('trend and comparison', () {
+    test('colors a change by the goal of the measurement', () {
+      expect(measurementTrend(_waist, -1), MeasurementTrend.good);
+      expect(measurementTrend(_waist, 0.5), MeasurementTrend.bad);
+      expect(measurementTrend(_fat, -0.4), MeasurementTrend.good);
+      expect(measurementTrend(_arm, 1.3), MeasurementTrend.good);
+      expect(measurementTrend(_chest, -1), MeasurementTrend.bad);
+      expect(
+        measurementTrend(BodyMeasurementField.neck, 1),
+        MeasurementTrend.neutral,
+      );
+      expect(measurementTrend(_arm, 0), MeasurementTrend.neutral);
+      expect(MeasurementTrend.good.color, AppColors.success);
+    });
+
+    test('compares first with latest unless two entries are picked', () {
+      final entries = [
+        _e(8, 1, {_waist: 88, _arm: 38}),
+        _e(9, 1, {_waist: 86.5, _chest: 101}),
+        _e(10, 1, {_waist: 85, _chest: 100}),
+      ];
+      final all = BodyMeasurementComparison.of(entries)!;
+      expect(all.from, DateTime(2026, 8, 1));
+      expect(all.deltas[_waist], (value: 85.0, change: -3.0));
+      expect(all.deltas[_chest], (value: 100.0, change: -1.0));
+      // Ramię zmierzone raz — wartość bez zmiany.
+      expect(all.deltas[_arm], (value: 38.0, change: null));
+
+      final picked = BodyMeasurementComparison.of(
+        entries,
+        from: DateTime(2026, 9, 1),
+        to: DateTime(2026, 10, 1),
+      )!;
+      expect(picked.deltas[_waist], (value: 85.0, change: -1.5));
+      expect(picked.deltas.containsKey(_arm), isFalse);
+
+      // Usunięty wpis — wraca do pierwszego z ostatnim.
+      final missing = BodyMeasurementComparison.of(
+        entries,
+        from: DateTime(2026, 8, 15),
+        to: DateTime(2026, 10, 1),
+      )!;
+      expect(missing.from, DateTime(2026, 8, 1));
+      expect(BodyMeasurementComparison.of(const []), isNull);
+      expect(BodyMeasurementComparison.of([entries.first])!.hasRange, isFalse);
+    });
+
+    test('formats fixed values, deltas and dates', () {
+      expect(formatMeasurementFixed(39), '39,0');
+      expect(formatMeasurementDelta(1.3), '+1,3');
+      expect(formatMeasurementDelta(-3.5), '−3,5');
+      expect(formatMeasurementDelta(0), '0,0');
+      final today = DateTime(2026, 10, 12);
+      expect(formatMeasurementDate(DateTime(2026, 8, 3), today), '3 sie');
+      expect(formatMeasurementDate(DateTime(2025, 8, 3), today), '3 sie 2025');
+    });
+  });
+
   group('BodyMeasurementsScreen', () {
     DateTime now() => DateTime(2026, 10, 4, 9);
 
     Future<void> pump(WidgetTester tester, _FakeRepository repo) async {
       await tester.binding.setSurfaceSize(const Size(430, 1400));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+      // Rysunek sylwetki wczytuje się z assetów poza zegarem testu.
+      await tester.runAsync(
+        () => BodyHighlighterAssetLoader.instance.loadModelData(
+          BodyGender.male,
+          BodyView.front,
+        ),
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: BlocProvider(
@@ -393,44 +473,102 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('shows latest values with change, chart and history', (
+    Finder label(BodyMeasurementField field, String text) => find.descendant(
+      of: find.byKey(bodyMeasurementLabelKey(field)),
+      matching: find.text(text),
+    );
+
+    Finder changeRow(BodyMeasurementField field) =>
+        find.byKey(bodyMeasurementChangeRowKey(field));
+
+    final history = [
+      _e(8, 1, {_waist: 88, _fat: 18, _arm: 38}),
+      _e(9, 1, {_waist: 86.5, _chest: 101, _arm: 38.5}),
+      _e(10, 1, {_waist: 85, _fat: 16.5, _arm: 39, _chest: 100}),
+    ];
+
+    testWidgets('compares the first and latest entry on the silhouette', (
+      tester,
+    ) async {
+      await pump(tester, _FakeRepository(history));
+
+      expect(
+        find.descendant(
+          of: find.byKey(bodyMeasurementComparePillKey),
+          matching: find.text('1 sie'),
+        ),
+        findsOneWidget,
+      );
+      expect(label(_waist, '85,0 −3,0'), findsOneWidget);
+      expect(label(_arm, '39,0 +1,0'), findsOneWidget);
+      expect(label(_chest, '100,0 −1,0'), findsOneWidget);
+      expect(
+        find.byKey(bodyMeasurementLabelKey(BodyMeasurementField.neck)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(bodyFatSummaryKey),
+          matching: find.text('16,5%'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('↓ 1,5'), findsOneWidget);
+
+      expect(find.text('Zmiana od 1 sie'), findsOneWidget);
+      expect(changeRow(_waist), findsOneWidget);
+      expect(changeRow(_chest), findsOneWidget);
+      // Tłuszcz ma własne miejsce nad sylwetką.
+      expect(changeRow(_fat), findsNothing);
+      expect(
+        tester.getTopLeft(changeRow(_waist)).dy,
+        lessThan(tester.getTopLeft(changeRow(_arm)).dy),
+      );
+      expect(find.text('3 wpisy · wykresy i edycja wpisów'), findsOneWidget);
+    });
+
+    testWidgets('picks the compared entries from the sheet', (tester) async {
+      await pump(tester, _FakeRepository(history));
+
+      await tester.tap(find.byKey(bodyMeasurementComparePillKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Porównaj pomiary'), findsOneWidget);
+      await tester.tap(
+        find.byKey(
+          bodyMeasurementCompareDateKey(from: true, date: DateTime(2026, 9, 1)),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(bodyMeasurementCompareApplyKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Zmiana od 1 wrz'), findsOneWidget);
+      expect(label(_waist, '85,0 −1,5'), findsOneWidget);
+      expect(label(_chest, '100,0 −1,0'), findsOneWidget);
+      // Tłuszczu nie mierzono 1 wrz — sama wartość.
+      expect(find.text('↓ 1,5'), findsNothing);
+    });
+
+    testWidgets('a single entry shows values without a comparison', (
       tester,
     ) async {
       await pump(
         tester,
         _FakeRepository([
-          _e(8, 1, {_waist: 88, _fat: 18}),
-          _e(9, 1, {_waist: 86.5, _chest: 101}),
-          _e(10, 1, {_waist: 85, _fat: 16.5}),
+          _e(10, 1, {_waist: 84.5}),
         ]),
       );
 
-      final waistTile = find.byKey(bodyMeasurementTileKey(_waist));
+      expect(label(_waist, '84,5'), findsOneWidget);
+      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+      expect(changeRow(_waist), findsNothing);
       expect(
-        find.descendant(of: waistTile, matching: find.text('85 cm')),
+        find.text(
+          'Dodaj kolejne pomiary, a zobaczysz tu, jak zmienia się '
+          'każdy obwód.',
+        ),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: waistTile, matching: find.text('−1,5 cm · 1 paź')),
-        findsOneWidget,
-      );
-      expect(find.byKey(bodyMeasurementTileKey(_chest)), findsOneWidget);
-      expect(
-        find.byKey(bodyMeasurementTileKey(BodyMeasurementField.neck)),
-        findsNothing,
-      );
-      expect(find.byType(BodyMeasurementChart), findsOneWidget);
-      expect(find.text('−3 cm od 1 sie'), findsOneWidget);
-      expect(find.text('Talia 85 cm · Tłuszcz 16,5%'), findsOneWidget);
-
-      await tester.tap(find.byKey(bodyMeasurementTileKey(_fat)));
-      await tester.pumpAndSettle();
-      expect(find.text('−1,5% od 1 sie'), findsOneWidget);
-
-      // Jeden pomiar klatki — bez wykresu.
-      await tester.tap(find.byKey(bodyMeasurementTileKey(_chest)));
-      await tester.pumpAndSettle();
-      expect(find.byType(BodyMeasurementChart), findsNothing);
     });
 
     testWidgets('adds measurements from the sheet', (tester) async {
@@ -438,7 +576,7 @@ void main() {
       await pump(tester, repo);
       expect(find.text('Brak pomiarów'), findsOneWidget);
 
-      await tester.tap(find.byKey(bodyMeasurementsAddButtonKey));
+      await tester.tap(find.byKey(bodyMeasurementsEmptyAddKey));
       await tester.pumpAndSettle();
       expect(find.text('Nowe pomiary'), findsOneWidget);
 
@@ -464,23 +602,56 @@ void main() {
         _e(10, 4, {_waist: 84.5, _fat: 15}),
       ]);
       expect(find.text('Zapisano pomiary.'), findsOneWidget);
-      expect(find.text('Talia 84,5 cm · Tłuszcz 15%'), findsOneWidget);
+      expect(label(_waist, '84,5'), findsOneWidget);
+
+      // Kolejne pomiary z przycisku w nagłówku.
+      await tester.tap(find.byKey(bodyMeasurementsAddButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Nowe pomiary'), findsOneWidget);
     });
 
-    testWidgets('deletes an entry from its menu', (tester) async {
-      final repo = _FakeRepository([
-        _e(9, 1, {_waist: 86}),
-        _e(10, 1, {_waist: 85}),
-      ]);
+    testWidgets('history shows the chart and edits or deletes entries', (
+      tester,
+    ) async {
+      final repo = _FakeRepository(history);
       await pump(tester, repo);
 
-      await tester.tap(find.byTooltip('Więcej').first);
+      // Dotknięcie obwodu otwiera jego wykres.
+      await tester.tap(find.byKey(bodyMeasurementLabelKey(_waist)));
+      await tester.pumpAndSettle();
+      expect(find.text('Historia pomiarów'), findsOneWidget);
+      expect(find.byType(BodyMeasurementChart), findsOneWidget);
+      expect(find.text('−3 cm od 1 sie'), findsOneWidget);
+
+      await tester.tap(find.byKey(bodyMeasurementFieldChipKey(_fat)));
+      await tester.pumpAndSettle();
+      expect(find.text('−1,5% od 1 sie'), findsOneWidget);
+
+      // Klatkę zmierzono dwa razy — wystarczy na wykres.
+      await tester.tap(find.byKey(bodyMeasurementFieldChipKey(_chest)));
+      await tester.pumpAndSettle();
+      expect(find.byType(BodyMeasurementChart), findsOneWidget);
+
+      final latest = find.byKey(bodyMeasurementEntryKey(DateTime(2026, 10, 1)));
+      expect(
+        find.descendant(of: latest, matching: find.text('16,5%')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(of: latest, matching: find.byTooltip('Więcej')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Usuń pomiary'));
       await tester.pumpAndSettle();
 
       expect(repo.deleted, [DateTime(2026, 10, 1)]);
       expect(find.text('1 października 2026'), findsNothing);
+
+      // Ekran główny porównuje teraz z nowym ostatnim wpisem.
+      await tester.tap(find.byTooltip('Wstecz'));
+      await tester.pumpAndSettle();
+      expect(label(_waist, '86,5 −1,5'), findsOneWidget);
     });
   });
 }

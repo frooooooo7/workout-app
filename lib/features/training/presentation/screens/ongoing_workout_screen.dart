@@ -1,28 +1,37 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/units/weight_unit.dart';
-import '../../../library/data/exercise_image_uri.dart';
+import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
-import '../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
+import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/live_workout_insights.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
-import '../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
+import '../../domain/services/stats/personal_records_calculator.dart';
+import '../../domain/services/stats/stats_sets.dart' show statsExerciseKey;
+import '../../domain/services/training_session_detail_mapper.dart'
+    show parseWeightKg;
 import '../bloc/training_session_cubit.dart';
-import '../widgets/ongoing_workout/ongoing_workout_progress_bar.dart';
+import '../widgets/ongoing_workout/next_exercise_card.dart';
+import '../widgets/ongoing_workout/ongoing_workout_header.dart';
+import '../widgets/ongoing_workout/record_burst.dart';
+import '../widgets/ongoing_workout/rest_timer_controller.dart';
 import '../widgets/ongoing_workout/rest_timer_controls.dart';
-import '../widgets/ongoing_workout_footer.dart';
-import '../widgets/ongoing_workout_header.dart';
-import '../widgets/set_type_badge.dart';
-import '../widgets/table_cell_input.dart';
+import '../widgets/ongoing_workout/rest_timer_pill.dart';
+import '../widgets/ongoing_workout/session_exercise_card.dart';
+import '../widgets/ongoing_workout/workout_colors.dart';
+import '../widgets/ongoing_workout/workout_progress_header.dart';
 import 'workout_summary_screen.dart';
 
 class OngoingWorkoutArgs {
@@ -32,6 +41,7 @@ class OngoingWorkoutArgs {
     this.pickExercise,
     this.restTimerScheduler,
     this.previousPerformance,
+    this.statsRepository,
   });
 
   final TrainingSession? initialSession;
@@ -39,9 +49,15 @@ class OngoingWorkoutArgs {
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
   final RestTimerScheduler? restTimerScheduler;
 
-  /// Źródło kolumny „POPRZ.”; domyślnie lokalna historia użytkownika.
+  /// Źródło kolumny „Poprzednio”; domyślnie lokalna historia użytkownika.
   final PreviousPerformanceRepository? previousPerformance;
+
+  /// Historia do rekordów ćwiczeń; domyślnie lokalne statystyki.
+  final TrainingStatsRepository? statsRepository;
 }
+
+/// Pozycje menu ⋯ w nagłówku treningu.
+enum _WorkoutMenuAction { rest, rir, tempo, note, exercises, discard }
 
 class OngoingWorkoutScreen extends StatefulWidget {
   const OngoingWorkoutScreen({super.key, this.args});
@@ -54,17 +70,26 @@ class OngoingWorkoutScreen extends StatefulWidget {
 
 class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Timer? _saveDebounce;
-  Timer? _restTimer;
   final PageController _exercisePageController = PageController();
   final ValueNotifier<TrainingSession?> _draftSession =
       ValueNotifier<TrainingSession?>(null);
-  final ValueNotifier<Duration> _restRemaining = ValueNotifier<Duration>(
-    Duration.zero,
+  late final RestTimerController _rest = RestTimerController(
+    scheduler: _restTimerScheduler,
   );
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
   final Set<String> _userHiddenRirColumns = {};
   final Set<String> _userHiddenTempoColumns = {};
+
+  /// Ćwiczenia, w których notatkę otwarto z menu ⋯.
+  final Set<String> _openNotes = {};
+
+  /// Poprzedni trening i rekord każdego ćwiczenia (po id ćwiczenia w sesji).
+  final Map<String, ExerciseHistoryInsights> _history = {};
+  final Set<String> _historyRequested = {};
+  Future<Map<String, ExerciseBest>?>? _bests;
+
+  RecordBurstData? _recordBurst;
 
   /// Osobny notifier, żeby zmiana strony (także w trakcie swipe'a) nie
   /// przebudowywała całego ekranu — słucha go tylko pasek postępu.
@@ -72,40 +97,29 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   bool _hasUnsavedDraft = false;
   Future<void>? _inFlightSave;
   bool _allowPop = false;
-  Duration _selectedRestDuration = const Duration(seconds: 90);
-  Duration? _lastCustomRestDuration;
 
   @override
   void initState() {
     super.initState();
-    _loadCustomRestDuration();
+    _rest.addListener(_onRestChanged);
+    unawaited(_rest.loadLastCustomDuration());
   }
 
-  Future<void> _loadCustomRestDuration() async {
-    final prefs = await SharedPreferences.getInstance();
-    final seconds = prefs.getInt('last_custom_rest_duration');
-    if (seconds != null && mounted) {
-      setState(() {
-        _lastCustomRestDuration = Duration(seconds: seconds);
-      });
-    }
+  void _onRestChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _saveDebounce?.cancel();
-    _restTimer?.cancel();
+    _rest
+      ..removeListener(_onRestChanged)
+      ..dispose();
     _draftSession.dispose();
-    _restRemaining.dispose();
     _currentExerciseIndex.dispose();
-    if (_restTimerScheduler != null) {
-      unawaited(_restTimerScheduler!.cancelRestFinished());
-    }
     _exercisePageController.dispose();
     super.dispose();
   }
-
-  bool get _restActive => _restTimer?.isActive == true;
 
   RestTimerScheduler? get _restTimerScheduler {
     try {
@@ -125,6 +139,46 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
   }
 
+  TrainingStatsRepository? get _statsRepository {
+    try {
+      return widget.args?.statsRepository ??
+          ServiceLocator.trainingStatsRepository;
+    } catch (_) {
+      // Bez zalogowanego użytkownika (testy) — rekord z poprzedniego treningu.
+      return null;
+    }
+  }
+
+  /// Historia ćwiczenia z pamięci podręcznej; przy pierwszym pytaniu startuje
+  /// wczytywanie i zwraca `null`.
+  ExerciseHistoryInsights? _historyFor(TrainingSessionExercise exercise) {
+    final cached = _history[exercise.id];
+    if (cached == null && _historyRequested.add(exercise.id)) {
+      unawaited(_loadHistory(exercise));
+    }
+    return cached;
+  }
+
+  Future<void> _loadHistory(TrainingSessionExercise exercise) async {
+    final (previous, bests) = await (
+      _loadPreviousSets(exercise),
+      _bests ??= _loadBests(),
+    ).wait;
+    final best = bests?[statsExerciseKey(exercise)];
+    final record = best != null
+        ? ExerciseRecordBaseline.fromBest(best)
+        : previous == null
+        ? null
+        : ExerciseRecordBaseline.fromSets(previous);
+    if (!mounted) return;
+    setState(() {
+      _history[exercise.id] = ExerciseHistoryInsights(
+        previousSets: previous,
+        record: record,
+      );
+    });
+  }
+
   /// Poprzedni wynik ćwiczenia; brak danych lub błąd odczytu to po prostu
   /// brak kolumny — nigdy błąd na ekranie treningu.
   Future<List<TrainingSessionSet>?> _loadPreviousSets(
@@ -142,15 +196,19 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
   }
 
-  Widget _buildSessionFooter(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: _KeyboardAwareFooter(
-        restActive: _restActive,
-        onRestTap: () => unawaited(_toggleRestTimer(context)),
-        onAddExerciseTap: () => _addExerciseToSession(context),
-      ),
-    );
+  /// Najlepsze wyniki ćwiczeń z całej historii — rekordy do pobicia.
+  Future<Map<String, ExerciseBest>?> _loadBests() async {
+    final repository = _statsRepository;
+    if (repository == null) return null;
+    try {
+      final history = await repository.allCompletedSessions();
+      return {
+        for (final best in PersonalRecordsCalculator.compute(history).bests)
+          best.exerciseKey: best,
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -169,97 +227,12 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           _userEnabledTempoColumns.clear();
           _userHiddenRirColumns.clear();
           _userHiddenTempoColumns.clear();
+          _openNotes.clear();
           _currentExerciseIndex.value = 0;
         }
         final session = _draftSession.value!;
         final exerciseCount = session.exercises.length;
-        if (exerciseCount == 0) {
-          return PopScope(
-            canPop: _allowPop,
-            onPopInvokedWithResult: (didPop, result) async {
-              if (didPop) return;
-              await _flushDraft(context.read<TrainingSessionCubit>());
-              if (!context.mounted) return;
-              setState(() => _allowPop = true);
-              context.pop(result);
-            },
-            child: ColoredBox(
-              color: AppColors.background,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Scaffold(
-                      backgroundColor: AppColors.background,
-                      body: SafeArea(
-                        bottom: false,
-                        child: Column(
-                          children: [
-                            OngoingWorkoutHeader(
-                              startedAt: session.startedAt,
-                              onFinish: null,
-                              onBack: () => _leaveWorkout(context),
-                              onCancel: () => _cancelWorkout(context, session),
-                            ),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  24,
-                                  16,
-                                  24,
-                                  24,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.fitness_center_rounded,
-                                      size: 56,
-                                      color: AppColors.primary.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    const Text(
-                                      'Dodaj pierwsze ćwiczenie',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    const Text(
-                                      'Wybór ćwiczeń i zapisywanie serii działa tak jak przy treningu z planu.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (_restActive)
-                              RestTimerBannerHost(
-                                remaining: _restRemaining,
-                                onStop: _stopRestTimer,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  _buildSessionFooter(context),
-                ],
-              ),
-            ),
-          );
-        }
-        if (_currentExerciseIndex.value >= exerciseCount) {
+        if (exerciseCount > 0 && _currentExerciseIndex.value >= exerciseCount) {
           _currentExerciseIndex.value = exerciseCount - 1;
         }
 
@@ -272,149 +245,59 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             setState(() => _allowPop = true);
             context.pop(result);
           },
-          child: ColoredBox(
-            color: AppColors.background,
-            child: Column(
-              children: [
-                Expanded(
-                  child: Scaffold(
-                    backgroundColor: AppColors.background,
-                    body: SafeArea(
-                      bottom: false,
-                      child: Column(
-                        children: [
-                          OngoingWorkoutHeader(
-                            startedAt: session.startedAt,
-                            onFinish: () {
-                              final current = _draftSession.value;
-                              if (current != null) _finish(context, current);
-                            },
-                            onBack: () => _leaveWorkout(context),
-                            onCancel: () => _cancelWorkout(context, session),
-                          ),
-                          ValueListenableBuilder<int>(
-                            valueListenable: _currentExerciseIndex,
-                            builder: (context, currentIndex, _) {
-                              final safeIndex = currentIndex.clamp(
-                                0,
-                                exerciseCount - 1,
-                              );
-                              return OngoingWorkoutProgressBar(
-                                currentIndex: safeIndex,
-                                exerciseCount: exerciseCount,
-                                exerciseName:
-                                    session.exercises[safeIndex].exerciseName,
-                                onPrevious: safeIndex > 0
-                                    ? () => _goToExercise(safeIndex - 1)
-                                    : null,
-                                onNext: safeIndex < exerciseCount - 1
-                                    ? () => _goToExercise(safeIndex + 1)
-                                    : null,
-                                onShowList: () {
-                                  final current = _draftSession.value;
-                                  if (current != null) {
-                                    _showExercisePicker(context, current);
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                          Expanded(
-                            child: PageView.builder(
-                              controller: _exercisePageController,
-                              itemCount: session.exercises.length,
-                              // Sąsiednie strony budują się z wyprzedzeniem,
-                              // więc swipe nie czeka na layout karty.
-                              allowImplicitScrolling: true,
-                              onPageChanged: (index) =>
-                                  _currentExerciseIndex.value = index,
-                              itemBuilder: (context, index) {
-                                return _KeepAlivePage(
-                                  key: ValueKey(
-                                    'exercise-page-${session.exercises[index].id}',
-                                  ),
-                                  child: SingleChildScrollView(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      20,
-                                      12,
-                                      20,
-                                      20,
-                                    ),
-                                    child: _SessionExerciseCard(
-                                      key: ValueKey(
-                                        session.exercises[index].id,
-                                      ),
-                                      exerciseIndex: index,
-                                      exercise: session.exercises[index],
-                                      showRirColumn: _shouldShowRirColumn(
-                                        session.exercises[index],
-                                      ),
-                                      showTempoColumn: _shouldShowTempoColumn(
-                                        session.exercises[index],
-                                      ),
-                                      onShowRirColumn: () => setState(() {
-                                        _userHiddenRirColumns.remove(
-                                          session.exercises[index].id,
-                                        );
-                                        _userEnabledRirColumns.add(
-                                          session.exercises[index].id,
-                                        );
-                                      }),
-                                      onShowTempoColumn: () => setState(() {
-                                        _userHiddenTempoColumns.remove(
-                                          session.exercises[index].id,
-                                        );
-                                        _userEnabledTempoColumns.add(
-                                          session.exercises[index].id,
-                                        );
-                                      }),
-                                      onHideRirColumn: () => setState(() {
-                                        _userEnabledRirColumns.remove(
-                                          session.exercises[index].id,
-                                        );
-                                        _userHiddenRirColumns.add(
-                                          session.exercises[index].id,
-                                        );
-                                      }),
-                                      onHideTempoColumn: () => setState(() {
-                                        _userEnabledTempoColumns.remove(
-                                          session.exercises[index].id,
-                                        );
-                                        _userHiddenTempoColumns.add(
-                                          session.exercises[index].id,
-                                        );
-                                      }),
-                                      onSetChanged: (setIndex, set) =>
-                                          _updateSet(
-                                            context,
-                                            index,
-                                            setIndex,
-                                            set,
-                                          ),
-                                      onAddSet: () => _addSet(context, index),
-                                      onRemoveSet: (setIndex) =>
-                                          _removeSet(context, index, setIndex),
-                                      onNoteChanged: (note) =>
-                                          _updateNote(context, index, note),
-                                      loadPreviousSets: _loadPreviousSets,
-                                    ),
-                                  ),
-                                );
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            body: SafeArea(
+              bottom: false,
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      OngoingWorkoutHeader(
+                        planName: session.planName,
+                        startedAt: session.startedAt,
+                        onCollapse: () => _leaveWorkout(context),
+                        onMore: () => unawaited(_showWorkoutMenu(context)),
+                        onFinish: exerciseCount == 0
+                            ? null
+                            : () {
+                                final current = _draftSession.value;
+                                if (current != null) _finish(context, current);
                               },
-                            ),
+                      ),
+                      if (exerciseCount == 0)
+                        Expanded(
+                          child: _EmptyWorkout(
+                            onAddExercise: () => _addExerciseToSession(context),
                           ),
-                          if (_restActive)
-                            RestTimerBannerHost(
-                              remaining: _restRemaining,
-                              onStop: _stopRestTimer,
-                            ),
-                        ],
+                        )
+                      else ...[
+                        _buildProgress(context),
+                        Expanded(child: _buildExercisePages(context, session)),
+                      ],
+                    ],
+                  ),
+                  if (_recordBurst != null)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: 118,
+                      child: IgnorePointer(
+                        child: RecordBurst(
+                          key: ValueKey(_recordBurst!.id),
+                          data: _recordBurst!,
+                          onDone: () => setState(() => _recordBurst = null),
+                        ),
                       ),
                     ),
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 16 + MediaQuery.paddingOf(context).bottom,
+                    child: _buildRestDock(context),
                   ),
-                ),
-                _buildSessionFooter(context),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -433,39 +316,292 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
   }
 
-  Future<void> _finish(BuildContext context, TrainingSession session) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Zakończyć trening?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Czy na pewno chcesz zakończyć ten trening? Sesja zostanie zapisana w historii.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Anuluj',
-              style: TextStyle(color: AppColors.textSecondary),
+  Widget _buildProgress(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
+      builder: (context, _) {
+        final session = _draftSession.value;
+        if (session == null || session.exercises.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return WorkoutProgressHeader(
+          exercises: session.exercises,
+          currentIndex: _currentExerciseIndex.value.clamp(
+            0,
+            session.exercises.length - 1,
+          ),
+          accent: PlanColors.of(session.planName),
+          onShowList: () => unawaited(_showExercisePicker(context, session)),
+          onSelectExercise: _goToExercise,
+        );
+      },
+    );
+  }
+
+  Widget _buildExercisePages(BuildContext context, TrainingSession session) {
+    final restVisible = _restDockVisible(context);
+    final bottomInset =
+        24 +
+        MediaQuery.paddingOf(context).bottom +
+        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
+        (restVisible ? 92 + 16 : 0);
+    return PageView.builder(
+      controller: _exercisePageController,
+      itemCount: session.exercises.length,
+      // Sąsiednie strony budują się z wyprzedzeniem, więc swipe nie czeka
+      // na layout karty.
+      allowImplicitScrolling: true,
+      onPageChanged: (index) => _currentExerciseIndex.value = index,
+      itemBuilder: (context, index) {
+        final exercise = session.exercises[index];
+        final next = index + 1 < session.exercises.length
+            ? session.exercises[index + 1]
+            : null;
+        return _KeepAlivePage(
+          key: ValueKey('exercise-page-${exercise.id}'),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(12, 12, 12, bottomInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SessionExerciseCard(
+                  key: ValueKey(exercise.id),
+                  exerciseIndex: index,
+                  exercise: exercise,
+                  history: _historyFor(exercise),
+                  showRirColumn: _shouldShowRirColumn(exercise),
+                  showTempoColumn: _shouldShowTempoColumn(exercise),
+                  noteOpen: _openNotes.contains(exercise.id),
+                  onSetChanged: (setIndex, set) =>
+                      _updateSet(context, index, setIndex, set),
+                  onAddSet: () => _addSet(context, index),
+                  onRemoveSet: (setIndex) =>
+                      _removeSet(context, index, setIndex),
+                  onNoteChanged: (note) => _updateNote(context, index, note),
+                  onRecord: _showRecord,
+                ),
+                if (next != null) ...[
+                  const SizedBox(height: 12),
+                  NextExerciseCard(
+                    exercise: next,
+                    lastResult: _historyFor(next)?.lastTopSet(),
+                    onTap: () => _goToExercise(index + 1),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Center(
+                  child: TextButton.icon(
+                    key: ValueKey('add-exercise-button-$index'),
+                    onPressed: () => _addExerciseToSession(context),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Dodaj ćwiczenie'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: WorkoutColors.link,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      textStyle: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Zakończ',
-              style: TextStyle(color: AppColors.primaryVariant),
-            ),
-          ),
-        ],
+        );
+      },
+    );
+  }
+
+  /// Panel znika pod klawiaturą — nie zasłania pól serii w trakcie pisania.
+  bool _restDockVisible(BuildContext context) =>
+      _rest.isActive && MediaQuery.viewInsetsOf(context).bottom == 0;
+
+  Widget _buildRestDock(BuildContext context) {
+    return RestTimerDock(
+      visible: _restDockVisible(context),
+      child: ListenableBuilder(
+        listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
+        builder: (context, _) => RestTimerPill(
+          remaining: _rest.remaining,
+          total: _rest.total,
+          caption: _upNextCaption(),
+          onExtend: () =>
+              unawaited(_reportSchedule(_rest.extend(_restExtension))),
+          onSkip: _rest.stop,
+          onChangeDuration: () => unawaited(_pickRestDuration(context)),
+        ),
       ),
     );
+  }
 
-    if (confirmed != true || !context.mounted) return;
+  static const _restExtension = Duration(seconds: 15);
+
+  /// „Teraz: seria 3 · 95 kg × 6” — co czeka po przerwie.
+  String? _upNextCaption() {
+    final session = _draftSession.value;
+    if (session == null || session.exercises.isEmpty) return null;
+    final index = _currentExerciseIndex.value.clamp(
+      0,
+      session.exercises.length - 1,
+    );
+    final exercise = session.exercises[index];
+    final setIndex = exercise.sets.indexWhere((set) => !set.completed);
+    if (setIndex == -1) {
+      final next = index + 1 < session.exercises.length
+          ? session.exercises[index + 1]
+          : null;
+      return next == null ? null : 'Teraz: ${next.exerciseName}';
+    }
+    final set = exercise.sets[setIndex];
+    final label = setRowLabels(exercise.sets.map((s) => s.setType))[setIndex];
+    final name = set.setType == SetType.warmup
+        ? 'rozgrzewka'
+        : (set.setType.badge == null ? 'seria $label' : set.setType.label);
+    final previous = _history[exercise.id]?.previousSets;
+    final previousSet = previous == null || previous.isEmpty
+        ? null
+        : previousSetFor(exercise.sets, setIndex, previous);
+    // Bez wpisanego ciężaru — ten z podpowiedzi progresji w polu KG.
+    final weight =
+        parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
+        progressionHintFor(set, previousSet)?.weightKg;
+    final reps = (set.actualReps?.trim().isNotEmpty ?? false)
+        ? set.actualReps!.trim()
+        : set.plannedReps.trim();
+    final load = [
+      if (weight != null && weight > 0) formatWeightWithUnit(weight),
+      if (reps.isNotEmpty) reps,
+    ].join(' × ');
+    return load.isEmpty ? 'Teraz: $name' : 'Teraz: $name · $load';
+  }
+
+  void _showRecord(RecordBurstData data) {
+    unawaited(HapticFeedback.heavyImpact());
+    setState(() => _recordBurst = data);
+  }
+
+  Future<void> _showWorkoutMenu(BuildContext context) async {
+    final session = _draftSession.value;
+    if (session == null) return;
+    final hasExercises = session.exercises.isNotEmpty;
+    final exercise = hasExercises
+        ? session.exercises[_currentExerciseIndex.value.clamp(
+            0,
+            session.exercises.length - 1,
+          )]
+        : null;
+    final restActive = _rest.isActive;
+    final action = await showAppActionSheet<_WorkoutMenuAction>(
+      context,
+      title: exercise?.exerciseName ?? 'Trening',
+      actions: [
+        AppSheetAction(
+          value: _WorkoutMenuAction.rest,
+          icon: restActive ? Icons.timer_off_outlined : Icons.timer_outlined,
+          label: restActive ? 'Zatrzymaj odpoczynek' : 'Odpoczynek',
+          subtitle: restActive
+              ? null
+              : 'Wybierz czas — przerwa startuje sama po odhaczeniu serii',
+        ),
+        if (exercise != null) ...[
+          AppSheetAction(
+            value: _WorkoutMenuAction.rir,
+            icon: Icons.speed_rounded,
+            label: _shouldShowRirColumn(exercise)
+                ? 'Ukryj kolumnę RIR'
+                : 'Pokaż kolumnę RIR',
+            subtitle: 'Ile powtórzeń zostało w zapasie',
+          ),
+          AppSheetAction(
+            value: _WorkoutMenuAction.tempo,
+            icon: Icons.av_timer_rounded,
+            label: _shouldShowTempoColumn(exercise)
+                ? 'Ukryj kolumnę tempo'
+                : 'Pokaż kolumnę tempo',
+            subtitle: 'Np. 3-1-1-0',
+          ),
+          if (!_noteVisible(exercise))
+            const AppSheetAction(
+              value: _WorkoutMenuAction.note,
+              icon: Icons.sticky_note_2_outlined,
+              label: 'Dodaj notatkę',
+            ),
+          const AppSheetAction(
+            value: _WorkoutMenuAction.exercises,
+            icon: Icons.format_list_bulleted_rounded,
+            label: 'Lista ćwiczeń',
+          ),
+        ],
+        const AppSheetAction(
+          value: _WorkoutMenuAction.discard,
+          icon: Icons.delete_outline_rounded,
+          label: 'Odrzuć trening',
+          destructive: true,
+        ),
+      ],
+    );
+    if (action == null || !context.mounted) return;
+    switch (action) {
+      case _WorkoutMenuAction.rest:
+        if (restActive) {
+          _rest.stop();
+        } else {
+          await _pickRestDuration(context);
+        }
+      case _WorkoutMenuAction.rir:
+        _toggleRirColumn(exercise!);
+      case _WorkoutMenuAction.tempo:
+        _toggleTempoColumn(exercise!);
+      case _WorkoutMenuAction.note:
+        setState(() => _openNotes.add(exercise!.id));
+      case _WorkoutMenuAction.exercises:
+        await _showExercisePicker(context, session);
+      case _WorkoutMenuAction.discard:
+        await _cancelWorkout(context, session);
+    }
+  }
+
+  bool _noteVisible(TrainingSessionExercise exercise) =>
+      _openNotes.contains(exercise.id) ||
+      (exercise.note?.trim().isNotEmpty ?? false);
+
+  void _toggleRirColumn(TrainingSessionExercise exercise) {
+    setState(() {
+      if (_shouldShowRirColumn(exercise)) {
+        _userEnabledRirColumns.remove(exercise.id);
+        _userHiddenRirColumns.add(exercise.id);
+      } else {
+        _userHiddenRirColumns.remove(exercise.id);
+        _userEnabledRirColumns.add(exercise.id);
+      }
+    });
+  }
+
+  void _toggleTempoColumn(TrainingSessionExercise exercise) {
+    setState(() {
+      if (_shouldShowTempoColumn(exercise)) {
+        _userEnabledTempoColumns.remove(exercise.id);
+        _userHiddenTempoColumns.add(exercise.id);
+      } else {
+        _userHiddenTempoColumns.remove(exercise.id);
+        _userEnabledTempoColumns.add(exercise.id);
+      }
+    });
+  }
+
+  Future<void> _finish(BuildContext context, TrainingSession session) async {
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Zakończyć trening?',
+      message:
+          'Czy na pewno chcesz zakończyć ten trening? Sesja zostanie zapisana w historii.',
+      confirmLabel: 'Zakończ',
+      destructive: false,
+    );
+
+    if (!confirmed || !context.mounted) return;
 
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
@@ -496,6 +632,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     router.push(WorkoutSummaryScreen.routePath, extra: args);
   }
 
+  /// Zwija ekran — trening trwa dalej i wraca z karty na ekranie Trening.
   Future<void> _leaveWorkout(BuildContext context) async {
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
@@ -508,38 +645,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     BuildContext context,
     TrainingSession session,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text(
-          'Odrzucić trening?',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: 'Odrzucić trening?',
+      message:
           'Czy na pewno chcesz odrzucić ten trening? Wszystkie zapisane postępy zostaną utracone.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Anuluj',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Odrzuć',
-              style: TextStyle(color: Colors.redAccent),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Odrzuć',
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       final cubit = context.read<TrainingSessionCubit>();
       _saveDebounce?.cancel();
       await cubit.cancel(session.id);
@@ -593,155 +707,23 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     });
   }
 
-  Future<void> _toggleRestTimer(BuildContext context) async {
-    if (_restActive) {
-      _stopRestTimer();
-    } else {
-      final duration = await _showRestDurationPicker(context);
-      if (duration == null || !context.mounted) return;
-      await _startRestTimer(context, duration);
-    }
+  /// Ręczny wybór długości przerwy (menu ⋯ albo dotknięcie panelu).
+  Future<void> _pickRestDuration(BuildContext context) async {
+    final duration = await showRestDurationPicker(context, controller: _rest);
+    if (duration == null || !context.mounted) return;
+    await _reportSchedule(_rest.start(duration));
   }
 
-  Future<void> _startRestTimer(BuildContext context, Duration duration) async {
-    _restTimer?.cancel();
-    _selectedRestDuration = duration;
-    try {
-      if (_restTimerScheduler != null) {
-        await _restTimerScheduler!.scheduleRestFinished(duration: duration);
-      }
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Timer lokalny wystartował, ale powiadomienie systemowe nie zostało zaplanowane.',
-            ),
-          ),
-        );
-      }
-    }
-    if (!mounted) return;
-    _restRemaining.value = duration;
-    setState(() {});
-    _restTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      if (_restRemaining.value <= const Duration(seconds: 1)) {
-        _completeRestTimer();
-        return;
-      }
-      _restRemaining.value -= const Duration(seconds: 1);
-    });
-  }
-
-  void _stopRestTimer() {
-    _restTimer?.cancel();
-    if (_restTimerScheduler != null) {
-      unawaited(_restTimerScheduler!.cancelRestFinished());
-    }
-    if (!mounted) return;
-    _restRemaining.value = Duration.zero;
-    setState(() {});
-  }
-
-  void _completeRestTimer() {
-    _restTimer?.cancel();
-    if (!mounted) return;
-    _restRemaining.value = Duration.zero;
-    setState(() {});
-  }
-
-  Future<Duration?> _showRestDurationPicker(BuildContext context) {
-    final options = <Duration>[
-      const Duration(seconds: 60),
-      const Duration(seconds: 90),
-      const Duration(seconds: 120),
-      const Duration(seconds: 180),
-    ];
-
-    return showModalBottomSheet<Duration>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Czas odpoczynku',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final option in options)
-                      RestDurationOption(
-                        key: ValueKey(
-                          'rest-duration-option-${option.inSeconds}',
-                        ),
-                        label: formatRestDurationOption(option),
-                        selected: option == _selectedRestDuration,
-                        onTap: () => Navigator.of(sheetContext).pop(option),
-                      ),
-                    if (_lastCustomRestDuration != null)
-                      RestDurationOption(
-                        key: const ValueKey('rest-duration-last-custom'),
-                        label: formatRestDurationOption(
-                          _lastCustomRestDuration!,
-                        ),
-                        eyebrow: 'Ostatni własny',
-                        selected:
-                            _lastCustomRestDuration == _selectedRestDuration,
-                        onTap: () => Navigator.of(
-                          sheetContext,
-                        ).pop(_lastCustomRestDuration),
-                      ),
-                    RestDurationOption(
-                      key: const ValueKey('rest-duration-custom-option'),
-                      label: 'Własny',
-                      selected: !options.contains(_selectedRestDuration),
-                      onTap: () async {
-                        final duration = await _showCustomRestDurationDialog(
-                          sheetContext,
-                        );
-                        if (!sheetContext.mounted || duration == null) return;
-                        _lastCustomRestDuration = duration;
-                        unawaited(
-                          SharedPreferences.getInstance().then(
-                            (p) => p.setInt(
-                              'last_custom_rest_duration',
-                              duration.inSeconds,
-                            ),
-                          ),
-                        );
-                        Navigator.of(sheetContext).pop(duration);
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<Duration?> _showCustomRestDurationDialog(BuildContext context) async {
-    return showDialog<Duration>(
-      context: context,
-      builder: (_) =>
-          CustomRestDurationDialog(initialDuration: _selectedRestDuration),
+  /// Licznik działa zawsze; komunikat tylko, gdy nie wyszło powiadomienie.
+  Future<void> _reportSchedule(Future<bool> scheduled) async {
+    final ok = await scheduled;
+    if (ok || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Timer lokalny wystartował, ale powiadomienie systemowe nie zostało zaplanowane.',
+        ),
+      ),
     );
   }
 
@@ -756,11 +738,16 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final exercises = List<TrainingSessionExercise>.from(session.exercises);
     final exercise = exercises[exerciseIndex];
     final sets = List<TrainingSessionSet>.from(exercise.sets);
+    final justCompleted = set.completed && !sets[setIndex].completed;
     sets[setIndex] = set;
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
     _draftSession.value = session.copyWith(exercises: exercises);
     _hasUnsavedDraft = true;
     _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    // Przerwa startuje sama po odhaczeniu serii, z ostatnio wybraną długością.
+    if (justCompleted) {
+      unawaited(_reportSchedule(_rest.start(_rest.selectedDuration)));
+    }
   }
 
   void _updateNote(BuildContext context, int exerciseIndex, String note) {
@@ -993,711 +980,64 @@ class _KeepAlivePageState extends State<_KeepAlivePage>
   }
 }
 
-class _KeyboardAwareFooter extends StatelessWidget {
-  const _KeyboardAwareFooter({
-    required this.restActive,
-    required this.onRestTap,
-    required this.onAddExerciseTap,
-  });
+/// Trening bez ćwiczeń (start „z ręki”).
+class _EmptyWorkout extends StatelessWidget {
+  const _EmptyWorkout({required this.onAddExercise});
 
-  final bool restActive;
-  final VoidCallback onRestTap;
-  final VoidCallback onAddExerciseTap;
+  final VoidCallback onAddExercise;
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.viewInsetsOf(context).bottom > 0) {
-      return const SizedBox.shrink();
-    }
-    return OngoingWorkoutFooter(
-      restLabel: 'Odpoczynek',
-      restActive: restActive,
-      onRestTap: onRestTap,
-      onAddExerciseTap: onAddExerciseTap,
-    );
-  }
-}
-
-class _SessionExerciseCard extends StatefulWidget {
-  const _SessionExerciseCard({
-    super.key,
-    required this.exerciseIndex,
-    required this.exercise,
-    required this.showRirColumn,
-    required this.showTempoColumn,
-    required this.onShowRirColumn,
-    required this.onShowTempoColumn,
-    required this.onHideRirColumn,
-    required this.onHideTempoColumn,
-    required this.onSetChanged,
-    required this.onAddSet,
-    required this.onRemoveSet,
-    required this.onNoteChanged,
-    this.loadPreviousSets,
-  });
-
-  final int exerciseIndex;
-  final TrainingSessionExercise exercise;
-  final bool showRirColumn;
-  final bool showTempoColumn;
-  final VoidCallback onShowRirColumn;
-  final VoidCallback onShowTempoColumn;
-  final VoidCallback onHideRirColumn;
-  final VoidCallback onHideTempoColumn;
-  final void Function(int setIndex, TrainingSessionSet set) onSetChanged;
-  final VoidCallback onAddSet;
-  final void Function(int setIndex) onRemoveSet;
-  final ValueChanged<String> onNoteChanged;
-  final Future<List<TrainingSessionSet>?> Function(
-    TrainingSessionExercise exercise,
-  )?
-  loadPreviousSets;
-
-  @override
-  State<_SessionExerciseCard> createState() => _SessionExerciseCardState();
-}
-
-class _SessionExerciseCardState extends State<_SessionExerciseCard> {
-  static const _setColumnWidth = 36.0;
-  static const _previousColumnWidth = 56.0;
-  static const _checkColumnWidth = 44.0;
-  static const _deleteColumnWidth = 32.0;
-  static const _columnGap = 8.0;
-
-  /// Najmniejsza szerokość pola (kg / powt. / RIR / tempo), przy której
-  /// kolumna „POPRZ.” jeszcze się mieści — na wąskich telefonach z włączonym
-  /// RIR i tempem ustępuje polom.
-  static const _minInputWidth = 40.0;
-
-  late List<TrainingSessionSet> _sets;
-  late final TextEditingController _noteController;
-  bool _noteOpen = false;
-  bool _noteAutofocus = false;
-  List<TrainingSessionSet>? _previous;
-  DecorationImage? _thumb;
-  String? _thumbUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
-    _noteController = TextEditingController(text: widget.exercise.note ?? '');
-    _noteOpen = _noteController.text.trim().isNotEmpty;
-    unawaited(_loadPrevious());
-  }
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadPrevious() async {
-    final loader = widget.loadPreviousSets;
-    if (loader == null) return;
-    final exercise = widget.exercise;
-    final sets = await loader(exercise);
-    if (!mounted || widget.exercise.id != exercise.id) return;
-    setState(() => _previous = sets);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _cacheThumb();
-  }
-
-  @override
-  void didUpdateWidget(covariant _SessionExerciseCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.exercise.id != widget.exercise.id ||
-        widget.exercise.sets.length != _sets.length) {
-      _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
-    }
-    if (oldWidget.exercise.id != widget.exercise.id) {
-      _previous = null;
-      _noteController.text = widget.exercise.note ?? '';
-      _noteOpen = _noteController.text.trim().isNotEmpty;
-      unawaited(_loadPrevious());
-    }
-    if (oldWidget.exercise.exerciseImageUrl !=
-        widget.exercise.exerciseImageUrl) {
-      _thumb = null;
-      _cacheThumb();
-    }
-  }
-
-  void _cacheThumb() {
-    final url = widget.exercise.exerciseImageUrl;
-    if (_thumb != null && _thumbUrl == url) return;
-    _thumbUrl = url;
-    final provider = exerciseThumbProvider(context, url, logicalSize: 44);
-    _thumb = provider == null
-        ? null
-        : DecorationImage(
-            image: provider,
-            fit: BoxFit.cover,
-            onError: (_, _) {},
-          );
-  }
-
-  void _handleSetChanged(int setIndex, TrainingSessionSet set) {
-    setState(() {
-      _sets = List<TrainingSessionSet>.from(_sets);
-      _sets[setIndex] = set;
-    });
-    widget.onSetChanged(setIndex, set);
-  }
-
-  Future<void> _pickSetType(int setIndex) async {
-    final picked = await showSetTypePicker(context, _sets[setIndex].setType);
-    if (picked == null || !mounted || setIndex >= _sets.length) return;
-    if (picked == _sets[setIndex].setType) return;
-    _handleSetChanged(setIndex, _sets[setIndex].copyWith(setType: picked));
-  }
-
-  /// Przepisuje ciężar i powtórzenia poprzedniego wyniku do serii.
-  void _fillFromPrevious(int setIndex, TrainingSessionSet previous) {
-    final weight = previous.actualWeight?.trim() ?? '';
-    final reps = previous.actualReps?.trim() ?? '';
-    _handleSetChanged(
-      setIndex,
-      _sets[setIndex].copyWith(
-        actualWeight: weight.isEmpty ? null : weight,
-        actualReps: reps.isEmpty ? null : reps,
-      ),
-    );
-  }
-
-  /// Czy kolumna „POPRZ.” mieści się obok pól — kolumny: SET, POPRZ., pola,
-  /// OK, usuń.
-  bool _fitsPreviousColumn(
-    double width, {
-    required bool showRir,
-    required bool showTempo,
-  }) {
-    final previous = _previous;
-    if (previous == null || previous.isEmpty) return false;
-    final inputs = 2 + (showRir ? 1 : 0) + (showTempo ? 1 : 0);
-    final gaps = 3 + inputs;
-    final fixed =
-        _setColumnWidth +
-        _previousColumnWidth +
-        _checkColumnWidth +
-        _deleteColumnWidth +
-        gaps * _columnGap;
-    return (width - fixed) / inputs >= _minInputWidth;
-  }
-
-  Widget _buildNote(int exerciseIndex) {
-    if (!_noteOpen) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          key: ValueKey('add-exercise-note-button-$exerciseIndex'),
-          onPressed: () => setState(() {
-            _noteOpen = true;
-            _noteAutofocus = true;
-          }),
-          icon: const Icon(Icons.sticky_note_2_outlined, size: 16),
-          label: const Text('Dodaj notatkę'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: const Size(0, 32),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            textStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
-    }
-    return TextField(
-      key: ValueKey('exercise-note-field-$exerciseIndex'),
-      controller: _noteController,
-      autofocus: _noteAutofocus,
-      onChanged: widget.onNoteChanged,
-      maxLength: maxExerciseNoteLength,
-      minLines: 1,
-      maxLines: 4,
-      textCapitalization: TextCapitalization.sentences,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
-      decoration: InputDecoration(
-        hintText: 'Notatka do ćwiczenia (np. ustawienie ławki)',
-        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-        counterText: '',
-        isDense: true,
-        filled: true,
-        fillColor: AppColors.surfaceVariant,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSetTable(
-    int exerciseIndex, {
-    required bool showRirColumn,
-    required bool showTempoColumn,
-  }) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final showPrevious = _fitsPreviousColumn(
-          constraints.maxWidth,
-          showRir: showRirColumn,
-          showTempo: showTempoColumn,
-        );
-        final labels = setRowLabels(_sets.map((set) => set.setType));
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const SizedBox(
-                  width: _setColumnWidth,
-                  child: _HeaderText('SET'),
-                ),
-                if (showPrevious) ...[
-                  const SizedBox(width: _columnGap),
-                  const SizedBox(
-                    width: _previousColumnWidth,
-                    child: _HeaderText('POPRZ.'),
-                  ),
-                ],
-                const SizedBox(width: _columnGap),
-                Expanded(child: _HeaderText(WeightUnits.current.columnLabel)),
-                const SizedBox(width: _columnGap),
-                const Expanded(child: _HeaderText('POWT.')),
-                if (showRirColumn) ...[
-                  const SizedBox(width: _columnGap),
-                  const Expanded(child: _HeaderText('RIR')),
-                ],
-                if (showTempoColumn) ...[
-                  const SizedBox(width: _columnGap),
-                  const Expanded(child: _HeaderText('TEMPO')),
-                ],
-                const SizedBox(width: _columnGap),
-                const SizedBox(
-                  width: _checkColumnWidth,
-                  child: _HeaderText('OK'),
-                ),
-                const SizedBox(width: _columnGap),
-                const SizedBox(width: _deleteColumnWidth),
-              ],
-            ),
-            const SizedBox(height: 8),
-            for (var setIndex = 0; setIndex < _sets.length; setIndex++)
-              _buildSetRow(
-                exerciseIndex,
-                setIndex,
-                label: labels[setIndex],
-                showPrevious: showPrevious,
-                showRirColumn: showRirColumn,
-                showTempoColumn: showTempoColumn,
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSetRow(
-    int exerciseIndex,
-    int setIndex, {
-    required String label,
-    required bool showPrevious,
-    required bool showRirColumn,
-    required bool showTempoColumn,
-  }) {
-    final set = _sets[setIndex];
-    final previousSet = showPrevious
-        ? previousSetFor(_sets, setIndex, _previous!)
-        : null;
-    final previousText = formatPreviousSet(previousSet);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: set.completed
-              ? AppColors.primary.withValues(alpha: 0.10)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: set.completed
-              ? Border.all(color: AppColors.primary.withValues(alpha: 0.35))
-              : null,
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: _setColumnWidth,
-              child: SetTypeBadge(
-                key: ValueKey('session-set-type-$exerciseIndex-$setIndex'),
-                label: label,
-                type: set.setType,
-                completed: set.completed,
-                onTap: () => unawaited(_pickSetType(setIndex)),
-              ),
-            ),
-            if (showPrevious) ...[
-              const SizedBox(width: _columnGap),
-              SizedBox(
-                width: _previousColumnWidth,
-                child: _PreviousCell(
-                  key: ValueKey(
-                    'session-set-previous-$exerciseIndex-$setIndex',
-                  ),
-                  text: previousText,
-                  onTap: previousSet == null || previousText == null
-                      ? null
-                      : () => _fillFromPrevious(setIndex, previousSet),
-                ),
-              ),
-            ],
-            const SizedBox(width: _columnGap),
-            Expanded(
-              child: WeightCellInput(
-                valueKg: set.actualWeight,
-                hintKg: set.plannedWeight,
-                onChanged: (value) => _handleSetChanged(
-                  setIndex,
-                  set.copyWith(
-                    actualWeight: value,
-                    clearActualWeight: value.trim().isEmpty,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: _columnGap),
-            Expanded(
-              child: TableCellInput(
-                value: set.actualReps ?? '',
-                hint: set.plannedReps,
-                onChanged: (value) => _handleSetChanged(
-                  setIndex,
-                  set.copyWith(
-                    actualReps: value,
-                    clearActualReps: value.trim().isEmpty,
-                  ),
-                ),
-              ),
-            ),
-            if (showRirColumn) ...[
-              const SizedBox(width: _columnGap),
-              Expanded(
-                child: TableCellInput(
-                  value: set.actualRir ?? '',
-                  hint: set.plannedRir?.isNotEmpty == true
-                      ? set.plannedRir!
-                      : '-',
-                  onChanged: (value) => _handleSetChanged(
-                    setIndex,
-                    set.copyWith(
-                      actualRir: value,
-                      clearActualRir: value.trim().isEmpty,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            if (showTempoColumn) ...[
-              const SizedBox(width: _columnGap),
-              Expanded(
-                child: TableCellInput(
-                  key: ValueKey('session-set-tempo-$exerciseIndex-$setIndex'),
-                  value: set.actualTempo ?? '',
-                  hint: set.plannedTempo?.isNotEmpty == true
-                      ? set.plannedTempo!
-                      : '-',
-                  keyboardType: TextInputType.text,
-                  onChanged: (value) => _handleSetChanged(
-                    setIndex,
-                    set.copyWith(
-                      actualTempo: value,
-                      clearActualTempo: value.trim().isEmpty,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(width: _columnGap),
-            SizedBox(
-              width: _checkColumnWidth,
-              child: Checkbox(
-                value: set.completed,
-                activeColor: AppColors.primary,
-                onChanged: (value) => _handleSetChanged(
-                  setIndex,
-                  set.copyWith(
-                    completed: value ?? false,
-                    completedAt: value == true ? DateTime.now().toUtc() : null,
-                    clearCompletedAt: value != true,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: _columnGap),
-            SizedBox(
-              width: _deleteColumnWidth,
-              child: IconButton(
-                tooltip: 'Usuń serię',
-                onPressed: _sets.length > 1
-                    ? () => widget.onRemoveSet(setIndex)
-                    : null,
-                padding: EdgeInsets.zero,
-                iconSize: 22,
-                icon: const Icon(Icons.delete_outline_rounded),
-                color: AppColors.textSecondary,
-                disabledColor: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final exercise = widget.exercise;
-    final exerciseIndex = widget.exerciseIndex;
-    final showRirColumn = widget.showRirColumn;
-    final showTempoColumn = widget.showTempoColumn;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              // Dotknięcie miniatury lub nazwy otwiera kartę ćwiczenia z
-              // wykresem i poprzednimi wynikami.
-              Expanded(
-                child: InkWell(
-                  key: ValueKey('session-exercise-details-$exerciseIndex'),
-                  onTap: () => unawaited(
-                    openExerciseDetailsFromSession(context, exercise),
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(10),
-                          image: _thumb,
-                        ),
-                        child: exercise.exerciseImageUrl == null
-                            ? const Icon(
-                                Icons.fitness_center,
-                                color: AppColors.textMuted,
-                                size: 22,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          exercise.exerciseName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6),
-                        child: Icon(
-                          Icons.insights_rounded,
-                          size: 16,
-                          color: AppColors.primaryVariant,
-                          semanticLabel: 'Historia ćwiczenia',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          Icon(
+            Icons.fitness_center_rounded,
+            size: 56,
+            color: AppColors.primary.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Dodaj pierwsze ćwiczenie',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Wybór ćwiczeń i zapisywanie serii działa tak jak przy treningu z planu.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            key: const ValueKey('add-first-exercise-button'),
+            onPressed: onAddExercise,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Dodaj ćwiczenie'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              if (!showRirColumn) ...[
-                const SizedBox(width: 8),
-                _OptionalColumnButton(
-                  key: ValueKey('show-rir-column-button-$exerciseIndex'),
-                  label: 'RIR',
-                  adding: true,
-                  onTap: widget.onShowRirColumn,
-                ),
-              ] else ...[
-                const SizedBox(width: 8),
-                _OptionalColumnButton(
-                  key: ValueKey('hide-rir-column-button-$exerciseIndex'),
-                  label: 'RIR',
-                  adding: false,
-                  onTap: widget.onHideRirColumn,
-                ),
-              ],
-              if (!showTempoColumn) ...[
-                const SizedBox(width: 8),
-                _OptionalColumnButton(
-                  key: ValueKey('show-tempo-column-button-$exerciseIndex'),
-                  label: 'Tempo',
-                  adding: true,
-                  onTap: widget.onShowTempoColumn,
-                ),
-              ] else ...[
-                const SizedBox(width: 8),
-                _OptionalColumnButton(
-                  key: ValueKey('hide-tempo-column-button-$exerciseIndex'),
-                  label: 'Tempo',
-                  adding: false,
-                  onTap: widget.onHideTempoColumn,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          _buildNote(exerciseIndex),
-          const SizedBox(height: 10),
-          _buildSetTable(
-            exerciseIndex,
-            showRirColumn: showRirColumn,
-            showTempoColumn: showTempoColumn,
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              key: const ValueKey('add-session-set-button'),
-              onPressed: widget.onAddSet,
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Dodaj serię'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryVariant,
-                side: BorderSide(
-                  color: AppColors.primary.withValues(alpha: 0.45),
-                ),
-                minimumSize: const Size.fromHeight(44),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Poprzedni wynik tej serii (`82,5×8`); dotknięcie wpisuje go w pola.
-class _PreviousCell extends StatelessWidget {
-  const _PreviousCell({super.key, required this.text, required this.onTap});
-
-  final String? text;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = Text(
-      text ?? '—',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: text == null ? AppColors.textMuted : AppColors.textSecondary,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-    if (onTap == null) return Center(child: label);
-    return Semantics(
-      button: true,
-      label: 'Użyj poprzedniego wyniku: $text',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(height: 36, child: Center(child: label)),
-      ),
-    );
-  }
-}
-
-class _OptionalColumnButton extends StatelessWidget {
-  const _OptionalColumnButton({
-    super.key,
-    required this.label,
-    required this.adding,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool adding;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.primary.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                adding ? Icons.add_rounded : Icons.close_rounded,
-                color: AppColors.primaryVariant,
-                size: 16,
-              ),
-              const SizedBox(width: 2),
-              Text(
-                '${adding ? '+' : '-'}$label',
-                style: const TextStyle(
-                  color: AppColors.primaryVariant,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeaderText extends StatelessWidget {
-  const _HeaderText(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: AppColors.textSecondary,
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
       ),
     );
   }

@@ -15,6 +15,7 @@ import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
+import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -42,6 +43,7 @@ void main() {
     ServiceLocator.debugSetUserScopedRepositories(
       trainingPlanRepository: _FakeTrainingPlanRepository(),
       trainingHistoryRepository: _FakeTrainingHistoryRepository(),
+      trainingStatsRepository: _FakeTrainingStatsRepository(),
       trainingSessionRepository: _FakeTrainingSessionRepository(),
     );
   });
@@ -211,6 +213,7 @@ void main() {
     ServiceLocator.debugSetUserScopedRepositories(
       trainingPlanRepository: _FakeTrainingPlanRepository(),
       trainingHistoryRepository: _FakeTrainingHistoryRepository(),
+      trainingStatsRepository: _FakeTrainingStatsRepository(),
       trainingSessionRepository: _FakeTrainingSessionRepository(
         active: TrainingSession(
           planName: 'Push',
@@ -445,4 +448,14 @@ class _NoSeenStore implements FeedSeenStore {
 
   @override
   Future<void> write(String userId, List<String> postIds) async {}
+}
+
+/// Trening i Historia liczą serię tygodni i rekordy ze statystyk.
+class _FakeTrainingStatsRepository implements TrainingStatsRepository {
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async => const [];
+
+  @override
+  Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
+      const [];
 }

@@ -16,6 +16,7 @@ class TrainingStatsState {
     this.snapshot,
     this.loading = true,
     this.failed = false,
+    this.recordsBySession = const {},
   });
 
   final StatsRange range;
@@ -31,12 +32,18 @@ class TrainingStatsState {
   /// Wczytanie się nie udało i nie ma czego pokazać.
   final bool failed;
 
+  /// Ile rekordów padło w danej sesji (z całej historii, niezależnie od
+  /// zakresu). Klucz to zarówno identyfikator serwerowy, jak i lokalny, więc
+  /// pasuje do pozycji listy historii przed synchronizacją i po niej.
+  final Map<String, int> recordsBySession;
+
   TrainingStatsState copyWith({
     StatsRange? range,
     StatsDateRange? customRange,
     TrainingStatsSnapshot? snapshot,
     bool? loading,
     bool? failed,
+    Map<String, int>? recordsBySession,
   }) {
     return TrainingStatsState(
       range: range ?? this.range,
@@ -44,6 +51,7 @@ class TrainingStatsState {
       snapshot: snapshot ?? this.snapshot,
       loading: loading ?? this.loading,
       failed: failed ?? this.failed,
+      recordsBySession: recordsBySession ?? this.recordsBySession,
     );
   }
 }
@@ -140,7 +148,14 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       _records = records;
       final snapshot = await _snapshotFor(state.range, state.customRange);
       if (isClosed || snapshot == null) return;
-      emit(state.copyWith(snapshot: snapshot, loading: false, failed: false));
+      emit(
+        state.copyWith(
+          snapshot: snapshot,
+          loading: false,
+          failed: false,
+          recordsBySession: records.countsBySession(valid),
+        ),
+      );
     } catch (_) {
       if (isClosed) return;
       emit(
@@ -150,6 +165,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           snapshot: state.snapshot,
           loading: false,
           failed: state.snapshot == null,
+          recordsBySession: state.recordsBySession,
         ),
       );
     }
@@ -228,6 +244,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           snapshot: state.snapshot,
           loading: false,
           failed: state.snapshot == null,
+          recordsBySession: state.recordsBySession,
         ),
       );
     }

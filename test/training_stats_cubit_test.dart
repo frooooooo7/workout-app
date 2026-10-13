@@ -25,7 +25,12 @@ class _Repo implements TrainingStatsRepository {
       sessions;
 }
 
-TrainingSession _session(DateTime startLocal) => TrainingSession(
+TrainingSession _session(
+  DateTime startLocal, {
+  String weight = '80',
+  String? serverId,
+}) => TrainingSession(
+  serverId: serverId,
   planName: 'Push',
   status: TrainingSessionStatus.completed,
   startedAt: startLocal.toUtc(),
@@ -38,7 +43,7 @@ TrainingSession _session(DateTime startLocal) => TrainingSession(
       exerciseCategory: 'compound',
       sets: [
         TrainingSessionSet(
-          actualWeight: '80',
+          actualWeight: weight,
           actualReps: '10',
           completed: true,
         ),
@@ -58,6 +63,21 @@ Future<void> _until(bool Function() condition) async {
 }
 
 void main() {
+  test('counts records per session under local and server ids', () async {
+    final first = _session(DateTime(2026, 9, 3, 18));
+    final second = _session(
+      DateTime(2026, 9, 10, 18),
+      weight: '85',
+      serverId: 'srv-2',
+    );
+    final cubit = TrainingStatsCubit(_Repo([first, second]), clock: () => _now);
+    await cubit.load();
+
+    // Pierwsza sesja ustanawia wynik, druga go poprawia — rekord tylko w niej.
+    expect(cubit.state.recordsBySession, {second.id: 1, 'srv-2': 1});
+    await cubit.close();
+  });
+
   group('custom range', () {
     test('selecting dates recomputes without another read', () async {
       final repo = _Repo([

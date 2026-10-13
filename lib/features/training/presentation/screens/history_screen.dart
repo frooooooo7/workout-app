@@ -6,16 +6,17 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_tab_header.dart';
+import '../../../../core/widgets/skeleton.dart';
 import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
 import '../bloc/workout_history_cubit.dart';
 import '../widgets/stats/training_stats_view.dart';
+import '../widgets/workout_history/history_month_calendar.dart';
+import '../widgets/workout_history/history_month_navigator.dart';
 import '../widgets/workout_history/history_segment_switch.dart';
-import '../widgets/workout_history/month_selector_bar.dart';
-import '../widgets/workout_history/monthly_sessions_list.dart';
-import '../widgets/workout_history/monthly_stats_card.dart';
-import '../widgets/workout_history/monthly_summary_footer.dart';
+import '../widgets/workout_history/history_week_sessions_list.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -30,8 +31,8 @@ class HistoryScreen extends StatelessWidget {
             dataChanges: ServiceLocator.trainingSessionDataChanges,
           ),
         ),
-        // Leniwie — statystyki liczą się dopiero przy pierwszym wejściu
-        // w podzakładkę.
+        // Liczone od razu: lista sesji bierze z nich serię tygodni
+        // i rekordy pobite w każdej sesji.
         BlocProvider(
           create: (_) => TrainingStatsCubit(
             ServiceLocator.trainingStatsRepository,
@@ -58,7 +59,6 @@ class _WorkoutHistoryView extends StatefulWidget {
 }
 
 class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
-  late final PageController _pageController;
   HistorySegment _segment = HistorySegment.sessions;
 
   void _selectSegment(HistorySegment segment) {
@@ -66,21 +66,23 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     setState(() => _segment = segment);
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
   Future<void> _onRefresh(BuildContext context) async {
     HapticFeedback.lightImpact();
     await context.read<WorkoutHistoryCubit>().refresh();
+  }
+
+  /// Miesiąc obok bieżącego ([step] = -1 poprzedni, 1 następny) albo `null`,
+  /// gdy wychodzi poza dostępny zakres.
+  DateTime? _adjacentMonth(WorkoutHistoryState state, int step) {
+    final months = state.availableMonths;
+    final index = months.indexWhere(
+      (m) =>
+          m.year == state.focusedMonth.year &&
+          m.month == state.focusedMonth.month,
+    );
+    final target = index + step;
+    if (index == -1 || target < 0 || target >= months.length) return null;
+    return months[target];
   }
 
   void _onHorizontalDragEnd(
@@ -90,110 +92,103 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   ) {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity.abs() < 200) return;
-
-    final currentIndex = state.availableMonths.indexWhere(
-      (m) =>
-          m.year == state.focusedMonth.year &&
-          m.month == state.focusedMonth.month,
-    );
-    if (currentIndex == -1) return;
-
-    if (velocity < 0) {
-      // Swiped left -> next month
-      if (currentIndex < state.availableMonths.length - 1) {
-        context.read<WorkoutHistoryCubit>().selectMonth(
-          state.availableMonths[currentIndex + 1],
-        );
-      }
-    } else {
-      // Swiped right -> previous month
-      if (currentIndex > 0) {
-        context.read<WorkoutHistoryCubit>().selectMonth(
-          state.availableMonths[currentIndex - 1],
-        );
-      }
-    }
+    // Przesunięcie w lewo — następny miesiąc, w prawo — poprzedni.
+    final month = _adjacentMonth(state, velocity < 0 ? 1 : -1);
+    if (month != null) context.read<WorkoutHistoryCubit>().selectMonth(month);
   }
 
   @override
   Widget build(BuildContext context) {
+    final showStats = _segment == HistorySegment.stats;
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
       body: AppTabBackground(
         child: SafeArea(
           bottom: false,
-          child: BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
-            builder: (context, state) {
-              final cubit = context.read<WorkoutHistoryCubit>();
-              final showStats = _segment == HistorySegment.stats;
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Nagłówek — tytuł i wskaźnik synchronizacji.
+              const AppTabHeader(title: 'Historia'),
 
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 1. Header — wspólny dla wszystkich zakładek
-                  AppTabHeader(
-                    title: 'Historia',
-                    actions: [
-                      if (!showStats)
-                        AppTabHeaderButton(
-                          tooltip: 'Wybierz rok/miesiąc',
-                          icon: Icons.calendar_today_rounded,
-                          onPressed: () => cubit.openMonthPicker(context),
-                        ),
-                    ],
+              // 2. Podzakładki: sesje / statystyki
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.xs,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: HistorySegmentSwitch(
+                  selected: _segment,
+                  onChanged: _selectSegment,
+                ),
+              ),
+
+              if (showStats) ...[
+                const SizedBox(height: AppSpacing.sm),
+                const AppTabScrollEdge(),
+                Expanded(
+                  child: TrainingStatsView(
+                    onStartWorkout: () => context.go('/app/training'),
+                    bodyWeightRepository: ServiceLocator.bodyWeightRepository,
                   ),
-
-                  // 2. Podzakładki: lista sesji / statystyki
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                    child: HistorySegmentSwitch(
-                      selected: _segment,
-                      onChanged: _selectSegment,
-                    ),
-                  ),
-
-                  if (showStats) ...[
-                    const SizedBox(height: 12),
-                    const AppTabScrollEdge(),
-                    Expanded(
-                      child: TrainingStatsView(
-                        onStartWorkout: () => context.go('/app/training'),
-                        bodyWeightRepository:
-                            ServiceLocator.bodyWeightRepository,
-                      ),
-                    ),
-                  ] else ...[
-                    // 3. Month Selector Bar
-                    const SizedBox(height: 8),
-                    MonthSelectorBar(
-                      availableMonths: state.availableMonths,
-                      focusedMonth: state.focusedMonth,
-                      onMonthSelected: (month) => cubit.selectMonth(month),
-                    ),
-                    const SizedBox(height: 12),
-                    const AppTabScrollEdge(),
-
-                    // Main Content — Vertical scroll view with swipe gesture for months
-                    Expanded(
-                      child: GestureDetector(
-                        onHorizontalDragEnd: (details) =>
-                            _onHorizontalDragEnd(context, details, state),
-                        behavior: HitTestBehavior.opaque,
-                        child: RefreshIndicator(
-                          onRefresh: () => _onRefresh(context),
-                          color: AppColors.primary,
-                          child: _buildBody(context, state, cubit),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            },
+                ),
+              ] else
+                Expanded(child: _buildSessions(context)),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSessions(BuildContext context) {
+    return BlocBuilder<WorkoutHistoryCubit, WorkoutHistoryState>(
+      builder: (context, state) {
+        final cubit = context.read<WorkoutHistoryCubit>();
+        final previous = _adjacentMonth(state, -1);
+        final next = _adjacentMonth(state, 1);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 3. Miesiąc: strzałki, nazwa i podsumowanie w jednej linii.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.xs,
+              ),
+              child: HistoryMonthNavigator(
+                month: state.focusedMonth,
+                stats: state.monthlyHistory?.stats,
+                onPrevious: previous == null
+                    ? null
+                    : () => cubit.selectMonth(previous),
+                onNext: next == null ? null : () => cubit.selectMonth(next),
+                onPickMonth: () => cubit.openMonthPicker(context),
+              ),
+            ),
+            const AppTabScrollEdge(),
+
+            // 4. Kalendarz i sesje — przesunięcie w bok zmienia miesiąc.
+            Expanded(
+              child: GestureDetector(
+                onHorizontalDragEnd: (details) =>
+                    _onHorizontalDragEnd(context, details, state),
+                behavior: HitTestBehavior.opaque,
+                child: RefreshIndicator(
+                  onRefresh: () => _onRefresh(context),
+                  color: AppColors.primary,
+                  child: _buildBody(context, state, cubit),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -213,107 +208,114 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
       );
     }
 
-    final history = state.monthlyHistory;
-    final stats = history?.stats;
-    final sessions = state.filteredSessions;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sessions = state.monthlyHistory?.sessions ?? const [];
+    final stats = context.select(
+      (TrainingStatsCubit c) => (
+        streak: c.state.snapshot?.currentStreakWeeks ?? 0,
+        records: c.state.recordsBySession,
+      ),
+    );
 
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state.fromCache)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Text(
-                    'Tryb offline: pokazujemy zapisane dane z pamięci podręcznej.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.xs,
+            AppSpacing.md,
+            0,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (state.fromCache)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Text(
+                      'Tryb offline: pokazujemy zapisane dane z pamięci podręcznej.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
-                child: state.isMonthChanging
-                    ? const Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.primary,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: state.isMonthChanging
+                      ? const Padding(
+                          padding: EdgeInsets.only(bottom: AppSpacing.xs),
+                          child: Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              if (stats != null) ...[
-                MonthlyStatsCard(
-                  focusedMonth: state.focusedMonth,
-                  stats: stats,
-                  onShowStats: () => _selectSegment(HistorySegment.stats),
+                        )
+                      : const SizedBox.shrink(),
                 ),
-                const SizedBox(height: 16),
+                HistoryMonthCalendar(
+                  month: state.focusedMonth,
+                  sessions: sessions,
+                  today: today,
+                  selectedDay: state.selectedDay,
+                  streakWeeks: stats.streak,
+                  onDayTap: cubit.toggleDaySelection,
+                ),
               ],
-            ],
-          ),
-        ),
-        MonthlySessionsList(sessions: sessions, selectedDay: state.selectedDay),
-        if (stats != null)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 20),
-              child: MonthlySummaryFooter(stats: stats),
             ),
           ),
+        ),
+        HistoryWeekSessionsList(
+          sessions: state.filteredSessions,
+          today: today,
+          selectedDay: state.selectedDay,
+          recordsBySession: stats.records,
+          onClearDay: cubit.clearDaySelection,
+        ),
         SliverToBoxAdapter(
-          child: SizedBox(height: 24 + MediaQuery.paddingOf(context).bottom),
+          child: SizedBox(
+            height: AppSpacing.xl + MediaQuery.paddingOf(context).bottom,
+          ),
         ),
       ],
     );
   }
 }
 
+/// Szkielet pierwszego wczytania: kalendarz i kilka wierszy sesji.
 class _WorkoutHistorySkeleton extends StatelessWidget {
   const _WorkoutHistorySkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        8,
-        16,
-        8 + MediaQuery.paddingOf(context).bottom,
+    return SkeletonPulse(
+      label: 'Wczytywanie historii',
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.xs,
+          AppSpacing.md,
+          AppSpacing.xs + MediaQuery.paddingOf(context).bottom,
+        ),
+        children: [
+          const SkeletonBlock(height: 300, radius: 22),
+          const SizedBox(height: AppSpacing.md),
+          const SkeletonBlock(width: 180, height: 16),
+          for (var i = 0; i < 3; i++) ...[
+            const SizedBox(height: AppSpacing.xs),
+            const SkeletonBlock(height: 64, radius: 18),
+          ],
+        ],
       ),
-      children: [
-        Container(
-          height: 170,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          height: 190,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          height: 160,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-      ],
     );
   }
 }

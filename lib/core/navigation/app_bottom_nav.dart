@@ -1,8 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Bottom navigation with a notched, docked center "Trening" button.
+/// Pływający pasek nawigacji z wyróżnionym środkowym przyciskiem „Trening”.
 ///
 /// Order: Historia (0), Plany (1), [Trening (2)], Aktywność (3), Profil (4).
 /// Purely presentational — the parent resolves taps.
@@ -15,9 +17,12 @@ class AppBottomNav extends StatelessWidget {
     required this.onCenterTap,
   });
 
-  static const double barHeight = 64;
-  static const double centerDiameter = 56;
-  static const double _centerOverlap = centerDiameter / 2;
+  static const double barHeight = 68;
+  static const double centerSize = 52;
+
+  /// Odstęp paska od krawędzi ekranu (boki / dół nad bezpiecznym obszarem).
+  static const double sideInset = 12;
+  static const double bottomInset = 14;
 
   final int currentIndex;
   final bool hasActiveSession;
@@ -28,81 +33,78 @@ class AppBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
-      child: SizedBox(
-        // Extra height on top so the circle stays inside hit-test bounds.
-        height: barHeight + _centerOverlap,
-        child: Stack(
-          children: [
-            const Positioned(
-              left: 0,
-              right: 0,
-              top: _centerOverlap,
-              bottom: 0,
-              child: CustomPaint(
-                painter: _NotchedBarPainter(notchDepth: 30, notchMargin: 40),
+      minimum: const EdgeInsets.only(bottom: bottomInset),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: sideInset),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.45),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              top: _centerOverlap,
-              bottom: 0,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _NavItem(
-                    index: 0,
-                    label: 'Historia',
-                    icon: Icons.history_outlined,
-                    selectedIcon: Icons.history_rounded,
-                    selected: currentIndex == 0,
-                    onTap: onDestinationSelected,
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                height: barHeight,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xDB141924),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
                   ),
-                  _NavItem(
-                    index: 1,
-                    label: 'Plany',
-                    icon: Icons.format_list_bulleted_rounded,
-                    selectedIcon: Icons.format_list_bulleted_rounded,
-                    selected: currentIndex == 1,
-                    onTap: onDestinationSelected,
-                  ),
-                  _CenterLabelSlot(
-                    label: 'Trening',
-                    selected: currentIndex == 2,
-                    onTap: onCenterTap,
-                  ),
-                  _NavItem(
-                    index: 3,
-                    label: 'Aktywność',
-                    icon: Icons.timeline_outlined,
-                    selectedIcon: Icons.timeline_rounded,
-                    selected: currentIndex == 3,
-                    onTap: onDestinationSelected,
-                  ),
-                  _NavItem(
-                    index: 4,
-                    label: 'Profil',
-                    icon: Icons.person_outline_rounded,
-                    selectedIcon: Icons.person_rounded,
-                    selected: currentIndex == 4,
-                    onTap: onDestinationSelected,
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: _CenterButton(
-                  selected: currentIndex == 2,
-                  hasActiveSession: hasActiveSession,
-                  onTap: onCenterTap,
+                ),
+                child: Row(
+                  children: [
+                    _NavItem(
+                      index: 0,
+                      label: 'Historia',
+                      icon: Icons.history_rounded,
+                      selected: currentIndex == 0,
+                      onTap: onDestinationSelected,
+                    ),
+                    _NavItem(
+                      index: 1,
+                      label: 'Plany',
+                      icon: Icons.format_list_bulleted_rounded,
+                      selected: currentIndex == 1,
+                      onTap: onDestinationSelected,
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: _CenterButton(
+                          selected: currentIndex == 2,
+                          hasActiveSession: hasActiveSession,
+                          onTap: onCenterTap,
+                        ),
+                      ),
+                    ),
+                    _NavItem(
+                      index: 3,
+                      label: 'Aktywność',
+                      icon: Icons.monitor_heart_outlined,
+                      selected: currentIndex == 3,
+                      onTap: onDestinationSelected,
+                    ),
+                    _NavItem(
+                      index: 4,
+                      label: 'Profil',
+                      icon: Icons.person_outline_rounded,
+                      selected: currentIndex == 4,
+                      onTap: onDestinationSelected,
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -122,6 +124,7 @@ class _CenterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(18);
     return Semantics(
       button: true,
       selected: selected,
@@ -130,27 +133,32 @@ class _CenterButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          borderRadius: radius,
           onTap: onTap,
-          child: Container(
+          child: AnimatedContainer(
             key: const Key('app-bottom-nav-center'),
-            width: AppBottomNav.centerDiameter,
-            height: AppBottomNav.centerDiameter,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            width: AppBottomNav.centerSize,
+            height: AppBottomNav.centerSize,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: radius,
               color: AppColors.primary,
               border: selected
-                  ? Border.all(color: Colors.white, width: 2)
+                  ? Border.all(color: Colors.white.withValues(alpha: 0.35))
                   : null,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.45),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
+                  color: AppColors.primary.withValues(
+                    alpha: selected ? 0.55 : 0.35,
+                  ),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: Stack(
+              clipBehavior: Clip.none,
               children: [
                 const Center(
                   child: Icon(
@@ -161,12 +169,12 @@ class _CenterButton extends StatelessWidget {
                 ),
                 if (hasActiveSession)
                   Positioned(
-                    top: 1,
-                    right: 1,
+                    top: -3,
+                    right: -3,
                     child: Container(
                       key: const Key('app-bottom-nav-active-dot'),
-                      width: 12,
-                      height: 12,
+                      width: 14,
+                      height: 14,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppColors.success,
@@ -191,7 +199,6 @@ class _NavItem extends StatelessWidget {
     required this.index,
     required this.label,
     required this.icon,
-    required this.selectedIcon,
     required this.selected,
     required this.onTap,
   });
@@ -199,7 +206,6 @@ class _NavItem extends StatelessWidget {
   final int index;
   final String label;
   final IconData icon;
-  final IconData selectedIcon;
   final bool selected;
   final ValueChanged<int> onTap;
 
@@ -211,37 +217,29 @@ class _NavItem extends StatelessWidget {
         button: true,
         selected: selected,
         label: label,
+        excludeSemantics: true,
         child: InkWell(
+          borderRadius: BorderRadius.circular(18),
           onTap: () => onTap(index),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.primaryVariant.withValues(alpha: 0.18)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  selected ? selectedIcon : icon,
-                  color: color,
-                  size: 22,
-                ),
+              AnimatedScale(
+                scale: selected ? 1.08 : 1,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: Icon(icon, color: color, size: 22),
               ),
-              const SizedBox(height: 2),
-              Text(
-                label,
+              const SizedBox(height: 4),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
                 style: TextStyle(
+                  fontFamily: DefaultTextStyle.of(context).style.fontFamily,
                   color: color,
-                  fontSize: 10.5,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
+                child: Text(label, maxLines: 1),
               ),
             ],
           ),
@@ -249,99 +247,4 @@ class _NavItem extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CenterLabelSlot extends StatelessWidget {
-  const _CenterLabelSlot({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: label,
-        child: InkWell(
-          onTap: onTap,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected
-                      ? AppColors.primaryVariant
-                      : AppColors.textSecondary,
-                  fontSize: 10.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NotchedBarPainter extends CustomPainter {
-  const _NotchedBarPainter({required this.notchDepth, required this.notchMargin});
-
-  final double notchDepth;
-  final double notchMargin;
-
-  Path _topEdge(Size size) {
-    final centerX = size.width / 2;
-    return Path()
-      ..moveTo(0, 0)
-      ..lineTo(centerX - notchMargin, 0)
-      ..cubicTo(
-        centerX - notchMargin + 8,
-        0,
-        centerX - 14,
-        notchDepth,
-        centerX,
-        notchDepth,
-      )
-      ..cubicTo(
-        centerX + 14,
-        notchDepth,
-        centerX + notchMargin - 8,
-        0,
-        centerX + notchMargin,
-        0,
-      )
-      ..lineTo(size.width, 0);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final edge = _topEdge(size);
-    final fill = Path.from(edge)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(fill, Paint()..color = AppColors.surface);
-    canvas.drawPath(
-      edge,
-      Paint()
-        ..color = AppColors.border
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_NotchedBarPainter oldDelegate) =>
-      oldDelegate.notchDepth != notchDepth ||
-      oldDelegate.notchMargin != notchMargin;
 }

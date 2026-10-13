@@ -90,12 +90,12 @@ double? parseWeightNumber(String? raw) {
 }
 
 /// Surowy ciężar serii (tekst w kilogramach, tak jak leży w bazie) w postaci
-/// do pola tekstowego w aktualnej jednostce. W kilogramach tekst wraca bez
-/// zmian, żeby nie ruszać tego, co użytkownik wpisał.
+/// do pola tekstowego w aktualnej jednostce. W kilogramach tekst zostaje
+/// taki, jak go wpisano — zmienia się tylko kropka na przecinek dziesiętny.
 String weightTextForInput(String? rawKg, {WeightUnit? unit}) {
   final u = unit ?? WeightUnits.current;
   final raw = rawKg ?? '';
-  if (u == WeightUnit.kg) return raw;
+  if (u == WeightUnit.kg) return raw.replaceAll('.', ',');
   final kg = parseWeightNumber(raw);
   if (kg == null) return raw.trim().isEmpty ? '' : raw;
   return formatDisplayNumber(u.fromKg(kg));
