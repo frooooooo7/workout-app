@@ -11,6 +11,12 @@ abstract final class AppColors {
   static const textPrimary = Color(0xFFF5F7FB);
   static const textSecondary = Color(0xFF8A94A8);
   static const textMuted = Color(0xFF5E687C);
+
+  /// Drugorzędny tekst na kartach — jaśniejszy od [textSecondary].
+  static const textSubtle = Color(0xFFA3ACBD);
+
+  /// Podpisy osi i dni (litery tygodnia, nagłówki tabel).
+  static const textLabel = Color(0xFF7C869A);
   static const border = Color(0xFF1F2635);
   static const success = Color(0xFF34D399);
 

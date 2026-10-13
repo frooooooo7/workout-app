@@ -114,8 +114,11 @@ class TrainingWeekStrip extends StatelessWidget {
       caption = 'dziś';
     } else if (isFuture) {
       caption = plannedPlan ?? 'wolne';
-    } else {
+    } else if (donePlan != null) {
+      // Zrobiony dzień ma w kółku ptaszek, więc pod spodem zostaje data.
       caption = '${date.day}';
+    } else {
+      caption = plannedPlan != null ? 'pominięty' : 'wolne';
     }
 
     return _WeekDay(
@@ -165,8 +168,6 @@ class _WeekSummary extends StatelessWidget {
   final int target;
   final int streakWeeks;
 
-  static const _summaryColor = Color(0xFFA3ACBD);
-
   @override
   Widget build(BuildContext context) {
     final rest = target > 0
@@ -201,7 +202,7 @@ class _WeekSummary extends StatelessWidget {
               TextSpan(text: rest),
             ],
           ),
-          style: const TextStyle(color: _summaryColor, fontSize: 13),
+          style: const TextStyle(color: AppColors.textSubtle, fontSize: 13),
         ),
         if (streakWeeks > 0) ...[
           const SizedBox(width: 8),
@@ -277,15 +278,13 @@ class _WeekDay extends StatelessWidget {
   final String semanticLabel;
   final VoidCallback onTap;
 
-  static const _labelColor = Color(0xFF7C869A);
-
   @override
   Widget build(BuildContext context) {
     final todayTint = Color.lerp(color, Colors.white, 0.35)!;
     final captionColor = isToday
         ? todayTint
         : state == WeekDayState.done
-        ? _labelColor
+        ? AppColors.textLabel
         : AppColors.textMuted;
 
     return Semantics(
@@ -301,7 +300,7 @@ class _WeekDay extends StatelessWidget {
             Text(
               letter,
               style: TextStyle(
-                color: isToday ? todayTint : _labelColor,
+                color: isToday ? todayTint : AppColors.textLabel,
                 fontSize: 11,
                 fontWeight: isToday ? FontWeight.w800 : FontWeight.w700,
               ),
@@ -355,7 +354,6 @@ class _DayCircle extends StatelessWidget {
   final bool pulse;
 
   static const _plannedFill = Color(0xFF171D2A);
-  static const _plannedText = Color(0xFFA3ACBD);
   static const _restBorder = Color(0xFF2A3243);
 
   @override
@@ -405,7 +403,7 @@ class _DayCircle extends StatelessWidget {
             Text(
               '$dayNumber',
               style: const TextStyle(
-                color: _plannedText,
+                color: AppColors.textSubtle,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 height: 1.1,

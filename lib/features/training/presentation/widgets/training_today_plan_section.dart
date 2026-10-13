@@ -330,7 +330,7 @@ class _PlanContent extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: _mutedText,
+                      color: AppColors.textSubtle,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -386,8 +386,6 @@ class _PlanContent extends StatelessWidget {
       ],
     );
   }
-
-  static const _mutedText = Color(0xFFA3ACBD);
 
   /// Czas w pełnych 5 minutach, co najmniej 5.
   static int _roundedMinutes(int seconds) {

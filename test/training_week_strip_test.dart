@@ -61,6 +61,14 @@ void main() {
     expect(find.bySemanticsLabel('Środa 29, dziś Legs'), findsOneWidget);
   });
 
+  testWidgets('marks a missed planned day instead of repeating its date', (
+    tester,
+  ) async {
+    await _pump(tester, scheduled: const {1: 'Push'}, done: const {});
+
+    expect(find.text('pominięty'), findsOneWidget);
+  });
+
   testWidgets('uses the weekly goal and shows the streak', (tester) async {
     await _pump(
       tester,
