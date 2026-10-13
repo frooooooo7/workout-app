@@ -45,6 +45,9 @@ abstract class ProfileRepository {
     ProfileDetails? details,
   });
 
+  /// Ustawia cel masy ciała; `null` usuwa cel. Pozostałe dane bez zmian.
+  Future<UserProfile> updateTargetWeight(double? kg);
+
   /// `GET /profile/handle-availability` — czy znormalizowany [handle] jest
   /// wolny. Własny, obecny nick też liczy się jako wolny.
   Future<bool> isHandleAvailable(String handle);

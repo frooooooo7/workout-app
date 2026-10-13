@@ -9,6 +9,7 @@ class ProfileDetails {
     this.trainingGoal,
     this.experienceLevel,
     this.weeklyTrainingDays,
+    this.targetWeightKg,
   });
 
   static const empty = ProfileDetails();
@@ -22,6 +23,9 @@ class ProfileDetails {
   final ExperienceLevel? experienceLevel;
   final int? weeklyTrainingDays;
 
+  /// Cel masy ciała (ekran „Masa ciała”) — postęp i prognoza daty.
+  final double? targetWeightKg;
+
   bool get isEmpty =>
       birthDate == null &&
       gender == null &&
@@ -29,7 +33,8 @@ class ProfileDetails {
       weightKg == null &&
       trainingGoal == null &&
       experienceLevel == null &&
-      weeklyTrainingDays == null;
+      weeklyTrainingDays == null &&
+      targetWeightKg == null;
 
   /// Pełne lata w dniu [today].
   int? ageOn(DateTime today) {
@@ -49,6 +54,7 @@ class ProfileDetails {
         json['experienceLevel'] as String?,
       ),
       weeklyTrainingDays: (json['weeklyTrainingDays'] as num?)?.toInt(),
+      targetWeightKg: (json['targetWeightKg'] as num?)?.toDouble(),
     );
   }
 
@@ -61,6 +67,7 @@ class ProfileDetails {
         'trainingGoal': trainingGoal?.apiValue,
         'experienceLevel': experienceLevel?.apiValue,
         'weeklyTrainingDays': weeklyTrainingDays,
+        'targetWeightKg': targetWeightKg,
       };
 
   @override
@@ -72,7 +79,8 @@ class ProfileDetails {
       other.weightKg == weightKg &&
       other.trainingGoal == trainingGoal &&
       other.experienceLevel == experienceLevel &&
-      other.weeklyTrainingDays == weeklyTrainingDays;
+      other.weeklyTrainingDays == weeklyTrainingDays &&
+      other.targetWeightKg == targetWeightKg;
 
   @override
   int get hashCode => Object.hash(
@@ -83,6 +91,7 @@ class ProfileDetails {
         trainingGoal,
         experienceLevel,
         weeklyTrainingDays,
+        targetWeightKg,
       );
 }
 

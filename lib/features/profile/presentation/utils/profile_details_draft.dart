@@ -12,6 +12,7 @@ class ProfileDetailsDraft {
     this.trainingGoal,
     this.experienceLevel,
     this.weeklyTrainingDays,
+    this.targetWeightKg,
   });
 
   factory ProfileDetailsDraft.fromDetails(ProfileDetails? details) {
@@ -24,6 +25,7 @@ class ProfileDetailsDraft {
       trainingGoal: d.trainingGoal,
       experienceLevel: d.experienceLevel,
       weeklyTrainingDays: d.weeklyTrainingDays,
+      targetWeightKg: d.targetWeightKg,
     );
   }
 
@@ -34,6 +36,10 @@ class ProfileDetailsDraft {
   final TrainingGoal? trainingGoal;
   final ExperienceLevel? experienceLevel;
   final int? weeklyTrainingDays;
+
+  /// Cel masy ciała — ustawiany na ekranie „Masa ciała”; szkic tylko go
+  /// przenosi, żeby zapis danych go nie wyczyścił.
+  final double? targetWeightKg;
 
   int? ageOn(DateTime today) {
     final birth = birthDate;
@@ -49,6 +55,7 @@ class ProfileDetailsDraft {
     trainingGoal: base.trainingGoal,
     experienceLevel: base.experienceLevel,
     weeklyTrainingDays: base.weeklyTrainingDays,
+    targetWeightKg: base.targetWeightKg,
   );
 
   /// [base] z polami z kroku „Twój cel” z tego szkicu.
@@ -60,9 +67,11 @@ class ProfileDetailsDraft {
     trainingGoal: trainingGoal,
     experienceLevel: experienceLevel,
     weeklyTrainingDays: weeklyTrainingDays,
+    targetWeightKg: base.targetWeightKg,
   );
 
-  ProfileDetails toDetails() => goalOnto(bodyOnto(ProfileDetails.empty));
+  ProfileDetails toDetails() =>
+      goalOnto(bodyOnto(ProfileDetails(targetWeightKg: targetWeightKg)));
 
   /// Każde pole można wyczyścić — `clear*` ustawia null.
   ProfileDetailsDraft copyWith({
@@ -95,6 +104,7 @@ class ProfileDetailsDraft {
       weeklyTrainingDays: clearWeeklyTrainingDays
           ? null
           : (weeklyTrainingDays ?? this.weeklyTrainingDays),
+      targetWeightKg: targetWeightKg,
     );
   }
 }

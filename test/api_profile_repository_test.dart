@@ -230,6 +230,7 @@ void main() {
         'trainingGoal': 'fat_loss',
         'experienceLevel': 'intermediate',
         'weeklyTrainingDays': 4,
+        'targetWeightKg': 58.5,
       },
     };
 
@@ -246,6 +247,7 @@ void main() {
         trainingGoal: TrainingGoal.fatLoss,
         experienceLevel: ExperienceLevel.intermediate,
         weeklyTrainingDays: 4,
+        targetWeightKg: 58.5,
       ),
     );
   });
@@ -293,7 +295,24 @@ void main() {
       'trainingGoal': 'strength',
       'experienceLevel': null,
       'weeklyTrainingDays': null,
+      'targetWeightKg': null,
     });
+  });
+
+  test('updateTargetWeight sends only the goal; null clears it', () async {
+    api.responses['PATCH /profile/me'] = {
+      ..._profileJson(),
+      'details': {'targetWeightKg': 80},
+    };
+
+    final profile = await repository.updateTargetWeight(80);
+
+    expect(api.calls.single, 'PATCH /profile/me');
+    expect(api.lastBody, {'targetWeightKg': 80.0});
+    expect(profile.details?.targetWeightKg, 80);
+
+    await repository.updateTargetWeight(null);
+    expect(api.lastBody, {'targetWeightKg': null});
   });
 
   test('updateProfile without details sends only given fields', () async {
