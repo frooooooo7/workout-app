@@ -459,7 +459,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final name = set.setType == SetType.warmup
         ? 'rozgrzewka'
         : (set.setType.badge == null ? 'seria $label' : set.setType.label);
-    final weight = parseWeightKg(set.actualWeight ?? set.plannedWeight);
+    final previous = _history[exercise.id]?.previousSets;
+    final previousSet = previous == null || previous.isEmpty
+        ? null
+        : previousSetFor(exercise.sets, setIndex, previous);
+    // Bez wpisanego ciężaru — ten z podpowiedzi progresji w polu KG.
+    final weight =
+        parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
+        progressionHintFor(set, previousSet)?.weightKg;
     final reps = (set.actualReps?.trim().isNotEmpty ?? false)
         ? set.actualReps!.trim()
         : set.plannedReps.trim();

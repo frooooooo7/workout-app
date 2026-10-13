@@ -118,7 +118,7 @@ class TrainingWeekStrip extends StatelessWidget {
       // Zrobiony dzień ma w kółku ptaszek, więc pod spodem zostaje data.
       caption = '${date.day}';
     } else {
-      caption = plannedPlan != null ? 'pominięty' : 'wolne';
+      caption = plannedPlan != null ? 'brak' : 'wolne';
     }
 
     return _WeekDay(

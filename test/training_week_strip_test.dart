@@ -66,7 +66,7 @@ void main() {
   ) async {
     await _pump(tester, scheduled: const {1: 'Push'}, done: const {});
 
-    expect(find.text('pominięty'), findsOneWidget);
+    expect(find.text('brak'), findsOneWidget);
   });
 
   testWidgets('uses the weekly goal and shows the streak', (tester) async {
