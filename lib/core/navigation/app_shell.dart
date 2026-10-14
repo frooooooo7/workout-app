@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../services/service_locator.dart';
 import '../theme/app_colors.dart';
 import 'app_bottom_nav.dart';
 
@@ -67,6 +68,7 @@ class AppShell extends StatelessWidget {
                 hasActiveSession: sessionState.activeSession != null,
                 onDestinationSelected: _onDestinationSelected,
                 onCenterTap: () => _handleCenterTap(context, sessionState),
+                activityBadge: ServiceLocator.unreadNotifications,
               );
             },
           ),

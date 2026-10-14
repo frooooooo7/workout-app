@@ -5,6 +5,8 @@ import 'package:gym/features/account/presentation/bloc/notification_settings_cub
 import 'package:gym/features/account/presentation/bloc/workout_reminder_cubit.dart';
 import 'package:gym/features/account/presentation/screens/help_screen.dart';
 import 'package:gym/features/account/presentation/screens/notification_settings_screen.dart';
+import 'package:gym/features/notifications/presentation/bloc/social_notification_settings_cubit.dart';
+import 'package:gym/features/notifications/presentation/widgets/social_notifications_section.dart';
 import 'package:gym/features/training/data/settings_aware_rest_timer_scheduler.dart';
 import 'package:gym/features/training/data/shared_preferences_rest_timer_notification_settings.dart';
 import 'package:gym/features/training/data/shared_preferences_workout_reminder_settings.dart';
@@ -12,6 +14,8 @@ import 'package:gym/features/training/domain/models/workout_reminder.dart';
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/domain/services/workout_reminder_scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fake_notifications_repository.dart';
 
 class _RecordingScheduler implements RestTimerScheduler {
   final scheduled = <Duration>[];
@@ -74,6 +78,9 @@ void main() {
   ) async {
     const settings = SharedPreferencesRestTimerNotificationSettings();
     final inner = _RecordingScheduler();
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -89,6 +96,11 @@ void main() {
               create: (_) => WorkoutReminderCubit(
                 const SharedPreferencesWorkoutReminderSettings(),
                 _NoopReminderScheduler(),
+              ),
+            ),
+            BlocProvider(
+              create: (_) => SocialNotificationSettingsCubit(
+                FakeNotificationsRepository(),
               ),
             ),
           ],
@@ -114,6 +126,51 @@ void main() {
     await tester.tap(find.byKey(restTimerNotificationSwitchKey));
     await tester.pumpAndSettle();
     expect(await settings.isEnabled(), isTrue);
+  });
+
+  testWidgets('social switches and quiet hours save to the server', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = FakeNotificationsRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiBlocProvider(
+          providers: [
+            BlocProvider(
+              create: (_) => NotificationSettingsCubit(
+                const SharedPreferencesRestTimerNotificationSettings(),
+              ),
+            ),
+            BlocProvider(
+              create: (_) => WorkoutReminderCubit(
+                const SharedPreferencesWorkoutReminderSettings(),
+                _NoopReminderScheduler(),
+              ),
+            ),
+            BlocProvider(
+              create: (_) => SocialNotificationSettingsCubit(repository),
+            ),
+          ],
+          child: const NotificationSettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(socialKudosSwitchKey));
+    await tester.pumpAndSettle();
+    expect(repository.settings.kudos, isFalse);
+
+    expect(find.byKey(quietHoursFromKey), findsNothing);
+    await tester.tap(find.byKey(quietHoursSwitchKey));
+    await tester.pumpAndSettle();
+    expect(repository.settings.quietHours.enabled, isTrue);
+    expect(find.text('społeczność wyciszona 22:00–7:00'), findsOneWidget);
+    expect(find.byKey(quietHoursFromKey), findsOneWidget);
   });
 
   testWidgets('help screen lists FAQ entries and expands answers', (

@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../notifications/presentation/bloc/social_notification_settings_cubit.dart';
+import '../../../notifications/presentation/widgets/social_notifications_section.dart';
 import '../bloc/notification_settings_cubit.dart';
 import '../bloc/workout_reminder_cubit.dart';
 import '../widgets/workout_reminder_section.dart';
 
 const restTimerNotificationSwitchKey = Key('rest-timer-notification-switch');
 
-/// Wymaga [NotificationSettingsCubit] i [WorkoutReminderCubit] w kontekście.
+/// Wymaga [NotificationSettingsCubit], [WorkoutReminderCubit]
+/// i [SocialNotificationSettingsCubit] w kontekście.
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
@@ -24,6 +27,7 @@ class _NotificationSettingsScreenState
     super.initState();
     context.read<NotificationSettingsCubit>().load();
     context.read<WorkoutReminderCubit>().load();
+    context.read<SocialNotificationSettingsCubit>().load();
   }
 
   @override
@@ -48,6 +52,8 @@ class _NotificationSettingsScreenState
               return ListView(
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
                 children: [
+                  const SocialNotificationsSection(),
+                  const SizedBox(height: 28),
                   const WorkoutReminderSection(),
                   const SizedBox(height: 28),
                   const NotificationSectionLabel('Trening'),
