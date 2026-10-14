@@ -130,17 +130,19 @@ class SessionSetRow extends StatelessWidget {
             const SizedBox(width: SetTableLayout.gap),
           ] else
             const Spacer(),
-          SizedBox(
-            width: layout.weightWidth,
-            child: _WeightField(
-              key: ValueKey('session-set-weight-$exerciseIndex-$setIndex'),
-              set: set,
-              look: _look(completed: completed, highlighted: highlighted),
-              progression: highlighted ? progression : null,
-              onChanged: onChanged,
+          if (layout.showWeight) ...[
+            SizedBox(
+              width: layout.weightWidth,
+              child: _WeightField(
+                key: ValueKey('session-set-weight-$exerciseIndex-$setIndex'),
+                set: set,
+                look: _look(completed: completed, highlighted: highlighted),
+                progression: highlighted ? progression : null,
+                onChanged: onChanged,
+              ),
             ),
-          ),
-          const SizedBox(width: SetTableLayout.gap),
+            const SizedBox(width: SetTableLayout.gap),
+          ],
           SizedBox(
             width: layout.repsWidth,
             child: TableCellInput(

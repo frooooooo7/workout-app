@@ -1,4 +1,5 @@
 import '../../../../../core/units/weight_unit.dart';
+import '../../../../library/domain/models/exercise_tracking.dart';
 import '../../../domain/models/training_history_models.dart';
 
 /// Objętość treningowa: `8 450 kg`, a od tony `12,4 t`. Spacja nierozdzielająca
@@ -86,3 +87,21 @@ String formatSetMetrics(TrainingSetMetrics? metrics) {
 
 /// Ciężar (w kg) w aktualnej jednostce, bez zbędnego zera: `80`, `82,5`.
 String formatWeight(double weightKg) => formatWeightNumber(weightKg);
+
+/// Kardio: `3,2 km · 18:10 · 5:41 /km` z zrobionych odcinków; `null`, gdy
+/// ćwiczenie nie jest kardio albo nic nie zapisano.
+String? formatCardioSummary(TrainingExerciseDetail exercise) {
+  if (!exercise.tracking.isCardio) return null;
+  final totals = exercise.cardioTotals;
+  final unit = exercise.distanceUnit;
+  final pace = exercise.tracking.tracksDistance
+      ? unit.pace(seconds: totals.seconds, meters: totals.meters)
+      : null;
+  final parts = [
+    if (exercise.tracking.tracksDistance && totals.meters > 0)
+      unit.formatWithUnit(totals.meters),
+    if (totals.seconds > 0) formatSetDuration(totals.seconds),
+    if (pace != null) '$pace ${unit.paceSuffix}',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}

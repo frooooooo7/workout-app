@@ -2,6 +2,7 @@ import '../../../../core/units/weight_unit.dart';
 import '../../../library/domain/models/exercise_stats.dart';
 import '../models/training_session.dart';
 import '../models/training_stats.dart';
+import 'cardio_insights.dart';
 import 'training_session_detail_mapper.dart' show parseReps, parseWeightKg;
 
 /// Wskazówki dla treningu na żywo: najlepsza seria poprzedniego treningu,
@@ -237,13 +238,31 @@ int? _targetReps(String planned) {
 /// Historia ćwiczenia potrzebna w trakcie treningu: serie z poprzedniego
 /// treningu (kolumna „Poprzednio”, chip „Ostatnio”, progresja) i rekord.
 class ExerciseHistoryInsights {
-  const ExerciseHistoryInsights({this.previousSets, this.record});
+  const ExerciseHistoryInsights({
+    this.previousSets,
+    this.record,
+    this.bestPaceSecondsPerKm,
+  });
 
   static const empty = ExerciseHistoryInsights();
 
   /// `null` — ćwiczenia jeszcze nie robiono (albo historia niedostępna).
   final List<TrainingSessionSet>? previousSets;
   final ExerciseRecordBaseline? record;
+
+  /// Kardio: najszybsze tempo z całej historii (s/km).
+  final int? bestPaceSecondsPerKm;
+
+  /// „Ostatnio” ćwiczenia: dla kardio suma poprzedniego treningu
+  /// (`3,2 km · 18:10`), dla reszty najlepsza seria.
+  String? lastResult(TrainingSessionExercise exercise, {WeightUnit? unit}) {
+    if (!exercise.tracking.tracksDuration) return lastTopSet(unit: unit);
+    return formatCardioTotals(
+      cardioTotals(previousSets ?? const []),
+      exercise.tracking,
+      exercise.distanceUnit,
+    );
+  }
 
   /// Najlepsza seria z poprzedniego treningu: `92,5 × 6`.
   String? lastTopSet({WeightUnit? unit}) {

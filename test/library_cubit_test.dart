@@ -22,6 +22,8 @@ class _FakeExerciseRepository implements ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final e = Exercise(
       id: 'new-${data.length + 1}',
@@ -56,6 +58,8 @@ class _FakeExerciseRepository implements ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) =>
       throw UnimplementedError();
 }
@@ -229,6 +233,8 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) =>
       throw UnimplementedError();
 
@@ -254,6 +260,8 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) =>
       throw UnimplementedError();
 }

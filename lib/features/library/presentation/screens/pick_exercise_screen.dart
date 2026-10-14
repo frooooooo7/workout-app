@@ -190,9 +190,13 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
                                           },
                                         ),
                                         child: exercise.imageUrl == null
-                                            ? const Icon(
-                                                Icons.fitness_center,
-                                                color: AppColors.textMuted,
+                                            ? Icon(
+                                                exercise.tracking.isCardio
+                                                    ? Icons.directions_run_rounded
+                                                    : Icons.fitness_center,
+                                                color: exercise.tracking.isCardio
+                                                    ? AppColors.statTeal
+                                                    : AppColors.textMuted,
                                               )
                                             : null,
                                       ),

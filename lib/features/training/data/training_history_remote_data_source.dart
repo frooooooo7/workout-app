@@ -71,6 +71,8 @@ class TrainingHistoryRemoteDataSource {
           'muscles': exercise.muscles.map((m) => m.name).toList(),
           'imageUrl': exercise.imageUrl,
           'note': exercise.note,
+          'trackingType': exercise.tracking.apiName,
+          'distanceUnit': exercise.distanceUnit.apiName,
           'sets': exercise.sets.map((set) {
             return {
               'setIndex': set.setIndex,
@@ -195,6 +197,8 @@ class TrainingHistoryRemoteDataSource {
       'reps': metrics.reps,
       'rir': metrics.rir,
       'tempo': metrics.tempo,
+      'durationSeconds': metrics.durationSeconds,
+      'distanceM': metrics.distanceM,
     };
   }
 

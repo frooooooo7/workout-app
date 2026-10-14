@@ -17,6 +17,7 @@ import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/cardio_insights.dart';
 import '../../domain/services/live_workout_insights.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
@@ -26,6 +27,7 @@ import '../../domain/services/training_session_detail_mapper.dart'
     show parseWeightKg;
 import '../bloc/training_home_cubit.dart';
 import '../bloc/training_session_cubit.dart';
+import '../widgets/ongoing_workout/cardio_stopwatch.dart';
 import '../widgets/ongoing_workout/next_exercise_card.dart';
 import '../widgets/ongoing_workout/ongoing_workout_header.dart';
 import '../widgets/ongoing_workout/record_burst.dart';
@@ -86,6 +88,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     scheduler: _restTimerScheduler,
     clock: widget.args?.restTimerClock,
   );
+  final CardioStopwatchController _stopwatch = CardioStopwatchController();
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
   final Set<String> _userHiddenRirColumns = {};
@@ -97,7 +100,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   /// Poprzedni trening i rekord każdego ćwiczenia (po id ćwiczenia w sesji).
   final Map<String, ExerciseHistoryInsights> _history = {};
   final Set<String> _historyRequested = {};
-  Future<Map<String, ExerciseBest>?>? _bests;
+  Future<_HistoryBests?>? _bests;
 
   RecordBurstData? _recordBurst;
 
@@ -119,6 +122,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   void initState() {
     super.initState();
     _rest.addListener(_onRestChanged);
+    // Start, pauza i stop stopera (nie sekundy) pokazują i chowają panel.
+    _stopwatch.addListener(_onRestChanged);
     unawaited(_rest.loadLastCustomDuration());
   }
 
@@ -130,6 +135,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   void dispose() {
     _saveDebounce?.cancel();
     _rest
+      ..removeListener(_onRestChanged)
+      ..dispose();
+    _stopwatch
       ..removeListener(_onRestChanged)
       ..dispose();
     _draftSession.dispose();
@@ -181,7 +189,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _loadPreviousSets(exercise),
       _bests ??= _loadBests(),
     ).wait;
-    final best = bests?[statsExerciseKey(exercise)];
+    final key = statsExerciseKey(exercise);
+    final best = bests?.records[key];
     final record = best != null
         ? ExerciseRecordBaseline.fromBest(best)
         : previous == null
@@ -192,6 +201,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _history[exercise.id] = ExerciseHistoryInsights(
         previousSets: previous,
         record: record,
+        bestPaceSecondsPerKm: bests?.paces[key],
       );
     });
   }
@@ -214,7 +224,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   /// Najlepsze wyniki ćwiczeń z całej historii — rekordy do pobicia.
-  Future<Map<String, ExerciseBest>?> _loadBests() async {
+  Future<_HistoryBests?> _loadBests() async {
     final repository = _statsRepository;
     if (repository == null) return null;
     try {
@@ -392,8 +402,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final bottomInset =
         24 +
         MediaQuery.paddingOf(context).bottom +
-        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
-        (restVisible ? 92 + 16 : 0);
+        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”; panel
+        // stopera bywa o linijkę wyższy.
+        (restVisible ? 92 + 16 : 0) +
+        (_stopwatch.isActive ? 20 : 0);
     final blocks = SupersetRounds.blocks(session.exercises);
     return PageView.builder(
       controller: _exercisePageController,
@@ -434,7 +446,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                   const SizedBox(height: 12),
                   NextExerciseCard(
                     exercise: next,
-                    lastResult: _historyFor(next)?.lastTopSet(),
+                    lastResult: _historyFor(next)?.lastResult(next),
                     onTap: () => _goToExercise(nextIndex),
                   ),
                 ],
@@ -482,6 +494,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       noteOpen: _openNotes.contains(exercise.id),
       embedded: embedded,
       focused: focused,
+      stopwatch: _stopwatch,
       onSetChanged: (setIndex, set) =>
           _updateSet(context, index, setIndex, set),
       onAddSet: () => _addSet(context, index),
@@ -520,11 +533,27 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Panel znika pod klawiaturą — nie zasłania pól serii w trakcie pisania.
   bool _restDockVisible(BuildContext context) =>
-      (_rest.isActive || _noRest != null) &&
+      (_rest.isActive || _noRest != null || _stopwatch.isActive) &&
       MediaQuery.viewInsetsOf(context).bottom == 0;
 
   Widget _buildRestDock(BuildContext context) {
     final noRest = _noRest;
+    if (!_rest.isActive && noRest == null && _stopwatch.isActive) {
+      final measured = _stopwatchSet();
+      return RestTimerDock(
+        visible: _restDockVisible(context),
+        child: CardioStopwatchPill(
+          elapsed: _stopwatch.elapsed,
+          running: _stopwatch.isRunning,
+          caption: measured?.caption ?? 'Odcinek',
+          target: measured?.target,
+          onTogglePause: _stopwatch.isRunning
+              ? _stopwatch.pause
+              : _stopwatch.resume,
+          onSave: _stopwatch.save,
+        ),
+      );
+    }
     if (!_rest.isActive && noRest != null) {
       return RestTimerDock(
         visible: _restDockVisible(context),
@@ -554,6 +583,30 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   static const _restExtension = Duration(seconds: 15);
 
+  /// Mierzony odcinek: „Odcinek 1 · cel 15:00” i cel do pierścienia.
+  ({String caption, Duration? target})? _stopwatchSet() {
+    final session = _draftSession.value;
+    final setId = _stopwatch.setId;
+    if (session == null || setId == null) return null;
+    for (final exercise in session.exercises) {
+      final index = exercise.sets.indexWhere((set) => set.id == setId);
+      if (index == -1) continue;
+      final set = exercise.sets[index];
+      final label = setRowLabels(exercise.sets.map((s) => s.setType))[index];
+      final name = set.setType == SetType.warmup
+          ? 'Rozgrzewka'
+          : 'Odcinek $label';
+      final target = set.plannedDurationSeconds;
+      return (
+        caption: target == null
+            ? name
+            : '$name · cel ${formatSetDuration(target)}',
+        target: target == null ? null : Duration(seconds: target),
+      );
+    }
+    return null;
+  }
+
   /// „Teraz: seria 3 · 95 kg × 6” — co czeka po przerwie.
   String? _upNextCaption() {
     final session = _draftSession.value;
@@ -576,6 +629,18 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         ? 'rozgrzewka'
         : (set.setType.badge == null ? 'seria $label' : set.setType.label);
     final memberLabel = _supersetLabel(session.exercises, index);
+    if (exercise.tracking.tracksDuration) {
+      final cardioName = set.setType == SetType.warmup
+          ? 'rozgrzewka'
+          : 'odcinek $label';
+      final name = memberLabel == null
+          ? cardioName
+          : '$memberLabel · $cardioName';
+      final target = set.plannedDurationSeconds;
+      return target == null
+          ? 'Teraz: $name'
+          : 'Teraz: $name · ${formatSetDuration(target)}';
+    }
     final name = memberLabel == null ? setName : '$memberLabel · $setName';
     final previous = _history[exercise.id]?.previousSets;
     final previousSet = previous == null || previous.isEmpty
@@ -737,6 +802,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
     if (!confirmed || !context.mounted) return;
 
+    // Odcinek mierzony do końca — czas trafia do serii przed zapisem.
+    if (_stopwatch.isActive) _stopwatch.save();
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     final finished = await cubit.finish(session.id);
@@ -818,6 +885,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           exerciseMuscles: picked.muscles.map((muscle) => muscle.name).toList(),
           exerciseCategory: picked.category.name,
           exerciseImageUrl: picked.imageUrl,
+          tracking: picked.tracking,
+          distanceUnit: picked.distanceUnit,
           sets: [TrainingSessionSet()],
         ),
       );
@@ -965,6 +1034,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         actualReps: previousSet?.actualReps ?? previousSet?.plannedReps,
         actualRir: previousSet?.actualRir ?? previousSet?.plannedRir,
         actualTempo: previousSet?.actualTempo ?? previousSet?.plannedTempo,
+        // Kardio: nowy odcinek ma ten sam cel, wynik mierzy się na nowo.
+        plannedDurationSeconds: previousSet?.plannedDurationSeconds,
+        plannedDistanceM: previousSet?.plannedDistanceM,
       ),
     );
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
@@ -1275,7 +1347,17 @@ class _MissingSessionScreen extends StatelessWidget {
   }
 }
 
-Map<String, ExerciseBest> _bestsJob(List<TrainingSession> history) => {
-  for (final best in PersonalRecordsCalculator.compute(history).bests)
-    best.exerciseKey: best,
-};
+/// Rekordy ćwiczeń i najlepsze tempo kardio z całej historii (klucz:
+/// [statsExerciseKey]).
+typedef _HistoryBests = ({
+  Map<String, ExerciseBest> records,
+  Map<String, int> paces,
+});
+
+_HistoryBests _bestsJob(List<TrainingSession> history) => (
+  records: {
+    for (final best in PersonalRecordsCalculator.compute(history).bests)
+      best.exerciseKey: best,
+  },
+  paces: bestPacesByExercise(history),
+);

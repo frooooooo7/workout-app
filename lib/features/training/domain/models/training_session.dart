@@ -1,8 +1,10 @@
 import 'package:uuid/uuid.dart';
 
+import '../../../library/domain/models/exercise_tracking.dart';
 import 'custom_training_plan.dart';
 import 'set_type.dart';
 
+export '../../../library/domain/models/exercise_tracking.dart';
 export 'set_type.dart';
 
 enum TrainingSessionStatus { active, completed, cancelled }
@@ -21,6 +23,10 @@ class TrainingSessionSet {
     this.actualTempo,
     this.completed = false,
     this.completedAt,
+    this.plannedDurationSeconds,
+    this.plannedDistanceM,
+    this.actualDurationSeconds,
+    this.actualDistanceM,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -35,6 +41,12 @@ class TrainingSessionSet {
   final String? actualTempo;
   final bool completed;
   final DateTime? completedAt;
+
+  /// Czas i dystans serii kardio (dystans zawsze w metrach).
+  final int? plannedDurationSeconds;
+  final int? plannedDistanceM;
+  final int? actualDurationSeconds;
+  final int? actualDistanceM;
 
   /// Czy seria wlicza się do objętości, liczby serii i rekordów.
   bool get countsTowardStats => setType.countsTowardStats;
@@ -52,11 +64,17 @@ class TrainingSessionSet {
     String? actualTempo,
     bool? completed,
     DateTime? completedAt,
+    int? plannedDurationSeconds,
+    int? plannedDistanceM,
+    int? actualDurationSeconds,
+    int? actualDistanceM,
     bool clearActualWeight = false,
     bool clearActualReps = false,
     bool clearActualRir = false,
     bool clearActualTempo = false,
     bool clearCompletedAt = false,
+    bool clearActualDuration = false,
+    bool clearActualDistance = false,
   }) {
     return TrainingSessionSet(
       id: id ?? this.id,
@@ -73,6 +91,15 @@ class TrainingSessionSet {
       actualTempo: clearActualTempo ? null : (actualTempo ?? this.actualTempo),
       completed: completed ?? this.completed,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      plannedDurationSeconds:
+          plannedDurationSeconds ?? this.plannedDurationSeconds,
+      plannedDistanceM: plannedDistanceM ?? this.plannedDistanceM,
+      actualDurationSeconds: clearActualDuration
+          ? null
+          : (actualDurationSeconds ?? this.actualDurationSeconds),
+      actualDistanceM: clearActualDistance
+          ? null
+          : (actualDistanceM ?? this.actualDistanceM),
     );
   }
 }
@@ -89,6 +116,8 @@ class TrainingSessionExercise {
     required this.sets,
     this.restSeconds,
     this.supersetGroup,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -108,6 +137,11 @@ class TrainingSessionExercise {
 
   /// Litera superserii z planu (A, B…).
   final String? supersetGroup;
+
+  /// Tryb ćwiczenia z chwili dodania do sesji — historia rysuje serie
+  /// tak, jak były zapisywane, nawet gdy ćwiczenie potem zmieniono.
+  final ExerciseTracking tracking;
+  final DistanceUnit distanceUnit;
 
   TrainingSessionExercise copyWith({
     String? id,
@@ -133,6 +167,8 @@ class TrainingSessionExercise {
       sets: sets ?? this.sets,
       restSeconds: restSeconds ?? this.restSeconds,
       supersetGroup: supersetGroup ?? this.supersetGroup,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
   }
 }
@@ -252,6 +288,8 @@ class TrainingSession {
               exerciseImageUrl: exercise.exercise.imageUrl,
               restSeconds: plan.restFor(exercise),
               supersetGroup: exercise.supersetGroup,
+              tracking: exercise.exercise.tracking,
+              distanceUnit: exercise.exercise.distanceUnit,
               sets: exercise.sets
                   .map(
                     (set) => TrainingSessionSet(
@@ -263,6 +301,8 @@ class TrainingSession {
                       actualReps: set.reps,
                       actualRir: set.rir,
                       actualTempo: set.tempo,
+                      plannedDurationSeconds: set.durationSeconds,
+                      plannedDistanceM: set.distanceM,
                     ),
                   )
                   .toList(),

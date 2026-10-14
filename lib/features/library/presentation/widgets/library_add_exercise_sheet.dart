@@ -5,12 +5,15 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/models/exercise.dart';
+import 'exercise_tracking_picker.dart';
 
 typedef LibraryAddExerciseSubmit = Future<Exercise> Function({
   required String name,
   required List<MuscleGroup> muscles,
   required ExerciseCategory category,
   required String description,
+  required ExerciseTracking tracking,
+  required DistanceUnit distanceUnit,
   Uint8List? imageBytes,
   String? imageFilename,
 });
@@ -20,6 +23,8 @@ typedef LibraryEditExerciseSubmit = Future<Exercise> Function({
   required List<MuscleGroup> muscles,
   required ExerciseCategory category,
   required String description,
+  required ExerciseTracking tracking,
+  required DistanceUnit distanceUnit,
 });
 
 /// Opens a modal bottom sheet to create a user-owned exercise.
@@ -58,6 +63,8 @@ Future<Exercise?> showLibraryEditExerciseSheet(
         required List<MuscleGroup> muscles,
         required ExerciseCategory category,
         required String description,
+        required ExerciseTracking tracking,
+        required DistanceUnit distanceUnit,
         Uint8List? imageBytes,
         String? imageFilename,
       }) =>
@@ -66,6 +73,8 @@ Future<Exercise?> showLibraryEditExerciseSheet(
         muscles: muscles,
         category: category,
         description: description,
+        tracking: tracking,
+        distanceUnit: distanceUnit,
       ),
     ),
   );
@@ -94,6 +103,11 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
 
   Set<MuscleGroup> _selectedMuscles = {};
   ExerciseCategory _category = ExerciseCategory.compound;
+  ExerciseTracking _tracking = ExerciseTracking.weightReps;
+  DistanceUnit _distanceUnit = DistanceUnit.km;
+
+  /// Użytkownik sam wybrał tryb — zmiana kategorii już go nie podmienia.
+  bool _trackingChosen = false;
   bool _submitting = false;
   String? _errorText;
 
@@ -120,6 +134,9 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
       _nameController.text = initial.name;
       _descriptionController.text = initial.description;
       _category = initial.category;
+      _tracking = initial.tracking;
+      _distanceUnit = initial.distanceUnit;
+      _trackingChosen = true;
       _selectedMuscles = initial.workingMuscles
           .map((m) => m.apiGroup)
           .where((m) => m.isApiSupported)
@@ -240,6 +257,8 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
         muscles: musclesList,
         category: _category,
         description: _descriptionController.text.trim(),
+        tracking: _tracking,
+        distanceUnit: _distanceUnit,
         imageBytes: imageBytes,
         imageFilename: imageFilename,
       );
@@ -253,6 +272,19 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
             'Nie udało się zapisać ćwiczenia. Sprawdź połączenie i spróbuj ponownie.';
       });
     }
+  }
+
+  /// Kardio podpowiada czas + dystans, inne kategorie ciężar × powt. —
+  /// dopóki użytkownik sam nie wybrał trybu.
+  void _selectCategory(ExerciseCategory category) {
+    setState(() {
+      _category = category;
+      if (!_trackingChosen) {
+        _tracking = category == ExerciseCategory.cardio
+            ? ExerciseTracking.durationDistance
+            : ExerciseTracking.weightReps;
+      }
+    });
   }
 
   void _toggleMuscle(MuscleGroup m) {
@@ -515,7 +547,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                           onSelected: _submitting
                               ? null
                               : (v) {
-                                  if (v) setState(() => _category = c);
+                                  if (v) _selectCategory(c);
                                 },
                           selectedColor:
                               AppColors.primary.withValues(alpha: 0.22),
@@ -539,6 +571,27 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                       );
                     }).toList(),
                   ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Co zapisujesz',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ExerciseTrackingPicker(
+                  tracking: _tracking,
+                  distanceUnit: _distanceUnit,
+                  enabled: !_submitting,
+                  onTrackingChanged: (tracking) => setState(() {
+                    _tracking = tracking;
+                    _trackingChosen = true;
+                  }),
+                  onDistanceUnitChanged: (unit) =>
+                      setState(() => _distanceUnit = unit),
                 ),
                 if (_errorText != null) ...[
                   const SizedBox(height: 14),

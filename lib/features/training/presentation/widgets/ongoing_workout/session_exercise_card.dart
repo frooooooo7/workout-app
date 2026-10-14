@@ -7,12 +7,15 @@ import '../../../../../core/units/weight_unit.dart';
 import '../../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../domain/models/training_session.dart';
 import '../../../domain/repositories/previous_performance_repository.dart';
+import '../../../domain/services/cardio_insights.dart' show formatPacePerKm;
 import '../../../domain/services/live_workout_insights.dart';
 import '../../../domain/services/stats/stats_sets.dart' show taggedMuscles;
 import '../../../domain/services/training_session_detail_mapper.dart'
     show parseReps, parseWeightKg;
 import '../../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
 import '../set_type_badge.dart';
+import 'cardio_set_table.dart';
+import 'cardio_stopwatch.dart';
 import 'dashed_add_button.dart';
 import 'exercise_stat_chips.dart';
 import 'exercise_thumb.dart';
@@ -43,6 +46,7 @@ class SessionExerciseCard extends StatefulWidget {
     required this.onRecord,
     this.embedded = false,
     this.focused = true,
+    this.stopwatch,
   });
 
   final int exerciseIndex;
@@ -69,6 +73,9 @@ class SessionExerciseCard extends StatefulWidget {
   /// Czy to ćwiczenie jest teraz na kolei (w superserii tylko jedno ma
   /// podświetloną serię).
   final bool focused;
+
+  /// Stoper odcinków kardio (wspólny dla treningu).
+  final CardioStopwatchController? stopwatch;
 
   @override
   State<SessionExerciseCard> createState() => _SessionExerciseCardState();
@@ -118,6 +125,16 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   ExerciseRecordBaseline? get _record => widget.history?.record;
 
   void _handleSetChanged(int setIndex, TrainingSessionSet set) {
+    final stopwatch = widget.stopwatch;
+    if (set.completed &&
+        !_sets[setIndex].completed &&
+        stopwatch?.setId == set.id) {
+      // Odhaczony w trakcie pomiaru — czas ze stopera, chyba że wpisany.
+      final measured = stopwatch!.stop();
+      set = set.actualDurationSeconds == null
+          ? set.copyWith(actualDurationSeconds: measured.inSeconds)
+          : set;
+    }
     final before = recordSetIndexes(_record, _sets);
     setState(() {
       _sets = List<TrainingSessionSet>.from(_sets);
@@ -167,7 +184,29 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     );
   }
 
+  /// Stoper dla odcinka [setIndex]; „Zapisz” wpisuje zmierzony czas.
+  void _startStopwatch(int setIndex) {
+    final stopwatch = widget.stopwatch;
+    if (stopwatch == null) return;
+    final set = _sets[setIndex];
+    stopwatch.start(
+      set.id,
+      from: Duration(seconds: set.actualDurationSeconds ?? 0),
+      onSave: (measured) {
+        if (!mounted) return;
+        final index = _sets.indexWhere((s) => s.id == set.id);
+        if (index == -1) return;
+        _handleSetChanged(
+          index,
+          _sets[index].copyWith(actualDurationSeconds: measured.inSeconds),
+        );
+      },
+    );
+  }
+
   void _removeSet(int setIndex) {
+    final stopwatch = widget.stopwatch;
+    if (stopwatch?.setId == _sets[setIndex].id) stopwatch!.stop();
     // Dismissible musi zniknąć z drzewa w tej samej klatce.
     setState(
       () => _sets = List<TrainingSessionSet>.from(_sets)..removeAt(setIndex),
@@ -180,7 +219,11 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     final exercise = widget.exercise;
     final history = widget.history;
     final previous = history?.previousSets;
-    final muscles = taggedMuscles(exercise).map((m) => m.shortLabel).take(2);
+    final cardio = exercise.tracking.tracksDuration;
+    final subtitle = cardio
+        ? 'Kardio · ${exercise.tracking.label.toLowerCase()}'
+        : taggedMuscles(exercise).map((m) => m.shortLabel).take(2).join(' · ');
+    final bestPace = history?.bestPaceSecondsPerKm;
 
     final thumbSize = widget.embedded ? 44.0 : 56.0;
     return Container(
@@ -201,6 +244,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                 imageUrl: exercise.exerciseImageUrl,
                 size: thumbSize,
                 radius: widget.embedded ? 12 : 14,
+                cardio: cardio,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -216,10 +260,10 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (muscles.isNotEmpty) ...[
+                    if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
-                        muscles.join(' · '),
+                        subtitle,
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12.5,
@@ -242,8 +286,13 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
             ],
           ),
           ExerciseStatChips(
-            last: history?.lastTopSet(),
-            record: history?.record?.format(),
+            last: history?.lastResult(exercise),
+            record: cardio
+                ? (bestPace == null
+                      ? null
+                      : formatPacePerKm(bestPace, exercise.distanceUnit))
+                : history?.record?.format(),
+            recordLabel: cardio ? 'Tempo' : 'Rekord',
           ),
           if (widget.noteOpen || _hadNote) ...[
             const SizedBox(height: 10),
@@ -255,34 +304,52 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
             ),
           ],
           const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final layout = SetTableLayout.of(
-                constraints.maxWidth,
-                hasPrevious: previous != null && previous.isNotEmpty,
-                showRir: widget.showRirColumn,
-                showTempo: widget.showTempoColumn,
-              );
-              return _SetTable(
-                exerciseIndex: widget.exerciseIndex,
-                sets: _sets,
-                previous: previous,
-                record: _record,
-                layout: layout,
-                focused: widget.focused,
-                onChanged: _handleSetChanged,
-                onPickType: (i) => unawaited(_pickSetType(i)),
-                onFillPrevious: _fillFromPrevious,
-                onRemove: _sets.length > 1 ? _removeSet : null,
-              );
-            },
-          ),
+          if (cardio)
+            CardioSetTable(
+              exerciseIndex: widget.exerciseIndex,
+              exercise: exercise,
+              sets: _sets,
+              previous: previous,
+              focused: widget.focused,
+              stopwatch: widget.stopwatch,
+              onChanged: _handleSetChanged,
+              onPickType: (i) => unawaited(_pickSetType(i)),
+              onRemove: _sets.length > 1 ? _removeSet : null,
+              onStartStopwatch: widget.stopwatch == null
+                  ? null
+                  : _startStopwatch,
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final layout = SetTableLayout.of(
+                  constraints.maxWidth,
+                  hasPrevious: previous != null && previous.isNotEmpty,
+                  showWeight: exercise.tracking.tracksWeight,
+                  showRir: widget.showRirColumn,
+                  showTempo: widget.showTempoColumn,
+                );
+                return _SetTable(
+                  exerciseIndex: widget.exerciseIndex,
+                  sets: _sets,
+                  previous: previous,
+                  record: _record,
+                  layout: layout,
+                  focused: widget.focused,
+                  onChanged: _handleSetChanged,
+                  onPickType: (i) => unawaited(_pickSetType(i)),
+                  onFillPrevious: _fillFromPrevious,
+                  onRemove: _sets.length > 1 ? _removeSet : null,
+                );
+              },
+            ),
           const SizedBox(height: 10),
           DashedAddButton(
             key: const ValueKey('add-session-set-button'),
-            label: 'Dodaj serię',
+            label: cardio ? 'Dodaj odcinek' : 'Dodaj serię',
             onTap: widget.onAddSet,
           ),
+          if (cardio) CardioTotalsBar(exercise: exercise, sets: _sets),
         ],
       ),
     );

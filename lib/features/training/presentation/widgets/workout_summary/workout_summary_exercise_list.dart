@@ -75,9 +75,14 @@ class _ExerciseRow extends StatelessWidget {
     final topSet = exercise.topSet;
     final volume = exercise.volumeKg;
 
+    final cardio = formatCardioSummary(exercise);
     final subtitleParts = <String>[
-      '$completed/$total ${polishPlural(total, 'seria', 'serie', 'serii')}',
-      if (topSet != null) 'top ${formatSetMetrics(topSet.actual)}',
+      exercise.tracking.isCardio
+          ? '$completed/$total ${polishPlural(total, 'odcinek', 'odcinki', 'odcinków')}'
+          : '$completed/$total ${polishPlural(total, 'seria', 'serie', 'serii')}',
+      ?cardio,
+      if (cardio == null && topSet != null)
+        'top ${formatSetMetrics(topSet.actual)}',
     ];
 
     return Padding(

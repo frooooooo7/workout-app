@@ -65,6 +65,12 @@ class TrainingSessionRemoteDataSource {
                   completedAt: set['completedAt'] != null
                       ? DateTime.tryParse(set['completedAt'] as String)?.toUtc()
                       : null,
+                  plannedDurationSeconds:
+                      (set['plannedDurationSeconds'] as num?)?.toInt(),
+                  plannedDistanceM: (set['plannedDistanceM'] as num?)?.toInt(),
+                  actualDurationSeconds:
+                      (set['actualDurationSeconds'] as num?)?.toInt(),
+                  actualDistanceM: (set['actualDistanceM'] as num?)?.toInt(),
                 ),
               )
               .toList();
@@ -82,6 +88,12 @@ class TrainingSessionRemoteDataSource {
             note: exercise['note'] as String?,
             restSeconds: (exercise['restSeconds'] as num?)?.toInt(),
             supersetGroup: exercise['supersetGroup'] as String?,
+            tracking: ExerciseTracking.fromApi(
+              exercise['exerciseTrackingType'] as String?,
+            ),
+            distanceUnit: DistanceUnit.fromApi(
+              exercise['exerciseDistanceUnit'] as String?,
+            ),
             sets: sets,
           );
         })
@@ -144,6 +156,8 @@ class TrainingSessionRemoteDataSource {
           'note': exercise.note,
           'restSeconds': exercise.restSeconds,
           'supersetGroup': exercise.supersetGroup,
+          'exerciseTrackingType': exercise.tracking.apiName,
+          'exerciseDistanceUnit': exercise.distanceUnit.apiName,
           'position': entry.key,
           'sets': exercise.sets.asMap().entries.map((setEntry) {
             final set = setEntry.value;
@@ -161,6 +175,10 @@ class TrainingSessionRemoteDataSource {
               'actualTempo': set.actualTempo,
               'completed': set.completed,
               'completedAt': set.completedAt?.toUtc().toIso8601String(),
+              'plannedDurationSeconds': set.plannedDurationSeconds,
+              'plannedDistanceM': set.plannedDistanceM,
+              'actualDurationSeconds': set.actualDurationSeconds,
+              'actualDistanceM': set.actualDistanceM,
             };
           }).toList(),
         };

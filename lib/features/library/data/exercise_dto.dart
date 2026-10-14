@@ -20,6 +20,8 @@ class ExerciseDto {
     this.isFavouriteDirty = false,
     this.localImageBytes,
     this.localImageFilename,
+    this.trackingType = 'weight_reps',
+    this.distanceUnit = 'km',
   });
 
   final String localId;
@@ -36,6 +38,8 @@ class ExerciseDto {
   final bool isFavouriteDirty;
   final Uint8List? localImageBytes;
   final String? localImageFilename;
+  final String trackingType;
+  final String distanceUnit;
 
   // ── DB ──────────────────────────────────────
 
@@ -59,6 +63,8 @@ class ExerciseDto {
       isFavouriteDirty: ((map['is_favourite_dirty'] as int?) ?? 0) == 1,
       localImageBytes: map['local_image_bytes'] as Uint8List?,
       localImageFilename: map['local_image_filename'] as String?,
+      trackingType: map['tracking_type'] as String? ?? 'weight_reps',
+      distanceUnit: map['distance_unit'] as String? ?? 'km',
     );
   }
 
@@ -77,6 +83,8 @@ class ExerciseDto {
         'is_favourite_dirty': isFavouriteDirty ? 1 : 0,
         'local_image_bytes': localImageBytes,
         'local_image_filename': localImageFilename,
+        'tracking_type': trackingType,
+        'distance_unit': distanceUnit,
       };
 
   // ── Domain ───────────────────────────────────
@@ -109,6 +117,8 @@ class ExerciseDto {
         isFavouriteDirty: isFavouriteDirty,
         localImageBytes: localImageBytes,
         localImageFilename: localImageFilename,
+        trackingType: e.tracking.apiName,
+        distanceUnit: e.distanceUnit.apiName,
       );
 
   /// Row shaped after a successful pull from API (`Exercise.id` is server id).
@@ -130,6 +140,8 @@ class ExerciseDto {
             DateTime.now().millisecondsSinceEpoch,
         pendingOp: null,
         isFavouriteDirty: false,
+        trackingType: serverExercise.tracking.apiName,
+        distanceUnit: serverExercise.distanceUnit.apiName,
       );
 
   bool get isPendingSync =>
@@ -150,5 +162,7 @@ class ExerciseDto {
         isMine: isMine,
         createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true),
         isPendingSync: isPendingSync,
+        tracking: ExerciseTracking.fromApi(trackingType),
+        distanceUnit: DistanceUnit.fromApi(distanceUnit),
       );
 }

@@ -127,6 +127,8 @@ class _EditWorkoutView extends StatelessWidget {
         exerciseMuscles: picked.muscles.map((m) => m.name).toList(),
         exerciseCategory: picked.category.name,
         exerciseImageUrl: picked.imageUrl,
+        tracking: picked.tracking,
+        distanceUnit: picked.distanceUnit,
         sets: [TrainingSessionSet()],
       ),
     );
@@ -383,6 +385,8 @@ class _ExerciseEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<EditWorkoutCubit>();
     final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
+    final tracking = exercise.tracking;
+    final unit = exercise.distanceUnit;
     const headerStyle = TextStyle(
       color: AppColors.textMuted,
       fontSize: 11,
@@ -461,30 +465,55 @@ class _ExerciseEditor extends StatelessWidget {
             padding: const EdgeInsets.only(right: 6, bottom: 6),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 34,
-                  child: Text('SERIA', style: headerStyle),
-                ),
-                SizedBox(width: 6),
-                Expanded(
-                  flex: 3,
-                  child: Center(
-                    child: Text(
-                      WeightUnits.current.columnLabel,
-                      style: headerStyle,
-                    ),
+                  child: Text(
+                    tracking.isCardio ? 'ODC.' : 'SERIA',
+                    style: headerStyle,
                   ),
                 ),
-                SizedBox(width: 6),
-                Expanded(
-                  flex: 3,
-                  child: Center(child: Text('POWT.', style: headerStyle)),
-                ),
-                SizedBox(width: 6),
-                Expanded(
-                  flex: 2,
-                  child: Center(child: Text('RIR', style: headerStyle)),
-                ),
+                if (tracking.tracksWeight) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    flex: 3,
+                    child: Center(
+                      child: Text(
+                        WeightUnits.current.columnLabel,
+                        style: headerStyle,
+                      ),
+                    ),
+                  ),
+                ],
+                if (tracking.tracksReps) ...const [
+                  SizedBox(width: 6),
+                  Expanded(
+                    flex: 3,
+                    child: Center(child: Text('POWT.', style: headerStyle)),
+                  ),
+                ],
+                if (tracking.tracksDuration) ...const [
+                  SizedBox(width: 6),
+                  Expanded(
+                    flex: 3,
+                    child: Center(child: Text('CZAS', style: headerStyle)),
+                  ),
+                ],
+                if (tracking.tracksDistance) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    flex: 3,
+                    child: Center(
+                      child: Text('DYST. (${unit.label})', style: headerStyle),
+                    ),
+                  ),
+                ],
+                if (!tracking.isCardio) ...const [
+                  SizedBox(width: 6),
+                  Expanded(
+                    flex: 2,
+                    child: Center(child: Text('RIR', style: headerStyle)),
+                  ),
+                ],
                 SizedBox(width: 80),
               ],
             ),
@@ -512,39 +541,72 @@ class _ExerciseEditor extends StatelessWidget {
                       },
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 3,
-                    child: WeightCellInput(
-                      key: ValueKey('edit-set-$exerciseIndex-$s-weight'),
-                      valueKg: exercise.sets[s].actualWeight,
-                      hintKg: exercise.sets[s].plannedWeight,
-                      fallbackHint: '—',
-                      onChanged: (v) => cubit.setWeight(exerciseIndex, s, v),
+                  if (tracking.tracksWeight) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 3,
+                      child: WeightCellInput(
+                        key: ValueKey('edit-set-$exerciseIndex-$s-weight'),
+                        valueKg: exercise.sets[s].actualWeight,
+                        hintKg: exercise.sets[s].plannedWeight,
+                        fallbackHint: '—',
+                        onChanged: (v) => cubit.setWeight(exerciseIndex, s, v),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 3,
-                    child: TableCellInput(
-                      key: ValueKey('edit-set-$exerciseIndex-$s-reps'),
-                      value: exercise.sets[s].actualReps ?? '',
-                      hint: exercise.sets[s].plannedReps,
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) => cubit.setReps(exerciseIndex, s, v),
+                  ],
+                  if (tracking.tracksReps) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 3,
+                      child: TableCellInput(
+                        key: ValueKey('edit-set-$exerciseIndex-$s-reps'),
+                        value: exercise.sets[s].actualReps ?? '',
+                        hint: exercise.sets[s].plannedReps,
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) => cubit.setReps(exerciseIndex, s, v),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    flex: 2,
-                    child: TableCellInput(
-                      key: ValueKey('edit-set-$exerciseIndex-$s-rir'),
-                      value: exercise.sets[s].actualRir ?? '',
-                      hint: exercise.sets[s].plannedRir ?? '—',
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) => cubit.setRir(exerciseIndex, s, v),
+                  ],
+                  if (tracking.tracksDuration) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 3,
+                      child: DurationCellInput(
+                        key: ValueKey('edit-set-$exerciseIndex-$s-duration'),
+                        seconds: exercise.sets[s].actualDurationSeconds,
+                        hintSeconds: exercise.sets[s].plannedDurationSeconds,
+                        onChanged: (v) =>
+                            cubit.setDuration(exerciseIndex, s, v),
+                      ),
                     ),
-                  ),
+                  ],
+                  if (tracking.tracksDistance) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 3,
+                      child: DistanceCellInput(
+                        key: ValueKey('edit-set-$exerciseIndex-$s-distance'),
+                        meters: exercise.sets[s].actualDistanceM,
+                        hintMeters: exercise.sets[s].plannedDistanceM,
+                        unit: unit,
+                        onChanged: (v) =>
+                            cubit.setDistance(exerciseIndex, s, v),
+                      ),
+                    ),
+                  ],
+                  if (!tracking.isCardio) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 2,
+                      child: TableCellInput(
+                        key: ValueKey('edit-set-$exerciseIndex-$s-rir'),
+                        value: exercise.sets[s].actualRir ?? '',
+                        hint: exercise.sets[s].plannedRir ?? '—',
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) => cubit.setRir(exerciseIndex, s, v),
+                      ),
+                    ),
+                  ],
                   SizedBox(
                     width: 40,
                     child: IconButton(
@@ -586,7 +648,7 @@ class _ExerciseEditor extends StatelessWidget {
               key: ValueKey('edit-exercise-add-set-$exerciseIndex'),
               onPressed: () => cubit.addSet(exerciseIndex),
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Dodaj serię'),
+              label: Text(tracking.isCardio ? 'Dodaj odcinek' : 'Dodaj serię'),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.primaryVariant,
               ),

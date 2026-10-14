@@ -76,12 +76,33 @@ class TrainingSessionListItem {
 }
 
 class TrainingSetMetrics {
-  const TrainingSetMetrics({this.weightKg, this.reps, this.rir, this.tempo});
+  const TrainingSetMetrics({
+    this.weightKg,
+    this.reps,
+    this.rir,
+    this.tempo,
+    this.durationSeconds,
+    this.distanceM,
+  });
 
   final double? weightKg;
   final int? reps;
   final int? rir;
   final String? tempo;
+
+  /// Kardio: czas i dystans (w metrach).
+  final int? durationSeconds;
+  final int? distanceM;
+
+  /// Tempo w sekundach na kilometr; `null` bez czasu albo dystansu.
+  int? get paceSecondsPerKm {
+    final seconds = durationSeconds;
+    final meters = distanceM;
+    if (seconds == null || meters == null || seconds <= 0 || meters <= 0) {
+      return null;
+    }
+    return (seconds * 1000 / meters).round();
+  }
 }
 
 class TrainingExerciseSetDetail {
@@ -127,10 +148,16 @@ class TrainingExerciseDetail {
     this.imageUrl,
     this.note,
     required this.sets,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   });
 
   final String exerciseId;
   final String exerciseName;
+
+  /// Tryb ćwiczenia z chwili treningu — decyduje, jak rysować serie.
+  final ExerciseTracking tracking;
+  final DistanceUnit distanceUnit;
 
   /// Snapshot grup mięśniowych z chwili wykonania sesji — nie zmienia się,
   /// gdy ćwiczenie zostanie później przetagowane albo usunięte z biblioteki.
@@ -171,6 +198,30 @@ class TrainingExerciseDetail {
         .toList(growable: false);
     if (stamps.isEmpty) return null;
     return stamps.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// Kardio: suma czasu (s) i dystansu (m) zrobionych odcinków, z rozgrzewką.
+  ({int seconds, int meters}) get cardioTotals {
+    var seconds = 0;
+    var meters = 0;
+    for (final set in sets) {
+      if (!set.completed) continue;
+      seconds += set.actual?.durationSeconds ?? 0;
+      meters += set.actual?.distanceM ?? 0;
+    }
+    return (seconds: seconds, meters: meters);
+  }
+
+  /// Najszybsze tempo (s/km) zrobionego odcinka roboczego; `null` bez
+  /// odcinka z czasem i dystansem.
+  int? get bestPaceSecondsPerKm {
+    int? best;
+    for (final set in sets) {
+      if (!set.completed || !set.countsTowardStats) continue;
+      final pace = set.actual?.paceSecondsPerKm;
+      if (pace != null && (best == null || pace < best)) best = pace;
+    }
+    return best;
   }
 
   /// Najcięższa ukończona seria robocza — „top set" pokazywany w stopce karty.

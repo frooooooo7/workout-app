@@ -21,6 +21,8 @@ class TrainingPlanRemoteDataSource {
           reps: set['reps'] as String? ?? '',
           rir: set['rir'] as String?,
           tempo: set['tempo'] as String?,
+          durationSeconds: (set['durationSeconds'] as num?)?.toInt(),
+          distanceM: (set['distanceM'] as num?)?.toInt(),
         );
       }).toList();
       return PlanExercise(
@@ -88,6 +90,8 @@ class TrainingPlanRemoteDataSource {
               'reps': set.reps,
               'rir': set.rir,
               'tempo': set.tempo,
+              'durationSeconds': set.durationSeconds,
+              'distanceM': set.distanceM,
             };
           }).toList(),
         };

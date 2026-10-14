@@ -124,6 +124,12 @@ class TrainingSessionLocalMapper {
             note: exerciseRow['note'] as String?,
             restSeconds: exerciseRow['rest_seconds'] as int?,
             supersetGroup: exerciseRow['superset_group'] as String?,
+            tracking: ExerciseTracking.fromApi(
+              exerciseRow['tracking_type'] as String?,
+            ),
+            distanceUnit: DistanceUnit.fromApi(
+              exerciseRow['distance_unit'] as String?,
+            ),
             sets: [
               for (final set
                   in setsByExerciseId[exerciseRow['local_id'] as String] ??
@@ -151,6 +157,10 @@ class TrainingSessionLocalMapper {
       actualTempo: set['actual_tempo'] as String?,
       completed: ((set['completed'] as int?) ?? 0) == 1,
       completedAt: decodeDate(set['completed_at']),
+      plannedDurationSeconds: set['planned_duration_seconds'] as int?,
+      plannedDistanceM: set['planned_distance_m'] as int?,
+      actualDurationSeconds: set['actual_duration_seconds'] as int?,
+      actualDistanceM: set['actual_distance_m'] as int?,
     );
   }
 
@@ -294,6 +304,8 @@ class TrainingSessionLocalMapper {
         'note': exercise.note,
         'rest_seconds': exercise.restSeconds,
         'superset_group': exercise.supersetGroup,
+        'tracking_type': exercise.tracking.apiName,
+        'distance_unit': exercise.distanceUnit.apiName,
       });
       for (final setEntry in exercise.sets.asMap().entries) {
         final set = setEntry.value;
@@ -313,6 +325,10 @@ class TrainingSessionLocalMapper {
           'actual_tempo': set.actualTempo,
           'completed': set.completed ? 1 : 0,
           'completed_at': encodeDate(set.completedAt),
+          'planned_duration_seconds': set.plannedDurationSeconds,
+          'planned_distance_m': set.plannedDistanceM,
+          'actual_duration_seconds': set.actualDurationSeconds,
+          'actual_distance_m': set.actualDistanceM,
         });
       }
     }
