@@ -23,6 +23,9 @@ import '../../features/library/data/exercise_remote_data_source.dart';
 import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
+import '../../features/notifications/data/api_notifications_repository.dart';
+import '../../features/notifications/domain/repositories/notifications_repository.dart';
+import '../../features/notifications/presentation/unread_notifications.dart';
 import '../../features/feed/data/api_feed_repository.dart';
 import '../../features/feed/data/shared_preferences_feed_cache.dart';
 import '../../features/feed/data/shared_preferences_feed_seen_store.dart';
@@ -122,6 +125,10 @@ class ServiceLocator {
   static final feedPostEvents = FeedPostEvents();
   static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
+  static late final NotificationsRepository notificationsRepository;
+
+  /// Nieprzeczytane powiadomienia (dzwonek, plakietka w dolnym pasku).
+  static final unreadNotifications = UnreadNotificationsCounter();
 
   /// Dziennik masy ciała w bazie konta (offline-first). `null` bez
   /// zalogowanego użytkownika (i w testach bez bazy) — karty i zapisy wagi
@@ -277,6 +284,7 @@ class ServiceLocator {
     _bodyWeightRemote = ApiBodyWeightRepository(apiClient);
     _bodyMeasurementsRemote = ApiBodyMeasurementsRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
+    notificationsRepository = ApiNotificationsRepository(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
     final localNotifications = LocalNotifications();
@@ -341,6 +349,9 @@ class ServiceLocator {
     // repozytoria z bieżącego scope'u, a ich synchronizacja by stanęła.
     if (requestedUserId == _scopeUserId) return;
     _scopeUserId = requestedUserId;
+    unreadNotifications.attach(
+      requestedUserId == null ? null : notificationsRepository,
+    );
 
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((
       _,

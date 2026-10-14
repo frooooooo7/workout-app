@@ -28,6 +28,8 @@ import '../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../features/feed/presentation/bloc/post_comments_cubit.dart';
 import '../../features/feed/presentation/bloc/post_details_cubit.dart';
 import '../../features/feed/presentation/screens/activity_feed_screen.dart';
+import '../../features/notifications/presentation/bloc/notifications_cubit.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/feed/presentation/screens/post_details_screen.dart';
 import '../../features/library/domain/models/exercise.dart';
 import '../../features/library/presentation/bloc/exercise_details_cubit.dart';
@@ -337,6 +339,7 @@ GoRouter buildRouter({
                       child: ActivityFeedScreen(
                         repository: ServiceLocator.feedRepository,
                         currentUserId: userId,
+                        notifications: ServiceLocator.unreadNotifications,
                       ),
                     ),
                   );
@@ -528,6 +531,27 @@ GoRouter buildRouter({
             ),
           );
         },
+      ),
+
+      GoRoute(
+        parentNavigatorKey: appRootNavigatorKey,
+        path: kNotificationsRoute,
+        builder: (_, _) => _withFollowCubit(
+          BlocProvider(
+            create: (_) => NotificationsCubit(
+              repository: ServiceLocator.notificationsRepository,
+              onUnreadChanged: ServiceLocator.unreadNotifications.set,
+            ),
+            child: const NotificationsScreen(),
+          ),
+        ),
+        routes: [
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'settings',
+            builder: (_, _) => buildNotificationSettingsPage(),
+          ),
+        ],
       ),
 
       // Karta ćwiczenia — poza shellem, otwierana z biblioteki i z planów.
