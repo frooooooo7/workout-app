@@ -20,6 +20,7 @@ import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/training/presentation/screens/plans_screen.dart';
 import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/training/presentation/screens/training_stats_screen.dart';
+import '../../features/training/presentation/screens/user_plan_screen.dart';
 import '../../features/training/presentation/screens/workout_summary_screen.dart';
 import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/feed/domain/models/feed_author.dart';
@@ -522,6 +523,7 @@ GoRouter buildRouter({
                 repository: repository,
                 currentUserId: ServiceLocator.currentUser.value?.id,
                 focusComment: state.uri.queryParameters['comment'] == '1',
+                planSharing: ServiceLocator.planSharingRepository,
               ),
             ),
           );
@@ -565,10 +567,26 @@ GoRouter buildRouter({
               currentUserId: ServiceLocator.currentUser.value?.id,
               currentUser: _currentFeedAuthor(),
               postEvents: ServiceLocator.feedPostEvents,
+              planSharing: ServiceLocator.planSharingRepository,
             ),
           );
         },
         routes: [
+          // Podgląd planu wymaga danych z profilu (extra) — bez nich, np. po
+          // odświeżeniu strony, wracamy do profilu.
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'plans/:planId',
+            redirect: (_, state) =>
+                state.extra is UserPlanArgs &&
+                    ServiceLocator.planSharingRepository != null
+                ? null
+                : '/app/users/${state.pathParameters['userId']}',
+            builder: (_, state) => UserPlanScreen(
+              args: state.extra! as UserPlanArgs,
+              repository: ServiceLocator.planSharingRepository!,
+            ),
+          ),
           GoRoute(
             parentNavigatorKey: appRootNavigatorKey,
             path: 'following',

@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 16;
+  static const _dbVersion = 17;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -296,6 +296,25 @@ class ExerciseDatabase {
     await _createBodyMeasurementsTable(db);
     await _addPlanStyleAndRestColumns(db);
     await _addCardioColumns(db);
+    await _addPlanSharingColumns(db);
+  }
+
+  /// v17: widoczność planu na profilu i pochodzenie kopii („od @anna”).
+  Future<void> _addPlanSharingColumns(Database db) async {
+    const columns = {
+      'is_public': 'INTEGER NOT NULL DEFAULT 0',
+      'copied_from_user_id': 'TEXT',
+      'copied_from_handle': 'TEXT',
+      'copy_count': 'INTEGER NOT NULL DEFAULT 0',
+    };
+    for (final column in columns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingPlans,
+        column: column.key,
+        definition: column.value,
+      );
+    }
   }
 
   /// v16: kardio — co zapisuje ćwiczenie (ciężar × powt., czas, czas
@@ -717,6 +736,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 16) {
       await _addCardioColumns(db);
+    }
+    if (oldVersion < 17) {
+      await _addPlanSharingColumns(db);
     }
   }
 

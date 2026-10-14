@@ -8,6 +8,10 @@ import '../../../../core/widgets/app_tab_header.dart';
 import '../../../feed/domain/models/feed_author.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../../feed/domain/services/feed_post_events.dart';
+import '../../../training/data/plan_sharing_repository.dart';
+import '../../../training/domain/models/custom_training_plan.dart';
+import '../../../training/presentation/screens/user_plan_screen.dart';
+import '../../../training/presentation/widgets/plans/public_plans_strip.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/profile_repository.dart';
 import '../bloc/follow_cubit.dart';
@@ -30,6 +34,7 @@ class UserProfileScreen extends StatefulWidget {
     this.currentUserId,
     this.currentUser,
     this.postEvents,
+    this.planSharing,
   });
 
   final String userId;
@@ -41,6 +46,9 @@ class UserProfileScreen extends StatefulWidget {
   final FeedAuthor? currentUser;
   final FeedPostEvents? postEvents;
 
+  /// Publiczne plany osoby (sekcja „Plany”); `null` ukrywa sekcję.
+  final PlanSharingRepository? planSharing;
+
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
 }
@@ -49,6 +57,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   late final FollowCubit _followCubit;
   late ProfilePostsCubit _postsCubit;
   late Future<UserProfile> _future;
+  late Future<List<CustomTrainingPlan>> _plansFuture;
 
   @override
   void initState() {
@@ -83,7 +92,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   void _load() {
     _future = _fetch();
+    _plansFuture = _fetchPlans();
     _postsCubit.load();
+  }
+
+  /// Sekcja planów jest dodatkiem — błąd sieci ją po prostu ukrywa.
+  Future<List<CustomTrainingPlan>> _fetchPlans() async {
+    final sharing = widget.planSharing;
+    if (sharing == null) return const [];
+    try {
+      return await sharing.publicPlans(widget.userId);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  void _openPlan(UserProfile profile, CustomTrainingPlan plan) {
+    context.push(
+      '/app/users/${profile.id}/plans/${plan.id}',
+      extra: UserPlanArgs(
+        plan: plan,
+        owner: PlanOwner(
+          id: profile.id,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          handle: profile.handle,
+          avatarUrl: profile.avatarUrl,
+          isFollowing: _followCubit.state.isFollowing(profile.id),
+        ),
+      ),
+    );
   }
 
   Future<UserProfile> _fetch() async {
@@ -160,7 +198,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       onRefresh: () async {
         setState(_load);
         try {
-          await Future.wait([_future, _postsCubit.refresh()]);
+          await Future.wait([_future, _plansFuture, _postsCubit.refresh()]);
         } catch (_) {}
       },
       color: AppColors.primary,
@@ -199,6 +237,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           ),
+          if (!isMe)
+            SliverToBoxAdapter(
+              child: FutureBuilder<List<CustomTrainingPlan>>(
+                future: _plansFuture,
+                builder: (context, snapshot) {
+                  final plans = snapshot.data ?? const [];
+                  return AnimatedSize(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: plans.isEmpty
+                        ? const SizedBox(width: double.infinity)
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const ProfileSectionHeader(title: 'Plany'),
+                              PublicPlansStrip(
+                                plans: plans,
+                                onOpen: (plan) => _openPlan(profile, plan),
+                              ),
+                            ],
+                          ),
+                  );
+                },
+              ),
+            ),
           const SliverToBoxAdapter(
             child: ProfileSectionHeader(title: 'Aktywność'),
           ),

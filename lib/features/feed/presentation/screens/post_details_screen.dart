@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
+import '../../../training/data/plan_sharing_repository.dart';
 import '../../../training/domain/models/training_history_models.dart';
+import '../../../training/presentation/utils/plan_copy.dart';
 import '../../../training/presentation/widgets/new_records_banner.dart';
 import '../../../training/presentation/widgets/session_details/session_exercise_card.dart';
 import '../../../training/presentation/widgets/session_details/session_muscle_map.dart';
@@ -33,6 +36,7 @@ class PostDetailsScreen extends StatefulWidget {
     required this.repository,
     this.currentUserId,
     this.focusComment = false,
+    this.planSharing,
   });
 
   final String postId;
@@ -43,6 +47,10 @@ class PostDetailsScreen extends StatefulWidget {
   /// komentarzy.
   final bool focusComment;
 
+  /// Kopiowanie treningu jako planu (⋯ → „Skopiuj jako plan”); `null`
+  /// ukrywa menu.
+  final PlanSharingRepository? planSharing;
+
   @override
   State<PostDetailsScreen> createState() => _PostDetailsScreenState();
 }
@@ -51,6 +59,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   final _commentFocus = FocusNode();
   final _commentsKey = GlobalKey();
   bool _didAutoFocus = false;
+  bool _copying = false;
 
   @override
   void initState() {
@@ -88,6 +97,51 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       ..showSnackBar(
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
+  }
+
+  Future<void> _showPostActions() async {
+    final isOwn = context.read<PostDetailsCubit>().state.post?.isOwn ?? false;
+    final copy = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            key: const ValueKey('post-copy-plan'),
+            leading: const Icon(
+              Icons.copy_rounded,
+              color: AppColors.textPrimary,
+            ),
+            title: const Text(
+              'Skopiuj jako plan',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              isOwn
+                  ? 'Ćwiczenia, serie i ciężary z tego treningu'
+                  : 'Ćwiczenia i serie, bez ciężarów autora',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            onTap: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ),
+      ),
+    );
+    final sharing = widget.planSharing;
+    if (copy != true || !mounted || sharing == null) return;
+    setState(() => _copying = true);
+    final ok = await copyPlanAndOpenPlans(
+      context,
+      () => sharing.copyFromPost(widget.postId),
+    );
+    if (!ok && mounted) setState(() => _copying = false);
   }
 
   Future<void> _confirmDelete(PostComment comment) async {
@@ -180,9 +234,36 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
             bottom: false,
             child: Column(
               children: [
-                AppHeader(
-                  title: 'Trening',
-                  onBack: () => Navigator.of(context).maybePop(),
+                BlocSelector<PostDetailsCubit, PostDetailsState, bool>(
+                  selector: (state) => state.status == PostDetailsStatus.ready,
+                  builder: (context, ready) => AppHeader(
+                    title: 'Trening',
+                    onBack: () => Navigator.of(context).maybePop(),
+                    actions: [
+                      if (ready && widget.planSharing != null)
+                        _copying
+                            ? const SizedBox(
+                                width: AppSpacing.minTapTarget,
+                                height: AppSpacing.minTapTarget,
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : AppHeaderIconButton(
+                                key: const ValueKey('post-more'),
+                                icon: Icons.more_horiz_rounded,
+                                tooltip: 'Więcej opcji',
+                                onTap: _showPostActions,
+                              ),
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: BlocBuilder<PostDetailsCubit, PostDetailsState>(

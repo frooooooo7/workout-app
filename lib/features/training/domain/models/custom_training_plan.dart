@@ -142,6 +142,9 @@ class CustomTrainingPlan {
     this.highlightPlanColor = true,
     this.showRir = true,
     this.showTempo = true,
+    this.isPublic = false,
+    this.copiedFrom,
+    this.copyCount = 0,
   }) : id = id ?? const Uuid().v4();
 
   /// Domyślna przerwa nowego planu (i planów sprzed tej funkcji).
@@ -179,6 +182,15 @@ class CustomTrainingPlan {
   final bool showRir;
   final bool showTempo;
 
+  /// Plan widoczny na profilu — inni mogą go podejrzeć i skopiować.
+  final bool isPublic;
+
+  /// Autor planu, z którego zrobiono tę kopię; `null` — plan własny.
+  final PlanAuthor? copiedFrom;
+
+  /// Ile razy inni skopiowali ten plan.
+  final int copyCount;
+
   /// Wygląd i ustawienia treningu dla ekranów znających tylko nazwę planu.
   PlanStyle get style => PlanStyle(
     colorKey: colorKey,
@@ -192,6 +204,36 @@ class CustomTrainingPlan {
   /// Przerwa po serii [exercise]: własna albo domyślna planu.
   int restFor(PlanExercise exercise) =>
       exercise.restSeconds ?? defaultRestSeconds;
+
+  /// Szacunek czasu treningu: ~45 s na serię (odcinek kardio — jego czas)
+  /// i przerwa po każdej serii, a w superserii po każdej rundzie.
+  /// Zaokrąglony do 5 minut, co najmniej 5.
+  int get estimatedMinutes {
+    var seconds = 0;
+    for (var i = 0; i < exercises.length; i++) {
+      final exercise = exercises[i];
+      for (final set in exercise.sets) {
+        seconds += set.durationSeconds ?? 45;
+      }
+      final group = exercise.supersetGroup;
+      if (group != null &&
+          i + 1 < exercises.length &&
+          exercises[i + 1].supersetGroup == group) {
+        continue;
+      }
+      var rounds = exercise.sets.length;
+      if (group != null) {
+        for (final other in exercises) {
+          if (other.supersetGroup == group && other.sets.length > rounds) {
+            rounds = other.sets.length;
+          }
+        }
+      }
+      seconds += rounds * restFor(exercise);
+    }
+    final minutes = (seconds / 60 / 5).round() * 5;
+    return minutes < 5 ? 5 : minutes;
+  }
 
   CustomTrainingPlan copyWith({
     String? id,
@@ -209,6 +251,8 @@ class CustomTrainingPlan {
     bool? highlightPlanColor,
     bool? showRir,
     bool? showTempo,
+    bool? isPublic,
+    int? copyCount,
     bool clearColorKey = false,
     bool clearIconKey = false,
     bool clearGoal = false,
@@ -231,6 +275,26 @@ class CustomTrainingPlan {
       highlightPlanColor: highlightPlanColor ?? this.highlightPlanColor,
       showRir: showRir ?? this.showRir,
       showTempo: showTempo ?? this.showTempo,
+      isPublic: isPublic ?? this.isPublic,
+      copiedFrom: copiedFrom,
+      copyCount: copyCount ?? this.copyCount,
     );
   }
+}
+
+/// Autor planu, z którego zrobiono kopię (`od @anna`).
+class PlanAuthor {
+  const PlanAuthor({required this.userId, this.handle});
+
+  final String userId;
+
+  /// `null`, gdy serwer nie zna już tej osoby (konto usunięte).
+  final String? handle;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlanAuthor && other.userId == userId && other.handle == handle;
+
+  @override
+  int get hashCode => Object.hash(userId, handle);
 }

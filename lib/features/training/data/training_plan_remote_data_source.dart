@@ -52,6 +52,26 @@ class TrainingPlanRemoteDataSource {
       highlightPlanColor: json['highlightPlanColor'] as bool? ?? true,
       showRir: json['showRir'] as bool? ?? true,
       showTempo: json['showTempo'] as bool? ?? true,
+      isPublic: json['isPublic'] as bool? ?? false,
+      copyCount: (json['copyCount'] as num?)?.toInt() ?? 0,
+      copiedFrom: _authorFromJson(json['copiedFrom']),
+    );
+  }
+
+  static PlanAuthor? _authorFromJson(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final userId = json['userId'] as String?;
+    if (userId == null) return null;
+    return PlanAuthor(userId: userId, handle: json['handle'] as String?);
+  }
+
+  /// Plan z odpowiedzi kopiowania i liczba pominiętych ćwiczeń (własne
+  /// ćwiczenia autora, których nie widzimy w bibliotece).
+  PlanCopyResult _copyResult(Object? data) {
+    final json = data as Map<String, dynamic>;
+    return PlanCopyResult(
+      plan: _fromJson(json),
+      skippedExercises: (json['skippedExercises'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -72,6 +92,7 @@ class TrainingPlanRemoteDataSource {
       'highlightPlanColor': plan.highlightPlanColor,
       'showRir': plan.showRir,
       'showTempo': plan.showTempo,
+      'isPublic': plan.isPublic,
       'exercises': plan.exercises.asMap().entries.map((entry) {
         final pe = entry.value;
         return {
@@ -132,4 +153,38 @@ class TrainingPlanRemoteDataSource {
   Future<void> delete(String serverId) async {
     await _api.delete('/training-plans/$serverId', auth: true);
   }
+
+  /// Publiczne plany użytkownika (własne — wszystkie, z ciężarami).
+  Future<List<CustomTrainingPlan>> listPublic(String userId) async {
+    final data = await _api.get('/users/$userId/plans', auth: true);
+    return (data as List).cast<Map<String, dynamic>>().map(_fromJson).toList();
+  }
+
+  Future<PlanCopyResult> copy(String planServerId, {required String clientId}) async {
+    final data = await _api.post(
+      '/training-plans/$planServerId/copy',
+      {'clientId': clientId},
+      auth: true,
+    );
+    return _copyResult(data);
+  }
+
+  Future<PlanCopyResult> copyFromPost(
+    String sessionId, {
+    required String clientId,
+  }) async {
+    final data = await _api.post(
+      '/posts/$sessionId/copy-plan',
+      {'clientId': clientId},
+      auth: true,
+    );
+    return _copyResult(data);
+  }
+}
+
+class PlanCopyResult {
+  const PlanCopyResult({required this.plan, required this.skippedExercises});
+
+  final CustomTrainingPlan plan;
+  final int skippedExercises;
 }

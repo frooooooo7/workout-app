@@ -222,6 +222,9 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
   Future<void> _pullImpl() async {
     if (isStopped) return;
     markPullAttempt();
+    // Wiersz zapisany po wysłaniu żądania (np. świeżo skopiowany plan) nie
+    // jest sierotą, choć tej listy jeszcze w nim nie ma.
+    final requestedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
     try {
       final serverPlans = await _remote.getAll();
       if (isStopped) return;
@@ -233,12 +236,13 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           final serverIds = serverPlans.map((p) => p.id).toSet();
           final rows = await txn.query(
             ExerciseDatabase.tableTrainingPlans,
-            columns: ['local_id', 'server_id', 'pending_op'],
+            columns: ['local_id', 'server_id', 'pending_op', 'updated_at'],
           );
           final orphanIds = <String>[
             for (final row in rows)
               if (row['pending_op'] == null &&
                   row['server_id'] != null &&
+                  (row['updated_at'] as int? ?? 0) < requestedAt &&
                   !serverIds.contains(row['server_id']))
                 row['local_id'] as String,
           ];
@@ -263,6 +267,20 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     } on StateError {
       /* DB closing */
     }
+  }
+
+  /// Zapisuje plan skopiowany na serwerze (już zsynchronizowany) pod
+  /// [localId] i odświeża listy planów.
+  Future<void> storeCopiedPlan(
+    CustomTrainingPlan plan, {
+    required String localId,
+  }) async {
+    await _localDb.run(
+      (db) => db.transaction(
+        (txn) => _storePulledPlanOn(txn, plan, newLocalId: localId),
+      ),
+    );
+    notifyDataChanged();
   }
 
   Future<String> _ensureExerciseLocalRow(
@@ -386,6 +404,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     String? localIdOverride,
     int? expectedUpdatedAt,
     String? sentOp,
+    String? newLocalId,
   }) async {
       final existing = await _findLocalRow(
         db,
@@ -450,6 +469,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
       final localId =
           localIdOverride ??
           (existing?['local_id'] as String?) ??
+          newLocalId ??
           _uuid.v4();
       await _removeDuplicateServerRows(
         db,
