@@ -288,6 +288,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         highlightPlanColor: result.highlightPlanColor,
         showRir: result.showRir,
         showTempo: result.showTempo,
+        isPublic: result.isPublic,
         // Nowy cel ustawia przerwę planu; ćwiczenia z własną ją zachowują.
         defaultRestSeconds: goal != null && goal != _settings.goal
             ? goal.restSeconds
@@ -610,29 +611,9 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   String _summary() {
     if (_exercises.isEmpty) return '';
     final sets = _exercises.fold<int>(0, (sum, e) => sum + e.sets.length);
-    final minutes = _estimateMinutes();
+    final minutes = _settings.copyWith(exercises: _exercises).estimatedMinutes;
     return '${_exercises.length} ${_plural(_exercises.length, 'ćwiczenie', 'ćwiczenia', 'ćwiczeń')}'
         ' · $sets ${_plural(sets, 'seria', 'serie', 'serii')} · ~$minutes min';
-  }
-
-  /// Szacunek: ~45 s na serię (odcinek kardio — jego czas) i przerwa po
-  /// każdej serii (w superserii tylko po rundzie), zaokrąglony do 5 minut.
-  int _estimateMinutes() {
-    var seconds = 0;
-    for (final (i, exercise) in _exercises.indexed) {
-      final count = exercise.sets.length;
-      for (final set in exercise.sets) {
-        seconds += set.durationSeconds ?? 45;
-      }
-      if (SupersetGroups.endsRound(_exercises, i, (e) => e.supersetGroup)) {
-        final rounds = exercise.supersetGroup == null
-            ? count
-            : _roundsOf(exercise.supersetGroup!);
-        seconds += rounds * _settings.restFor(exercise);
-      }
-    }
-    final minutes = (seconds / 60 / 5).round() * 5;
-    return minutes < 5 ? 5 : minutes;
   }
 
   int _roundsOf(String group) {

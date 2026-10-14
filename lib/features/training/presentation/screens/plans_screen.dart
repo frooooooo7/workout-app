@@ -30,6 +30,7 @@ class _PlansScreenContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sharing = ServiceLocator.planSharingRepository;
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
@@ -59,7 +60,12 @@ class _PlansScreenContent extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               const AppTabScrollEdge(),
-              const Expanded(child: TrainingPlansTab()),
+              Expanded(
+                child: TrainingPlansTab(
+                  newPlanId: sharing?.recentlyCopiedPlanId,
+                  copyNotice: sharing?.copyNotice,
+                ),
+              ),
             ],
           ),
         ),

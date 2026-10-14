@@ -20,6 +20,8 @@ class PlanCard extends StatelessWidget {
     required this.onTap,
     required this.onStart,
     required this.onMore,
+    this.isNew = false,
+    this.onSetDays,
   });
 
   final CustomTrainingPlan plan;
@@ -29,6 +31,11 @@ class PlanCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onStart;
   final VoidCallback onMore;
+
+  /// Świeżo skopiowany plan — etykieta „Nowy”, ramka w kolorze planu
+  /// i pasek „Ustaw dni”, dopóki plan nie ma dni.
+  final bool isNew;
+  final VoidCallback? onSetDays;
 
   static const _previewCount = 3;
 
@@ -40,6 +47,10 @@ class PlanCard extends StatelessWidget {
     final note = plan.note?.trim() ?? '';
     final hiddenCount = exerciseCount - _previewCount;
     final color = PlanColors.of(plan.name, colorKey: plan.colorKey);
+    final author = plan.copiedFrom;
+    final showDaysPrompt =
+        isNew && plan.selectedDays.isEmpty && onSetDays != null;
+    final highlight = isNew ? color : (isToday ? AppColors.primary : null);
 
     return AppPressable(
       onTap: onTap,
@@ -49,14 +60,14 @@ class PlanCard extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.xl),
           border: Border.all(
-            color: isToday
-                ? AppColors.primary.withValues(alpha: 0.55)
+            color: highlight != null
+                ? highlight.withValues(alpha: 0.55)
                 : AppColors.border.withValues(alpha: 0.7),
           ),
-          boxShadow: isToday
+          boxShadow: highlight != null
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.14),
+                    color: highlight.withValues(alpha: 0.14),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),
@@ -78,7 +89,7 @@ class PlanCard extends StatelessWidget {
                 children: [
                   Padding(
                     padding: EdgeInsets.only(
-                      top: isToday ? 30 : 2,
+                      top: isToday || isNew ? 30 : 2,
                       right: AppSpacing.sm,
                     ),
                     child: PlanBadge(
@@ -91,8 +102,14 @@ class PlanCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (isToday) ...[
-                          const _TodayBadge(),
+                        if (isToday || isNew) ...[
+                          Row(
+                            children: [
+                              if (isToday) const _TodayBadge(),
+                              if (isToday && isNew) const SizedBox(width: 6),
+                              if (isNew) _NewBadge(color: color),
+                            ],
+                          ),
                           const SizedBox(height: AppSpacing.xs),
                         ],
                         Text(
@@ -116,6 +133,10 @@ class PlanCard extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        if (author != null) ...[
+                          const SizedBox(height: 6),
+                          PlanAuthorLabel(author: author),
+                        ],
                       ],
                     ),
                   ),
@@ -226,15 +247,30 @@ class PlanCard extends StatelessWidget {
                   ],
                 ),
               ),
+            if (showDaysPrompt)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: _SetDaysPrompt(
+                  key: ValueKey('plan-set-days-${plan.id}'),
+                  onTap: onSetDays!,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Row(
                 children: [
                   Expanded(
-                    child: _PlanWeekdays(
-                      planId: plan.id,
-                      selectedDays: plan.selectedDays,
-                    ),
+                    child: showDaysPrompt
+                        ? const SizedBox.shrink()
+                        : _PlanWeekdays(
+                            planId: plan.id,
+                            selectedDays: plan.selectedDays,
+                          ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _StartButton(
@@ -295,6 +331,136 @@ class _TodayBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _NewBadge extends StatelessWidget {
+  const _NewBadge({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        'NOWY',
+        style: TextStyle(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+/// „od @anna” z inicjałem autora — przy planach skopiowanych od innej osoby.
+class PlanAuthorLabel extends StatelessWidget {
+  const PlanAuthorLabel({super.key, required this.author});
+
+  final PlanAuthor author;
+
+  @override
+  Widget build(BuildContext context) {
+    final handle = author.handle;
+    final label = handle == null ? 'od innej osoby' : 'od @$handle';
+    final initial = handle == null || handle.isEmpty
+        ? '?'
+        : handle.substring(0, 1).toUpperCase();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: Color(0xFF2A2350),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            initial,
+            style: const TextStyle(
+              color: AppColors.planLegs,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textSubtle,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pasek na świeżo skopiowanym planie bez dni: „Bez przypisanych dni”.
+class _SetDaysPrompt extends StatelessWidget {
+  const _SetDaysPrompt({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = AppColors.statAmber;
+    return Semantics(
+      button: true,
+      label: 'Bez przypisanych dni. Ustaw dni',
+      excludeSemantics: true,
+      child: AppPressable(
+        onTap: onTap,
+        pressedScale: 0.98,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: amber.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: amber.withValues(alpha: 0.35)),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.calendar_today_outlined, color: amber, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Bez przypisanych dni',
+                  style: TextStyle(
+                    color: AppColors.textSubtle,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                'Ustaw dni',
+                style: TextStyle(
+                  color: amber,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

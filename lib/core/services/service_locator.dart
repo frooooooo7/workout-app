@@ -33,6 +33,7 @@ import '../../features/training/data/local_training_stats_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
 import '../../features/training/data/offline_first_training_history_repository.dart';
 import '../../features/training/data/offline_first_training_session_repository.dart';
+import '../../features/training/data/plan_sharing_repository.dart';
 import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/settings_aware_rest_timer_scheduler.dart';
 import '../../features/training/data/shared_preferences_rest_timer_notification_settings.dart';
@@ -102,6 +103,7 @@ class ServiceLocator {
   static TrainingPlanRepository? _trainingPlanRepository;
   static TrainingHistoryRepository? _trainingHistoryRepository;
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
+  static PlanSharingRepository? _planSharingRepository;
   static TrainingSessionRepository? _trainingSessionRepository;
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
   static SyncCoordinator? _syncCoordinator;
@@ -186,6 +188,11 @@ class ServiceLocator {
     );
     return _trainingPlanRepository!;
   }
+
+  /// Publiczne plany i kopiowanie planów; `null` bez zalogowanego
+  /// użytkownika (i w testach bez bazy).
+  static PlanSharingRepository? get planSharingRepository =>
+      _planSharingRepository;
 
   static TrainingHistoryRepository get trainingHistoryRepository {
     assert(
@@ -294,7 +301,9 @@ class ServiceLocator {
     TrainingHistoryRepository? trainingHistoryRepository,
     TrainingSessionRepository? trainingSessionRepository,
     TrainingStatsRepository? trainingStatsRepository,
+    PlanSharingRepository? planSharingRepository,
   }) {
+    _planSharingRepository = planSharingRepository;
     _exerciseRepository = exerciseRepository;
     _trainingPlanRepository = trainingPlanRepository;
     _trainingHistoryRepository = trainingHistoryRepository;
@@ -369,6 +378,7 @@ class ServiceLocator {
     _trainingSessionRepository = null;
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
+    _planSharingRepository = null;
     _trainingHistoryRepository = null;
     _trainingStatsRepository = null;
     _localSessionHistory = null;
@@ -433,6 +443,10 @@ class ServiceLocator {
     );
     _trainingPlanRepository = OfflineFirstTrainingPlanRepository(
       localDb: database,
+      syncEngine: planSync,
+    );
+    _planSharingRepository = PlanSharingRepository(
+      remote: _trainingPlanRemoteDataSource,
       syncEngine: planSync,
     );
     final localSessions = TrainingSessionLocalHistory(database);

@@ -19,6 +19,7 @@ typedef PlanSettingsResult = ({
   bool highlightPlanColor,
   bool showRir,
   bool showTempo,
+  bool isPublic,
 });
 
 /// Cel, krok progresji i wygląd ekranu treningu dla jednego planu.
@@ -40,6 +41,7 @@ class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
   late bool _highlight = widget.plan.highlightPlanColor;
   late bool _showRir = widget.plan.showRir;
   late bool _showTempo = widget.plan.showTempo;
+  late bool _isPublic = widget.plan.isPublic;
 
   Color get _color =>
       PlanColors.choices[widget.plan.colorKey] ??
@@ -52,6 +54,7 @@ class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
       highlightPlanColor: _highlight,
       showRir: _showRir,
       showTempo: _showTempo,
+      isPublic: _isPublic,
     ));
   }
 
@@ -169,6 +172,22 @@ class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
                           value: _showTempo,
                           color: color,
                           onChanged: (v) => setState(() => _showTempo = v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text('UDOSTĘPNIANIE', style: AppTextStyles.eyebrow),
+                    const SizedBox(height: 10),
+                    _Card(
+                      children: [
+                        _SwitchRow(
+                          key: const ValueKey('plan-setting-public'),
+                          title: 'Widoczny na profilu',
+                          subtitle:
+                              'inni zobaczą i skopiują plan, bez Twoich ciężarów',
+                          value: _isPublic,
+                          color: color,
+                          onChanged: (v) => setState(() => _isPublic = v),
                         ),
                       ],
                     ),

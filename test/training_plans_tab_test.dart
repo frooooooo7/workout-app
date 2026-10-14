@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
+import 'package:gym/features/training/data/plan_sharing_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/presentation/bloc/training_plans_cubit.dart';
@@ -88,6 +89,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Twoje plany'), findsOneWidget);
     expect(find.text('Push Power'), findsOneWidget);
+  });
+
+  testWidgets('a fresh copy is marked new, credited and announced', (
+    tester,
+  ) async {
+    final copy = CustomTrainingPlan(
+      name: 'Pull B',
+      selectedDays: const [],
+      copiedFrom: const PlanAuthor(userId: 'u-anna', handle: 'anna'),
+      exercises: [PlanExercise(exercise: mockExercises[1])],
+    );
+    final newPlanId = ValueNotifier<String?>(copy.id);
+    final notice = ValueNotifier<PlanCopyOutcome?>((
+      plan: copy,
+      skippedExercises: 0,
+    ));
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) =>
+              TrainingPlansCubit(_FakeTrainingPlanRepository([copy, ...plans])),
+          child: Scaffold(
+            body: TrainingPlansTab(
+              now: monday,
+              newPlanId: newPlanId,
+              copyNotice: notice,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('NOWY'), findsOneWidget);
+    expect(find.text('od @anna'), findsOneWidget);
+    expect(find.byKey(ValueKey('plan-set-days-${copy.id}')), findsOneWidget);
+    expect(find.text('Plan „Pull B” dodany'), findsOneWidget);
+    expect(find.text('Edytuj'), findsOneWidget);
+    expect(notice.value, isNull);
+
+    newPlanId.value = null;
+    await tester.pump();
+    expect(find.text('NOWY'), findsNothing);
+    expect(find.byKey(ValueKey('plan-set-days-${copy.id}')), findsNothing);
+    expect(find.text('od @anna'), findsOneWidget);
   });
 
   testWidgets('shows a call to action when there are no plans', (tester) async {

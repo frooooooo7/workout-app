@@ -44,6 +44,10 @@ class TrainingPlanLocalMapper {
     'highlight_plan_color': plan.highlightPlanColor ? 1 : 0,
     'show_rir': plan.showRir ? 1 : 0,
     'show_tempo': plan.showTempo ? 1 : 0,
+    'is_public': plan.isPublic ? 1 : 0,
+    'copied_from_user_id': plan.copiedFrom?.userId,
+    'copied_from_handle': plan.copiedFrom?.handle,
+    'copy_count': plan.copyCount,
   };
 
   static Future<LocalTrainingPlanRecord?> fromDb(
@@ -189,6 +193,15 @@ class TrainingPlanLocalMapper {
         highlightPlanColor: (planRow['highlight_plan_color'] as int?) != 0,
         showRir: (planRow['show_rir'] as int?) != 0,
         showTempo: (planRow['show_tempo'] as int?) != 0,
+        isPublic: (planRow['is_public'] as int?) == 1,
+        copiedFrom: switch (planRow['copied_from_user_id'] as String?) {
+          final userId? => PlanAuthor(
+            userId: userId,
+            handle: planRow['copied_from_handle'] as String?,
+          ),
+          null => null,
+        },
+        copyCount: (planRow['copy_count'] as int?) ?? 0,
       ),
       serverId: planRow['server_id'] as String?,
       pendingOp: planRow['pending_op'] as String?,
