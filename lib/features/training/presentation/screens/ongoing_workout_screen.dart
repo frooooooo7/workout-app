@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,6 +23,7 @@ import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/stats/stats_sets.dart' show statsExerciseKey;
 import '../../domain/services/training_session_detail_mapper.dart'
     show parseWeightKg;
+import '../bloc/training_home_cubit.dart';
 import '../bloc/training_session_cubit.dart';
 import '../widgets/ongoing_workout/next_exercise_card.dart';
 import '../widgets/ongoing_workout/ongoing_workout_header.dart';
@@ -40,6 +42,7 @@ class OngoingWorkoutArgs {
     this.sessionCubit,
     this.pickExercise,
     this.restTimerScheduler,
+    this.restTimerClock,
     this.previousPerformance,
     this.statsRepository,
   });
@@ -48,6 +51,9 @@ class OngoingWorkoutArgs {
   final TrainingSessionCubit? sessionCubit;
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
   final RestTimerScheduler? restTimerScheduler;
+
+  /// Zegar odliczania przerwy; domyślnie [DateTime.now].
+  final DateTime Function()? restTimerClock;
 
   /// Źródło kolumny „Poprzednio”; domyślnie lokalna historia użytkownika.
   final PreviousPerformanceRepository? previousPerformance;
@@ -75,6 +81,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       ValueNotifier<TrainingSession?>(null);
   late final RestTimerController _rest = RestTimerController(
     scheduler: _restTimerScheduler,
+    clock: widget.args?.restTimerClock,
   );
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
@@ -202,10 +209,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (repository == null) return null;
     try {
       final history = await repository.allCompletedSessions();
-      return {
-        for (final best in PersonalRecordsCalculator.compute(history).bests)
-          best.exerciseKey: best,
-      };
+      // Długa historia liczy się w osobnym wątku — start treningu nie przycina.
+      return history.length >= TrainingHomeCubit.isolateThreshold
+          ? await compute(_bestsJob, history)
+          : _bestsJob(history);
     } catch (_) {
       return null;
     }
@@ -1059,3 +1066,8 @@ class _MissingSessionScreen extends StatelessWidget {
     );
   }
 }
+
+Map<String, ExerciseBest> _bestsJob(List<TrainingSession> history) => {
+  for (final best in PersonalRecordsCalculator.compute(history).bests)
+    best.exerciseKey: best,
+};

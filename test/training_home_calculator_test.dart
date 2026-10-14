@@ -162,5 +162,61 @@ void main() {
       expect(cubit.state.weeklyGoal, isNull);
       await cubit.close();
     });
+
+    group('large history is computed off the main isolate', () {
+      List<TrainingSession> history() => [
+        for (var i = 0; i < TrainingHomeCubit.isolateThreshold + 20; i++)
+          _session(
+            'Push',
+            DateTime(2026, 7, 27, 18).subtract(Duration(days: i)),
+            sets: [('${60 + i % 30}', '5')],
+          ),
+      ];
+
+      test('matches the direct calculation', () async {
+        final sessions = history();
+        final cubit = TrainingHomeCubit(_Repo(sessions), clock: () => _today);
+        await cubit.refresh();
+
+        final direct = TrainingHomeCalculator.compute(sessions, today: _today);
+        expect(cubit.state.weekDonePlans, direct.weekDonePlans);
+        expect(cubit.state.recordsBySession, direct.recordsBySession);
+        expect(cubit.state.bests.keys.toSet(), direct.bests.keys.toSet());
+        expect(
+          cubit.state.bests.values.single.bestWeightKg,
+          direct.bests.values.single.bestWeightKg,
+        );
+        await cubit.close();
+      });
+
+      test(
+        'a goal that lands while the isolate is computing is kept',
+        () async {
+          for (final delayMs in [0, 5, 15, 30]) {
+            final cubit = TrainingHomeCubit(
+              _Repo(history()),
+              clock: () => _today,
+              weeklyGoalLoader: () async {
+                await Future<void>.delayed(Duration(milliseconds: delayMs));
+                return 4;
+              },
+            );
+            await cubit.refresh();
+            // Liczenie z refresh() z konstruktora mogło skończyć się później.
+            for (var i = 0; i < 100 && cubit.state.weeklyGoal == null; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 20));
+            }
+
+            expect(
+              cubit.state.weeklyGoal?.goal,
+              4,
+              reason: 'delay $delayMs ms',
+            );
+            expect(cubit.state.weekDonePlans, isNotEmpty);
+            await cubit.close();
+          }
+        },
+      );
+    });
   });
 }

@@ -14,6 +14,9 @@ import '../../domain/services/training_home_calculator.dart';
 ///
 /// Wszystko to dodatki do planu na dziś — przy błędzie zostaje ostatni
 /// znany stan, a ekran po prostu pomija brakujące elementy.
+///
+/// Przy dużej historii ([isolateThreshold] sesji i więcej) liczenie (rekordy
+/// z całej historii) idzie do osobnego wątku, żeby zakładka nie przycinała.
 class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
   TrainingHomeCubit(
     this._repository, {
@@ -30,6 +33,9 @@ class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
 
   static const _goalTimeout = Duration(seconds: 5);
 
+  /// Od tylu sesji liczenie idzie do osobnego wątku (jak w statystykach).
+  static const isolateThreshold = 300;
+
   final TrainingStatsRepository _repository;
   final Listenable? _dataChanges;
   final Future<int?> Function()? _weeklyGoalLoader;
@@ -40,6 +46,9 @@ class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
 
   /// Numer ostatniego wczytania — starsza odpowiedź nie nadpisuje nowszej.
   int _seq = 0;
+
+  /// Numer ostatniego liczenia — wynik starszego nie nadpisuje nowszego.
+  int _computeSeq = 0;
 
   @override
   Future<void> close() {
@@ -61,7 +70,7 @@ class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
       final sessions = await _repository.allCompletedSessions();
       if (isClosed || seq != _seq) return;
       _sessions = sessions;
-      _emitInsights();
+      await _emitInsights();
     } catch (_) {
       // Bez historii karta planu i tak działa — zostaje ostatni stan.
     }
@@ -74,19 +83,42 @@ class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
       final goal = await loader().timeout(_goalTimeout);
       if (isClosed || goal == _weeklyGoal) return;
       _weeklyGoal = goal;
-      if (_sessions != null) _emitInsights();
+      if (_sessions != null) await _emitInsights();
     } catch (_) {
       // Bez sieci licznik tygodnia pokaże dni zaplanowane w planach.
     }
   }
 
-  void _emitInsights() {
-    emit(
-      TrainingHomeCalculator.compute(
-        _sessions!,
-        today: _clock(),
-        weeklyGoal: _weeklyGoal,
-      ),
+  Future<void> _emitInsights() async {
+    final seq = ++_computeSeq;
+    final args = _InsightsArgs(
+      sessions: _sessions!,
+      today: _clock(),
+      weeklyGoal: _weeklyGoal,
     );
+    final insights = args.sessions.length >= isolateThreshold
+        ? await compute(_insightsJob, args)
+        : _insightsJob(args);
+    if (isClosed || seq != _computeSeq) return;
+    emit(insights);
   }
 }
+
+class _InsightsArgs {
+  const _InsightsArgs({
+    required this.sessions,
+    required this.today,
+    required this.weeklyGoal,
+  });
+
+  final List<TrainingSession> sessions;
+  final DateTime today;
+  final int? weeklyGoal;
+}
+
+TrainingHomeInsights _insightsJob(_InsightsArgs a) =>
+    TrainingHomeCalculator.compute(
+      a.sessions,
+      today: a.today,
+      weeklyGoal: a.weeklyGoal,
+    );
