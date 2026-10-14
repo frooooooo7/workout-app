@@ -127,6 +127,8 @@ class _EditWorkoutView extends StatelessWidget {
         exerciseMuscles: picked.muscles.map((m) => m.name).toList(),
         exerciseCategory: picked.category.name,
         exerciseImageUrl: picked.imageUrl,
+        tracking: picked.tracking,
+        distanceUnit: picked.distanceUnit,
         sets: [TrainingSessionSet()],
       ),
     );

@@ -38,6 +38,8 @@ class ExerciseRemoteDataSource {
     isMine: (j['isMine'] as bool?) ?? true,
     isPendingSync: false,
     clientId: j['clientId'] as String?,
+    tracking: ExerciseTracking.fromApi(j['trackingType'] as String?),
+    distanceUnit: DistanceUnit.fromApi(j['distanceUnit'] as String?),
   );
 
   /// Web clients often use filenames like `blob` without an extension — backend
@@ -148,12 +150,16 @@ class ExerciseRemoteDataSource {
     required ExerciseCategory category,
     required String description,
     String? clientId,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final body = <String, dynamic>{
       'name': name,
       'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
+      'trackingType': tracking.apiName,
+      'distanceUnit': distanceUnit.apiName,
     };
     if (clientId != null) {
       body['clientId'] = clientId;
@@ -191,12 +197,16 @@ class ExerciseRemoteDataSource {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final data = await _api.put('/exercises/$id', {
       'name': name,
       'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
+      'trackingType': tracking.apiName,
+      'distanceUnit': distanceUnit.apiName,
     }, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }

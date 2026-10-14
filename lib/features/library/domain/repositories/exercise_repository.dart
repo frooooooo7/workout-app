@@ -25,6 +25,8 @@ abstract interface class ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   });
 
   /// Updates an existing user-owned exercise via the backend and local cache.
@@ -34,6 +36,8 @@ abstract interface class ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   });
 
   /// Deletes a user-owned exercise from the backend and local cache.

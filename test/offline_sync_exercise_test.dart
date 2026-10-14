@@ -273,6 +273,8 @@ class _OfflinePullRemote extends _SeqRemote {
     required ExerciseCategory category,
     required String description,
     String? clientId,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     log.add('create');
     _created++;
@@ -322,6 +324,8 @@ class _SeqRemote extends ExerciseRemoteDataSource {
     required ExerciseCategory category,
     required String description,
     String? clientId,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     log.add('create');
     return Exercise(
@@ -363,6 +367,8 @@ class _SeqRemote extends ExerciseRemoteDataSource {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async =>
       throw UnimplementedError();
 

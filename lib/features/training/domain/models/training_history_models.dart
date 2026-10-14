@@ -76,12 +76,23 @@ class TrainingSessionListItem {
 }
 
 class TrainingSetMetrics {
-  const TrainingSetMetrics({this.weightKg, this.reps, this.rir, this.tempo});
+  const TrainingSetMetrics({
+    this.weightKg,
+    this.reps,
+    this.rir,
+    this.tempo,
+    this.durationSeconds,
+    this.distanceM,
+  });
 
   final double? weightKg;
   final int? reps;
   final int? rir;
   final String? tempo;
+
+  /// Kardio: czas i dystans (w metrach).
+  final int? durationSeconds;
+  final int? distanceM;
 }
 
 class TrainingExerciseSetDetail {
@@ -127,10 +138,16 @@ class TrainingExerciseDetail {
     this.imageUrl,
     this.note,
     required this.sets,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   });
 
   final String exerciseId;
   final String exerciseName;
+
+  /// Tryb ćwiczenia z chwili treningu — decyduje, jak rysować serie.
+  final ExerciseTracking tracking;
+  final DistanceUnit distanceUnit;
 
   /// Snapshot grup mięśniowych z chwili wykonania sesji — nie zmienia się,
   /// gdy ćwiczenie zostanie później przetagowane albo usunięte z biblioteki.

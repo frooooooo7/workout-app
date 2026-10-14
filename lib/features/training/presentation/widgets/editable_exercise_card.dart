@@ -125,8 +125,11 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
   @override
   Widget build(BuildContext context) {
     final planExercise = _draft;
-    final hasRir = planExercise.sets.any((s) => s.rir != null);
-    final hasTempo = planExercise.sets.any((s) => s.tempo != null);
+    final tracking = planExercise.exercise.tracking;
+    final distanceUnit = planExercise.exercise.distanceUnit;
+    final cardio = tracking.tracksDuration;
+    final hasRir = !cardio && planExercise.sets.any((s) => s.rir != null);
+    final hasTempo = !cardio && planExercise.sets.any((s) => s.tempo != null);
     final segment = widget.segment;
     final grouped = segment != SupersetSegment.none;
     final roundTop =
@@ -168,8 +171,8 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
               image: _thumb,
             ),
             child: planExercise.exercise.imageUrl == null
-                ? const Icon(
-                    Icons.fitness_center,
+                ? Icon(
+                    cardio ? Icons.directions_run_rounded : Icons.fitness_center,
                     color: AppColors.textMuted,
                     size: 24,
                   )
@@ -190,7 +193,9 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${planExercise.sets.length} serii',
+                  cardio
+                      ? cardioSegmentsLabel(planExercise.sets.length)
+                      : '${planExercise.sets.length} serii',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -220,45 +225,54 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
           padding: const EdgeInsets.only(bottom: 8),
           child: Row(
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 40,
                 child: Text(
-                  'SERIA',
+                  cardio ? 'ODC.' : 'SERIA',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.0,
-                  ),
+                  style: _headerStyle,
                 ),
               ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'CIĘŻAR',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.0,
+              if (tracking.tracksWeight) ...const [
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'CIĘŻAR',
+                    textAlign: TextAlign.center,
+                    style: _headerStyle,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'POWT.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.0,
+              ],
+              if (tracking.tracksReps) ...const [
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'POWT.',
+                    textAlign: TextAlign.center,
+                    style: _headerStyle,
                   ),
                 ),
-              ),
+              ],
+              if (cardio) ...const [
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'CEL: CZAS',
+                    textAlign: TextAlign.center,
+                    style: _headerStyle,
+                  ),
+                ),
+              ],
+              if (tracking.tracksDistance) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'DYSTANS (${distanceUnit.label})',
+                    textAlign: TextAlign.center,
+                    style: _headerStyle,
+                  ),
+                ),
+              ],
               if (hasRir) ...const [
                 SizedBox(width: 8),
                 Expanded(
@@ -313,34 +327,81 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: WeightCellInput(
-                    fallbackHint: '-',
-                    valueKg: set.weight,
-                    suffixText: ' ${WeightUnits.current.label}',
-                    onChanged: (val) {
-                      final newSets = List<ExerciseSet>.from(planExercise.sets);
-                      newSets[setIndex] = set.copyWith(
-                        weight: val.isEmpty ? null : val,
-                        clearWeight: val.isEmpty,
-                      );
-                      _commit(planExercise.copyWith(sets: newSets));
-                    },
+                if (tracking.tracksWeight) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: WeightCellInput(
+                      fallbackHint: '-',
+                      valueKg: set.weight,
+                      suffixText: ' ${WeightUnits.current.label}',
+                      onChanged: (val) {
+                        final newSets = List<ExerciseSet>.from(
+                          planExercise.sets,
+                        );
+                        newSets[setIndex] = set.copyWith(
+                          weight: val.isEmpty ? null : val,
+                          clearWeight: val.isEmpty,
+                        );
+                        _commit(planExercise.copyWith(sets: newSets));
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TableCellInput(
-                    hint: '-',
-                    value: set.reps,
-                    onChanged: (val) {
-                      final newSets = List<ExerciseSet>.from(planExercise.sets);
-                      newSets[setIndex] = set.copyWith(reps: val);
-                      _commit(planExercise.copyWith(sets: newSets));
-                    },
+                ],
+                if (tracking.tracksReps) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TableCellInput(
+                      hint: '-',
+                      value: set.reps,
+                      onChanged: (val) {
+                        final newSets = List<ExerciseSet>.from(
+                          planExercise.sets,
+                        );
+                        newSets[setIndex] = set.copyWith(reps: val);
+                        _commit(planExercise.copyWith(sets: newSets));
+                      },
+                    ),
                   ),
-                ),
+                ],
+                if (cardio) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DurationCellInput(
+                      key: ValueKey('plan-set-duration-$setIndex'),
+                      seconds: set.durationSeconds,
+                      onChanged: (seconds) {
+                        final newSets = List<ExerciseSet>.from(
+                          planExercise.sets,
+                        );
+                        newSets[setIndex] = set.copyWith(
+                          durationSeconds: seconds,
+                          clearDuration: seconds == null,
+                        );
+                        _commit(planExercise.copyWith(sets: newSets));
+                      },
+                    ),
+                  ),
+                ],
+                if (tracking.tracksDistance) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DistanceCellInput(
+                      key: ValueKey('plan-set-distance-$setIndex'),
+                      meters: set.distanceM,
+                      unit: distanceUnit,
+                      onChanged: (meters) {
+                        final newSets = List<ExerciseSet>.from(
+                          planExercise.sets,
+                        );
+                        newSets[setIndex] = set.copyWith(
+                          distanceM: meters,
+                          clearDistance: meters == null,
+                        );
+                        _commit(planExercise.copyWith(sets: newSets));
+                      },
+                    ),
+                  ),
+                ],
                 if (hasRir) ...[
                   const SizedBox(width: 8),
                   Expanded(
@@ -407,12 +468,14 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                     reps: previous?.reps ?? '',
                     rir: previous?.rir,
                     tempo: previous?.tempo,
+                    durationSeconds: previous?.durationSeconds,
+                    distanceM: previous?.distanceM,
                   ),
                 );
                 _commit(planExercise.copyWith(sets: newSets));
               },
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Dodaj serię'),
+              label: Text(cardio ? 'Dodaj odcinek' : 'Dodaj serię'),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 padding: const EdgeInsets.symmetric(
@@ -422,7 +485,7 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
               ),
             ),
             const Spacer(),
-            if (!hasRir)
+            if (!hasRir && !cardio)
               TextButton(
                 onPressed: () {
                   final newSets = planExercise.sets
@@ -438,7 +501,7 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
                 ),
                 child: const Text('+ RIR', style: TextStyle(fontSize: 12)),
               ),
-            if (!hasTempo)
+            if (!hasTempo && !cardio)
               TextButton(
                 onPressed: () {
                   final newSets = planExercise.sets
@@ -499,4 +562,23 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
     AppColors.superset.withValues(alpha: 0.05),
     AppColors.surface,
   );
+}
+
+const _headerStyle = TextStyle(
+  color: AppColors.textSecondary,
+  fontSize: 10,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 1.0,
+);
+
+/// `1 odcinek`, `3 odcinki`, `5 odcinków`.
+String cardioSegmentsLabel(int count) {
+  final mod10 = count % 10;
+  final mod100 = count % 100;
+  final word = count == 1
+      ? 'odcinek'
+      : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
+      ? 'odcinki'
+      : 'odcinków';
+  return '$count $word';
 }

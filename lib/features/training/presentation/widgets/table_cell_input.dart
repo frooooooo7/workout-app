@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../library/domain/models/exercise_tracking.dart';
 
 /// Pole ciężaru serii. W bazie ciężar leży jako tekst w kilogramach; pole
 /// pokazuje go i przyjmuje w aktualnej jednostce ([WeightUnits.current]),
@@ -49,6 +50,72 @@ class WeightCellInput extends StatelessWidget {
     final y = parseWeightNumber(b);
     if (x == null || y == null) return x == y && a.trim() == b.trim();
     return (x - y).abs() < 0.05;
+  }
+}
+
+/// Pole czasu serii (`12:47`, albo same minuty: `15`). [onChanged] dostaje
+/// sekundy; `null` — puste albo nieczytelne.
+class DurationCellInput extends StatelessWidget {
+  const DurationCellInput({
+    super.key,
+    required this.seconds,
+    required this.onChanged,
+    this.hintSeconds,
+    this.look = TableCellInputLook.compact,
+  });
+
+  final int? seconds;
+  final int? hintSeconds;
+  final TableCellInputLook look;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = hintSeconds;
+    return TableCellInput(
+      value: seconds == null ? '' : formatSetDuration(seconds!),
+      hint: hint == null ? '0:00' : formatSetDuration(hint),
+      // Dwukropek jest na klawiaturze daty i godziny.
+      keyboardType: TextInputType.datetime,
+      look: look,
+      onChanged: (text) => onChanged(parseSetDuration(text)),
+      // „12:4” w trakcie pisania to już 12:04 — nie przepisujemy pola.
+      sameValue: (text, value) =>
+          parseSetDuration(text) == parseSetDuration(value),
+    );
+  }
+}
+
+/// Pole dystansu w jednostce ćwiczenia; [onChanged] dostaje metry.
+class DistanceCellInput extends StatelessWidget {
+  const DistanceCellInput({
+    super.key,
+    required this.meters,
+    required this.unit,
+    required this.onChanged,
+    this.hintMeters,
+    this.look = TableCellInputLook.compact,
+  });
+
+  final int? meters;
+  final int? hintMeters;
+  final DistanceUnit unit;
+  final TableCellInputLook look;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = hintMeters;
+    return TableCellInput(
+      value: meters == null ? '' : unit.format(meters!),
+      hint: hint == null ? '–' : unit.format(hint),
+      keyboardType: unit == DistanceUnit.km
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.number,
+      look: look,
+      onChanged: (text) => onChanged(unit.parse(text)),
+      sameValue: (text, value) => unit.parse(text) == unit.parse(value),
+    );
   }
 }
 

@@ -222,6 +222,8 @@ class LibraryCubit extends Cubit<LibraryState> {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final updated = await _repository.update(
       id: id,
@@ -229,6 +231,8 @@ class LibraryCubit extends Cubit<LibraryState> {
       muscles: muscles,
       category: category,
       description: description,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
     await refresh(showLoadingIndicator: false);
     return updated;
@@ -247,6 +251,8 @@ class LibraryCubit extends Cubit<LibraryState> {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final created = await _repository.create(
       name: name,
@@ -255,6 +261,8 @@ class LibraryCubit extends Cubit<LibraryState> {
       description: description,
       imageBytes: imageBytes,
       imageFilename: imageFilename,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
     await refresh(showLoadingIndicator: false);
     return created;

@@ -11,6 +11,8 @@ class ExerciseSet {
     this.reps = '',
     this.rir,
     this.tempo,
+    this.durationSeconds,
+    this.distanceM,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -19,15 +21,23 @@ class ExerciseSet {
   final String? rir;
   final String? tempo;
 
+  /// Cel czasu i dystansu serii kardio (dystans zawsze w metrach).
+  final int? durationSeconds;
+  final int? distanceM;
+
   ExerciseSet copyWith({
     String? id,
     String? weight,
     String? reps,
     String? rir,
     String? tempo,
+    int? durationSeconds,
+    int? distanceM,
     bool clearWeight = false,
     bool clearRir = false,
     bool clearTempo = false,
+    bool clearDuration = false,
+    bool clearDistance = false,
   }) {
     return ExerciseSet(
       id: id ?? this.id,
@@ -35,6 +45,10 @@ class ExerciseSet {
       reps: reps ?? this.reps,
       rir: clearRir ? null : (rir ?? this.rir),
       tempo: clearTempo ? null : (tempo ?? this.tempo),
+      durationSeconds: clearDuration
+          ? null
+          : (durationSeconds ?? this.durationSeconds),
+      distanceM: clearDistance ? null : (distanceM ?? this.distanceM),
     );
   }
 }

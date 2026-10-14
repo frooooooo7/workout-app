@@ -1,3 +1,7 @@
+import 'exercise_tracking.dart';
+
+export 'exercise_tracking.dart';
+
 // ──────────────────────────────────────────────
 // Enums
 // ──────────────────────────────────────────────
@@ -251,6 +255,8 @@ class Exercise {
     this.createdAt,
     this.isPendingSync = false,
     this.clientId,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   });
 
   final String id;
@@ -272,6 +278,13 @@ class Exercise {
   /// własnych ćwiczeń) — pozwala sparować rekord z serwera z lokalnym wierszem.
   final String? clientId;
 
+  /// Co zapisuje seria: ciężar × powt., same powtórzenia, czas albo czas
+  /// + dystans.
+  final ExerciseTracking tracking;
+
+  /// Jednostka dystansu przy [ExerciseTracking.durationDistance].
+  final DistanceUnit distanceUnit;
+
   /// Mięśnie bez sentinela [MuscleGroup.all] — to, co faktycznie pracuje.
   /// Pierwszy na liście to mięsień główny, kolejne są wspomagające.
   List<MuscleGroup> get workingMuscles =>
@@ -287,6 +300,8 @@ class Exercise {
     bool? isMine,
     DateTime? createdAt,
     bool? isPendingSync,
+    ExerciseTracking? tracking,
+    DistanceUnit? distanceUnit,
   }) {
     return Exercise(
       id: id,
@@ -300,6 +315,8 @@ class Exercise {
       createdAt: createdAt ?? this.createdAt,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       clientId: clientId,
+      tracking: tracking ?? this.tracking,
+      distanceUnit: distanceUnit ?? this.distanceUnit,
     );
   }
 }

@@ -13,12 +13,16 @@ class ExerciseThumb extends StatefulWidget {
     required this.size,
     required this.radius,
     this.opacity = 1,
+    this.fallbackIcon = Icons.fitness_center,
   });
 
   final String? imageUrl;
   final double size;
   final double radius;
   final double opacity;
+
+  /// Ikona, gdy ćwiczenie nie ma zdjęcia (kardio — biegacz).
+  final IconData fallbackIcon;
 
   @override
   State<ExerciseThumb> createState() => _ExerciseThumbState();
@@ -71,7 +75,7 @@ class _ExerciseThumbState extends State<ExerciseThumb> {
       ),
       child: widget.imageUrl == null
           ? Icon(
-              Icons.fitness_center,
+              widget.fallbackIcon,
               color: AppColors.textMuted,
               size: widget.size * 0.45,
             )

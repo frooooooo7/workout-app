@@ -35,6 +35,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     'category',
     'description',
     'image_url',
+    'tracking_type',
+    'distance_unit',
     'is_favourite',
     'is_mine',
     'created_at',
@@ -151,6 +153,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     final localId = _uuid.v4();
     final createdAt = DateTime.now().toUtc();
@@ -165,6 +169,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
       isMine: true,
       createdAt: createdAt,
       isPendingSync: true,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
 
     final dto = ExerciseDto.fromDomain(
@@ -194,6 +200,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
   }) async {
     await _localDb.run((db) async {
       final row = await _findRow(db, id);
@@ -212,6 +220,8 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
           'muscles': ExerciseDto.encodeMusclesToJson(muscles),
           'category': category.name,
           'description': description,
+          'tracking_type': tracking.apiName,
+          'distance_unit': distanceUnit.apiName,
           'pending_op': nextPending,
           'sync_error': null,
         },

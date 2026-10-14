@@ -36,6 +36,8 @@ TrainingSession buildRepeatedSession(
           exerciseImageUrl: exercise.exerciseImageUrl,
           restSeconds: exercise.restSeconds,
           supersetGroup: exercise.supersetGroup,
+          tracking: exercise.tracking,
+          distanceUnit: exercise.distanceUnit,
           sets: [for (final set in exercise.sets) _repeatSet(set)],
         ),
     ],
@@ -57,6 +59,10 @@ TrainingSessionSet _repeatSet(TrainingSessionSet previous) {
     actualReps: reps,
     actualRir: rir,
     actualTempo: tempo,
+    // Kardio: poprzedni czas i dystans to cel, wynik wpisuje się na nowo.
+    plannedDurationSeconds:
+        previous.actualDurationSeconds ?? previous.plannedDurationSeconds,
+    plannedDistanceM: previous.actualDistanceM ?? previous.plannedDistanceM,
   );
 }
 

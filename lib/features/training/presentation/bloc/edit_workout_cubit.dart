@@ -216,6 +216,8 @@ class EditWorkoutCubit extends Cubit<EditWorkoutState> {
           actualWeight: last?.actualWeight,
           actualReps: last?.actualReps,
           actualRir: last?.actualRir,
+          plannedDurationSeconds: last?.plannedDurationSeconds,
+          plannedDistanceM: last?.plannedDistanceM,
         ),
       ],
     );

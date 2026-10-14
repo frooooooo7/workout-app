@@ -161,6 +161,8 @@ class TrainingPlanLocalMapper {
                 reps: set['reps'] as String? ?? '',
                 rir: set['rir'] as String?,
                 tempo: set['tempo'] as String?,
+                durationSeconds: set['duration_seconds'] as int?,
+                distanceM: set['distance_m'] as int?,
               ),
           ],
           restSeconds: planExerciseRow['rest_seconds'] as int?,
@@ -295,6 +297,8 @@ class TrainingPlanLocalMapper {
           'reps': set.reps,
           'rir': set.rir,
           'tempo': set.tempo,
+          'duration_seconds': set.durationSeconds,
+          'distance_m': set.distanceM,
         });
       }
     }

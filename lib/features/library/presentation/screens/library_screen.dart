@@ -78,12 +78,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
             required List<MuscleGroup> muscles,
             required ExerciseCategory category,
             required String description,
+          required ExerciseTracking tracking,
+          required DistanceUnit distanceUnit,
           }) => cubit.updateExercise(
             id: exercise.id,
             name: name,
             muscles: muscles,
             category: category,
             description: description,
+            tracking: tracking,
+            distanceUnit: distanceUnit,
           ),
     );
     if (updated != null && context.mounted) {
@@ -188,6 +192,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             required List<MuscleGroup> muscles,
                                             required ExerciseCategory category,
                                             required String description,
+                                            required ExerciseTracking tracking,
+                                            required DistanceUnit distanceUnit,
                                             Uint8List? imageBytes,
                                             String? imageFilename,
                                           }) => cubit.createExercise(
@@ -195,6 +201,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             muscles: muscles,
                                             category: category,
                                             description: description,
+                                            tracking: tracking,
+                                            distanceUnit: distanceUnit,
                                             imageBytes: imageBytes,
                                             imageFilename: imageFilename,
                                           ),

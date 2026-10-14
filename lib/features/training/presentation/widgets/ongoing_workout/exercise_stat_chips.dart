@@ -6,10 +6,18 @@ import 'workout_colors.dart';
 /// Chipy pod nazwą ćwiczenia: „Ostatnio 92,5 × 6” (najlepsza seria
 /// poprzedniego treningu) i złoty „Rekord 92,5 × 6”. Bez danych chip znika.
 class ExerciseStatChips extends StatelessWidget {
-  const ExerciseStatChips({super.key, this.last, this.record});
+  const ExerciseStatChips({
+    super.key,
+    this.last,
+    this.record,
+    this.recordLabel = 'Rekord',
+  });
 
   final String? last;
   final String? record;
+
+  /// „Rekord”, a w kardio „Tempo” (najszybsze z historii).
+  final String recordLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +41,7 @@ class ExerciseStatChips extends StatelessWidget {
             _Chip(
               key: const Key('exercise-record-chip'),
               icon: Icons.emoji_events_outlined,
-              label: 'Rekord',
+              label: recordLabel,
               value: record!,
               background: AppColors.record.withValues(alpha: 0.12),
               labelColor: WorkoutColors.recordText,

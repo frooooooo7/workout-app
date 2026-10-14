@@ -152,6 +152,8 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    required ExerciseTracking tracking,
+    required DistanceUnit distanceUnit,
   }) async {
     final updated = await _repository.update(
       id: state.exercise?.id ?? exerciseId,
@@ -159,6 +161,8 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
       muscles: muscles,
       category: category,
       description: description,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
     if (!isClosed) {
       emit(state.copyWith(exercise: updated));

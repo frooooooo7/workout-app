@@ -201,6 +201,8 @@ class ExerciseSyncEngine extends SyncEngineBase {
         category: domain.category,
         description: domain.description,
         clientId: dto.localId,
+        tracking: domain.tracking,
+        distanceUnit: domain.distanceUnit,
       ),
     );
     if (created == null) return false;
@@ -234,6 +236,8 @@ class ExerciseSyncEngine extends SyncEngineBase {
           'category': created.category.name,
           'description': created.description,
           'image_url': created.imageUrl,
+          'tracking_type': created.tracking.apiName,
+          'distance_unit': created.distanceUnit.apiName,
           'is_mine': created.isMine ? 1 : 0,
           // Ulubione zmienione w trakcie wysyłki wyśle _flushFavouriteOnly.
           if (!current.isFavouriteDirty)
@@ -272,6 +276,8 @@ class ExerciseSyncEngine extends SyncEngineBase {
         muscles: domain.muscles,
         category: domain.category,
         description: domain.description,
+        tracking: domain.tracking,
+        distanceUnit: domain.distanceUnit,
       ),
     );
     if (updated == null) return false;
@@ -296,6 +302,8 @@ class ExerciseSyncEngine extends SyncEngineBase {
           'category': updated.category.name,
           'description': updated.description,
           'image_url': updated.imageUrl,
+          'tracking_type': updated.tracking.apiName,
+          'distance_unit': updated.distanceUnit.apiName,
           if (updated.createdAt != null)
             'created_at': updated.createdAt!.millisecondsSinceEpoch,
         },
@@ -427,7 +435,9 @@ class ExerciseSyncEngine extends SyncEngineBase {
       a.name == b.name &&
       a.muscles == b.muscles &&
       a.category == b.category &&
-      a.description == b.description;
+      a.description == b.description &&
+      a.trackingType == b.trackingType &&
+      a.distanceUnit == b.distanceUnit;
 
   /// Przed przypisaniem [serverId] do wiersza [localId] usuwa duplikat, który
   /// mogło wstawić wcześniejsze pobranie (np. po zgubionej odpowiedzi na
@@ -549,6 +559,8 @@ class ExerciseSyncEngine extends SyncEngineBase {
             'category': ex.category.name,
             'description': ex.description,
             'image_url': ex.imageUrl,
+            'tracking_type': ex.tracking.apiName,
+            'distance_unit': ex.distanceUnit.apiName,
             if (!favDirty) 'is_favourite': ex.isFavourite ? 1 : 0,
             'is_mine': ex.isMine ? 1 : 0,
             if (ex.createdAt != null)

@@ -73,6 +73,8 @@ TrainingExerciseDetail _exerciseDetailFromSession(
         .toList(growable: false),
     imageUrl: exercise.exerciseImageUrl,
     note: exercise.note,
+    tracking: exercise.tracking,
+    distanceUnit: exercise.distanceUnit,
     sets: exercise.sets
         .asMap()
         .entries
@@ -85,12 +87,16 @@ TrainingExerciseDetail _exerciseDetailFromSession(
               reps: entry.value.plannedReps,
               rir: entry.value.plannedRir,
               tempo: entry.value.plannedTempo,
+              durationSeconds: entry.value.plannedDurationSeconds,
+              distanceM: entry.value.plannedDistanceM,
             ),
             actual: _metricsFromRaw(
               weight: entry.value.actualWeight,
               reps: entry.value.actualReps,
               rir: entry.value.actualRir,
               tempo: entry.value.actualTempo,
+              durationSeconds: entry.value.actualDurationSeconds,
+              distanceM: entry.value.actualDistanceM,
             ),
             completed: entry.value.completed,
             completedAt: entry.value.completedAt,
@@ -107,13 +113,20 @@ TrainingSetMetrics? _metricsFromRaw({
   String? reps,
   String? rir,
   String? tempo,
+  int? durationSeconds,
+  int? distanceM,
 }) {
   final weightKg = parseWeightKg(weight);
   final repsCount = parseReps(reps);
   final rirValue = parseReps(rir);
   final tempoValue = tempo?.trim();
   final hasTempo = tempoValue != null && tempoValue.isNotEmpty;
-  if (weightKg == null && repsCount == null && rirValue == null && !hasTempo) {
+  if (weightKg == null &&
+      repsCount == null &&
+      rirValue == null &&
+      !hasTempo &&
+      durationSeconds == null &&
+      distanceM == null) {
     return null;
   }
   return TrainingSetMetrics(
@@ -121,6 +134,8 @@ TrainingSetMetrics? _metricsFromRaw({
     reps: repsCount,
     rir: rirValue,
     tempo: hasTempo ? tempoValue : null,
+    durationSeconds: durationSeconds,
+    distanceM: distanceM,
   );
 }
 

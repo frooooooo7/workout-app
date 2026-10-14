@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 15;
+  static const _dbVersion = 16;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -295,6 +295,42 @@ class ExerciseDatabase {
     await _createBodyWeightTable(db);
     await _createBodyMeasurementsTable(db);
     await _addPlanStyleAndRestColumns(db);
+    await _addCardioColumns(db);
+  }
+
+  /// v16: kardio — co zapisuje ćwiczenie (ciężar × powt., czas, czas
+  /// + dystans) oraz czas i dystans serii w planie i w sesji.
+  Future<void> _addCardioColumns(Database db) async {
+    final columns = <String, Map<String, String>>{
+      tableExercises: {
+        'tracking_type': "TEXT NOT NULL DEFAULT 'weight_reps'",
+        'distance_unit': "TEXT NOT NULL DEFAULT 'km'",
+      },
+      tableTrainingPlanSets: {
+        'duration_seconds': 'INTEGER',
+        'distance_m': 'INTEGER',
+      },
+      tableTrainingSessionExercises: {
+        'tracking_type': 'TEXT',
+        'distance_unit': 'TEXT',
+      },
+      tableTrainingSessionSets: {
+        'planned_duration_seconds': 'INTEGER',
+        'planned_distance_m': 'INTEGER',
+        'actual_duration_seconds': 'INTEGER',
+        'actual_distance_m': 'INTEGER',
+      },
+    };
+    for (final table in columns.entries) {
+      for (final column in table.value.entries) {
+        await _addColumnIfMissing(
+          db,
+          table: table.key,
+          column: column.key,
+          definition: column.value,
+        );
+      }
+    }
   }
 
   /// v15: wygląd i ustawienia planu, przerwa i superseria ćwiczenia (w planie
@@ -678,6 +714,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 15) {
       await _addPlanStyleAndRestColumns(db);
+    }
+    if (oldVersion < 16) {
+      await _addCardioColumns(db);
     }
   }
 
