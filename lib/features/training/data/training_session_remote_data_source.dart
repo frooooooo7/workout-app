@@ -80,6 +80,8 @@ class TrainingSessionRemoteDataSource {
             exerciseCategory: exercise['exerciseCategory'] as String,
             exerciseImageUrl: exercise['exerciseImageUrl'] as String?,
             note: exercise['note'] as String?,
+            restSeconds: (exercise['restSeconds'] as num?)?.toInt(),
+            supersetGroup: exercise['supersetGroup'] as String?,
             sets: sets,
           );
         })
@@ -101,6 +103,8 @@ class TrainingSessionRemoteDataSource {
           ? DateTime.tryParse(json['finishedAt'] as String)?.toUtc()
           : null,
       sharedToProfile: (json['sharedToProfile'] as bool?) ?? false,
+      planColorKey: json['planColorKey'] as String?,
+      planIconKey: json['planIconKey'] as String?,
       exercises: exercises,
     );
   }
@@ -119,6 +123,8 @@ class TrainingSessionRemoteDataSource {
       'startedAt': session.startedAt.toUtc().toIso8601String(),
       'finishedAt': session.finishedAt?.toUtc().toIso8601String(),
       'sharedToProfile': session.sharedToProfile,
+      'planColorKey': session.planColorKey,
+      'planIconKey': session.planIconKey,
       'exercises': session.exercises.asMap().entries.map((entry) {
         final exercise = entry.value;
         final serverExerciseId =
@@ -136,6 +142,8 @@ class TrainingSessionRemoteDataSource {
           'exerciseCategory': exercise.exerciseCategory,
           'exerciseImageUrl': exercise.exerciseImageUrl,
           'note': exercise.note,
+          'restSeconds': exercise.restSeconds,
+          'supersetGroup': exercise.supersetGroup,
           'position': entry.key,
           'sets': exercise.sets.asMap().entries.map((setEntry) {
             final set = setEntry.value;

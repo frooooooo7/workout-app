@@ -87,6 +87,8 @@ class TrainingSessionExercise {
     this.exerciseImageUrl,
     this.note,
     required this.sets,
+    this.restSeconds,
+    this.supersetGroup,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -100,6 +102,13 @@ class TrainingSessionExercise {
   final String? note;
   final List<TrainingSessionSet> sets;
 
+  /// Przerwa po serii skopiowana z planu przy starcie (`null` = przerwa
+  /// z ustawień). W superserii liczy się ta ostatniego ćwiczenia grupy.
+  final int? restSeconds;
+
+  /// Litera superserii z planu (A, B…).
+  final String? supersetGroup;
+
   TrainingSessionExercise copyWith({
     String? id,
     String? exerciseId,
@@ -110,6 +119,8 @@ class TrainingSessionExercise {
     String? note,
     List<TrainingSessionSet>? sets,
     bool clearNote = false,
+    int? restSeconds,
+    String? supersetGroup,
   }) {
     return TrainingSessionExercise(
       id: id ?? this.id,
@@ -120,6 +131,8 @@ class TrainingSessionExercise {
       exerciseImageUrl: exerciseImageUrl ?? this.exerciseImageUrl,
       note: clearNote ? null : (note ?? this.note),
       sets: sets ?? this.sets,
+      restSeconds: restSeconds ?? this.restSeconds,
+      supersetGroup: supersetGroup ?? this.supersetGroup,
     );
   }
 }
@@ -138,6 +151,8 @@ class TrainingSession {
     this.sharedToProfile = false,
     required this.exercises,
     this.pendingOp,
+    this.planColorKey,
+    this.planIconKey,
   }) : id = id ?? const Uuid().v4(),
        startedAt = startedAt ?? DateTime.now().toUtc();
 
@@ -157,6 +172,11 @@ class TrainingSession {
   final List<TrainingSessionExercise> exercises;
   final String? pendingOp;
 
+  /// Kolor i ikona planu z chwili startu — historia rysuje sesję w nich
+  /// także po usunięciu planu.
+  final String? planColorKey;
+  final String? planIconKey;
+
   bool get isActive => status == TrainingSessionStatus.active;
 
   TrainingSession copyWith({
@@ -174,6 +194,8 @@ class TrainingSession {
     String? pendingOp,
     bool clearFinishedAt = false,
     bool clearPendingOp = false,
+    String? planColorKey,
+    String? planIconKey,
   }) {
     return TrainingSession(
       id: id ?? this.id,
@@ -188,6 +210,8 @@ class TrainingSession {
       sharedToProfile: sharedToProfile ?? this.sharedToProfile,
       exercises: exercises ?? this.exercises,
       pendingOp: clearPendingOp ? null : (pendingOp ?? this.pendingOp),
+      planColorKey: planColorKey ?? this.planColorKey,
+      planIconKey: planIconKey ?? this.planIconKey,
     );
   }
 
@@ -214,6 +238,8 @@ class TrainingSession {
       planLocalId: plan.id,
       planServerId: planServerId,
       planName: plan.name,
+      planColorKey: plan.colorKey,
+      planIconKey: plan.iconKey,
       exercises: plan.exercises
           .map(
             (exercise) => TrainingSessionExercise(
@@ -224,6 +250,8 @@ class TrainingSession {
                   .toList(),
               exerciseCategory: exercise.exercise.category.name,
               exerciseImageUrl: exercise.exercise.imageUrl,
+              restSeconds: plan.restFor(exercise),
+              supersetGroup: exercise.supersetGroup,
               sets: exercise.sets
                   .map(
                     (set) => TrainingSessionSet(

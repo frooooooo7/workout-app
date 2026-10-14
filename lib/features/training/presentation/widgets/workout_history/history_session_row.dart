@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/theme/plan_icons.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/utils/polish_plural.dart';
@@ -44,22 +45,10 @@ class HistorySessionRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: plan.tint(0.17),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Text(
-                plan.letter,
-                style: TextStyle(
-                  color: plan.onTint,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+            PlanBadge(
+              name: plan.name,
+              color: plan.color,
+              iconKey: plan.iconKey,
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(

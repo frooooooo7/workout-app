@@ -374,6 +374,111 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('a superset goes A1 → A2 without rest, then the plan rest', (
+    tester,
+  ) async {
+    TrainingSessionExercise member(String id, String name, int rest) =>
+        TrainingSessionExercise(
+          exerciseId: id,
+          exerciseName: name,
+          exerciseMuscles: const ['shoulders'],
+          exerciseCategory: 'compound',
+          supersetGroup: 'A',
+          restSeconds: rest,
+          sets: [
+            TrainingSessionSet(plannedWeight: '24', plannedReps: '10'),
+            TrainingSessionSet(plannedWeight: '24', plannedReps: '10'),
+          ],
+        );
+    final session = TrainingSession(
+      planName: 'Góra A',
+      startedAt: DateTime.now().toUtc(),
+      exercises: [
+        member('press', 'Wyciskanie hantli', 999),
+        member('raise', 'Wznosy bokiem', 75),
+      ],
+    );
+    final scheduler = _FakeRestTimerScheduler();
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
+          ),
+        ),
+      ),
+    );
+
+    // Obie części superserii na jednej stronie.
+    expect(find.text('SUPERSERIA A'), findsOneWidget);
+    expect(find.text('Wznosy bokiem'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('session-set-check-0-0')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('superset-next-pill')), findsOneWidget);
+    expect(find.textContaining('Teraz: A2 · Wznosy bokiem'), findsOneWidget);
+    expect(scheduler.scheduledDurations, isEmpty);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('session-set-check-1-0')),
+    );
+    await tester.tap(find.byKey(const ValueKey('session-set-check-1-0')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('superset-next-pill')), findsNothing);
+    expect(find.text('Przerwa po rundzie 1'), findsOneWidget);
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 75)]);
+
+    await cubit.close();
+  });
+
+  testWidgets('rest uses the exercise rest from the plan', (tester) async {
+    final base = _session();
+    final session = base.copyWith(
+      exercises: [
+        base.exercises[0].copyWith(restSeconds: 45),
+        base.exercises[1],
+      ],
+    );
+    final scheduler = _FakeRestTimerScheduler();
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('session-set-check-0-0')));
+    await tester.pump();
+
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 45)]);
+    expect(_restLabel('0:45'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('rest-timer-skip')));
+    await tester.pump();
+    await cubit.close();
+  });
+
   testWidgets('picks the rest length by hand from the ⋯ menu', (tester) async {
     final session = _session();
     final scheduler = _FakeRestTimerScheduler();

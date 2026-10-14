@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 14;
+  static const _dbVersion = 15;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -294,6 +294,55 @@ class ExerciseDatabase {
     await _createSyncStateTable(db);
     await _createBodyWeightTable(db);
     await _createBodyMeasurementsTable(db);
+    await _addPlanStyleAndRestColumns(db);
+  }
+
+  /// v15: wygląd i ustawienia planu, przerwa i superseria ćwiczenia (w planie
+  /// i w sesji) oraz kopia koloru/ikony planu przy sesji.
+  Future<void> _addPlanStyleAndRestColumns(Database db) async {
+    const planColumns = {
+      'default_rest_seconds': 'INTEGER NOT NULL DEFAULT 120',
+      'color_key': 'TEXT',
+      'icon_key': 'TEXT',
+      'goal': 'TEXT',
+      'progression_step_kg': 'REAL',
+      'highlight_plan_color': 'INTEGER NOT NULL DEFAULT 1',
+      'show_rir': 'INTEGER NOT NULL DEFAULT 1',
+      'show_tempo': 'INTEGER NOT NULL DEFAULT 1',
+    };
+    for (final entry in planColumns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingPlans,
+        column: entry.key,
+        definition: entry.value,
+      );
+    }
+    for (final table in [
+      tableTrainingPlanExercises,
+      tableTrainingSessionExercises,
+    ]) {
+      await _addColumnIfMissing(
+        db,
+        table: table,
+        column: 'rest_seconds',
+        definition: 'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        table: table,
+        column: 'superset_group',
+        definition: 'TEXT',
+      );
+    }
+    for (final column in ['plan_color_key', 'plan_icon_key']) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessions,
+        column: column,
+        definition: 'TEXT',
+      );
+    }
   }
 
   /// `pending_op`: `upsert` albo `delete` (nagrobek, ukryty w odczytach).
@@ -627,6 +676,9 @@ class ExerciseDatabase {
     if (oldVersion < 14) {
       await _createBodyMeasurementsTable(db);
     }
+    if (oldVersion < 15) {
+      await _addPlanStyleAndRestColumns(db);
+    }
   }
 
   /// `ALTER TABLE ... ADD COLUMN` bez ryzyka duplikatu — tabela utworzona
@@ -638,6 +690,8 @@ class ExerciseDatabase {
     required String definition,
   }) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
+    // Brak tabeli (np. częściowa baza w testach) — nie ma czego rozszerzać.
+    if (columns.isEmpty) return;
     final exists = columns.any((row) => row['name'] == column);
     if (exists) return;
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');

@@ -410,6 +410,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           'selected_days': TrainingPlanLocalMapper.encodeDays(
             plan.selectedDays,
           ),
+          ...TrainingPlanLocalMapper.planSettingsValues(plan),
           'created_at': now,
           'updated_at': now,
           'pending_op': 'delete',
@@ -465,6 +466,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           'selected_days': TrainingPlanLocalMapper.encodeDays(
             plan.selectedDays,
           ),
+          ...TrainingPlanLocalMapper.planSettingsValues(plan),
           'created_at': existing?['created_at'] ?? now,
           'updated_at': now,
           'pending_op': null,
@@ -497,13 +499,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
 
       await TrainingPlanLocalMapper.replacePlanChildren(
         db,
-        CustomTrainingPlan(
-          id: localId,
-          name: plan.name,
-          note: plan.note,
-          selectedDays: plan.selectedDays,
-          exercises: localPlanExercises,
-        ),
+        plan.copyWith(id: localId, exercises: localPlanExercises),
         exerciseServerIdsByLocalId: exerciseServerIds,
       );
   }

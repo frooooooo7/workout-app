@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import 'workout_colors.dart';
+import 'workout_accent.dart';
 
 /// Duży okrągły przycisk odhaczenia serii. Zrobiona seria jest zielona;
 /// odhaczenie „pyka” (1 → 1,15 → 1, easeOutBack), rysuje ptaszek i daje
@@ -102,13 +103,12 @@ class _SetCheckButtonState extends State<SetCheckButton>
     final completed = widget.completed;
     final active = widget.active && !completed;
     final size = active ? 38.0 : 36.0;
-    final Color borderColor = active
-        ? AppColors.primaryVariant
-        : AppColors.borderStrong;
+    final accent = WorkoutAccent.of(context);
+    final Color borderColor = active ? accent.strong : AppColors.borderStrong;
     final Color checkColor = completed
         ? WorkoutColors.onSuccess
         : active
-        ? AppColors.primaryVariant.withValues(alpha: 0.55)
+        ? accent.strong.withValues(alpha: 0.55)
         : AppColors.textMuted.withValues(alpha: 0.6);
 
     final circle = AnimatedContainer(
@@ -167,7 +167,7 @@ class _SetCheckButtonState extends State<SetCheckButton>
                             height: size + 14 * t,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppColors.primaryVariant.withValues(
+                              color: accent.strong.withValues(
                                 alpha: 0.55 * (1 - t),
                               ),
                             ),

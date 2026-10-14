@@ -33,6 +33,19 @@ class TrainingPlanLocalMapper {
   static List<int> decodeDays(String raw) =>
       (jsonDecode(raw) as List).map((d) => d as int).toList();
 
+  /// Kolumny wyglądu i ustawień planu w `training_plans` (zapis lokalny,
+  /// tworzenie, edycja i pull z serwera).
+  static Map<String, Object?> planSettingsValues(CustomTrainingPlan plan) => {
+    'default_rest_seconds': plan.defaultRestSeconds,
+    'color_key': plan.colorKey,
+    'icon_key': plan.iconKey,
+    'goal': plan.goal?.apiName,
+    'progression_step_kg': plan.progressionStepKg,
+    'highlight_plan_color': plan.highlightPlanColor ? 1 : 0,
+    'show_rir': plan.showRir ? 1 : 0,
+    'show_tempo': plan.showTempo ? 1 : 0,
+  };
+
   static Future<LocalTrainingPlanRecord?> fromDb(
     DatabaseExecutor db,
     Map<String, dynamic> planRow,
@@ -150,6 +163,8 @@ class TrainingPlanLocalMapper {
                 tempo: set['tempo'] as String?,
               ),
           ],
+          restSeconds: planExerciseRow['rest_seconds'] as int?,
+          supersetGroup: planExerciseRow['superset_group'] as String?,
         ),
       );
     }
@@ -161,6 +176,17 @@ class TrainingPlanLocalMapper {
         note: planRow['note'] as String?,
         selectedDays: decodeDays(planRow['selected_days'] as String),
         exercises: planExercises,
+        defaultRestSeconds:
+            (planRow['default_rest_seconds'] as int?) ??
+            CustomTrainingPlan.defaultRest,
+        colorKey: planRow['color_key'] as String?,
+        iconKey: planRow['icon_key'] as String?,
+        goal: PlanGoal.fromApi(planRow['goal'] as String?),
+        progressionStepKg: (planRow['progression_step_kg'] as num?)
+            ?.toDouble(),
+        highlightPlanColor: (planRow['highlight_plan_color'] as int?) != 0,
+        showRir: (planRow['show_rir'] as int?) != 0,
+        showTempo: (planRow['show_tempo'] as int?) != 0,
       ),
       serverId: planRow['server_id'] as String?,
       pendingOp: planRow['pending_op'] as String?,
@@ -253,6 +279,8 @@ class TrainingPlanLocalMapper {
         'exercise_local_id': pe.exercise.id,
         'exercise_server_id': exerciseServerIdsByLocalId[pe.exercise.id],
         'position': entry.key,
+        'rest_seconds': pe.restSeconds,
+        'superset_group': pe.supersetGroup,
       });
       for (final setEntry in pe.sets.asMap().entries) {
         final set = setEntry.value;

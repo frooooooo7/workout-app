@@ -21,6 +21,7 @@ import '../../domain/services/live_workout_insights.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/stats/stats_sets.dart' show statsExerciseKey;
+import '../../domain/services/superset_rounds.dart';
 import '../../domain/services/training_session_detail_mapper.dart'
     show parseWeightKg;
 import '../bloc/training_home_cubit.dart';
@@ -32,6 +33,8 @@ import '../widgets/ongoing_workout/rest_timer_controller.dart';
 import '../widgets/ongoing_workout/rest_timer_controls.dart';
 import '../widgets/ongoing_workout/rest_timer_pill.dart';
 import '../widgets/ongoing_workout/session_exercise_card.dart';
+import '../widgets/ongoing_workout/superset_block_card.dart';
+import '../widgets/ongoing_workout/workout_accent.dart';
 import '../widgets/ongoing_workout/workout_colors.dart';
 import '../widgets/ongoing_workout/workout_progress_header.dart';
 import 'workout_summary_screen.dart';
@@ -97,6 +100,13 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Future<Map<String, ExerciseBest>?>? _bests;
 
   RecordBurstData? _recordBurst;
+
+  /// „Bez przerwy” w superserii: co teraz (A2…) i jaka przerwa po rundzie.
+  /// Znika przy następnej odhaczonej serii albo starcie przerwy.
+  ({String caption, String? footer})? _noRest;
+
+  /// Tytuł panelu przerwy: „Odpoczynek” albo „Przerwa po rundzie 2”.
+  String _restTitle = 'Odpoczynek';
 
   /// Osobny notifier, żeby zmiana strony (także w trakcie swipe'a) nie
   /// przebudowywała całego ekranu — słucha go tylko pasek postępu.
@@ -252,58 +262,67 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             setState(() => _allowPop = true);
             context.pop(result);
           },
-          child: Scaffold(
-            backgroundColor: AppColors.background,
-            body: SafeArea(
-              bottom: false,
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                      OngoingWorkoutHeader(
-                        planName: session.planName,
-                        startedAt: session.startedAt,
-                        onCollapse: () => _leaveWorkout(context),
-                        onMore: () => unawaited(_showWorkoutMenu(context)),
-                        onFinish: exerciseCount == 0
-                            ? null
-                            : () {
-                                final current = _draftSession.value;
-                                if (current != null) _finish(context, current);
-                              },
-                      ),
-                      if (exerciseCount == 0)
-                        Expanded(
-                          child: _EmptyWorkout(
-                            onAddExercise: () => _addExerciseToSession(context),
+          child: WorkoutAccentScope(
+            accent: _accentOf(session),
+            progressionStepKg: _planStyleOf(session)?.progressionStepKg,
+            child: Scaffold(
+              backgroundColor: AppColors.background,
+              body: SafeArea(
+                bottom: false,
+                child: Stack(
+                  children: [
+                    Column(
+                      children: [
+                        OngoingWorkoutHeader(
+                          planName: session.planName,
+                          startedAt: session.startedAt,
+                          onCollapse: () => _leaveWorkout(context),
+                          onMore: () => unawaited(_showWorkoutMenu(context)),
+                          onFinish: exerciseCount == 0
+                              ? null
+                              : () {
+                                  final current = _draftSession.value;
+                                  if (current != null) {
+                                    _finish(context, current);
+                                  }
+                                },
+                        ),
+                        if (exerciseCount == 0)
+                          Expanded(
+                            child: _EmptyWorkout(
+                              onAddExercise: () =>
+                                  _addExerciseToSession(context),
+                            ),
+                          )
+                        else ...[
+                          _buildProgress(context),
+                          Expanded(
+                            child: _buildExercisePages(context, session),
                           ),
-                        )
-                      else ...[
-                        _buildProgress(context),
-                        Expanded(child: _buildExercisePages(context, session)),
+                        ],
                       ],
-                    ],
-                  ),
-                  if (_recordBurst != null)
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      top: 118,
-                      child: IgnorePointer(
-                        child: RecordBurst(
-                          key: ValueKey(_recordBurst!.id),
-                          data: _recordBurst!,
-                          onDone: () => setState(() => _recordBurst = null),
+                    ),
+                    if (_recordBurst != null)
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        top: 118,
+                        child: IgnorePointer(
+                          child: RecordBurst(
+                            key: ValueKey(_recordBurst!.id),
+                            data: _recordBurst!,
+                            onDone: () => setState(() => _recordBurst = null),
+                          ),
                         ),
                       ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 16 + MediaQuery.paddingOf(context).bottom,
+                      child: _buildRestDock(context),
                     ),
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    bottom: 16 + MediaQuery.paddingOf(context).bottom,
-                    child: _buildRestDock(context),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -323,6 +342,26 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
   }
 
+  /// Ustawienia planu sesji (z rejestru planów, a gdy planu już nie ma —
+  /// kolor zapisany przy sesji). `null` dla treningu bez planu.
+  PlanStyle? _planStyleOf(TrainingSession session) {
+    if (session.planLocalId == null && session.planServerId == null) {
+      return null;
+    }
+    return PlanColors.styles.styleFor(session.planName) ??
+        PlanStyle(colorKey: session.planColorKey, iconKey: session.planIconKey);
+  }
+
+  WorkoutAccent _accentOf(TrainingSession session) {
+    final style = _planStyleOf(session);
+    if (style == null || !style.highlightPlanColor) {
+      return WorkoutAccent.standard;
+    }
+    return WorkoutAccent.plan(
+      PlanColors.of(session.planName, colorKey: session.planColorKey),
+    );
+  }
+
   Widget _buildProgress(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
@@ -337,7 +376,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             0,
             session.exercises.length - 1,
           ),
-          accent: PlanColors.of(session.planName),
+          accent: PlanColors.of(
+            session.planName,
+            colorKey: session.planColorKey,
+          ),
           onShowList: () => unawaited(_showExercisePicker(context, session)),
           onSelectExercise: _goToExercise,
         );
@@ -352,53 +394,54 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         MediaQuery.paddingOf(context).bottom +
         // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
         (restVisible ? 92 + 16 : 0);
+    final blocks = SupersetRounds.blocks(session.exercises);
     return PageView.builder(
       controller: _exercisePageController,
-      itemCount: session.exercises.length,
+      itemCount: blocks.length,
       // Sąsiednie strony budują się z wyprzedzeniem, więc swipe nie czeka
       // na layout karty.
       allowImplicitScrolling: true,
-      onPageChanged: (index) => _currentExerciseIndex.value = index,
-      itemBuilder: (context, index) {
-        final exercise = session.exercises[index];
-        final next = index + 1 < session.exercises.length
-            ? session.exercises[index + 1]
+      onPageChanged: (page) {
+        // „Bez przerwy” dotyczy superserii, z której użytkownik właśnie
+        // zjechał; zwykła zmiana strony nie przebudowuje ekranu.
+        if (_noRest != null) setState(() => _noRest = null);
+        final current = _draftSession.value;
+        if (current == null || page >= blocks.length) return;
+        _currentExerciseIndex.value = SupersetRounds.focusOf(
+          current.exercises,
+          blocks[page],
+        );
+      },
+      itemBuilder: (context, page) {
+        final block = blocks[page];
+        final first = session.exercises[block.first];
+        final nextIndex = block.last + 1;
+        final next = nextIndex < session.exercises.length
+            ? session.exercises[nextIndex]
             : null;
         return _KeepAlivePage(
-          key: ValueKey('exercise-page-${exercise.id}'),
+          key: ValueKey('exercise-page-${first.id}'),
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(12, 12, 12, bottomInset),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SessionExerciseCard(
-                  key: ValueKey(exercise.id),
-                  exerciseIndex: index,
-                  exercise: exercise,
-                  history: _historyFor(exercise),
-                  showRirColumn: _shouldShowRirColumn(exercise),
-                  showTempoColumn: _shouldShowTempoColumn(exercise),
-                  noteOpen: _openNotes.contains(exercise.id),
-                  onSetChanged: (setIndex, set) =>
-                      _updateSet(context, index, setIndex, set),
-                  onAddSet: () => _addSet(context, index),
-                  onRemoveSet: (setIndex) =>
-                      _removeSet(context, index, setIndex),
-                  onNoteChanged: (note) => _updateNote(context, index, note),
-                  onRecord: _showRecord,
-                ),
+                if (block.length == 1)
+                  _exerciseCard(context, session, block.first)
+                else
+                  _supersetCard(context, session, block),
                 if (next != null) ...[
                   const SizedBox(height: 12),
                   NextExerciseCard(
                     exercise: next,
                     lastResult: _historyFor(next)?.lastTopSet(),
-                    onTap: () => _goToExercise(index + 1),
+                    onTap: () => _goToExercise(nextIndex),
                   ),
                 ],
                 const SizedBox(height: 10),
                 Center(
                   child: TextButton.icon(
-                    key: ValueKey('add-exercise-button-$index'),
+                    key: ValueKey('add-exercise-button-$page'),
                     onPressed: () => _addExerciseToSession(context),
                     icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('Dodaj ćwiczenie'),
@@ -421,16 +464,82 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
   }
 
+  Widget _exerciseCard(
+    BuildContext context,
+    TrainingSession session,
+    int index, {
+    bool embedded = false,
+    bool focused = true,
+  }) {
+    final exercise = session.exercises[index];
+    return SessionExerciseCard(
+      key: ValueKey(exercise.id),
+      exerciseIndex: index,
+      exercise: exercise,
+      history: _historyFor(exercise),
+      showRirColumn: _shouldShowRirColumn(exercise),
+      showTempoColumn: _shouldShowTempoColumn(exercise),
+      noteOpen: _openNotes.contains(exercise.id),
+      embedded: embedded,
+      focused: focused,
+      onSetChanged: (setIndex, set) =>
+          _updateSet(context, index, setIndex, set),
+      onAddSet: () => _addSet(context, index),
+      onRemoveSet: (setIndex) => _removeSet(context, index, setIndex),
+      onNoteChanged: (note) => _updateNote(context, index, note),
+      onRecord: _showRecord,
+    );
+  }
+
+  /// Superseria: ćwiczenia grupy w jednej karcie, podświetlona seria tylko
+  /// w tym, które jest teraz na kolei.
+  Widget _supersetCard(
+    BuildContext context,
+    TrainingSession session,
+    List<int> block,
+  ) {
+    final focus = SupersetRounds.focusOf(session.exercises, block);
+    final (round, total) = SupersetRounds.roundOf(session.exercises, block);
+    return SupersetBlockCard(
+      key: ValueKey('superset-${session.exercises[block.first].id}'),
+      group: session.exercises[block.first].supersetGroup ?? '',
+      round: round,
+      totalRounds: total,
+      members: [
+        for (final index in block)
+          _exerciseCard(
+            context,
+            session,
+            index,
+            embedded: true,
+            focused: index == focus,
+          ),
+      ],
+    );
+  }
+
   /// Panel znika pod klawiaturą — nie zasłania pól serii w trakcie pisania.
   bool _restDockVisible(BuildContext context) =>
-      _rest.isActive && MediaQuery.viewInsetsOf(context).bottom == 0;
+      (_rest.isActive || _noRest != null) &&
+      MediaQuery.viewInsetsOf(context).bottom == 0;
 
   Widget _buildRestDock(BuildContext context) {
+    final noRest = _noRest;
+    if (!_rest.isActive && noRest != null) {
+      return RestTimerDock(
+        visible: _restDockVisible(context),
+        child: SupersetNextPill(
+          caption: noRest.caption,
+          restAfterRound: noRest.footer,
+        ),
+      );
+    }
     return RestTimerDock(
       visible: _restDockVisible(context),
       child: ListenableBuilder(
         listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
         builder: (context, _) => RestTimerPill(
+          title: _restTitle,
           remaining: _rest.remaining,
           total: _rest.total,
           caption: _upNextCaption(),
@@ -463,9 +572,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
     final set = exercise.sets[setIndex];
     final label = setRowLabels(exercise.sets.map((s) => s.setType))[setIndex];
-    final name = set.setType == SetType.warmup
+    final setName = set.setType == SetType.warmup
         ? 'rozgrzewka'
         : (set.setType.badge == null ? 'seria $label' : set.setType.label);
+    final memberLabel = _supersetLabel(session.exercises, index);
+    final name = memberLabel == null ? setName : '$memberLabel · $setName';
     final previous = _history[exercise.id]?.previousSets;
     final previousSet = previous == null || previous.isEmpty
         ? null
@@ -473,7 +584,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     // Bez wpisanego ciężaru — ten z podpowiedzi progresji w polu KG.
     final weight =
         parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
-        progressionHintFor(set, previousSet)?.weightKg;
+        progressionHintFor(
+          set,
+          previousSet,
+          stepKg: _planStyleOf(session)?.progressionStepKg,
+        )?.weightKg;
     final reps = (set.actualReps?.trim().isNotEmpty ?? false)
         ? set.actualReps!.trim()
         : set.plannedReps.trim();
@@ -482,6 +597,18 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       if (reps.isNotEmpty) reps,
     ].join(' × ');
     return load.isEmpty ? 'Teraz: $name' : 'Teraz: $name · $load';
+  }
+
+  /// „A2” — litera grupy i miejsce ćwiczenia w superserii.
+  String? _supersetLabel(List<TrainingSessionExercise> exercises, int index) {
+    final group = exercises[index].supersetGroup;
+    if (group == null) return null;
+    var position = 1;
+    for (var i = index - 1; i >= 0; i--) {
+      if (exercises[i].supersetGroup != group) break;
+      position++;
+    }
+    return '$group$position';
   }
 
   void _showRecord(RecordBurstData data) {
@@ -709,7 +836,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_exercisePageController.hasClients) return;
-      _exercisePageController.jumpToPage(nextIndex);
+      _exercisePageController.jumpToPage(_pageOf(nextIndex));
       _currentExerciseIndex.value = nextIndex;
     });
   }
@@ -718,6 +845,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Future<void> _pickRestDuration(BuildContext context) async {
     final duration = await showRestDurationPicker(context, controller: _rest);
     if (duration == null || !context.mounted) return;
+    setState(() {
+      _noRest = null;
+      _restTitle = 'Odpoczynek';
+    });
     await _reportSchedule(_rest.start(duration));
   }
 
@@ -748,13 +879,60 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final justCompleted = set.completed && !sets[setIndex].completed;
     sets[setIndex] = set;
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
-    _draftSession.value = session.copyWith(exercises: exercises);
+    final updated = session.copyWith(exercises: exercises);
+    _draftSession.value = updated;
     _hasUnsavedDraft = true;
     _scheduleDraftSave(context.read<TrainingSessionCubit>());
-    // Przerwa startuje sama po odhaczeniu serii, z ostatnio wybraną długością.
-    if (justCompleted) {
-      unawaited(_reportSchedule(_rest.start(_rest.selectedDuration)));
+    final inSuperset = exercise.supersetGroup != null;
+    if (inSuperset && set.completed != exercise.sets[setIndex].completed) {
+      // Runda i ćwiczenie „na kolei” w karcie superserii.
+      setState(() {});
     }
+    if (justCompleted) _afterSetCompleted(updated, exerciseIndex);
+  }
+
+  /// Przerwa startuje sama po odhaczeniu serii: z przerwą ćwiczenia z planu
+  /// albo ostatnio wybraną. W superserii dopiero po całej rundzie — wcześniej
+  /// panel „Bez przerwy” mówi, które ćwiczenie teraz.
+  void _afterSetCompleted(TrainingSession session, int exerciseIndex) {
+    final exercises = session.exercises;
+    final next = SupersetRounds.afterSet(exercises, exerciseIndex);
+    final restSeconds = next.restSeconds;
+    final restDuration = restSeconds == null
+        ? _rest.selectedDuration
+        : Duration(seconds: restSeconds);
+    if (!next.rest) {
+      _rest.stop();
+      final member = exercises[next.next];
+      final setNumber = member.sets.where((s) => s.completed).length + 1;
+      setState(() {
+        _noRest = (
+          caption:
+              'Teraz: ${_supersetLabel(exercises, next.next)} · '
+              '${member.exerciseName}, seria $setNumber',
+          footer: 'po rundzie przerwa ${formatRestRemaining(restDuration)}',
+        );
+      });
+      _currentExerciseIndex.value = next.next;
+      return;
+    }
+    final inSuperset = exercises[exerciseIndex].supersetGroup != null;
+    final block = inSuperset
+        ? SupersetRounds.blocks(
+            exercises,
+          ).firstWhere((b) => b.contains(exerciseIndex))
+        : null;
+    setState(() {
+      _noRest = null;
+      _restTitle = block == null
+          ? 'Odpoczynek'
+          : 'Przerwa po rundzie '
+                '${exercises[exerciseIndex].sets.where((s) => s.completed).length}';
+    });
+    if (block != null) {
+      _currentExerciseIndex.value = SupersetRounds.focusOf(exercises, block);
+    }
+    unawaited(_reportSchedule(_rest.start(restDuration)));
   }
 
   void _updateNote(BuildContext context, int exerciseIndex, String note) {
@@ -850,24 +1028,45 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
   }
 
+  /// Plan z wyłączoną kolumną (Ustawienia planu) ukrywa ją, dopóki
+  /// użytkownik nie włączy jej z menu ⋯.
+  bool _planHides({required bool rir}) {
+    final session = _draftSession.value;
+    final style = session == null ? null : _planStyleOf(session);
+    if (style == null) return false;
+    return rir ? !style.showRir : !style.showTempo;
+  }
+
   bool _shouldShowRirColumn(TrainingSessionExercise exercise) {
     if (_userHiddenRirColumns.contains(exercise.id)) return false;
-    return _userEnabledRirColumns.contains(exercise.id) ||
-        exercise.sets.any(
-          (set) =>
-              (set.plannedRir?.trim().isNotEmpty ?? false) ||
-              (set.actualRir?.trim().isNotEmpty ?? false),
-        );
+    if (_userEnabledRirColumns.contains(exercise.id)) return true;
+    if (_planHides(rir: true)) return false;
+    return exercise.sets.any(
+      (set) =>
+          (set.plannedRir?.trim().isNotEmpty ?? false) ||
+          (set.actualRir?.trim().isNotEmpty ?? false),
+    );
   }
 
   bool _shouldShowTempoColumn(TrainingSessionExercise exercise) {
     if (_userHiddenTempoColumns.contains(exercise.id)) return false;
-    return _userEnabledTempoColumns.contains(exercise.id) ||
-        exercise.sets.any(
-          (set) =>
-              (set.plannedTempo?.trim().isNotEmpty ?? false) ||
-              (set.actualTempo?.trim().isNotEmpty ?? false),
-        );
+    if (_userEnabledTempoColumns.contains(exercise.id)) return true;
+    if (_planHides(rir: false)) return false;
+    return exercise.sets.any(
+      (set) =>
+          (set.plannedTempo?.trim().isNotEmpty ?? false) ||
+          (set.actualTempo?.trim().isNotEmpty ?? false),
+    );
+  }
+
+  /// Strona (blok) ćwiczenia [index] — superseria to jedna strona.
+  int _pageOf(int index) {
+    final session = _draftSession.value;
+    if (session == null) return index;
+    return SupersetRounds.blockOf(
+      SupersetRounds.blocks(session.exercises),
+      index,
+    );
   }
 
   void _goToExercise(int index) {
@@ -875,21 +1074,30 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _currentExerciseIndex.value = index;
       return;
     }
+    final target = _pageOf(index);
     final from =
-        _exercisePageController.page?.round() ?? _currentExerciseIndex.value;
-    if (from == index) return;
+        _exercisePageController.page?.round() ??
+        _pageOf(_currentExerciseIndex.value);
+    _currentExerciseIndex.value = index;
+    if (from == target) return;
     // Przy skoku o kilka ćwiczeń animacja przez wszystkie strony pośrednie
     // buduje każdą z nich po drodze — przeskakujemy na sąsiada celu i
     // animujemy już tylko ostatnią stronę.
-    if ((index - from).abs() > 1) {
-      _exercisePageController.jumpToPage(index > from ? index - 1 : index + 1);
+    if ((target - from).abs() > 1) {
+      _exercisePageController.jumpToPage(
+        target > from ? target - 1 : target + 1,
+      );
     }
-    _currentExerciseIndex.value = index;
     _exercisePageController.animateToPage(
-      index,
+      target,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
+    // Po animacji `onPageChanged` ustawia ćwiczenie na kolei w bloku —
+    // wybrane z listy ma pierwszeństwo.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _currentExerciseIndex.value = index;
+    });
   }
 
   Future<void> _showExercisePicker(

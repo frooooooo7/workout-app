@@ -12,6 +12,7 @@ import 'session_set_badge.dart';
 import 'set_check_button.dart';
 import 'set_table_layout.dart';
 import 'workout_colors.dart';
+import 'workout_accent.dart';
 
 /// Wiersz serii w treningu na żywo: numer / rodzaj, wynik z poprzedniego
 /// treningu, pola i duży przycisk odhaczenia. Zrobiona seria zielenieje,
@@ -75,6 +76,7 @@ class SessionSetRow extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final completed = set.completed;
     final highlighted = active && !completed;
+    final accent = WorkoutAccent.of(context);
 
     final row = AnimatedContainer(
       duration: reduceMotion
@@ -89,12 +91,12 @@ class SessionSetRow extends StatelessWidget {
         color: completed
             ? AppColors.success.withValues(alpha: 0.06)
             : highlighted
-            ? AppColors.primary.withValues(alpha: 0.10)
+            ? accent.fill.withValues(alpha: 0.10)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         border: highlighted
             ? Border.all(
-                color: AppColors.primaryVariant.withValues(alpha: 0.55),
+                color: accent.strong.withValues(alpha: 0.55),
                 width: 1.5,
               )
             : null,

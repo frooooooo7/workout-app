@@ -97,6 +97,7 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
           'note': localPlan.note,
           'selected_days':
               TrainingPlanLocalMapper.encodeDays(localPlan.selectedDays),
+          ...TrainingPlanLocalMapper.planSettingsValues(localPlan),
           'created_at': now,
           'updated_at': now,
           'pending_op': 'create',
@@ -132,6 +133,7 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
           'name': plan.name,
           'note': plan.note,
           'selected_days': TrainingPlanLocalMapper.encodeDays(plan.selectedDays),
+          ...TrainingPlanLocalMapper.planSettingsValues(plan),
           'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
           'pending_op': nextPending,
           'is_deleted': 0,
