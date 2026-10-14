@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../library/data/exercise_image_uri.dart';
+import '../../../library/domain/models/exercise_tracking.dart';
 import '../../domain/models/custom_training_plan.dart';
 import 'table_cell_input.dart';
 
@@ -172,7 +173,9 @@ class _EditableExerciseCardState extends State<EditableExerciseCard> {
             ),
             child: planExercise.exercise.imageUrl == null
                 ? Icon(
-                    cardio ? Icons.directions_run_rounded : Icons.fitness_center,
+                    cardio
+                        ? Icons.directions_run_rounded
+                        : Icons.fitness_center,
                     color: AppColors.textMuted,
                     size: 24,
                   )
@@ -570,15 +573,3 @@ const _headerStyle = TextStyle(
   fontWeight: FontWeight.w600,
   letterSpacing: 1.0,
 );
-
-/// `1 odcinek`, `3 odcinki`, `5 odcinków`.
-String cardioSegmentsLabel(int count) {
-  final mod10 = count % 10;
-  final mod100 = count % 100;
-  final word = count == 1
-      ? 'odcinek'
-      : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-      ? 'odcinki'
-      : 'odcinków';
-  return '$count $word';
-}

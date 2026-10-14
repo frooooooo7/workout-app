@@ -417,7 +417,8 @@ class _TimeCell extends StatelessWidget {
   Widget _field() {
     final input = DurationCellInput(
       seconds: set.actualDurationSeconds,
-      hintSeconds: set.plannedDurationSeconds ?? previous?.actualDurationSeconds,
+      hintSeconds:
+          set.plannedDurationSeconds ?? previous?.actualDurationSeconds,
       look: look,
       onChanged: (seconds) => onChanged(
         set.copyWith(

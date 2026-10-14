@@ -78,8 +78,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
             required List<MuscleGroup> muscles,
             required ExerciseCategory category,
             required String description,
-          required ExerciseTracking tracking,
-          required DistanceUnit distanceUnit,
+            required ExerciseTracking tracking,
+            required DistanceUnit distanceUnit,
           }) => cubit.updateExercise(
             id: exercise.id,
             name: name,

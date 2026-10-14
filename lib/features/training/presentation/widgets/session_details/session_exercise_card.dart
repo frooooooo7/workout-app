@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../../../core/utils/polish_plural.dart';
 import '../../../../library/presentation/widgets/exercise_thumbnail.dart';
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
+import '../../../domain/services/cardio_insights.dart' show formatPacePerKm;
 import '../set_type_badge.dart';
 import 'session_details_formatters.dart';
 
@@ -31,6 +33,11 @@ class SessionExerciseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topSet = exercise.topSet;
+    final tracking = exercise.tracking;
+    final cardioSummary = formatCardioSummary(exercise);
+    final bestPace = tracking.tracksDistance
+        ? exercise.bestPaceSecondsPerKm
+        : null;
     final note = exercise.note?.trim();
     final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
 
@@ -104,8 +111,12 @@ class SessionExerciseCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       [
-                        '${exercise.completedSetsCount}/${exercise.workingSetsCount} serii',
-                        if (exercise.volumeKg > 0)
+                        tracking.isCardio
+                            ? '${exercise.completedSetsCount}/${exercise.workingSetsCount} '
+                                  '${polishPlural(exercise.workingSetsCount, 'odcinek', 'odcinki', 'odcinków')}'
+                            : '${exercise.completedSetsCount}/${exercise.workingSetsCount} serii',
+                        ?cardioSummary,
+                        if (cardioSummary == null && exercise.volumeKg > 0)
                           formatVolumeKg(exercise.volumeKg),
                       ].join('  ·  '),
                       style: const TextStyle(
@@ -127,11 +138,29 @@ class SessionExerciseCard extends StatelessWidget {
             const SizedBox(height: 14),
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 8),
-            const _SetTableHeader(),
+            _SetTableHeader(tracking: tracking),
             for (var i = 0; i < exercise.sets.length; i++)
-              _SetRow(set: exercise.sets[i], label: setLabels[i]),
+              tracking.isCardio
+                  ? _CardioSetRow(
+                      set: exercise.sets[i],
+                      label: setLabels[i],
+                      tracking: tracking,
+                      unit: exercise.distanceUnit,
+                    )
+                  : _SetRow(
+                      set: exercise.sets[i],
+                      label: setLabels[i],
+                      showWeight: tracking.tracksWeight,
+                    ),
           ],
-          if (topSet != null) ...[
+          if (bestPace != null)
+            _CardFooter(
+              icon: Icons.speed_rounded,
+              text:
+                  'Najlepsze tempo: '
+                  '${formatPacePerKm(bestPace, exercise.distanceUnit)}',
+            )
+          else if (topSet != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
@@ -169,14 +198,16 @@ class _ExerciseThumbnail extends StatelessWidget {
 
   MuscleRegion? get _region => exercise.muscles.firstOrNull?.region;
 
-  IconData get _icon => switch (_region) {
-        MuscleRegion.back => Icons.rowing_rounded,
-        MuscleRegion.legs => Icons.directions_run_rounded,
-        MuscleRegion.shoulders => Icons.sports_gymnastics_rounded,
-        MuscleRegion.core => Icons.self_improvement_rounded,
-        MuscleRegion.arms => Icons.sports_martial_arts_rounded,
-        _ => Icons.fitness_center_rounded,
-      };
+  IconData get _icon => exercise.tracking.isCardio
+      ? Icons.directions_run_rounded
+      : switch (_region) {
+          MuscleRegion.back => Icons.rowing_rounded,
+          MuscleRegion.legs => Icons.directions_run_rounded,
+          MuscleRegion.shoulders => Icons.sports_gymnastics_rounded,
+          MuscleRegion.core => Icons.self_improvement_rounded,
+          MuscleRegion.arms => Icons.sports_martial_arts_rounded,
+          _ => Icons.fitness_center_rounded,
+        };
 
   Color get _accent => switch (_region) {
         MuscleRegion.chest => AppColors.primaryVariant,
@@ -208,7 +239,9 @@ class _ExerciseThumbnail extends StatelessWidget {
 }
 
 class _SetTableHeader extends StatelessWidget {
-  const _SetTableHeader();
+  const _SetTableHeader({required this.tracking});
+
+  final ExerciseTracking tracking;
 
   @override
   Widget build(BuildContext context) {
@@ -219,15 +252,55 @@ class _SetTableHeader extends StatelessWidget {
       letterSpacing: 0.4,
     );
 
-    return const Padding(
-      padding: EdgeInsets.only(bottom: 4),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: tracking.isCardio
+            ? [
+                const SizedBox(width: 24, child: Text('#', style: style)),
+                const Expanded(flex: 4, child: Text('CZAS', style: style)),
+                if (tracking.tracksDistance) ...const [
+                  Expanded(flex: 3, child: Text('DYSTANS', style: style)),
+                  Expanded(flex: 3, child: Text('TEMPO', style: style)),
+                ],
+                const SizedBox(width: 22),
+              ]
+            : [
+                const SizedBox(width: 24, child: Text('#', style: style)),
+                if (tracking.tracksWeight)
+                  const Expanded(flex: 4, child: Text('CIĘŻAR', style: style)),
+                const Expanded(flex: 3, child: Text('POWT.', style: style)),
+                const Expanded(flex: 2, child: Text('RIR', style: style)),
+                const SizedBox(width: 22),
+              ],
+      ),
+    );
+  }
+}
+
+/// Stopka karty: najcięższa seria albo najlepsze tempo.
+class _CardFooter extends StatelessWidget {
+  const _CardFooter({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
-          SizedBox(width: 24, child: Text('#', style: style)),
-          Expanded(flex: 4, child: Text('CIĘŻAR', style: style)),
-          Expanded(flex: 3, child: Text('POWT.', style: style)),
-          Expanded(flex: 2, child: Text('RIR', style: style)),
-          SizedBox(width: 22),
+          Icon(icon, size: 14, color: AppColors.statTeal),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -278,9 +351,16 @@ class _ExerciseNote extends StatelessWidget {
 }
 
 class _SetRow extends StatelessWidget {
-  const _SetRow({required this.set, required this.label});
+  const _SetRow({
+    required this.set,
+    required this.label,
+    this.showWeight = true,
+  });
 
   final TrainingExerciseSetDetail set;
+
+  /// Ćwiczenie na same powtórzenia nie ma kolumny ciężaru.
+  final bool showWeight;
 
   /// Numer serii roboczej albo litera rodzaju (W / F / D).
   final String label;
@@ -327,36 +407,37 @@ class _SetRow extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            flex: 4,
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    weight == null
-                        ? '—'
-                        : '${formatWeight(weight)} ${WeightUnits.current.label}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: valueStyle,
-                  ),
-                ),
-                if (delta != null) ...[
-                  const SizedBox(width: 5),
-                  Text(
-                    '${delta > 0 ? '+' : '−'}${formatWeight(delta.abs())}',
-                    style: TextStyle(
-                      color: delta > 0
-                          ? AppColors.success
-                          : AppColors.strengthMedium,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
+          if (showWeight)
+            Expanded(
+              flex: 4,
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      weight == null
+                          ? '—'
+                          : '${formatWeight(weight)} ${WeightUnits.current.label}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: valueStyle,
                     ),
                   ),
+                  if (delta != null) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      '${delta > 0 ? '+' : '−'}${formatWeight(delta.abs())}',
+                      style: TextStyle(
+                        color: delta > 0
+                            ? AppColors.success
+                            : AppColors.strengthMedium,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
           Expanded(
             flex: 3,
             child: Text(reps?.toString() ?? '—', style: valueStyle),
@@ -365,6 +446,98 @@ class _SetRow extends StatelessWidget {
             flex: 2,
             child: Text(rir?.toString() ?? '—', style: valueStyle),
           ),
+          SizedBox(
+            width: 22,
+            child: Icon(
+              set.completed
+                  ? Icons.check_circle_rounded
+                  : Icons.remove_circle_outline_rounded,
+              size: 16,
+              color: set.completed ? AppColors.success : AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Odcinek kardio: czas, dystans i tempo.
+class _CardioSetRow extends StatelessWidget {
+  const _CardioSetRow({
+    required this.set,
+    required this.label,
+    required this.tracking,
+    required this.unit,
+  });
+
+  final TrainingExerciseSetDetail set;
+  final String label;
+  final ExerciseTracking tracking;
+  final DistanceUnit unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = set.actual ?? set.planned;
+    final seconds = metrics?.durationSeconds;
+    final meters = metrics?.distanceM;
+    final pace = set.actual?.paceSecondsPerKm;
+    final dimmed = !set.completed;
+
+    final valueStyle = TextStyle(
+      color: dimmed ? AppColors.textMuted : Colors.white,
+      fontSize: 12.5,
+      fontWeight: FontWeight.w600,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: setTypeColor(set.setType) ?? AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: set.setType == SetType.normal
+                    ? FontWeight.w600
+                    : FontWeight.w800,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              seconds == null ? '—' : formatSetDuration(seconds),
+              style: valueStyle,
+            ),
+          ),
+          if (tracking.tracksDistance) ...[
+            Expanded(
+              flex: 3,
+              child: Text(
+                meters == null ? '—' : unit.formatWithUnit(meters),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: valueStyle,
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                pace == null || dimmed
+                    ? '—'
+                    : formatSetDuration(
+                        (pace * unit.paceMeters / 1000).round(),
+                      ),
+                style: valueStyle.copyWith(
+                  color: dimmed ? AppColors.textMuted : AppColors.statTeal,
+                ),
+              ),
+            ),
+          ],
           SizedBox(
             width: 22,
             child: Icon(

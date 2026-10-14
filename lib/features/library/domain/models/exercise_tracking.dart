@@ -1,3 +1,5 @@
+import '../../../../core/utils/polish_plural.dart';
+
 /// Co zapisuje seria ćwiczenia. Wartość w API: [apiName].
 enum ExerciseTracking {
   /// Ciężar × powtórzenia (domyślny, jak przed kardio).
@@ -34,6 +36,9 @@ enum ExerciseTracking {
       this == ExerciseTracking.durationDistance;
 
   bool get tracksDistance => this == ExerciseTracking.durationDistance;
+
+  /// Serie to odcinki na czas (kardio, deska) — bez RIR i tempa.
+  bool get isCardio => tracksDuration;
 
   /// Starszy serwer (albo sesja sprzed kardio) nie wysyła trybu — to
   /// zawsze był ciężar × powtórzenia.
@@ -135,3 +140,7 @@ int? parseSetDuration(String? raw) {
   }
   return seconds > maxDurationSeconds ? null : seconds;
 }
+
+/// `1 odcinek`, `3 odcinki`, `5 odcinków`.
+String cardioSegmentsLabel(int count) =>
+    '$count ${polishPlural(count, 'odcinek', 'odcinki', 'odcinków')}';

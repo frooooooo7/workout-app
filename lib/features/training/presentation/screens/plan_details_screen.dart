@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/data/exercise_image_uri.dart';
+import '../../../library/domain/models/exercise_tracking.dart';
 import '../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../library/presentation/widgets/exercise_actions_sheet.dart';
 import '../../domain/models/custom_training_plan.dart';
@@ -256,6 +257,8 @@ CustomTrainingPlan duplicatePlan(CustomTrainingPlan plan) {
                 reps: set.reps,
                 rir: set.rir,
                 tempo: set.tempo,
+                durationSeconds: set.durationSeconds,
+                distanceM: set.distanceM,
               ),
           ],
         ),
@@ -435,8 +438,10 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                     },
                   ),
                   child: planExercise.exercise.imageUrl == null
-                      ? const Icon(
-                          Icons.fitness_center,
+                      ? Icon(
+                          planExercise.exercise.tracking.isCardio
+                              ? Icons.directions_run_rounded
+                              : Icons.fitness_center,
                           color: AppColors.textMuted,
                           size: 22,
                         )
@@ -466,7 +471,9 @@ class _ExerciseCardState extends State<_ExerciseCard> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          '${planExercise.sets.length} serie',
+                          planExercise.exercise.tracking.isCardio
+                              ? cardioSegmentsLabel(planExercise.sets.length)
+                              : '${planExercise.sets.length} serie',
                           style: const TextStyle(
                             color: AppColors.primary,
                             fontSize: 11,
@@ -511,171 +518,125 @@ class _ExerciseCardState extends State<_ExerciseCard> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
                 children: [
-                  // Header row
-                  Row(
-                    children: [
-                      const SizedBox(
-                        width: 40,
-                        child: Text(
-                          'SERIA',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'CIĘŻAR',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'POWT.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                      if (hasRir) ...[
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'RIR',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (hasTempo) ...[
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'TEMPO',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  _PlanSetTable(
+                    exercise: planExercise,
+                    hasRir: hasRir,
+                    hasTempo: hasTempo,
                   ),
-                  const SizedBox(height: 8),
-                  // Set rows
-                  ...planExercise.sets.asMap().entries.map((entry) {
-                    final setIndex = entry.key;
-                    final set = entry.value;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 40,
-                            child: Text(
-                              '${setIndex + 1}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              set.weight != null && set.weight!.isNotEmpty
-                                  ? '${weightTextForInput(set.weight)} '
-                                        '${WeightUnits.current.label}'
-                                  : '-',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              set.reps.isNotEmpty ? set.reps : '-',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (hasRir) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                set.rir != null && set.rir!.isNotEmpty
-                                    ? set.rir!
-                                    : '-',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                          if (hasTempo) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                set.tempo != null && set.tempo!.isNotEmpty
-                                    ? set.tempo!
-                                    : '-',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  }),
                 ],
               ),
             ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Tabela serii planu — kolumny zależą od tego, co ćwiczenie zapisuje:
+/// ciężar i powtórzenia albo czas i dystans odcinków.
+class _PlanSetTable extends StatelessWidget {
+  const _PlanSetTable({
+    required this.exercise,
+    required this.hasRir,
+    required this.hasTempo,
+  });
+
+  final PlanExercise exercise;
+  final bool hasRir;
+  final bool hasTempo;
+
+  static const _headerStyle = TextStyle(
+    color: AppColors.textSecondary,
+    fontSize: 10,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.0,
+  );
+
+  static const _valueStyle = TextStyle(
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
+
+  static String _orDash(String? value) =>
+      value != null && value.isNotEmpty ? value : '-';
+
+  @override
+  Widget build(BuildContext context) {
+    final tracking = exercise.exercise.tracking;
+    final unit = exercise.exercise.distanceUnit;
+    final columns = <(String, String Function(ExerciseSet))>[
+      if (tracking.tracksWeight)
+        (
+          'CIĘŻAR',
+          (set) => set.weight != null && set.weight!.isNotEmpty
+              ? '${weightTextForInput(set.weight)} ${WeightUnits.current.label}'
+              : '-',
+        ),
+      if (tracking.tracksReps) ('POWT.', (set) => _orDash(set.reps)),
+      if (tracking.tracksDuration)
+        (
+          'CZAS',
+          (set) => set.durationSeconds == null
+              ? '-'
+              : formatSetDuration(set.durationSeconds!),
+        ),
+      if (tracking.tracksDistance)
+        (
+          'DYSTANS',
+          (set) =>
+              set.distanceM == null ? '-' : unit.formatWithUnit(set.distanceM!),
+        ),
+      if (hasRir && !tracking.isCardio) ('RIR', (set) => _orDash(set.rir)),
+      if (hasTempo && !tracking.isCardio)
+        ('TEMPO', (set) => _orDash(set.tempo)),
+    ];
+
+    Widget row(Widget first, List<Widget> cells) => Row(
+      children: [
+        SizedBox(width: 40, child: first),
+        for (final cell in cells) ...[
+          const SizedBox(width: 8),
+          Expanded(child: cell),
+        ],
+      ],
+    );
+
+    return Column(
+      children: [
+        row(
+          Text(
+            tracking.isCardio ? 'ODC.' : 'SERIA',
+            textAlign: TextAlign.center,
+            style: _headerStyle,
+          ),
+          [
+            for (final (header, _) in columns)
+              Text(header, textAlign: TextAlign.center, style: _headerStyle),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final (index, set) in exercise.sets.indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: row(
+              Text(
+                '${index + 1}',
+                textAlign: TextAlign.center,
+                style: _valueStyle,
+              ),
+              [
+                for (final (_, value) in columns)
+                  Text(
+                    value(set),
+                    textAlign: TextAlign.center,
+                    style: _valueStyle,
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

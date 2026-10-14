@@ -402,8 +402,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final bottomInset =
         24 +
         MediaQuery.paddingOf(context).bottom +
-        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
-        (restVisible ? 92 + 16 : 0);
+        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”; panel
+        // stopera bywa o linijkę wyższy.
+        (restVisible ? 92 + 16 : 0) +
+        (_stopwatch.isActive ? 20 : 0);
     final blocks = SupersetRounds.blocks(session.exercises);
     return PageView.builder(
       controller: _exercisePageController,

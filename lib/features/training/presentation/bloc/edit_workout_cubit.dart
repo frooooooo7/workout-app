@@ -179,6 +179,22 @@ class EditWorkoutCubit extends Cubit<EditWorkoutState> {
         : set.copyWith(actualRir: value),
   );
 
+  void setDuration(int exerciseIndex, int setIndex, int? seconds) => _updateSet(
+    exerciseIndex,
+    setIndex,
+    (set) => seconds == null
+        ? set.copyWith(clearActualDuration: true)
+        : set.copyWith(actualDurationSeconds: seconds),
+  );
+
+  void setDistance(int exerciseIndex, int setIndex, int? meters) => _updateSet(
+    exerciseIndex,
+    setIndex,
+    (set) => meters == null
+        ? set.copyWith(clearActualDistance: true)
+        : set.copyWith(actualDistanceM: meters),
+  );
+
   void setSetType(int exerciseIndex, int setIndex, SetType type) =>
       _updateSet(exerciseIndex, setIndex, (set) => set.copyWith(setType: type));
 

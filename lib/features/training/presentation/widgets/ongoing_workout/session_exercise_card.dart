@@ -244,9 +244,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                 imageUrl: exercise.exerciseImageUrl,
                 size: thumbSize,
                 radius: widget.embedded ? 12 : 14,
-                fallbackIcon: cardio
-                    ? Icons.directions_run_rounded
-                    : Icons.fitness_center,
+                cardio: cardio,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -322,29 +320,29 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                   : _startStopwatch,
             )
           else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final layout = SetTableLayout.of(
-                constraints.maxWidth,
-                hasPrevious: previous != null && previous.isNotEmpty,
-                showWeight: exercise.tracking.tracksWeight,
-                showRir: widget.showRirColumn,
-                showTempo: widget.showTempoColumn,
-              );
-              return _SetTable(
-                exerciseIndex: widget.exerciseIndex,
-                sets: _sets,
-                previous: previous,
-                record: _record,
-                layout: layout,
-                focused: widget.focused,
-                onChanged: _handleSetChanged,
-                onPickType: (i) => unawaited(_pickSetType(i)),
-                onFillPrevious: _fillFromPrevious,
-                onRemove: _sets.length > 1 ? _removeSet : null,
-              );
-            },
-          ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final layout = SetTableLayout.of(
+                  constraints.maxWidth,
+                  hasPrevious: previous != null && previous.isNotEmpty,
+                  showWeight: exercise.tracking.tracksWeight,
+                  showRir: widget.showRirColumn,
+                  showTempo: widget.showTempoColumn,
+                );
+                return _SetTable(
+                  exerciseIndex: widget.exerciseIndex,
+                  sets: _sets,
+                  previous: previous,
+                  record: _record,
+                  layout: layout,
+                  focused: widget.focused,
+                  onChanged: _handleSetChanged,
+                  onPickType: (i) => unawaited(_pickSetType(i)),
+                  onFillPrevious: _fillFromPrevious,
+                  onRemove: _sets.length > 1 ? _removeSet : null,
+                );
+              },
+            ),
           const SizedBox(height: 10),
           DashedAddButton(
             key: const ValueKey('add-session-set-button'),

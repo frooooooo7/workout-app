@@ -615,13 +615,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         ' · $sets ${_plural(sets, 'seria', 'serie', 'serii')} · ~$minutes min';
   }
 
-  /// Szacunek: ~45 s na serię i przerwa po każdej serii (w superserii
-  /// tylko po rundzie), zaokrąglony do 5 minut.
+  /// Szacunek: ~45 s na serię (odcinek kardio — jego czas) i przerwa po
+  /// każdej serii (w superserii tylko po rundzie), zaokrąglony do 5 minut.
   int _estimateMinutes() {
     var seconds = 0;
     for (final (i, exercise) in _exercises.indexed) {
       final count = exercise.sets.length;
-      seconds += count * 45;
+      for (final set in exercise.sets) {
+        seconds += set.durationSeconds ?? 45;
+      }
       if (SupersetGroups.endsRound(_exercises, i, (e) => e.supersetGroup)) {
         final rounds = exercise.supersetGroup == null
             ? count

@@ -149,7 +149,7 @@ class CardioStopwatchPill extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           key: const Key('cardio-stopwatch-pill'),
-          height: 92,
+          constraints: const BoxConstraints(minHeight: 92),
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
             color: WorkoutColors.restPanel,
@@ -193,7 +193,7 @@ class CardioStopwatchPill extends StatelessWidget {
                     const SizedBox(height: 2),
                     const Text(
                       'liczy też przy zablokowanym ekranie',
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: WorkoutColors.textFaint,
@@ -269,9 +269,7 @@ class _StopwatchRing extends StatelessWidget {
           Text(
             formatSetDuration(elapsed.inSeconds),
             key: const ValueKey('cardio-stopwatch-label'),
-            style: AppTextStyles.number(
-              size: elapsed.inHours > 0 ? 14 : 18,
-            ),
+            style: AppTextStyles.number(size: elapsed.inHours > 0 ? 14 : 18),
           ),
         ],
       ),
