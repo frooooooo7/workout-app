@@ -27,6 +27,8 @@ class TrainingPlanRemoteDataSource {
         id: item['clientId'] as String? ?? item['id'] as String?,
         exercise: exercise,
         sets: sets,
+        restSeconds: (item['restSeconds'] as num?)?.toInt(),
+        supersetGroup: item['supersetGroup'] as String?,
       );
     }).toList();
 
@@ -37,6 +39,17 @@ class TrainingPlanRemoteDataSource {
       selectedDays: (json['selectedDays'] as List).cast<int>(),
       exercises: exercises,
       clientId: json['clientId'] as String?,
+      // Starszy serwer nie zna tych pól — zostają wartości domyślne.
+      defaultRestSeconds:
+          (json['defaultRestSeconds'] as num?)?.toInt() ??
+          CustomTrainingPlan.defaultRest,
+      colorKey: json['colorKey'] as String?,
+      iconKey: json['iconKey'] as String?,
+      goal: PlanGoal.fromApi(json['goal'] as String?),
+      progressionStepKg: (json['progressionStepKg'] as num?)?.toDouble(),
+      highlightPlanColor: json['highlightPlanColor'] as bool? ?? true,
+      showRir: json['showRir'] as bool? ?? true,
+      showTempo: json['showTempo'] as bool? ?? true,
     );
   }
 
@@ -49,6 +62,14 @@ class TrainingPlanRemoteDataSource {
       'name': plan.name,
       'note': plan.note,
       'selectedDays': plan.selectedDays,
+      'defaultRestSeconds': plan.defaultRestSeconds,
+      'colorKey': plan.colorKey,
+      'iconKey': plan.iconKey,
+      'goal': plan.goal?.apiName,
+      'progressionStepKg': plan.progressionStepKg,
+      'highlightPlanColor': plan.highlightPlanColor,
+      'showRir': plan.showRir,
+      'showTempo': plan.showTempo,
       'exercises': plan.exercises.asMap().entries.map((entry) {
         final pe = entry.value;
         return {
@@ -56,6 +77,8 @@ class TrainingPlanRemoteDataSource {
           'exerciseId':
               exerciseServerIdsByLocalId[pe.exercise.id] ?? pe.exercise.id,
           'position': entry.key,
+          'restSeconds': pe.restSeconds,
+          'supersetGroup': pe.supersetGroup,
           'sets': pe.sets.asMap().entries.map((setEntry) {
             final set = setEntry.value;
             return {

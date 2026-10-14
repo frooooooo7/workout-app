@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/theme/plan_colors.dart';
+import '../../../../../core/theme/plan_icons.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../../../core/widgets/app_pressable.dart';
 import '../../../../library/domain/models/exercise.dart';
@@ -37,6 +39,7 @@ class PlanCard extends StatelessWidget {
     final muscles = planMuscleFocus(plan);
     final note = plan.note?.trim() ?? '';
     final hiddenCount = exerciseCount - _previewCount;
+    final color = PlanColors.of(plan.name, colorKey: plan.colorKey);
 
     return AppPressable(
       onTap: onTap,
@@ -73,6 +76,17 @@ class PlanCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Padding(
+                    padding: EdgeInsets.only(
+                      top: isToday ? 30 : 2,
+                      right: AppSpacing.sm,
+                    ),
+                    child: PlanBadge(
+                      name: plan.name,
+                      color: color,
+                      iconKey: plan.iconKey,
+                    ),
+                  ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,6 +239,7 @@ class PlanCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   _StartButton(
                     key: ValueKey('plan-start-${plan.id}'),
+                    color: color,
                     onPressed: exerciseCount == 0 ? null : onStart,
                   ),
                 ],
@@ -467,8 +482,10 @@ class _WeekdayPill extends StatelessWidget {
 }
 
 class _StartButton extends StatelessWidget {
-  const _StartButton({super.key, required this.onPressed});
+  const _StartButton({super.key, required this.color, required this.onPressed});
 
+  /// Kolor planu — ten sam co w podglądzie „Wygląd planu”.
+  final Color color;
   final VoidCallback? onPressed;
 
   @override
@@ -478,8 +495,8 @@ class _StartButton extends StatelessWidget {
       child: FilledButton.icon(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.onPrimary,
+          backgroundColor: color,
+          foregroundColor: PlanColors.onAccent(color),
           disabledBackgroundColor: AppColors.surfaceVariant,
           disabledForegroundColor: AppColors.textMuted,
           elevation: 0,

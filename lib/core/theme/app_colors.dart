@@ -66,4 +66,8 @@ abstract final class AppColors {
   static const planBlue = Color(0xFF5B8DF6);
   static const planPink = Color(0xFFF472B6);
   static const planAmber = Color(0xFFF5B83D);
+
+  /// Superserie (znaczek „SUPERSERIA A”, pasek grupy, „Połącz”) — ciepły
+  /// pomarańcz odróżnia je od niebieskich akcji.
+  static const superset = Color(0xFFFF8A4C);
 }

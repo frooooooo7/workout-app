@@ -9,6 +9,7 @@ import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/widgets/app_pressable.dart';
 import 'rest_timer_controls.dart';
 import 'workout_colors.dart';
+import 'workout_accent.dart';
 
 /// Pływający panel odpoczynku przy dolnej krawędzi. Wjeżdża od dołu
 /// (280 ms, easeOutCubic), gdy [visible], i zjeżdża po końcu przerwy.
@@ -51,7 +52,11 @@ class RestTimerPill extends StatelessWidget {
     required this.onExtend,
     required this.onSkip,
     required this.onChangeDuration,
+    this.title = 'Odpoczynek',
   });
+
+  /// „Odpoczynek” albo „Przerwa po rundzie 2” w superserii.
+  final String title;
 
   final ValueListenable<Duration> remaining;
   final Duration total;
@@ -95,7 +100,9 @@ class RestTimerPill extends StatelessWidget {
                               _RestRing(remaining: value, total: total),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(child: _RestLabels(caption: caption)),
+                        Expanded(
+                          child: _RestLabels(title: title, caption: caption),
+                        ),
                       ],
                     ),
                   ),
@@ -117,7 +124,8 @@ class RestTimerPill extends StatelessWidget {
                     _PillButton(
                       key: const Key('rest-timer-skip'),
                       label: 'Pomiń',
-                      color: AppColors.primary,
+                      color: WorkoutAccent.of(context).fill,
+                      textColor: WorkoutAccent.of(context).onFill,
                       onTap: onSkip,
                     ),
                   ],
@@ -132,8 +140,9 @@ class RestTimerPill extends StatelessWidget {
 }
 
 class _RestLabels extends StatelessWidget {
-  const _RestLabels({required this.caption});
+  const _RestLabels({required this.title, required this.caption});
 
+  final String title;
   final String? caption;
 
   @override
@@ -142,9 +151,11 @@ class _RestLabels extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text(
-          'Odpoczynek',
-          style: TextStyle(
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
             color: AppColors.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w800,
@@ -214,7 +225,10 @@ class _RestRing extends StatelessWidget {
             curve: Curves.easeOut,
             builder: (context, value, _) => CustomPaint(
               size: const Size.square(64),
-              painter: _RingPainter(fraction: value),
+              painter: _RingPainter(
+                fraction: value,
+                color: WorkoutAccent.of(context).strong,
+              ),
             ),
           ),
           if (finalCountdown)
@@ -236,9 +250,10 @@ class _RestRing extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  _RingPainter({required this.fraction});
+  _RingPainter({required this.fraction, required this.color});
 
   final double fraction;
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -252,7 +267,7 @@ class _RingPainter extends CustomPainter {
     canvas.drawOval(arcRect, track);
     if (fraction <= 0) return;
     final arc = Paint()
-      ..color = AppColors.primaryVariant
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
@@ -261,7 +276,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RingPainter oldDelegate) =>
-      oldDelegate.fraction != fraction;
+      oldDelegate.fraction != fraction || oldDelegate.color != color;
 }
 
 class _PillButton extends StatelessWidget {
@@ -269,11 +284,13 @@ class _PillButton extends StatelessWidget {
     super.key,
     required this.label,
     required this.color,
+    this.textColor = AppColors.textPrimary,
     required this.onTap,
   });
 
   final String label;
   final Color color;
+  final Color textColor;
   final VoidCallback onTap;
 
   @override
@@ -291,8 +308,8 @@ class _PillButton extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
+            style: TextStyle(
+              color: textColor,
               fontSize: 13,
               fontWeight: FontWeight.w800,
             ),

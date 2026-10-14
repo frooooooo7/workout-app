@@ -210,11 +210,12 @@ double progressionStepKg(WeightUnit unit) =>
 /// Podpowiedź dla serii [current] na podstawie pasującej serii z poprzedniego
 /// treningu. Rozgrzewki i serie bez poprzedniego ciężaru jej nie mają. Cel
 /// powtórzeń to plan (górna granica zakresu `8-10`), a bez planu — wynik z
-/// poprzedniego razu.
+/// poprzedniego razu. [stepKg] — krok progresji z ustawień planu.
 ProgressionHint? progressionHintFor(
   TrainingSessionSet current,
   TrainingSessionSet? previous, {
   WeightUnit? unit,
+  double? stepKg,
 }) {
   if (previous == null || !current.countsTowardStats) return null;
   final weight = parseWeightKg(previous.actualWeight);
@@ -222,7 +223,7 @@ ProgressionHint? progressionHintFor(
   if (weight == null || weight <= 0 || reps == null) return null;
   final target = _targetReps(current.plannedReps) ?? reps;
   final delta = reps >= target
-      ? progressionStepKg(unit ?? WeightUnits.current)
+      ? (stepKg ?? progressionStepKg(unit ?? WeightUnits.current))
       : 0.0;
   return ProgressionHint(weightKg: weight + delta, deltaKg: delta);
 }

@@ -14,17 +14,20 @@ class TrainingPlanSummary {
   const TrainingPlanSummary({
     required this.id,
     required this.name,
+    this.colorKey,
+    this.iconKey,
   });
 
   final String id;
   final String name;
+
+  /// Kolor i ikona planu z chwili treningu (plan mógł zostać usunięty).
+  final String? colorKey;
+  final String? iconKey;
 }
 
 class TrainingProgressHighlight {
-  const TrainingProgressHighlight({
-    required this.type,
-    required this.label,
-  });
+  const TrainingProgressHighlight({required this.type, required this.label});
 
   final TrainingProgressHighlightType type;
   final String label;
@@ -73,12 +76,7 @@ class TrainingSessionListItem {
 }
 
 class TrainingSetMetrics {
-  const TrainingSetMetrics({
-    this.weightKg,
-    this.reps,
-    this.rir,
-    this.tempo,
-  });
+  const TrainingSetMetrics({this.weightKg, this.reps, this.rir, this.tempo});
 
   final double? weightKg;
   final int? reps;
@@ -153,8 +151,7 @@ class TrainingExerciseDetail {
   int get completedSetsCount =>
       sets.where((s) => s.completed && s.countsTowardStats).length;
 
-  double get volumeKg =>
-      sets.fold(0, (sum, set) => sum + set.volumeKg);
+  double get volumeKg => sets.fold(0, (sum, set) => sum + set.volumeKg);
 
   /// Pierwszy i ostatni moment odhaczenia serii — punkt zaczepienia na osi
   /// czasu. `null`, gdy żadna seria nie ma znacznika.
@@ -221,8 +218,7 @@ class TrainingSessionDetail {
   int get workingSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.workingSetsCount);
 
-  double get totalVolumeKg =>
-      exercises.fold(0, (sum, e) => sum + e.volumeKg);
+  double get totalVolumeKg => exercises.fold(0, (sum, e) => sum + e.volumeKg);
 
   /// Czy sesja niesie znaczniki czasu serii. Sesje sprzed dodania
   /// `completedAt` ich nie mają — oś czasu wtedy rezygnuje z godzin.
@@ -243,4 +239,3 @@ class TrainingSessionPage {
   final bool hasMore;
   final bool isFromCache;
 }
-

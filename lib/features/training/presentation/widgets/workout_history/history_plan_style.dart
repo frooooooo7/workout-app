@@ -4,17 +4,21 @@ import '../../../../../core/theme/plan_colors.dart';
 import '../../../domain/models/training_history_models.dart';
 
 /// Kolory planu sesji w Historii: kropka legendy, podbarwione tło dnia
-/// w kalendarzu i odznaka z literą na liście — wszystko z [PlanColors.of].
+/// w kalendarzu i odznaka (ikona albo litera) na liście — z [PlanColors.of].
 class HistoryPlanStyle {
-  HistoryPlanStyle._(this.name, this.color);
+  HistoryPlanStyle._(this.name, this.color, this.iconKey);
 
   factory HistoryPlanStyle.of(TrainingSessionListItem session) {
     final name = session.plan.name.trim();
     return HistoryPlanStyle._(
       name.isEmpty ? 'Trening siłowy' : name,
-      PlanColors.of(name),
+      PlanColors.of(name, colorKey: session.plan.colorKey),
+      PlanColors.styles.iconKeyFor(name) ?? session.plan.iconKey,
     );
   }
+
+  /// Ikona wybrana w planie; `null` — odznaka z literą.
+  final String? iconKey;
 
   /// Nazwa do wyświetlenia (sesja bez nazwy planu to „Trening siłowy”).
   final String name;

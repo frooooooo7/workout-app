@@ -118,6 +118,8 @@ class TrainingHistoryRemoteDataSource {
       plan: TrainingPlanSummary(
         id: plan['id'] as String? ?? '',
         name: plan['name'] as String? ?? 'Bez planu',
+        colorKey: plan['colorKey'] as String?,
+        iconKey: plan['iconKey'] as String?,
       ),
       exercisesCount: (json['exercisesCount'] as num?)?.toInt() ?? 0,
       completedSetsCount: (json['completedSetsCount'] as num?)?.toInt() ?? 0,
@@ -149,6 +151,8 @@ class TrainingHistoryRemoteDataSource {
       plan: TrainingPlanSummary(
         id: plan['id'] as String? ?? '',
         name: plan['name'] as String? ?? 'Bez planu',
+        colorKey: plan['colorKey'] as String?,
+        iconKey: plan['iconKey'] as String?,
       ),
       note: json['note'] as String?,
       exercises: exercisesRaw

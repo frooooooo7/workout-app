@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/plan_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/repositories/training_plan_repository.dart';
 
@@ -90,6 +91,18 @@ class TrainingPlansCubit extends Cubit<TrainingPlansState> {
       newPlans[index] = saved;
       emit(state.copyWith(plans: newPlans));
     }
+  }
+
+  /// Historia, kalendarz i trening na żywo znają tylko nazwę planu z sesji
+  /// — rejestr podpowiada im kolor, ikonę i ustawienia treningu planu.
+  @override
+  void onChange(Change<TrainingPlansState> change) {
+    super.onChange(change);
+    if (identical(change.currentState.plans, change.nextState.plans)) return;
+    PlanColors.styles.register([
+      for (final plan in change.nextState.plans)
+        (name: plan.name, style: plan.style),
+    ]);
   }
 
   Future<void> removePlan(String planId) async {

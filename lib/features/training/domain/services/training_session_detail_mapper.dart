@@ -8,7 +8,9 @@ import '../models/training_session.dart';
 ///
 /// Dzięki temu ekran podsumowania pokazuje te same liczby, które użytkownik
 /// zobaczy później w historii — bez czekania na synchronizację z serwerem.
-TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) {
+TrainingSessionDetail trainingSessionDetailFromSession(
+  TrainingSession session,
+) {
   final endedAt = session.finishedAt;
   final durationSec = endedAt == null
       ? 0
@@ -23,6 +25,8 @@ TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) 
     plan: TrainingPlanSummary(
       id: session.planServerId ?? session.planLocalId ?? '',
       name: session.planName,
+      colorKey: session.planColorKey,
+      iconKey: session.planIconKey,
     ),
     note: session.note,
     exercises: session.exercises
@@ -123,10 +127,10 @@ TrainingSetMetrics? _metricsFromRaw({
 /// `82,5` → 82.5; `60 kg` → 60; `''` / `abc` → `null`.
 double? parseWeightKg(String? raw) {
   if (raw == null) return null;
-  final cleaned = raw.trim().replaceAll(',', '.').replaceAll(
-    RegExp(r'[^0-9.]'),
-    '',
-  );
+  final cleaned = raw
+      .trim()
+      .replaceAll(',', '.')
+      .replaceAll(RegExp(r'[^0-9.]'), '');
   if (cleaned.isEmpty) return null;
   return double.tryParse(cleaned);
 }

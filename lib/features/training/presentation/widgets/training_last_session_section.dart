@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/plan_colors.dart';
+import '../../../../core/theme/plan_icons.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../../core/widgets/animated_number.dart';
@@ -56,7 +57,8 @@ class TrainingLastSessionSection extends StatelessWidget {
       );
     }
 
-    final color = PlanColors.of(item.plan.name);
+    final color = PlanColors.of(item.plan.name, colorKey: item.plan.colorKey);
+    final icon = PlanIcons.of(item.plan.name, iconKey: item.plan.iconKey);
     final records = recordsBySession[item.id] ?? 0;
     final volume = item.totalVolumeKg;
     final initial = item.plan.name.trim().isEmpty
@@ -71,14 +73,16 @@ class TrainingLastSessionSection extends StatelessWidget {
         pressedScale: 0.98,
         onTap: () => onOpenDetails(item),
         child: _LastSessionShell(
-          leading: Text(
-            initial,
-            style: TextStyle(
-              color: Color.lerp(color, Colors.white, 0.3),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          leading: icon != null
+              ? Icon(icon, size: 20, color: color)
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    color: Color.lerp(color, Colors.white, 0.3),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
           leadingColor: color.withValues(alpha: 0.16),
           title: 'Ostatnio: ${item.plan.name}',
           subtitle: _subtitle(item),

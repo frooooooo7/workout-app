@@ -19,6 +19,7 @@ import 'exercise_thumb.dart';
 import 'record_burst.dart';
 import 'session_set_row.dart';
 import 'set_table_layout.dart';
+import 'workout_accent.dart';
 import 'workout_colors.dart';
 
 /// Karta bieżącego ćwiczenia: miniatura, nazwa i partie, chipy „Ostatnio” /
@@ -40,6 +41,8 @@ class SessionExerciseCard extends StatefulWidget {
     required this.onRemoveSet,
     required this.onNoteChanged,
     required this.onRecord,
+    this.embedded = false,
+    this.focused = true,
   });
 
   final int exerciseIndex;
@@ -59,6 +62,13 @@ class SessionExerciseCard extends StatefulWidget {
 
   /// Odhaczona seria pobiła rekord.
   final ValueChanged<RecordBurstData> onRecord;
+
+  /// Część karty superserii — bez własnego tła i ramki.
+  final bool embedded;
+
+  /// Czy to ćwiczenie jest teraz na kolei (w superserii tylko jedno ma
+  /// podświetloną serię).
+  final bool focused;
 
   @override
   State<SessionExerciseCard> createState() => _SessionExerciseCardState();
@@ -172,13 +182,16 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     final previous = history?.previousSets;
     final muscles = taggedMuscles(exercise).map((m) => m.shortLabel).take(2);
 
+    final thumbSize = widget.embedded ? 44.0 : 56.0;
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.all(14),
+      decoration: widget.embedded
+          ? null
+          : BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -186,8 +199,8 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
             children: [
               ExerciseThumb(
                 imageUrl: exercise.exerciseImageUrl,
-                size: 56,
-                radius: 14,
+                size: thumbSize,
+                radius: widget.embedded ? 12 : 14,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -256,6 +269,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                 previous: previous,
                 record: _record,
                 layout: layout,
+                focused: widget.focused,
                 onChanged: _handleSetChanged,
                 onPickType: (i) => unawaited(_pickSetType(i)),
                 onFillPrevious: _fillFromPrevious,
@@ -282,6 +296,7 @@ class _SetTable extends StatelessWidget {
     required this.previous,
     required this.record,
     required this.layout,
+    required this.focused,
     required this.onChanged,
     required this.onPickType,
     required this.onFillPrevious,
@@ -293,6 +308,7 @@ class _SetTable extends StatelessWidget {
   final List<TrainingSessionSet>? previous;
   final ExerciseRecordBaseline? record;
   final SetTableLayout layout;
+  final bool focused;
   final void Function(int setIndex, TrainingSessionSet set) onChanged;
   final ValueChanged<int> onPickType;
   final void Function(int setIndex, TrainingSessionSet previous) onFillPrevious;
@@ -301,7 +317,7 @@ class _SetTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = setRowLabels(sets.map((set) => set.setType));
-    final activeIndex = sets.indexWhere((set) => !set.completed);
+    final activeIndex = focused ? sets.indexWhere((set) => !set.completed) : -1;
     final records = recordSetIndexes(record, sets);
     final previous = this.previous;
     return Column(
@@ -329,7 +345,11 @@ class _SetTable extends StatelessWidget {
                     ? null
                     : () => onFillPrevious(i, previousSet),
                 progression: i == activeIndex
-                    ? progressionHintFor(sets[i], previousSet)
+                    ? progressionHintFor(
+                        sets[i],
+                        previousSet,
+                        stepKg: WorkoutAccentScope.progressionStepOf(context),
+                      )
                     : null,
                 onChanged: (set) => onChanged(i, set),
                 onPickType: () => onPickType(i),

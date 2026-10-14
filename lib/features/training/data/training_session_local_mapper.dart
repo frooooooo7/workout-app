@@ -105,6 +105,8 @@ class TrainingSessionLocalMapper {
       startedAt: decodeDate(sessionRow['started_at'])!,
       finishedAt: decodeDate(sessionRow['finished_at']),
       sharedToProfile: ((sessionRow['shared_to_profile'] as int?) ?? 0) == 1,
+      planColorKey: sessionRow['plan_color_key'] as String?,
+      planIconKey: sessionRow['plan_icon_key'] as String?,
       exercises: [
         for (final exerciseRow in exerciseRows)
           TrainingSessionExercise(
@@ -120,6 +122,8 @@ class TrainingSessionLocalMapper {
             exerciseCategory: exerciseRow['exercise_category'] as String,
             exerciseImageUrl: exerciseRow['exercise_image_url'] as String?,
             note: exerciseRow['note'] as String?,
+            restSeconds: exerciseRow['rest_seconds'] as int?,
+            supersetGroup: exerciseRow['superset_group'] as String?,
             sets: [
               for (final set
                   in setsByExerciseId[exerciseRow['local_id'] as String] ??
@@ -178,6 +182,8 @@ class TrainingSessionLocalMapper {
           'started_at': encodeDate(session.startedAt),
           'finished_at': encodeDate(session.finishedAt),
           'shared_to_profile': session.sharedToProfile ? 1 : 0,
+          'plan_color_key': session.planColorKey,
+          'plan_icon_key': session.planIconKey,
           'created_at': old.isEmpty ? now : old.first['created_at'],
           'updated_at': now,
           'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),
@@ -286,6 +292,8 @@ class TrainingSessionLocalMapper {
         'exercise_image_url': exercise.exerciseImageUrl,
         'position': entry.key,
         'note': exercise.note,
+        'rest_seconds': exercise.restSeconds,
+        'superset_group': exercise.supersetGroup,
       });
       for (final setEntry in exercise.sets.asMap().entries) {
         final set = setEntry.value;
