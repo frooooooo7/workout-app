@@ -85,7 +85,6 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
-    - assets/body_data/
     - assets/body_highlighter/
 
   # An image asset can refer to one or more resolution-specific "variants", see

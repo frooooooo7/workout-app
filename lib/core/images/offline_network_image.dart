@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -79,9 +80,19 @@ class OfflineImageStore {
   static const _timeout = Duration(seconds: 20);
   static const _refreshAfter = Duration(days: 7);
 
+  /// Większego obrazka nie trzymamy w pamięci ani na dysku — miniatury
+  /// i awatary z API mają kilkadziesiąt KB, a adres może wskazywać gdziekolwiek.
+  static const _maxBytes = 8 * 1024 * 1024;
+
+  /// Katalog przycinamy raz na tyle zapisów (i przy pierwszym w sesji), a nie
+  /// po każdym — przycinanie listuje katalog i czyta datę każdego pliku.
+  static const _pruneEvery = 25;
+
   final Map<String, Future<Uint8List>> _inFlight = {};
   Future<Directory>? _directory;
   http.Client? _client;
+  int _writesUntilPrune = 0;
+  Future<void>? _pruning;
 
   Future<Uint8List> load(String url) {
     return _inFlight[url] ??= _load(url).whenComplete(() {
@@ -125,16 +136,36 @@ class OfflineImageStore {
   Future<Uint8List> _download(String url, File? file) async {
     final uri = Uri.parse(url);
     final response = await (_client ??= http.Client())
-        .get(uri)
+        .send(http.Request('GET', uri))
         .timeout(_timeout);
-    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+    final declared = response.contentLength;
+    if (response.statusCode != 200 ||
+        (declared != null && declared > _maxBytes)) {
+      unawaited(response.stream.listen(null).cancel());
       throw NetworkImageLoadException(
         statusCode: response.statusCode,
         uri: uri,
       );
     }
-    if (file != null) unawaited(_write(file, response.bodyBytes));
-    return response.bodyBytes;
+    final bytes = await _readCapped(response.stream, uri).timeout(_timeout);
+    if (bytes.isEmpty) {
+      throw NetworkImageLoadException(statusCode: 200, uri: uri);
+    }
+    if (file != null) unawaited(_write(file, bytes));
+    return bytes;
+  }
+
+  /// Czyta odpowiedź do [_maxBytes] — serwer bez `Content-Length` też nie
+  /// zapcha pamięci.
+  static Future<Uint8List> _readCapped(Stream<List<int>> stream, Uri uri) async {
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in stream) {
+      builder.add(chunk);
+      if (builder.length > _maxBytes) {
+        throw NetworkImageLoadException(statusCode: 200, uri: uri);
+      }
+    }
+    return builder.takeBytes();
   }
 
   Future<void> _write(File file, Uint8List bytes) async {
@@ -142,7 +173,11 @@ class OfflineImageStore {
       final tmp = File('${file.path}.tmp');
       await tmp.writeAsBytes(bytes, flush: true);
       await tmp.rename(file.path);
-      await _prune(file.parent);
+      if (_writesUntilPrune-- <= 0 && _pruning == null) {
+        _writesUntilPrune = _pruneEvery;
+        _pruning = _prune(file.parent).whenComplete(() => _pruning = null);
+        await _pruning;
+      }
     } catch (_) {
       /* cache jest opcjonalny */
     }

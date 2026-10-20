@@ -1,0 +1,10 @@
+# Copy to android/key.properties (git-ignored) to sign release builds with your
+# own key. Create the keystore once:
+#   keytool -genkey -v -keystore ~/gym-release.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias gym
+# Without key.properties `flutter build apk --release` falls back to the debug
+# key, which is fine locally but must never be published.
+storeFile=C:/Users/you/gym-release.jks
+storePassword=change-me
+keyAlias=gym
+keyPassword=change-me

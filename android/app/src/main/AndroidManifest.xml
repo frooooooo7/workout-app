@@ -9,10 +9,16 @@
     <!-- connectivity_plus: synchronizacja startuje po powrocie sieci. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Bez kopii zapasowej Google: lokalna baza trzyma całą historię
+         treningów i pomiary ciała, a zaszyfrowany token i tak nie da się
+         odtworzyć na innym urządzeniu (klucz zostaje w Keystore). -->
     <application
         android:label="gym"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

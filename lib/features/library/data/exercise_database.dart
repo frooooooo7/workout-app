@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 17;
+  static const _dbVersion = 18;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -291,6 +291,7 @@ class ExerciseDatabase {
     await _createTrainingHistoryTables(db);
     await _createTrainingSessionTables(db);
     await _createPerformanceIndexes(db);
+    await _createExerciseHistoryIndexes(db);
     await _createSyncStateTable(db);
     await _createBodyWeightTable(db);
     await _createBodyMeasurementsTable(db);
@@ -480,6 +481,20 @@ class ExerciseDatabase {
       'CREATE INDEX IF NOT EXISTS ex_pending_idx '
       'ON $tableExercises(pending_op, is_favourite_dirty) '
       'WHERE pending_op IS NOT NULL OR is_favourite_dirty = 1',
+    );
+  }
+
+  /// „Poprzedni wynik” i sortowanie „Popularne” szukają ćwiczenia w historii
+  /// po identyfikatorze albo nazwie — bez tych indeksów każde ćwiczenie
+  /// dodane do treningu skanowało całą tabelę ćwiczeń z sesji.
+  Future<void> _createExerciseHistoryIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tse_exercise_idx '
+      'ON $tableTrainingSessionExercises(exercise_local_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tse_exercise_name_idx '
+      'ON $tableTrainingSessionExercises(exercise_name COLLATE NOCASE)',
     );
   }
 
@@ -739,6 +754,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 17) {
       await _addPlanSharingColumns(db);
+    }
+    if (oldVersion < 18) {
+      await _createExerciseHistoryIndexes(db);
     }
   }
 

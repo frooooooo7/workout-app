@@ -90,7 +90,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
                 ActivityTypeOptionTile(
                   icon: Icons.view_week_rounded,
                   iconColor: AppColors.primaryVariant,
-                  imageAsset: 'assets/images/login-hero.png',
+                  imageAsset: 'assets/images/login-hero.webp',
                   imageAlignment: Alignment.centerRight,
                   eyebrow: 'Gotowy plan',
                   title: 'Moje plany',
@@ -103,7 +103,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
                 ActivityTypeOptionTile(
                   icon: Icons.bolt_rounded,
                   iconColor: const Color(0xFFF59E0B),
-                  imageAsset: 'assets/images/login-hero.png',
+                  imageAsset: 'assets/images/login-hero.webp',
                   imageAlignment: Alignment.centerLeft,
                   eyebrow: 'Wolny trening',
                   title: 'Niestandardowa',

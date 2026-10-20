@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -29,6 +31,11 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
   late Future<List<FollowingUser>> _future;
   String _lastQuery = '';
 
+  /// Wyszukiwanie rusza po chwili bez pisania, a nie po każdym znaku —
+  /// szybkie pisanie nie zasypuje serwera żądaniami (ma limit na minutę).
+  static const _debounce = Duration(milliseconds: 300);
+  Timer? _debounceTimer;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +46,7 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controller.removeListener(_onQueryChanged);
     _controller.dispose();
     super.dispose();
@@ -55,8 +63,12 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
     // Listener odpala się też przy zmianie zaznaczenia/kursora.
     if (query == _lastQuery) return;
     _lastQuery = query;
-    setState(() {
-      _future = _search(query);
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_debounce, () {
+      if (!mounted) return;
+      setState(() {
+        _future = _search(query);
+      });
     });
   }
 

@@ -21,7 +21,7 @@ class LoginWelcomeCard extends StatelessWidget {
       children: [
         Center(
           child: Image.asset(
-            'assets/images/logo.png',
+            'assets/images/logo.webp',
             width: 48,
             height: 48,
             fit: BoxFit.contain,

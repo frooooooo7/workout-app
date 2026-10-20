@@ -474,7 +474,7 @@ class _RestDayContent extends StatelessWidget {
               ),
             ),
             Image.asset(
-              'assets/images/monk_rest.png',
+              'assets/images/monk_rest.webp',
               key: const ValueKey('monk-rest-icon'),
               height: 64,
               fit: BoxFit.contain,
