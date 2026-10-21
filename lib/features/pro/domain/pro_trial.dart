@@ -48,6 +48,9 @@ class ProTrial {
   /// Ostatni tydzień trialu.
   bool get isEnding => isActive && daysLeft <= warningDays;
 
+  /// Pierwsze dni konta — tylko wtedy ma sens powitanie „30 dni za darmo”.
+  bool get isFresh => isActive && dayNumber <= 3;
+
   /// 0–1, do paska postępu.
   double get progress => isEnded ? 1 : dayNumber / lengthDays;
 }

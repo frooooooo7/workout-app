@@ -51,6 +51,15 @@ void main() {
       expect(t.daysLeft, 0);
     });
 
+    test('only the first days count as fresh', () {
+      ProTrial at(int days) =>
+          ProTrial.of(created, now: created.add(Duration(days: days)));
+      expect(at(0).isFresh, isTrue);
+      expect(at(2).isFresh, isTrue);
+      expect(at(3).isFresh, isFalse);
+      expect(at(40).isFresh, isFalse);
+    });
+
     test('Polish days label', () {
       expect(proDaysLeftLabel(1), 'Został 1 dzień');
       expect(proDaysLeftLabel(2), 'Zostały 2 dni');

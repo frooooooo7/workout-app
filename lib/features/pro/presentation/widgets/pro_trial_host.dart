@@ -39,13 +39,17 @@ class _ProTrialHostState extends State<ProTrialHost> {
     if (user == null || createdAt == null || !user.onboardingCompleted) return;
 
     final trial = ProTrial.of(createdAt, now: widget.clock());
-    final String? route;
+    String? route;
     if (trial.isActive) {
-      route = await widget.store.welcomeSeen(user.id) ? null : '/pro/welcome';
-      if (route != null) await widget.store.markWelcomeSeen(user.id);
-    } else {
-      route = await widget.store.endSeen(user.id) ? null : '/pro/trial-end';
-      if (route != null) await widget.store.markEndSeen(user.id);
+      if (!await widget.store.welcomeSeen(user.id)) {
+        await widget.store.markWelcomeSeen(user.id);
+        // Konto założone dawno (np. po aktualizacji aplikacji) nie dostaje
+        // powitania „30 dni”, tylko ewentualnie pasek na koniec.
+        if (trial.isFresh) route = '/pro/welcome';
+      }
+    } else if (!await widget.store.endSeen(user.id)) {
+      await widget.store.markEndSeen(user.id);
+      route = '/pro/trial-end';
     }
     if (route == null || !mounted) return;
     context.push(route);
