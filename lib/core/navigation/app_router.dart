@@ -9,6 +9,8 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/onboarding/presentation/bloc/onboarding_cubit.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../../features/pro/presentation/screens/pro_trial_end_screen.dart';
+import '../../features/pro/presentation/screens/pro_welcome_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
@@ -171,6 +173,17 @@ GoRouter buildRouter({
             ),
           );
         },
+      ),
+
+      // Miesiąc PRO: powitanie i koniec okresu próbnego (pełny ekran, poza shellem).
+      GoRoute(
+        path: '/pro/welcome',
+        builder: (_, s) =>
+            ProWelcomeScreen(info: s.uri.queryParameters['info'] == '1'),
+      ),
+      GoRoute(
+        path: '/pro/trial-end',
+        builder: (_, s) => const ProTrialEndScreen(),
       ),
 
       // App shell — authenticated zone
