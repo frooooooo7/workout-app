@@ -22,12 +22,16 @@ FeedPost _post({
   int kudos = 3,
   int comments = 1,
   List<PersonalRecord> personalRecords = const [],
+  String? postTitle,
+  String? photoUrl,
 }) {
   return FeedPost(
     id: 'p1',
     author: const FeedAuthor(id: 'u1', firstName: 'Anna', lastName: 'Nowak'),
     title: 'Push A',
     note: 'Nowy rekord na ławce',
+    postTitle: postTitle,
+    photoUrl: photoUrl,
     startedAt: DateTime(2026, 9, 15, 18, 5),
     durationSec: 3420,
     exercisesCount: 6,
@@ -77,6 +81,31 @@ Future<void> _pumpCard(
 }
 
 void main() {
+  testWidgets('own post title replaces the workout name, which moves next to the date', (
+    tester,
+  ) async {
+    await _pumpCard(
+      tester,
+      _post(postTitle: 'W końcu 82,5!', photoUrl: '/uploads/post-photos/a.webp'),
+    );
+    await tester.pump();
+
+    expect(find.text('W końcu 82,5!'), findsOneWidget);
+    expect(find.textContaining('· Push A'), findsOneWidget);
+    expect(find.text('Push A'), findsNothing);
+    expect(find.text('Nowy rekord na ławce'), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+  });
+
+  testWidgets('without a post title the card keeps the workout name', (
+    tester,
+  ) async {
+    await _pumpCard(tester, _post());
+
+    expect(find.text('Push A'), findsOneWidget);
+    expect(find.textContaining('· Push A'), findsNothing);
+  });
+
   group('formatters', () {
     final now = DateTime(2026, 9, 15, 20);
 

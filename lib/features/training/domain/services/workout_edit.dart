@@ -152,6 +152,10 @@ TrainingSession applyWorkoutEdit(
     startedAt: startedAt,
     finishedAt: startedAt.add(Duration(minutes: minutes)),
     sharedToProfile: original.sharedToProfile,
+    postTitle: original.postTitle,
+    postPhotoUrl: original.postPhotoUrl,
+    planColorKey: original.planColorKey,
+    planIconKey: original.planIconKey,
     pendingOp: original.pendingOp,
     exercises: [
       for (final exercise in draft.exercises)

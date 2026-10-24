@@ -10,6 +10,7 @@ import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
@@ -54,8 +55,9 @@ void main() {
     ServiceLocator.currentUser.value = null;
   });
 
-  testWidgets('redirects protected deep links when no session is restored',
-      (tester) async {
+  testWidgets('redirects protected deep links when no session is restored', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     var resolveCalls = 0;
@@ -75,8 +77,9 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, '/login');
   });
 
-  testWidgets('keeps protected deep links after restoring a session',
-      (tester) async {
+  testWidgets('keeps protected deep links after restoring a session', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     final user = AuthUser(
@@ -169,8 +172,9 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, '/app/plans');
   });
 
-  testWidgets('center tap without active session switches to training branch',
-      (tester) async {
+  testWidgets('center tap without active session switches to training branch', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     final user = AuthUser(
@@ -440,6 +444,15 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 class _NoSeenStore implements FeedSeenStore {

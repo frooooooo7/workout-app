@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/training_session.dart';
 
 /// Sesja z `GET /training-sessions/history` razem z jej `updatedAt`
@@ -68,8 +71,8 @@ class TrainingSessionRemoteDataSource {
                   plannedDurationSeconds:
                       (set['plannedDurationSeconds'] as num?)?.toInt(),
                   plannedDistanceM: (set['plannedDistanceM'] as num?)?.toInt(),
-                  actualDurationSeconds:
-                      (set['actualDurationSeconds'] as num?)?.toInt(),
+                  actualDurationSeconds: (set['actualDurationSeconds'] as num?)
+                      ?.toInt(),
                   actualDistanceM: (set['actualDistanceM'] as num?)?.toInt(),
                 ),
               )
@@ -117,6 +120,8 @@ class TrainingSessionRemoteDataSource {
       sharedToProfile: (json['sharedToProfile'] as bool?) ?? false,
       planColorKey: json['planColorKey'] as String?,
       planIconKey: json['planIconKey'] as String?,
+      postTitle: json['postTitle'] as String?,
+      postPhotoUrl: json['postPhotoUrl'] as String?,
       exercises: exercises,
     );
   }
@@ -135,6 +140,7 @@ class TrainingSessionRemoteDataSource {
       'startedAt': session.startedAt.toUtc().toIso8601String(),
       'finishedAt': session.finishedAt?.toUtc().toIso8601String(),
       'sharedToProfile': session.sharedToProfile,
+      'postTitle': session.postTitle,
       'planColorKey': session.planColorKey,
       'planIconKey': session.planIconKey,
       'exercises': session.exercises.asMap().entries.map((entry) {
@@ -225,6 +231,45 @@ class TrainingSessionRemoteDataSource {
     return _fromJson(data as Map<String, dynamic>);
   }
 
+  /// Flaga razem z treścią posta — dla sesji spoza lokalnej bazy.
+  Future<TrainingSession> sharePost(
+    String serverId, {
+    required String? title,
+    required String? body,
+  }) async {
+    final data = await _api.patch(
+      '/training-sessions/$serverId/shared-to-profile',
+      {'sharedToProfile': true, 'postTitle': title, 'note': body},
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `POST /training-sessions/:id/post-photo` (multipart `photo`).
+  Future<TrainingSession> uploadPostPhoto(
+    String serverId,
+    Uint8List bytes,
+    String filename,
+  ) async {
+    final data = await _api.postMultipart(
+      '/training-sessions/$serverId/post-photo',
+      files: [
+        imageMultipartFile('photo', bytes, filename, fallbackName: 'post.jpg'),
+      ],
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `DELETE /training-sessions/:id/post-photo`.
+  Future<TrainingSession> deletePostPhoto(String serverId) async {
+    final data = await _api.delete(
+      '/training-sessions/$serverId/post-photo',
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
   /// `DELETE /training-sessions/:id` → 204 (także powtórnie).
   Future<void> delete(String serverId) async {
     await _api.delete('/training-sessions/$serverId', auth: true);
@@ -233,10 +278,7 @@ class TrainingSessionRemoteDataSource {
   /// `DELETE /training-sessions/by-client-id/:clientId` → zawsze 204 i zawsze
   /// zostawia nagrobek, więc zabija też zapis wciąż czekający w kolejce.
   Future<void> deleteByClientId(String clientId) async {
-    await _api.delete(
-      '/training-sessions/by-client-id/$clientId',
-      auth: true,
-    );
+    await _api.delete('/training-sessions/by-client-id/$clientId', auth: true);
   }
 
   /// Zakończone / anulowane sesje, najnowsze najpierw. `deleted` przychodzi

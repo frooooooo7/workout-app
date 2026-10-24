@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 18;
+  static const _dbVersion = 19;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -47,6 +47,11 @@ class ExerciseDatabase {
   /// Klucz → wartość dla silników synchronizacji (np. znacznik ostatniego
   /// pobrania sesji). Baza jest per użytkownik, więc stan też.
   static const tableSyncState = 'sync_state';
+
+  /// Zdjęcia postów czekające na wysłanie albo usunięcie na serwerze —
+  /// jeden wiersz na sesję (`op` = `upload` / `remove`). Bajty trzymamy
+  /// w bazie, bo na webie nie ma trwałych plików.
+  static const tablePendingPostPhotos = 'pending_post_photos';
 
   /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
   static const syncedTables = [
@@ -156,12 +161,13 @@ class ExerciseDatabase {
   Future<void> clearSyncErrors() {
     return run((db) async {
       for (final table in syncedTables) {
-        await db.update(
-          table,
-          {'sync_error': null},
-          where: 'sync_error IS NOT NULL',
-        );
+        await db.update(table, {
+          'sync_error': null,
+        }, where: 'sync_error IS NOT NULL');
       }
+      await db.update(tablePendingPostPhotos, {
+        'sync_error': null,
+      }, where: 'sync_error IS NOT NULL');
     });
   }
 
@@ -185,12 +191,19 @@ class ExerciseDatabase {
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries
              WHERE pending_op IS NOT NULL AND sync_error IS NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries
-             WHERE pending_op IS NOT NULL AND sync_error IS NULL) AS pending,
+             WHERE pending_op IS NOT NULL AND sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos p
+             WHERE p.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingSessions s
+               WHERE s.local_id = p.session_local_id
+                 AND s.sync_error IS NOT NULL
+             )) AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;
@@ -298,6 +311,33 @@ class ExerciseDatabase {
     await _addPlanStyleAndRestColumns(db);
     await _addCardioColumns(db);
     await _addPlanSharingColumns(db);
+    await _addPostColumns(db);
+  }
+
+  /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
+  Future<void> _addPostColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'post_title',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'post_photo_url',
+      definition: 'TEXT',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePendingPostPhotos (
+        session_local_id TEXT PRIMARY KEY NOT NULL,
+        op TEXT NOT NULL,
+        bytes BLOB,
+        filename TEXT,
+        created_at INTEGER NOT NULL,
+        sync_error TEXT
+      )
+    ''');
   }
 
   /// v17: widoczność planu na profilu i pochodzenie kopii („od @anna”).
@@ -757,6 +797,9 @@ class ExerciseDatabase {
     }
     if (oldVersion < 18) {
       await _createExerciseHistoryIndexes(db);
+    }
+    if (oldVersion < 19) {
+      await _addPostColumns(db);
     }
   }
 

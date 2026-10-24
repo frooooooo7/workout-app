@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 import 'package:gym/features/training/presentation/screens/edit_workout_screen.dart';
@@ -56,9 +57,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('validates the form and saves an edited workout', (
-    tester,
-  ) async {
+  testWidgets('validates the form and saves an edited workout', (tester) async {
     await useTallViewport(tester);
     final repository = _FakeRepository(_session());
     var savedCalls = 0;
@@ -91,7 +90,10 @@ void main() {
       '8x',
     );
     await tapSave(tester);
-    expect(find.text('Nieprawidłowy ciężar: „Bench”, seria 1.'), findsOneWidget);
+    expect(
+      find.text('Nieprawidłowy ciężar: „Bench”, seria 1.'),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const ValueKey('edit-set-0-0-weight')),
@@ -119,9 +121,7 @@ void main() {
     expect(results, [true]);
   });
 
-  testWidgets('removing the only exercise is rejected on save', (
-    tester,
-  ) async {
+  testWidgets('removing the only exercise is rejected on save', (tester) async {
     await useTallViewport(tester);
     final repository = _FakeRepository(_session());
     await pumpEditor(tester, repository);
@@ -180,7 +180,11 @@ TrainingSession _session() => TrainingSession(
       exerciseMuscles: const ['chest'],
       exerciseCategory: 'compound',
       sets: [
-        TrainingSessionSet(actualWeight: '80', actualReps: '5', completed: true),
+        TrainingSessionSet(
+          actualWeight: '80',
+          actualReps: '5',
+          completed: true,
+        ),
         TrainingSessionSet(actualWeight: '80', actualReps: '5'),
       ],
     ),
@@ -237,4 +241,13 @@ class _FakeRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }

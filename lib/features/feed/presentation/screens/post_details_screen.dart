@@ -24,6 +24,7 @@ import '../widgets/feed_status_views.dart';
 import '../widgets/kudos_sheet.dart';
 import '../widgets/post_author_row.dart';
 import '../widgets/post_comment_tile.dart';
+import '../widgets/post_photo.dart';
 import '../widgets/post_social_bar.dart';
 
 /// Szczegóły posta: autor, metryki, mapa mięśni, ćwiczenia z seriami,
@@ -277,8 +278,11 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                     if (detailsState.status != PostDetailsStatus.ready) {
                       return const SizedBox.shrink();
                     }
-                    return BlocSelector<PostCommentsCubit, PostCommentsState,
-                        bool>(
+                    return BlocSelector<
+                      PostCommentsCubit,
+                      PostCommentsState,
+                      bool
+                    >(
                       selector: (state) => state.isSending,
                       builder: (context, sending) => CommentInputBar(
                         focusNode: _commentFocus,
@@ -359,13 +363,21 @@ class _PostDetailsBody extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: PostAuthorRow(
             author: post.author,
-            timestamp: formatFeedTimestamp(post.startedAt),
+            timestamp: post.postTitle == null
+                ? formatFeedTimestamp(post.startedAt)
+                : '${formatFeedTimestamp(post.startedAt)} · ${post.title}',
             onTap: () =>
                 openAuthorProfile(context, post.author.id, isOwn: post.isOwn),
           ),
         ),
         const SizedBox(height: 12),
-        SessionSummaryHeader(detail: sessionDetail),
+        if (post.photoUrl != null ||
+            post.postTitle != null ||
+            post.note != null) ...[
+          _PostContent(post: post),
+          const SizedBox(height: 14),
+        ],
+        SessionSummaryHeader(detail: sessionDetail, showNote: false),
         const SizedBox(height: 12),
         if (post.personalRecords.isNotEmpty) ...[
           NewRecordsBanner(records: post.personalRecords),
@@ -398,6 +410,63 @@ class _PostDetailsBody extends StatelessWidget {
           commentCount: post.commentCount,
           onDeleteComment: onDeleteComment,
         ),
+      ],
+    );
+  }
+}
+
+/// Zdjęcie, tytuł i pełny opis posta nad metrykami treningu.
+class _PostContent extends StatelessWidget {
+  const _PostContent({required this.post});
+
+  final FeedPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = post.photoUrl;
+    final title = post.postTitle;
+    final note = post.note;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (photoUrl != null)
+          PostPhoto(
+            key: const ValueKey('post-details-photo'),
+            url: photoUrl,
+            aspectRatio: 1.15,
+            radius: 22,
+          ),
+        if (title != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(4, photoUrl != null ? 14 : 0, 4, 0),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+                height: 1.2,
+              ),
+            ),
+          ),
+        if (note != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              4,
+              title != null ? 6 : (photoUrl != null ? 12 : 0),
+              4,
+              0,
+            ),
+            child: Text(
+              note,
+              style: const TextStyle(
+                color: AppColors.textSubtle,
+                fontSize: 14.5,
+                height: 1.45,
+              ),
+            ),
+          ),
       ],
     );
   }

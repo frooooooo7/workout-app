@@ -249,6 +249,8 @@ class TrainingSessionDetail {
     required this.exercises,
     required this.updatedAt,
     this.sharedToProfile = false,
+    this.postTitle,
+    this.postPhotoUrl,
   });
 
   final String id;
@@ -261,6 +263,34 @@ class TrainingSessionDetail {
   final List<TrainingExerciseDetail> exercises;
   final DateTime updatedAt;
   final bool sharedToProfile;
+
+  /// Tytuł posta (gdy inny niż nazwa treningu) i zdjęcie z serwera.
+  final String? postTitle;
+  final String? postPhotoUrl;
+
+  /// Te same szczegóły z nową treścią posta — po zapisie w arkuszu, zanim
+  /// sesja dotrze na serwer i wróci w odświeżonych szczegółach.
+  TrainingSessionDetail withPost({
+    required bool sharedToProfile,
+    required String? note,
+    required String? postTitle,
+    required String? postPhotoUrl,
+  }) {
+    return TrainingSessionDetail(
+      id: id,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      durationSec: durationSec,
+      status: status,
+      plan: plan,
+      note: note,
+      exercises: exercises,
+      updatedAt: updatedAt,
+      sharedToProfile: sharedToProfile,
+      postTitle: postTitle,
+      postPhotoUrl: postPhotoUrl,
+    );
+  }
 
   int get completedSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.completedSetsCount);

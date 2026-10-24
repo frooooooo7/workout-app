@@ -82,8 +82,8 @@ class TrainingSessionLocalMapper {
       for (final sessionRow in sessionRows)
         _sessionFromGrouped(
           sessionRow: sessionRow,
-          exerciseRows: exercisesBySession[sessionRow['local_id'] as String] ??
-              const [],
+          exerciseRows:
+              exercisesBySession[sessionRow['local_id'] as String] ?? const [],
           setsByExerciseId: setsByExercise,
         ),
     ];
@@ -107,6 +107,8 @@ class TrainingSessionLocalMapper {
       sharedToProfile: ((sessionRow['shared_to_profile'] as int?) ?? 0) == 1,
       planColorKey: sessionRow['plan_color_key'] as String?,
       planIconKey: sessionRow['plan_icon_key'] as String?,
+      postTitle: sessionRow['post_title'] as String?,
+      postPhotoUrl: sessionRow['post_photo_url'] as String?,
       exercises: [
         for (final exerciseRow in exerciseRows)
           TrainingSessionExercise(
@@ -170,6 +172,7 @@ class TrainingSessionLocalMapper {
     String? serverId,
     String? pendingOp,
     bool clearPendingOp = false,
+    bool fromServer = false,
   }) async {
     await _inTransaction(db, (txn) async {
       final old = await txn.query(
@@ -178,28 +181,41 @@ class TrainingSessionLocalMapper {
         whereArgs: [session.id],
         limit: 1,
       );
+      var postPhotoUrl = session.postPhotoUrl;
+      if (fromServer && old.isNotEmpty) {
+        // Zmiana zdjęcia czeka w kolejce — serwer jeszcze o niej nie wie,
+        // więc jego adres nie może cofnąć tego, co użytkownik już widzi.
+        final queued = await txn.query(
+          ExerciseDatabase.tablePendingPostPhotos,
+          columns: ['session_local_id'],
+          where: 'session_local_id = ?',
+          whereArgs: [session.id],
+          limit: 1,
+        );
+        if (queued.isNotEmpty) {
+          postPhotoUrl = old.first['post_photo_url'] as String?;
+        }
+      }
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      await txn.insert(
-        ExerciseDatabase.tableTrainingSessions,
-        {
-          'local_id': session.id,
-          'server_id': serverId ?? session.serverId,
-          'plan_local_id': session.planLocalId,
-          'plan_server_id': session.planServerId,
-          'plan_name': session.planName,
-          'status': session.status.name,
-          'note': session.note,
-          'started_at': encodeDate(session.startedAt),
-          'finished_at': encodeDate(session.finishedAt),
-          'shared_to_profile': session.sharedToProfile ? 1 : 0,
-          'plan_color_key': session.planColorKey,
-          'plan_icon_key': session.planIconKey,
-          'created_at': old.isEmpty ? now : old.first['created_at'],
-          'updated_at': now,
-          'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(ExerciseDatabase.tableTrainingSessions, {
+        'local_id': session.id,
+        'server_id': serverId ?? session.serverId,
+        'plan_local_id': session.planLocalId,
+        'plan_server_id': session.planServerId,
+        'plan_name': session.planName,
+        'status': session.status.name,
+        'note': session.note,
+        'started_at': encodeDate(session.startedAt),
+        'finished_at': encodeDate(session.finishedAt),
+        'shared_to_profile': session.sharedToProfile ? 1 : 0,
+        'plan_color_key': session.planColorKey,
+        'plan_icon_key': session.planIconKey,
+        'post_title': session.postTitle,
+        'post_photo_url': postPhotoUrl,
+        'created_at': old.isEmpty ? now : old.first['created_at'],
+        'updated_at': now,
+        'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await _replaceChildrenIn(txn, session);
     });
   }
@@ -214,6 +230,11 @@ class TrainingSessionLocalMapper {
       await txn.delete(
         ExerciseDatabase.tableTrainingSessions,
         where: 'local_id = ?',
+        whereArgs: [sessionLocalId],
+      );
+      await txn.delete(
+        ExerciseDatabase.tablePendingPostPhotos,
+        where: 'session_local_id = ?',
         whereArgs: [sessionLocalId],
       );
     });
@@ -277,9 +298,7 @@ class TrainingSessionLocalMapper {
       db,
       ExerciseDatabase.tableTrainingSessionSets,
       column: 'session_exercise_local_id',
-      ids: [
-        for (final old in oldExercises) old['local_id'] as String,
-      ],
+      ids: [for (final old in oldExercises) old['local_id'] as String],
     );
     await db.delete(
       ExerciseDatabase.tableTrainingSessionExercises,

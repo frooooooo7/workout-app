@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
+import '../../../../core/sync/sync_status.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
@@ -15,6 +18,7 @@ import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/training_session_detail_mapper.dart';
 import '../widgets/new_records_banner.dart';
 import '../widgets/session_details/session_muscle_map.dart';
+import '../widgets/workout_summary/share_workout_sheet.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
 import '../widgets/workout_summary/workout_summary_exercise_list.dart';
@@ -28,6 +32,7 @@ class WorkoutSummaryArgs {
     this.repository,
     this.statsRepository,
     this.user,
+    this.pickPhoto,
   });
 
   /// Ukończona sesja — źródło wszystkich metryk na ekranie.
@@ -42,6 +47,9 @@ class WorkoutSummaryArgs {
 
   /// Test seam; domyślnie [ServiceLocator.currentUser].
   final AuthUser? user;
+
+  /// Test seam wyboru zdjęcia w arkuszu udostępniania.
+  final PostPhotoPicker? pickPhoto;
 }
 
 /// Ekran po zakończeniu treningu: potwierdzenie, metryki, decyzja o
@@ -64,6 +72,15 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   WorkoutShareStatus _shareStatus = WorkoutShareStatus.notShared;
   List<PersonalRecord> _records = const [];
 
+  /// Zdjęcie wybrane w arkuszu, jeszcze niewysłane — pokazujemy je od razu.
+  Uint8List? _localPhoto;
+
+  /// Zdjęcie usunięte w arkuszu (serwer może go jeszcze nie wiedzieć).
+  bool _photoRemoved = false;
+
+  /// Post (sesja albo jego zdjęcie) czeka jeszcze w kolejce wysyłki.
+  bool _postQueued = false;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +92,32 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
     unawaited(_loadRecords());
+    ServiceLocator.syncStatus.addListener(_refreshPostQueued);
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.syncStatus.removeListener(_refreshPostQueued);
+    super.dispose();
+  }
+
+  /// Podpowiedź „Offline — opublikujemy…” dotyczy tylko tego posta, nie
+  /// dowolnej innej zmiany czekającej w kolejce.
+  Future<void> _refreshPostQueued() async {
+    if (widget.args == null || _shareStatus != WorkoutShareStatus.shared) {
+      if (_postQueued && mounted) setState(() => _postQueued = false);
+      return;
+    }
+    try {
+      final session = await _repository.getById(_session.id);
+      final photo = await _repository.pendingPostPhoto(_session.id);
+      final queued = (session?.pendingOp != null) || photo is! KeepPostPhoto;
+      if (mounted && queued != _postQueued) {
+        setState(() => _postQueued = queued);
+      }
+    } catch (_) {
+      // Odczyt lokalnej bazy nie może zepsuć ekranu — podpowiedź znika.
+    }
   }
 
   /// Rekordy liczymy z lokalnej historii (offline-first) — bez sieci
@@ -113,6 +156,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
             ? WorkoutShareStatus.shared
             : WorkoutShareStatus.notShared;
       });
+      unawaited(_refreshPostQueued());
       unawaited(_syncAndRefreshProfile());
     } on TrainingSessionDeletedException {
       if (!mounted) return;
@@ -130,6 +174,73 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Nie udało się zapisać zmiany. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openShareSheet({required bool editing}) async {
+    final result = await showShareWorkoutSheet(
+      context,
+      planName: _session.planName,
+      statsLine: postStatsLine(_detail),
+      // Zawsze to, co naprawdę zostanie opublikowane — także po „Cofnij”,
+      // bo tytuł i zdjęcie zostają przy treningu.
+      initialTitle: _session.postTitle,
+      initialBody: _session.note,
+      initialPhotoUrl: _photoRemoved ? null : _session.postPhotoUrl,
+      initialPhotoBytes: _localPhoto,
+      editing: editing,
+      pickPhoto: widget.args?.pickPhoto,
+    );
+    if (!mounted || result == null) return;
+    switch (result) {
+      case PublishPost(:final draft):
+        await _handlePublish(draft);
+      case UnsharePost():
+        await _handleShareChanged(false);
+    }
+  }
+
+  Future<void> _handlePublish(PostDraft draft) async {
+    final previous = _shareStatus;
+    setState(() => _shareStatus = WorkoutShareStatus.saving);
+    try {
+      final updated = await _repository.sharePost(_session.id, draft);
+      if (!mounted) return;
+      setState(() {
+        _session = updated;
+        _shareStatus = WorkoutShareStatus.shared;
+        switch (draft.photo) {
+          case KeepPostPhoto():
+            break;
+          case SetPostPhoto(:final photo):
+            _localPhoto = photo.bytes;
+            _photoRemoved = false;
+          case RemovePostPhoto():
+            _localPhoto = null;
+            _photoRemoved = true;
+        }
+      });
+      unawaited(_refreshPostQueued());
+      unawaited(_syncAndRefreshProfile());
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareStatus = WorkoutShareStatus.notShared);
+      ServiceLocator.notifyTrainingSessionsChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ten trening został usunięty.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _shareStatus = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się udostępnić. Spróbuj ponownie.'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -211,11 +322,23 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                       const SizedBox(height: 12),
                       StaggeredReveal(
                         index: 3,
-                        child: WorkoutShareCard(
-                          status: _shareStatus,
-                          user: _user,
-                          onShare: () => _handleShareChanged(true),
-                          onUnshare: () => _handleShareChanged(false),
+                        child: ValueListenableBuilder<SyncStatus>(
+                          valueListenable: ServiceLocator.syncStatus,
+                          builder: (context, sync, _) => WorkoutShareCard(
+                            status: _shareStatus,
+                            user: _user,
+                            title: _session.postTitle ?? _session.planName,
+                            body: _session.note,
+                            photoBytes: _localPhoto,
+                            photoUrl: _photoRemoved || _localPhoto != null
+                                ? null
+                                : _session.postPhotoUrl,
+                            waitingForNetwork:
+                                _postQueued && sync.phase == SyncPhase.offline,
+                            onShare: () => _openShareSheet(editing: false),
+                            onEdit: () => _openShareSheet(editing: true),
+                            onUnshare: () => _handleShareChanged(false),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),

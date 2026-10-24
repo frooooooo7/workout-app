@@ -5,6 +5,7 @@ import '../../../../core/sync/sync_engine_base.dart';
 import '../../../../core/sync/sync_failure.dart';
 import '../../../library/data/exercise_database.dart';
 import '../../domain/models/training_session.dart';
+import '../pending_post_photo_store.dart';
 import '../training_history_local_cache.dart';
 import '../training_session_local_mapper.dart';
 import '../training_session_remote_data_source.dart';
@@ -76,9 +77,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
   Future<void> pull() => runCoalesced('pull', _pullImpl);
 
   /// Jak [pull], ale najwyżej raz na [maxAge] (odczyty ekranów).
-  Future<void> pullIfDue({
-    Duration maxAge = SyncEngineBase.defaultPullMaxAge,
-  }) {
+  Future<void> pullIfDue({Duration maxAge = SyncEngineBase.defaultPullMaxAge}) {
     return runCoalesced('pull-if-due', () async {
       if (isPullDue(maxAge)) await _pullImpl();
     });
@@ -211,7 +210,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
   Future<void> _flushImpl() async {
     if (isStopped) return;
     final rows = await _pendingRows();
-    if (rows == null || rows.isEmpty) return;
+    if (rows == null) return;
 
     final networkMark = networkFailureMark;
     var changed = false;
@@ -234,9 +233,109 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
       }
       if (networkFailedSince(networkMark)) break;
     }
+    // Zdjęcia postów po sesjach — upload potrzebuje już id sesji z serwera.
+    if (!isStopped && !networkFailedSince(networkMark)) {
+      if (await _flushPostPhotos(networkMark)) changed = true;
+    }
     // Historia interesuje się tylko zakończonymi sesjami — zapis w trakcie
     // treningu nie powinien co chwilę odświeżać list.
     if (changed) notifyDataChanged();
+  }
+
+  /// Wysyła (albo usuwa) zdjęcia postów z kolejki. Zdjęcie sesji, której
+  /// serwer jeszcze nie zna, czeka na kolejny cykl; zdjęcie usuniętej sesji
+  /// znika z kolejki.
+  Future<bool> _flushPostPhotos(int networkMark) async {
+    final List<PendingPostPhoto> pending;
+    try {
+      pending = await _localDb.run(PendingPostPhotoStore.all);
+    } on StateError {
+      return false; /* DB closing */
+    }
+    var changed = false;
+    for (final photo in pending) {
+      if (isStopped) return changed;
+      final localId = photo.sessionLocalId;
+      try {
+        final row = await _localDb.run((db) async {
+          final rows = await db.query(
+            ExerciseDatabase.tableTrainingSessions,
+            columns: ['server_id', 'pending_op'],
+            where: 'local_id = ?',
+            whereArgs: [localId],
+            limit: 1,
+          );
+          return rows.isEmpty ? null : rows.first;
+        });
+        if (row == null || row['pending_op'] == 'delete') {
+          await _localDb.run((db) => PendingPostPhotoStore.remove(db, localId));
+          continue;
+        }
+        final serverId = row['server_id'] as String?;
+        if (serverId == null || row['pending_op'] == 'create') continue;
+
+        final TrainingSession saved;
+        try {
+          if (photo.op == PendingPostPhotoOp.upload) {
+            final bytes = await _localDb.run(
+              (db) => PendingPostPhotoStore.bytesOf(db, localId, photo.version),
+            );
+            if (bytes == null || bytes.isEmpty) {
+              await _localDb.run(
+                (db) => PendingPostPhotoStore.remove(
+                  db,
+                  localId,
+                  onlyVersion: photo.version,
+                ),
+              );
+              continue;
+            }
+            saved = await _remote.uploadPostPhoto(
+              serverId,
+              bytes,
+              photo.filename ?? 'post.jpg',
+            );
+          } else {
+            saved = await _remote.deletePostPhoto(serverId);
+          }
+        } on ApiException catch (e) {
+          final kind = registerFailure(e);
+          if (kind == SyncFailureKind.gone) {
+            await _localDb.run(
+              (db) => PendingPostPhotoStore.remove(db, localId),
+            );
+          } else if (kind == SyncFailureKind.permanent) {
+            await _localDb.run(
+              (db) => PendingPostPhotoStore.markRejected(
+                db,
+                localId,
+                e.message,
+                onlyVersion: photo.version,
+              ),
+            );
+          }
+          if (networkFailedSince(networkMark)) break;
+          continue;
+        }
+        await _localDb.run((db) async {
+          await db.update(
+            ExerciseDatabase.tableTrainingSessions,
+            {'post_photo_url': saved.postPhotoUrl},
+            where: 'local_id = ?',
+            whereArgs: [localId],
+          );
+          await PendingPostPhotoStore.remove(
+            db,
+            localId,
+            onlyVersion: photo.version,
+          );
+        });
+        changed = true;
+      } on StateError {
+        return changed; /* DB closing */
+      }
+    }
+    return changed;
   }
 
   /// `400` (niepoprawne id) / `404` (nigdy nie była nasza) / `410` — na
@@ -414,6 +513,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
         session.copyWith(id: localId, serverId: session.serverId),
         serverId: session.serverId,
         clearPendingOp: true,
+        fromServer: true,
       );
     });
   }
@@ -585,6 +685,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
           session.copyWith(id: localId, serverId: serverId),
           serverId: serverId,
           clearPendingOp: true,
+          fromServer: true,
         );
         await txn.update(
           ExerciseDatabase.tableTrainingSessions,
@@ -679,4 +780,3 @@ class _SessionPayload {
   final int? updatedAt;
   final TrainingSession session;
 }
-

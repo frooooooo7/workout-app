@@ -189,6 +189,8 @@ class TrainingSession {
     this.pendingOp,
     this.planColorKey,
     this.planIconKey,
+    this.postTitle,
+    this.postPhotoUrl,
   }) : id = id ?? const Uuid().v4(),
        startedAt = startedAt ?? DateTime.now().toUtc();
 
@@ -213,6 +215,14 @@ class TrainingSession {
   final String? planColorKey;
   final String? planIconKey;
 
+  /// Własny tytuł posta w feedzie; `null` → nazwa treningu. Opis posta to
+  /// [note].
+  final String? postTitle;
+
+  /// Zdjęcie posta na serwerze (ścieżka `/uploads/...`). Zdjęcie wybrane
+  /// offline czeka osobno, aż sesja i ono zostaną wysłane.
+  final String? postPhotoUrl;
+
   bool get isActive => status == TrainingSessionStatus.active;
 
   TrainingSession copyWith({
@@ -232,6 +242,11 @@ class TrainingSession {
     bool clearPendingOp = false,
     String? planColorKey,
     String? planIconKey,
+    String? postTitle,
+    String? postPhotoUrl,
+    bool clearNote = false,
+    bool clearPostTitle = false,
+    bool clearPostPhotoUrl = false,
   }) {
     return TrainingSession(
       id: id ?? this.id,
@@ -240,7 +255,7 @@ class TrainingSession {
       planServerId: planServerId ?? this.planServerId,
       planName: planName ?? this.planName,
       status: status ?? this.status,
-      note: note ?? this.note,
+      note: clearNote ? null : (note ?? this.note),
       startedAt: startedAt ?? this.startedAt,
       finishedAt: clearFinishedAt ? null : (finishedAt ?? this.finishedAt),
       sharedToProfile: sharedToProfile ?? this.sharedToProfile,
@@ -248,6 +263,10 @@ class TrainingSession {
       pendingOp: clearPendingOp ? null : (pendingOp ?? this.pendingOp),
       planColorKey: planColorKey ?? this.planColorKey,
       planIconKey: planIconKey ?? this.planIconKey,
+      postTitle: clearPostTitle ? null : (postTitle ?? this.postTitle),
+      postPhotoUrl: clearPostPhotoUrl
+          ? null
+          : (postPhotoUrl ?? this.postPhotoUrl),
     );
   }
 

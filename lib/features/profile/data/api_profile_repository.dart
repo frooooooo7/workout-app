@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:mime/mime.dart';
-
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/follow_result.dart';
 import '../domain/models/following_user.dart';
 import '../domain/models/profile_details.dart';
@@ -94,12 +91,11 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
-    final safeName = _normalizeImageFilename(filename);
-    final file = http.MultipartFile.fromBytes(
+    final file = imageMultipartFile(
       'avatar',
       bytes,
-      filename: safeName,
-      contentType: _mediaTypeForImage(safeName),
+      filename,
+      fallbackName: 'avatar.jpg',
     );
     final data = await _api.postMultipart(
       '/profile/me/avatar',
@@ -253,33 +249,5 @@ class ApiProfileRepository implements ProfileRepository {
       isFollowing: isFollowing,
       followersCount: followersCount.toInt(),
     );
-  }
-
-  /// Web często podaje nazwę `blob` bez rozszerzenia — backend i wykrywanie
-  /// MIME potrzebują prawdziwego rozszerzenia.
-  static String _normalizeImageFilename(String filename) {
-    var name = filename.trim();
-    if (name.isEmpty || name.toLowerCase() == 'blob') {
-      name = 'avatar.jpg';
-    }
-    final lower = name.toLowerCase();
-    final hasExt =
-        lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp');
-    if (!hasExt) {
-      name = '$name.jpg';
-    }
-    return name;
-  }
-
-  static MediaType _mediaTypeForImage(String filename) {
-    final typed = lookupMimeType(filename);
-    if (typed != null) return MediaType.parse(typed);
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return MediaType('image', 'png');
-    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
-    return MediaType('image', 'jpeg');
   }
 }

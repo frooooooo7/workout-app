@@ -11,13 +11,20 @@ import 'session_status_chip.dart';
 /// Sekcje poniżej (mapa mięśni, oś czasu, ćwiczenia) celowo ich nie powtarzają:
 /// każda pokazuje wyłącznie to, czego nagłówek nie umie pokazać.
 class SessionSummaryHeader extends StatelessWidget {
-  const SessionSummaryHeader({super.key, required this.detail});
+  const SessionSummaryHeader({
+    super.key,
+    required this.detail,
+    this.showNote = true,
+  });
 
   final TrainingSessionDetail detail;
 
+  /// `false`, gdy notatka stoi już wyżej jako opis posta.
+  final bool showNote;
+
   @override
   Widget build(BuildContext context) {
-    final note = detail.note?.trim();
+    final note = showNote ? detail.note?.trim() : null;
 
     return Container(
       width: double.infinity,
@@ -139,4 +146,3 @@ class SessionSummaryHeader extends StatelessWidget {
     );
   }
 }
-
