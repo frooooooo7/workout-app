@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
 import '../widgets/session_details/session_timeline.dart';
 import '../widgets/workout_summary/share_workout_sheet.dart';
+import '../widgets/workout_summary/workout_share_card.dart';
 import 'ongoing_workout_screen.dart';
 
 /// Nawigacja z ekranu szczegółów (test seam dla `context.push`).
@@ -81,6 +83,10 @@ class _TrainingSessionDetailsScreenState
   bool _shareSaving = false;
   bool _sharedToProfile = false;
 
+  /// Zdjęcie posta czekające w kolejce (pokazujemy je, zanim dotrze na
+  /// serwer) albo czekające usunięcie.
+  PostPhotoChange _pendingPhoto = const KeepPostPhoto();
+
   /// Trwa usuwanie / przygotowanie powtórzenia — menu jest zablokowane.
   bool _busy = false;
 
@@ -133,7 +139,11 @@ class _TrainingSessionDetailsScreenState
     try {
       final detail = await widget.repository.getSessionDetail(widget.sessionId);
       final local = await _sessionRepository?.getById(widget.sessionId);
+      final pendingPhoto =
+          await _sessionRepository?.pendingPostPhoto(widget.sessionId) ??
+          const KeepPostPhoto();
       if (!mounted) return;
+      _pendingPhoto = pendingPhoto;
       final current = _detail;
       // Ciche przeładowanie może trafić na starszy cache — pokazujemy tylko
       // nowszą wersję (i nie restartujemy animacji bez potrzeby).
@@ -224,6 +234,7 @@ class _TrainingSessionDetailsScreenState
       setState(() {
         _sharedToProfile = true;
         _shareSaving = false;
+        if (draft.photo is! KeepPostPhoto) _pendingPhoto = draft.photo;
         // Ciche przeładowanie pomija wersję bez nowszego `updatedAt` (np.
         // niewysłana sesja), więc nowa treść trafia na ekran od razu.
         _detail = _detail?.withPost(
@@ -300,6 +311,34 @@ class _TrainingSessionDetailsScreenState
         ),
       );
     }
+  }
+
+  /// Podgląd opublikowanego posta — ta sama karta co na podsumowaniu.
+  Widget _buildPostCard() {
+    final detail = _detail!;
+    final pending = _pendingPhoto;
+    final Uint8List? bytes = pending is SetPostPhoto
+        ? pending.photo.bytes
+        : null;
+    final url = pending is KeepPostPhoto ? detail.postPhotoUrl : null;
+    return WorkoutShareCard(
+      key: const ValueKey('session-post-card'),
+      status: _shareSaving
+          ? WorkoutShareStatus.saving
+          : WorkoutShareStatus.shared,
+      title: detail.postTitle ?? detail.plan.name,
+      body: detail.note,
+      photoBytes: bytes,
+      photoUrl: url,
+      onShare: _onSharePressed,
+      onEdit: _onSharePressed,
+      onUnshare: () {
+        final repository = _sessionRepository;
+        if (repository != null && !_shareSaving) {
+          unawaited(_setShared(repository, false));
+        }
+      },
+    );
   }
 
   Future<void> _syncAndRefreshProfile() async {
@@ -657,7 +696,10 @@ class _TrainingSessionDetailsScreenState
                     )
                   : _error != null
                   ? _ErrorState(message: _error!, onRetry: _load)
-                  : _DetailContent(detail: _detail!),
+                  : _DetailContent(
+                      detail: _detail!,
+                      postCard: _sharedToProfile ? _buildPostCard() : null,
+                    ),
             ),
           ],
         ),
@@ -667,9 +709,13 @@ class _TrainingSessionDetailsScreenState
 }
 
 class _DetailContent extends StatefulWidget {
-  const _DetailContent({required this.detail});
+  const _DetailContent({required this.detail, this.postCard});
 
   final TrainingSessionDetail detail;
+
+  /// Podgląd posta (gdy trening jest udostępniony) — opis jest wtedy w nim,
+  /// więc nagłówek nie powtarza notatki.
+  final Widget? postCard;
 
   @override
   State<_DetailContent> createState() => _DetailContentState();
@@ -732,8 +778,15 @@ class _DetailContentState extends State<_DetailContent> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
-        SessionSummaryHeader(detail: widget.detail),
+        SessionSummaryHeader(
+          detail: widget.detail,
+          showNote: widget.postCard == null,
+        ),
         const SizedBox(height: 12),
+        if (widget.postCard != null) ...[
+          widget.postCard!,
+          const SizedBox(height: 12),
+        ],
         SessionMuscleMap(detail: widget.detail),
         const SizedBox(height: 12),
         SessionTimeline(detail: widget.detail, onExerciseTap: _jumpToExercise),

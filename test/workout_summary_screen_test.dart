@@ -278,6 +278,80 @@ void main() {
     expect(repository.postDrafts.last.photo, isA<RemovePostPhoto>());
   });
 
+  testWidgets('closing a filled sheet asks before dropping the draft', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await openShareSheet(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('share-sheet-title')),
+      'Szkic',
+    );
+    await tester.pumpAndSettle();
+
+    final close = find.descendant(
+      of: find.byType(ShareWorkoutSheet),
+      matching: find.byTooltip('Zamknij'),
+    );
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(find.text('Odrzucić post?'), findsOneWidget);
+
+    await tester.tap(find.text('Anuluj'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShareWorkoutSheet), findsOneWidget);
+    expect(find.text('Szkic'), findsOneWidget);
+
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Odrzuć'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShareWorkoutSheet), findsNothing);
+    expect(repository.postDrafts, isEmpty);
+  });
+
+  testWidgets('an untouched sheet closes without asking', (tester) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+    await openShareSheet(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ShareWorkoutSheet),
+        matching: find.byTooltip('Zamknij'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Odrzucić post?'), findsNothing);
+    expect(find.byType(ShareWorkoutSheet), findsNothing);
+  });
+
+  testWidgets('the picked photo is labelled with the workout', (tester) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+    final photo = PickedPostPhoto(
+      bytes: Uint8List.fromList(_onePixelPng),
+      filename: 'gym.png',
+    );
+
+    await tester.pumpWidget(
+      buildScreen(repository, pickPhoto: (context, source) async => photo),
+    );
+    await tester.pumpAndSettle();
+    await openShareSheet(tester);
+    await tester.tap(find.byKey(const ValueKey('share-sheet-gallery')));
+    await tester.pumpAndSettle();
+
+    final label = tester.widget<Text>(
+      find.byKey(const ValueKey('share-sheet-photo-label')),
+    );
+    expect(label.data, startsWith('${repository.session.planName} · '));
+  });
+
   testWidgets('starts in shared state when session is already shared', (
     tester,
   ) async {

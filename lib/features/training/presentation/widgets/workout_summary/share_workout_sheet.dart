@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/widgets/app_action_sheet.dart';
 import '../../../../../core/utils/duration_formatter.dart';
 import '../../../../../core/utils/polish_plural.dart';
 import '../../../../feed/presentation/widgets/post_photo.dart';
@@ -15,7 +19,10 @@ String postStatsLine(TrainingSessionDetail detail) {
   final sets = detail.completedSetsCount;
   final setsWord = polishPlural(sets, 'seria', 'serie', 'serii');
   final parts = <String>[
-    formatDuration(detail.durationSec),
+    // Trening krótszy niż minuta to nie „0 min”.
+    detail.durationSec > 0 && detail.durationSec < 60
+        ? '< 1 min'
+        : formatDuration(detail.durationSec),
     if (detail.totalVolumeKg > 0) formatVolumeKg(detail.totalVolumeKg),
     '$sets $setsWord',
   ];
@@ -61,9 +68,13 @@ Future<ShareSheetResult?> showShareWorkoutSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    backgroundColor: const Color(0xFF111620),
+    // Przeciąganie w dół obsługuje sam arkusz — wbudowane zamyka go bez
+    // pytania i gubi wpisany post.
+    enableDrag: false,
+    backgroundColor: AppColors.surface,
+    barrierColor: Colors.black54,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
     ),
     builder: (context) => ShareWorkoutSheet(
       planName: planName,
@@ -168,6 +179,39 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
 
   void _refresh() => setState(() {});
 
+  /// Czy użytkownik coś zmienił — wtedy zamknięcie pyta o potwierdzenie.
+  bool get _dirty =>
+      _picked != null ||
+      _removed ||
+      _titleController.text != (widget.initialTitle ?? '') ||
+      _bodyController.text != (widget.initialBody ?? '');
+
+  bool _confirming = false;
+
+  /// Zamknięcie arkusza (X, tło, wstecz, przeciągnięcie w dół).
+  Future<void> _requestClose() async {
+    if (!_dirty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (_confirming) return;
+    _confirming = true;
+    final discard = await showAppConfirmDialog(
+      context,
+      title: widget.editing ? 'Odrzucić zmiany?' : 'Odrzucić post?',
+      message: widget.editing
+          ? 'Zmiany w poście nie zostaną zapisane.'
+          : 'Wpisany tytuł, opis i zdjęcie nie zostaną zapisane.',
+      confirmLabel: 'Odrzuć',
+    );
+    _confirming = false;
+    if (discard && mounted) Navigator.of(context).pop();
+  }
+
+  void _onHandleDragEnd(DragEndDetails details) {
+    if ((details.primaryVelocity ?? 0) > 300) unawaited(_requestClose());
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -229,6 +273,7 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
   }
 
   void _publish() {
+    unawaited(HapticFeedback.lightImpact());
     Navigator.of(context).pop(
       PublishPost(
         PostDraft(
@@ -245,160 +290,180 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final canUseCamera = ImagePicker().supportsImageSource(ImageSource.camera);
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A3344),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.editing ? 'Edytuj post' : 'Udostępnij trening',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ),
-                _SquareIconButton(
-                  icon: Icons.close_rounded,
-                  tooltip: 'Zamknij',
-                  onTap: () => Navigator.of(context).maybePop(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: _showsPhoto
-                  ? _PhotoPreview(
-                      key: const ValueKey('share-sheet-photo'),
-                      bytes: _picked?.bytes ?? widget.initialPhotoBytes,
-                      url: _picked == null ? widget.initialPhotoUrl : null,
-                      onChange: _changePhoto,
-                      onRemove: _removePhoto,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _WorkoutMini(
-                          planName: widget.planName,
-                          statsLine: widget.statsLine,
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_requestClose());
+      },
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragEnd: _onHandleDragEnd,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
-                        const SizedBox(height: 14),
-                        _PhotoSlot(
-                          canUseCamera: canUseCamera,
-                          onCamera: () => _pick(ImageSource.camera),
-                          onGallery: () => _pick(ImageSource.gallery),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.editing
+                                ? 'Edytuj post'
+                                : 'Udostępnij trening',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                        ),
+                        _SquareIconButton(
+                          icon: Icons.close_rounded,
+                          tooltip: 'Zamknij',
+                          onTap: _requestClose,
                         ),
                       ],
                     ),
-            ),
-            const SizedBox(height: 14),
-            _FieldLabel(
-              label: 'Tytuł',
-              trailing: _titleController.text.isEmpty
-                  ? 'opcjonalnie'
-                  : '${postTitleLength(_titleController.text)}/$postTitleMaxLength',
-            ),
-            _PostField(
-              key: const ValueKey('share-sheet-title'),
-              controller: _titleController,
-              hint: widget.planName,
-              maxLength: postTitleMaxLength,
-              measure: postTitleLength,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            _FieldLabel(
-              label: 'Opis',
-              trailing: _bodyController.text.isEmpty
-                  ? 'opcjonalnie'
-                  : '${postBodyLength(_bodyController.text)}/$postBodyMaxLength',
-            ),
-            _PostField(
-              key: const ValueKey('share-sheet-body'),
-              controller: _bodyController,
-              hint: 'Jak poszło? Napisz coś obserwującym…',
-              maxLength: postBodyMaxLength,
-              measure: postBodyLength,
-              minLines: 3,
-              maxLines: 6,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                key: const ValueKey('share-sheet-publish'),
-                onPressed: _publish,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _showsPhoto
+                    ? _PhotoPreview(
+                        key: const ValueKey('share-sheet-photo'),
+                        bytes: _picked?.bytes ?? widget.initialPhotoBytes,
+                        url: _picked == null ? widget.initialPhotoUrl : null,
+                        planName: widget.planName,
+                        statsLine: widget.statsLine,
+                        onChange: _changePhoto,
+                        onRemove: _removePhoto,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _WorkoutMini(
+                            planName: widget.planName,
+                            statsLine: widget.statsLine,
+                          ),
+                          const SizedBox(height: 14),
+                          _PhotoSlot(
+                            canUseCamera: canUseCamera,
+                            onCamera: () => _pick(ImageSource.camera),
+                            onGallery: () => _pick(ImageSource.gallery),
+                          ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 14),
+              _FieldLabel(
+                label: 'Tytuł',
+                trailing: _titleController.text.isEmpty
+                    ? 'opcjonalnie'
+                    : '${postTitleLength(_titleController.text)}/$postTitleMaxLength',
+              ),
+              _PostField(
+                key: const ValueKey('share-sheet-title'),
+                controller: _titleController,
+                hint: widget.planName,
+                maxLength: postTitleMaxLength,
+                measure: postTitleLength,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              _FieldLabel(
+                label: 'Opis',
+                trailing: _bodyController.text.isEmpty
+                    ? 'opcjonalnie'
+                    : '${postBodyLength(_bodyController.text)}/$postBodyMaxLength',
+              ),
+              _PostField(
+                key: const ValueKey('share-sheet-body'),
+                controller: _bodyController,
+                hint: 'Jak poszło? Napisz coś obserwującym…',
+                maxLength: postBodyMaxLength,
+                measure: postBodyLength,
+                minLines: 3,
+                maxLines: 6,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 52,
+                child: FilledButton.icon(
+                  key: const ValueKey('share-sheet-publish'),
+                  onPressed: _publish,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                ),
-                icon: Icon(
-                  widget.editing
-                      ? Icons.check_rounded
-                      : Icons.arrow_upward_rounded,
-                  size: 20,
-                ),
-                label: Text(
-                  widget.editing ? 'Zapisz' : 'Opublikuj',
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w800,
+                  icon: Icon(
+                    widget.editing
+                        ? Icons.check_rounded
+                        : Icons.arrow_upward_rounded,
+                    size: 20,
+                  ),
+                  label: Text(
+                    widget.editing ? 'Zapisz' : 'Opublikuj',
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            if (widget.editing)
-              TextButton(
-                key: const ValueKey('share-sheet-unshare'),
-                onPressed: () => Navigator.of(context).pop(const UnsharePost()),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                ),
-                child: const Text(
-                  'Cofnij udostępnienie',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              )
-            else
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  'Możesz to później zmienić w szczegółach treningu',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: 8),
+              if (widget.editing)
+                TextButton(
+                  key: const ValueKey('share-sheet-unshare'),
+                  onPressed: () =>
+                      Navigator.of(context).pop(const UnsharePost()),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                  ),
+                  child: const Text(
+                    'Cofnij udostępnienie',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Możesz to później zmienić w szczegółach treningu',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -416,7 +481,7 @@ class _WorkoutMini extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.tile,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
@@ -483,7 +548,7 @@ class _PhotoSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _DashedBorderPainter(color: const Color(0xFF2E3A52), radius: 18),
+      painter: _DashedBorderPainter(color: AppColors.borderStrong, radius: 18),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
         decoration: BoxDecoration(
@@ -493,7 +558,7 @@ class _PhotoSlot extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               AppColors.primary.withValues(alpha: 0.10),
-              AppColors.surface.withValues(alpha: 0.6),
+              AppColors.tile.withValues(alpha: 0.6),
             ],
           ),
         ),
@@ -559,12 +624,16 @@ class _PhotoPreview extends StatelessWidget {
     super.key,
     required this.bytes,
     required this.url,
+    required this.planName,
+    required this.statsLine,
     required this.onChange,
     required this.onRemove,
   });
 
   final Uint8List? bytes;
   final String? url;
+  final String planName;
+  final String statsLine;
   final VoidCallback onChange;
   final VoidCallback onRemove;
 
@@ -577,6 +646,54 @@ class _PhotoPreview extends StatelessWidget {
           url: url,
           aspectRatio: 5 / 4,
           expandable: false,
+        ),
+        // Mini-karta treningu znika przy zdjęciu, więc jego nazwa i liczby
+        // lądują na dole zdjęcia — widać, co się udostępnia.
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 28, 14, 12),
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(18),
+                ),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0),
+                    Colors.black.withValues(alpha: 0.72),
+                  ],
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.fitness_center_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      '$planName · $statsLine',
+                      key: const ValueKey('share-sheet-photo-label'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
         Positioned(
           top: 10,
@@ -682,7 +799,7 @@ class _PostField extends StatelessWidget {
         hintText: hint,
         hintStyle: const TextStyle(color: AppColors.textMuted),
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.background,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 13,
@@ -719,7 +836,7 @@ class _PillButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.iconOnTile,
         backgroundColor: AppColors.tile,
-        minimumSize: const Size(0, 36),
+        minimumSize: const Size(0, 44),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         side: const BorderSide(color: AppColors.borderStrong),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
@@ -757,13 +874,15 @@ class _GlassButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: SizedBox(
-          height: 34,
+          height: 40,
+          width: text == null ? 40 : null,
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: text == null ? 8 : 10),
+            padding: EdgeInsets.symmetric(horizontal: text == null ? 0 : 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 17, color: Colors.white),
+                Icon(icon, size: 18, color: Colors.white),
                 if (text != null) ...[
                   const SizedBox(width: 5),
                   Text(

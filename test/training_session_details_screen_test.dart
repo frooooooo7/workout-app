@@ -9,6 +9,7 @@ import 'package:gym/features/training/domain/repositories/training_history_repos
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
 import 'package:gym/features/training/presentation/screens/training_session_details_screen.dart';
+import 'package:gym/features/training/presentation/widgets/workout_summary/share_workout_sheet.dart';
 
 void main() {
   const sessionId = 'session-1';
@@ -126,7 +127,13 @@ void main() {
       find.byKey(const ValueKey('session-details-share-button')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Edytuj post'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ShareWorkoutSheet),
+        matching: find.text('Edytuj post'),
+      ),
+      findsOneWidget,
+    );
     final unshare = find.byKey(const ValueKey('share-sheet-unshare'));
     await tester.ensureVisible(unshare);
     await tester.tap(unshare);
@@ -136,6 +143,27 @@ void main() {
     expect(sessions.session.sharedToProfile, isFalse);
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
     expect(find.text('Usunięto trening z profilu'), findsOneWidget);
+  });
+
+  testWidgets('a shared session shows its post instead of the bare note', (
+    tester,
+  ) async {
+    final history = _FakeHistoryRepository(_detail(sharedToProfile: true));
+    final sessions = _FakeSessionRepository(_completed(sharedToProfile: true));
+
+    await tester.pumpWidget(buildScreen(history: history, sessions: sessions));
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('session-post-card'));
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.text('Udostępniono na profilu')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('workout-share-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShareWorkoutSheet), findsOneWidget);
   });
 
   testWidgets('prefers local shared flag over stale history detail', (
