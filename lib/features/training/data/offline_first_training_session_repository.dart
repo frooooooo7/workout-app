@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:typed_data';
+
+import 'package:sqflite/sqflite.dart' show Database;
 
 import '../../../core/network/api_client.dart';
 import '../../../core/sync/sync_failure.dart';
 import '../../library/data/exercise_database.dart';
 import '../domain/models/custom_training_plan.dart';
+import '../domain/models/post_draft.dart';
 import '../domain/models/training_session.dart';
 import '../domain/repositories/training_session_repository.dart';
 import '../domain/services/repeat_training_session.dart';
+import 'pending_post_photo_store.dart';
 import 'sync/training_session_sync_engine.dart';
 import 'training_history_local_cache.dart';
 import 'training_session_local_mapper.dart';
@@ -289,6 +294,68 @@ class OfflineFirstTrainingSessionRepository
   }
 
   @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) async {
+    final title = draft.cleanTitle;
+    final body = draft.cleanBody;
+    final row = await _findRow(sessionId);
+    if (row != null) {
+      final localId = row['local_id'] as String;
+      final updated = await _updateSession(
+        row,
+        (current) => current.copyWith(
+          sharedToProfile: true,
+          postTitle: title,
+          clearPostTitle: title == null,
+          note: body,
+          clearNote: body == null,
+        ),
+        beforeSync: (db) => PendingPostPhotoStore.put(db, localId, draft.photo),
+      );
+      return updated;
+    }
+    if (await _isPendingDelete(sessionId)) {
+      throw TrainingSessionDeletedException(sessionId);
+    }
+    // Sesja znana tylko z serwera (np. historia po reinstalacji) — wprost
+    // przez API, więc wymaga sieci.
+    final remote = _remote;
+    if (remote == null) throw StateError('Training session not found');
+    try {
+      var session = await remote.sharePost(sessionId, title: title, body: body);
+      switch (draft.photo) {
+        case KeepPostPhoto():
+          break;
+        case SetPostPhoto(:final photo):
+          session = await remote.uploadPostPhoto(
+            sessionId,
+            photo.bytes,
+            photo.filename,
+          );
+        case RemovePostPhoto():
+          session = await remote.deletePostPhoto(sessionId);
+      }
+      return session;
+    } on ApiException catch (e) {
+      if (!isGoneFailure(e)) rethrow;
+      await _historyCache.removeSessions({sessionId});
+      throw TrainingSessionDeletedException(sessionId);
+    }
+  }
+
+  @override
+  Future<Uint8List?> pendingPostPhoto(String sessionId) async {
+    final row = await _findRow(sessionId);
+    if (row == null) return null;
+    final pending = await _localDb.run(
+      (db) => PendingPostPhotoStore.find(db, row['local_id'] as String),
+    );
+    if (pending == null || pending.op != PendingPostPhotoOp.upload) {
+      return null;
+    }
+    return pending.bytes;
+  }
+
+  @override
   Future<TrainingSession> cancel(String sessionId) async {
     final row = await _findRow(sessionId);
     if (row == null) throw StateError('Training session not found');
@@ -417,13 +484,10 @@ class OfflineFirstTrainingSessionRepository
         // Ćwiczenia i serie znikają od razu; wiersz sesji zostaje jako
         // nagrobek do wysłania (`DELETE /:id` albo po clientId).
         await TrainingSessionLocalMapper.deleteChildren(txn, localId);
+        await PendingPostPhotoStore.remove(txn, localId);
         await txn.update(
           ExerciseDatabase.tableTrainingSessions,
-          {
-            'pending_op': _pendingDelete,
-            'sync_error': null,
-            'updated_at': now,
-          },
+          {'pending_op': _pendingDelete, 'sync_error': null, 'updated_at': now},
           where: 'local_id = ?',
           whereArgs: [localId],
         );
@@ -438,8 +502,9 @@ class OfflineFirstTrainingSessionRepository
   /// `pending_op`, a potem planuje synchronizację.
   Future<TrainingSession> _updateSession(
     Map<String, dynamic> row,
-    TrainingSession Function(TrainingSession current) mutate,
-  ) async {
+    TrainingSession Function(TrainingSession current) mutate, {
+    Future<void> Function(Database db)? beforeSync,
+  }) async {
     late TrainingSession updated;
     await _localDb.run((db) async {
       final current = await TrainingSessionLocalMapper.fromDb(db, row);
@@ -462,6 +527,7 @@ class OfflineFirstTrainingSessionRepository
         serverId: row['server_id'] as String?,
         pendingOp: nextPending,
       );
+      if (beforeSync != null) await beforeSync(db);
     });
     _scheduleSync();
     return updated;

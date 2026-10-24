@@ -87,6 +87,8 @@ class TrainingHistoryRemoteDataSource {
       }).toList(),
       'updatedAt': detail.updatedAt.toUtc().toIso8601String(),
       'sharedToProfile': detail.sharedToProfile,
+      'postTitle': detail.postTitle,
+      'postPhotoUrl': detail.postPhotoUrl,
     };
   }
 
@@ -165,6 +167,8 @@ class TrainingHistoryRemoteDataSource {
           DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
       sharedToProfile: json['sharedToProfile'] as bool? ?? false,
+      postTitle: json['postTitle'] as String?,
+      postPhotoUrl: json['postPhotoUrl'] as String?,
     );
   }
 

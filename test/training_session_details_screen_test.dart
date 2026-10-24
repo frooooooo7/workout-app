@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/data/offline_first_training_session_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
@@ -75,7 +78,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('share button publishes session to profile', (tester) async {
+  Future<void> publishFromSheet(WidgetTester tester) async {
+    final button = find.byKey(const ValueKey('share-sheet-publish'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('share button opens the post sheet and publishes', (
+    tester,
+  ) async {
     final history = _FakeHistoryRepository(_detail());
     final sessions = _FakeSessionRepository(_completed());
 
@@ -84,10 +96,18 @@ void main() {
 
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    expect(find.text('Udostępnij trening'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('share-sheet-title')),
+      'Mocny push',
+    );
+    await publishFromSheet(tester);
 
-    expect(sessions.sharedCalls, [(sessionId, true)]);
+    expect(sessions.postDrafts.single.cleanTitle, 'Mocny push');
     expect(sessions.session.sharedToProfile, isTrue);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(find.text('Trening pojawił się na Twoim profilu'), findsOneWidget);
@@ -104,7 +124,14 @@ void main() {
 
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Edytuj post'), findsOneWidget);
+    final unshare = find.byKey(const ValueKey('share-sheet-unshare'));
+    await tester.ensureVisible(unshare);
+    await tester.tap(unshare);
     await tester.pumpAndSettle();
 
     expect(sessions.sharedCalls, [(sessionId, false)]);
@@ -152,11 +179,14 @@ void main() {
     await tester.pumpWidget(buildScreen(history: history, sessions: sessions));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    await publishFromSheet(tester);
 
     expect(
-      find.text('Nie udało się zapisać zmiany. Spróbuj ponownie.'),
+      find.text('Nie udało się zapisać posta. Spróbuj ponownie.'),
       findsOneWidget,
     );
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
@@ -223,8 +253,11 @@ void main() {
       sessions: sessions,
       onSessionsChanged: () => changes++,
     );
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    await publishFromSheet(tester);
 
     expect(results, [true]);
     expect(changes, 1);
@@ -469,4 +502,24 @@ class _FakeSessionRepository implements TrainingSessionRepository {
     session = session.copyWith(sharedToProfile: shared);
     return session;
   }
+
+  final List<PostDraft> postDrafts = [];
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) async {
+    postDrafts.add(draft);
+    if (shareDeleted) throw TrainingSessionDeletedException(sessionId);
+    if (failShare) throw StateError('offline');
+    session = session.copyWith(
+      sharedToProfile: true,
+      postTitle: draft.cleanTitle,
+      clearPostTitle: draft.cleanTitle == null,
+      note: draft.cleanBody,
+      clearNote: draft.cleanBody == null,
+    );
+    return session;
+  }
+
+  @override
+  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
 }

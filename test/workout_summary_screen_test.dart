@@ -1,11 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/workout_summary_screen.dart';
+import 'package:gym/features/training/presentation/widgets/workout_summary/share_workout_sheet.dart';
 import 'package:gym/features/training/presentation/widgets/workout_summary/workout_share_card.dart';
 
 void main() {
@@ -28,6 +32,7 @@ void main() {
   Widget buildScreen(
     _FakeTrainingSessionRepository repository, {
     List<TrainingSession> history = const [],
+    PostPhotoPicker? pickPhoto,
   }) {
     return MaterialApp(
       home: WorkoutSummaryScreen(
@@ -36,9 +41,26 @@ void main() {
           repository: repository,
           statsRepository: _FakeStatsRepository(history),
           user: user,
+          pickPhoto: pickPhoto,
         ),
       ),
     );
+  }
+
+  /// Otwiera arkusz „Udostępnij trening” z karty w podsumowaniu.
+  Future<void> openShareSheet(WidgetTester tester) async {
+    final shareButton = find.byKey(const ValueKey('workout-share-button'));
+    await scrollTo(tester, shareButton);
+    await tester.tap(shareButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Udostępnij trening'), findsOneWidget);
+  }
+
+  Future<void> publish(WidgetTester tester) async {
+    final button = find.byKey(const ValueKey('share-sheet-publish'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('shows completion hero and session metrics', (tester) async {
@@ -143,33 +165,117 @@ void main() {
     expect(find.byKey(const ValueKey('new-records-banner')), findsNothing);
   });
 
-  testWidgets('share button persists flag and switches card to shared state', (
+  testWidgets(
+    'share sheet publishes title and body and the card previews the post',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_completedSession());
+
+      await tester.pumpWidget(buildScreen(repository));
+      await tester.pumpAndSettle();
+      await openShareSheet(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('share-sheet-title')),
+        '  Nowy rekord  ',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('share-sheet-body')),
+        'W końcu 120 kg na 5!',
+      );
+      await publish(tester);
+
+      final draft = repository.postDrafts.single;
+      expect(draft.cleanTitle, 'Nowy rekord');
+      expect(draft.cleanBody, 'W końcu 120 kg na 5!');
+      expect(draft.photo, isA<KeepPostPhoto>());
+      expect(repository.session.sharedToProfile, isTrue);
+
+      await scrollTo(
+        tester,
+        find.byKey(const ValueKey('workout-share-post-preview')),
+      );
+      expect(find.text('Udostępniono na profilu'), findsOneWidget);
+      expect(find.text('Nowy rekord'), findsOneWidget);
+      expect(find.text('W końcu 120 kg na 5!'), findsOneWidget);
+      expect(find.byKey(const ValueKey('workout-share-button')), findsNothing);
+
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+
+      expect(repository.sharedCalls.last, (repository.session.id, false));
+      expect(repository.session.sharedToProfile, isFalse);
+      expect(
+        find.byKey(const ValueKey('workout-share-button')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('empty sheet publishes with the workout name as the title', (
     tester,
   ) async {
     final repository = _FakeTrainingSessionRepository(_completedSession());
 
     await tester.pumpWidget(buildScreen(repository));
     await tester.pumpAndSettle();
+    await openShareSheet(tester);
+    await publish(tester);
 
-    final shareButton = find.byKey(const ValueKey('workout-share-button'));
-    await scrollTo(tester, shareButton);
-    expect(find.text('Udostępnij na profilu'), findsOneWidget);
-
-    await tester.tap(shareButton);
-    await tester.pumpAndSettle();
-
-    expect(repository.sharedCalls, [(repository.session.id, true)]);
+    final draft = repository.postDrafts.single;
+    expect(draft.cleanTitle, isNull);
+    expect(draft.cleanBody, isNull);
     expect(repository.session.sharedToProfile, isTrue);
-    expect(find.text('Udostępniono na profilu'), findsOneWidget);
-    expect(find.text('Widoczny na profilu'), findsOneWidget);
-    expect(find.byKey(const ValueKey('workout-share-button')), findsNothing);
+    await scrollTo(
+      tester,
+      find.byKey(const ValueKey('workout-share-post-preview')),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('workout-share-post-preview')),
+        matching: find.text(repository.session.planName),
+      ),
+      findsOneWidget,
+    );
+  });
 
-    await tester.tap(find.text('Cofnij'));
+  testWidgets('a picked photo goes into the draft and can be edited later', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+    final photo = PickedPostPhoto(
+      bytes: Uint8List.fromList(_onePixelPng),
+      filename: 'gym.png',
+    );
+
+    await tester.pumpWidget(
+      buildScreen(repository, pickPhoto: (context, source) async => photo),
+    );
     await tester.pumpAndSettle();
+    await openShareSheet(tester);
 
-    expect(repository.sharedCalls.last, (repository.session.id, false));
-    expect(repository.session.sharedToProfile, isFalse);
-    expect(find.byKey(const ValueKey('workout-share-button')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('share-sheet-gallery')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('share-sheet-photo')), findsOneWidget);
+
+    await publish(tester);
+    final draft = repository.postDrafts.single;
+    expect(draft.photo, isA<SetPostPhoto>());
+    expect((draft.photo as SetPostPhoto).photo.filename, 'gym.png');
+
+    // Edycja: zdjęcie i tytuł są już w arkuszu, usunięcie zdjęcia trafia do
+    // kolejnego szkicu.
+    final edit = find.byKey(const ValueKey('workout-share-edit'));
+    await scrollTo(tester, edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    expect(find.text('Edytuj post'), findsWidgets);
+    expect(find.byKey(const ValueKey('share-sheet-photo')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('share-sheet-remove-photo')));
+    await tester.pumpAndSettle();
+    await publish(tester);
+
+    expect(repository.postDrafts, hasLength(2));
+    expect(repository.postDrafts.last.photo, isA<RemovePostPhoto>());
   });
 
   testWidgets('starts in shared state when session is already shared', (
@@ -199,13 +305,11 @@ void main() {
     await tester.pumpWidget(buildScreen(repository));
     await tester.pumpAndSettle();
 
-    final shareButton = find.byKey(const ValueKey('workout-share-button'));
-    await scrollTo(tester, shareButton);
-    await tester.tap(shareButton);
-    await tester.pumpAndSettle();
+    await openShareSheet(tester);
+    await publish(tester);
 
     expect(
-      find.text('Nie udało się zapisać zmiany. Spróbuj ponownie.'),
+      find.text('Nie udało się udostępnić. Spróbuj ponownie.'),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('workout-share-button')), findsOneWidget);
@@ -393,4 +497,97 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  final List<PostDraft> postDrafts = [];
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) async {
+    postDrafts.add(draft);
+    if (failShare) throw StateError('offline');
+    session = session.copyWith(
+      sharedToProfile: true,
+      postTitle: draft.cleanTitle,
+      clearPostTitle: draft.cleanTitle == null,
+      note: draft.cleanBody,
+      clearNote: draft.cleanBody == null,
+    );
+    return session;
+  }
+
+  @override
+  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
 }
+
+/// Najmniejszy poprawny PNG (1×1) — podgląd zdjęcia w arkuszu.
+const _onePixelPng = <int>[
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1F,
+  0x15,
+  0xC4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9C,
+  0x63,
+  0xF8,
+  0xCF,
+  0xC0,
+  0xF0,
+  0x1F,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0xFF,
+  0x89,
+  0x99,
+  0x3D,
+  0x1D,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4E,
+  0x44,
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
+];

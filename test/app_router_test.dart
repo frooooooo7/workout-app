@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/navigation/app_router.dart';
@@ -10,6 +12,7 @@ import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
@@ -440,6 +443,14 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
 }
 
 class _NoSeenStore implements FeedSeenStore {

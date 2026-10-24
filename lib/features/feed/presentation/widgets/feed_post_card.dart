@@ -10,6 +10,7 @@ import 'feed_seen_markers.dart';
 import 'post_author_row.dart';
 import 'post_best_set.dart';
 import 'post_muscle_chips.dart';
+import 'post_photo.dart';
 import 'post_social_bar.dart';
 
 /// Karta posta w feedzie: autor, tytuł, notatka, panel statystyk,
@@ -53,7 +54,13 @@ class FeedPostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final note = post.note;
+    final photoUrl = post.photoUrl;
     final bestSet = pickBestSetExercise(post.topExercises);
+    // Z własnym tytułem nazwa treningu przechodzi do linii z datą.
+    final timestamp = formatFeedTimestamp(post.startedAt, now: now);
+    final timestampLabel = post.postTitle == null
+        ? timestamp
+        : '$timestamp · ${post.title}';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -75,7 +82,9 @@ class FeedPostCard extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(_radius),
-              border: Border.all(color: AppColors.border.withValues(alpha: 0.55)),
+              border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.55),
+              ),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -93,7 +102,7 @@ class FeedPostCard extends StatelessWidget {
                 if (showAuthor) ...[
                   PostAuthorRow(
                     author: post.author,
-                    timestamp: formatFeedTimestamp(post.startedAt, now: now),
+                    timestamp: timestampLabel,
                     onTap: onAuthorTap,
                     avatarSize: PostAuthorAvatarSize.large,
                     trailing: post.isOwn
@@ -104,13 +113,11 @@ class FeedPostCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                 ] else ...[
-                  _PostTimestamp(
-                    label: formatFeedTimestamp(post.startedAt, now: now),
-                  ),
+                  _PostTimestamp(label: timestampLabel),
                   const SizedBox(height: 8),
                 ],
                 Text(
-                  post.title,
+                  post.headline,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -122,8 +129,12 @@ class FeedPostCard extends StatelessWidget {
                   ),
                 ),
                 if (note != null) ...[
-                  const SizedBox(height: 8),
-                  _NoteQuote(note: note),
+                  const SizedBox(height: 6),
+                  _PostBody(note: note),
+                ],
+                if (photoUrl != null) ...[
+                  const SizedBox(height: 12),
+                  PostPhoto(url: photoUrl, expandable: false),
                 ],
                 const SizedBox(height: 14),
                 _PostStatsPanel(
@@ -233,43 +244,23 @@ class _OwnBadge extends StatelessWidget {
   }
 }
 
-/// Notatka autora jako cytat z akcentem po lewej.
-class _NoteQuote extends StatelessWidget {
-  const _NoteQuote({required this.note});
+/// Opis posta (notatka autora) — najwyżej trzy linie, „więcej” w
+/// szczegółach posta.
+class _PostBody extends StatelessWidget {
+  const _PostBody({required this.note});
 
   final String note;
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: 3,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [AppColors.primaryVariant, AppColors.primary],
-              ),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              note,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-                height: 1.45,
-              ),
-            ),
-          ),
-        ],
+    return Text(
+      note,
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: AppColors.textSubtle,
+        fontSize: 14,
+        height: 1.45,
       ),
     );
   }

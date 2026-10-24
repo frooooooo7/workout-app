@@ -7,6 +7,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/repositories/training_history_repository.dart';
@@ -16,6 +17,7 @@ import '../widgets/session_details/session_exercise_card.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
 import '../widgets/session_details/session_timeline.dart';
+import '../widgets/workout_summary/share_workout_sheet.dart';
 import 'ongoing_workout_screen.dart';
 
 /// Nawigacja z ekranu szczegółów (test seam dla `context.push`).
@@ -43,6 +45,7 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
     this.dataChanges,
     this.navigate,
     this.onSessionsChanged,
+    this.pickPhoto,
   });
 
   final String sessionId;
@@ -60,6 +63,9 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
 
   /// Test seam; domyślnie odświeża historię, statystyki, profil i feed.
   final VoidCallback? onSessionsChanged;
+
+  /// Test seam wyboru zdjęcia w arkuszu posta.
+  final PostPhotoPicker? pickPhoto;
 
   @override
   State<TrainingSessionDetailsScreen> createState() =>
@@ -163,11 +169,84 @@ class _TrainingSessionDetailsScreenState
     unawaited(_syncAndRefreshProfile());
   }
 
+  /// Arkusz posta: udostępnienie z tytułem, opisem i zdjęciem, a przy już
+  /// udostępnionym — edycja albo cofnięcie.
   Future<void> _onSharePressed() async {
     final repository = _sessionRepository;
-    if (repository == null || _detail == null || _shareSaving) return;
+    final detail = _detail;
+    if (repository == null || detail == null || _shareSaving) return;
 
-    final nextShared = !_sharedToProfile;
+    final local = await repository.getById(widget.sessionId);
+    final pendingPhoto = await repository.pendingPostPhoto(widget.sessionId);
+    if (!mounted) return;
+    final editing = _sharedToProfile;
+    final result = await showShareWorkoutSheet(
+      context,
+      planName: local?.planName ?? detail.plan.name,
+      statsLine: postStatsLine(detail),
+      initialTitle: editing ? (local?.postTitle ?? detail.postTitle) : null,
+      initialBody: local?.note ?? detail.note,
+      initialPhotoUrl: editing
+          ? (local?.postPhotoUrl ?? detail.postPhotoUrl)
+          : null,
+      initialPhotoBytes: editing ? pendingPhoto : null,
+      editing: editing,
+      pickPhoto: widget.pickPhoto,
+    );
+    if (!mounted || result == null) return;
+    switch (result) {
+      case PublishPost(:final draft):
+        await _publishPost(repository, draft);
+      case UnsharePost():
+        await _setShared(repository, false);
+    }
+  }
+
+  Future<void> _publishPost(
+    TrainingSessionRepository repository,
+    PostDraft draft,
+  ) async {
+    final wasShared = _sharedToProfile;
+    setState(() => _shareSaving = true);
+    try {
+      await repository.sharePost(widget.sessionId, draft);
+      if (!mounted) return;
+      setState(() {
+        _sharedToProfile = true;
+        _shareSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasShared
+                ? 'Zapisano zmiany w poście'
+                : 'Trening pojawił się na Twoim profilu',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      unawaited(_syncAndRefreshProfile());
+      unawaited(_load(silent: true));
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      _closeAfterRemoval('Ten trening został usunięty.');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zapisać posta. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _setShared(
+    TrainingSessionRepository repository,
+    bool nextShared,
+  ) async {
     setState(() => _shareSaving = true);
     try {
       final updated = await repository.setSharedToProfile(
@@ -526,7 +605,7 @@ class _TrainingSessionDetailsScreenState
                       : Icons.ios_share_rounded,
                   active: _sharedToProfile,
                   tooltip: _sharedToProfile
-                      ? 'Usuń trening z profilu'
+                      ? 'Edytuj post na profilu'
                       : 'Udostępnij trening na profilu',
                   onTap: _onSharePressed,
                 ),

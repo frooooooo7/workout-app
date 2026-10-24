@@ -34,6 +34,8 @@ TrainingSessionDetail trainingSessionDetailFromSession(
         .toList(growable: false),
     updatedAt: endedAt ?? session.startedAt,
     sharedToProfile: session.sharedToProfile,
+    postTitle: session.postTitle,
+    postPhotoUrl: session.postPhotoUrl,
   );
 }
 

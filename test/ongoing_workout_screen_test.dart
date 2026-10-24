@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/previous_performance_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
@@ -1058,6 +1060,14 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
 }
 
 class _FakeRestTimerScheduler implements RestTimerScheduler {
