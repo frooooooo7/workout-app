@@ -274,13 +274,19 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
         final serverId = row['server_id'] as String?;
         if (serverId == null || row['pending_op'] == 'create') continue;
 
-        final bytes = photo.bytes;
         final TrainingSession saved;
         try {
           if (photo.op == PendingPostPhotoOp.upload) {
+            final bytes = await _localDb.run(
+              (db) => PendingPostPhotoStore.bytesOf(db, localId, photo.version),
+            );
             if (bytes == null || bytes.isEmpty) {
               await _localDb.run(
-                (db) => PendingPostPhotoStore.remove(db, localId),
+                (db) => PendingPostPhotoStore.remove(
+                  db,
+                  localId,
+                  onlyVersion: photo.version,
+                ),
               );
               continue;
             }
@@ -300,8 +306,12 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
             );
           } else if (kind == SyncFailureKind.permanent) {
             await _localDb.run(
-              (db) =>
-                  PendingPostPhotoStore.markRejected(db, localId, e.message),
+              (db) => PendingPostPhotoStore.markRejected(
+                db,
+                localId,
+                e.message,
+                onlyVersion: photo.version,
+              ),
             );
           }
           if (networkFailedSince(networkMark)) break;
@@ -503,6 +513,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
         session.copyWith(id: localId, serverId: session.serverId),
         serverId: session.serverId,
         clearPendingOp: true,
+        fromServer: true,
       );
     });
   }
@@ -674,6 +685,7 @@ class TrainingSessionSyncEngine extends SyncEngineBase {
           session.copyWith(id: localId, serverId: serverId),
           serverId: serverId,
           clearPendingOp: true,
+          fromServer: true,
         );
         await txn.update(
           ExerciseDatabase.tableTrainingSessions,

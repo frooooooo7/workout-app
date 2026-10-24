@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1067,7 +1066,8 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   }
 
   @override
-  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 class _FakeRestTimerScheduler implements RestTimerScheduler {

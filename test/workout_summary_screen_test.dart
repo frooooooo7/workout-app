@@ -515,7 +515,8 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   }
 
   @override
-  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 /// Najmniejszy poprawny PNG (1×1) — podgląd zdjęcia w arkuszu.

@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:mime/mime.dart';
-
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/exercise.dart';
 
 /// Wraps the backend `/exercises` REST endpoints and returns domain [Exercise]
@@ -41,34 +38,6 @@ class ExerciseRemoteDataSource {
     tracking: ExerciseTracking.fromApi(j['trackingType'] as String?),
     distanceUnit: DistanceUnit.fromApi(j['distanceUnit'] as String?),
   );
-
-  /// Web clients often use filenames like `blob` without an extension — backend
-  /// and MIME detection need a real extension.
-  String _normalizeExerciseImageFilename(String filename) {
-    var name = filename.trim();
-    if (name.isEmpty || name.toLowerCase() == 'blob') {
-      name = 'upload.jpg';
-    }
-    final lower = name.toLowerCase();
-    final hasExt =
-        lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp');
-    if (!hasExt) {
-      name = '$name.jpg';
-    }
-    return name;
-  }
-
-  MediaType _mediaTypeForExerciseImage(String filename) {
-    final typed = lookupMimeType(filename);
-    if (typed != null) return MediaType.parse(typed);
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return MediaType('image', 'png');
-    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
-    return MediaType('image', 'jpeg');
-  }
 
   String _buildPath({
     required MuscleGroup? muscleGroup,
@@ -115,13 +84,15 @@ class ExerciseRemoteDataSource {
     );
     final all = <Exercise>[];
     for (var page = 0; page < _maxPages; page++) {
-      final path = base.replace(
-        queryParameters: {
-          ...base.queryParameters,
-          'limit': '$_pageSize',
-          'offset': '${page * _pageSize}',
-        },
-      ).toString();
+      final path = base
+          .replace(
+            queryParameters: {
+              ...base.queryParameters,
+              'limit': '$_pageSize',
+              'offset': '${page * _pageSize}',
+            },
+          )
+          .toString();
       final data = await _api.get(path, auth: true);
       final items = (data as List)
           .cast<Map<String, dynamic>>()
@@ -174,12 +145,11 @@ class ExerciseRemoteDataSource {
     Uint8List bytes,
     String filename,
   ) async {
-    final safeName = _normalizeExerciseImageFilename(filename);
-    final file = http.MultipartFile.fromBytes(
+    final file = imageMultipartFile(
       'image',
       bytes,
-      filename: safeName,
-      contentType: _mediaTypeForExerciseImage(safeName),
+      filename,
+      fallbackName: 'upload.jpg',
     );
     final data = await _api.postMultipart(
       '/exercises/$exerciseId/image',

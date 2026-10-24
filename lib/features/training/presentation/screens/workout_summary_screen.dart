@@ -78,6 +78,9 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   /// Zdjęcie usunięte w arkuszu (serwer może go jeszcze nie wiedzieć).
   bool _photoRemoved = false;
 
+  /// Post (sesja albo jego zdjęcie) czeka jeszcze w kolejce wysyłki.
+  bool _postQueued = false;
+
   @override
   void initState() {
     super.initState();
@@ -89,6 +92,32 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
     unawaited(_loadRecords());
+    ServiceLocator.syncStatus.addListener(_refreshPostQueued);
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.syncStatus.removeListener(_refreshPostQueued);
+    super.dispose();
+  }
+
+  /// Podpowiedź „Offline — opublikujemy…” dotyczy tylko tego posta, nie
+  /// dowolnej innej zmiany czekającej w kolejce.
+  Future<void> _refreshPostQueued() async {
+    if (widget.args == null || _shareStatus != WorkoutShareStatus.shared) {
+      if (_postQueued && mounted) setState(() => _postQueued = false);
+      return;
+    }
+    try {
+      final session = await _repository.getById(_session.id);
+      final photo = await _repository.pendingPostPhoto(_session.id);
+      final queued = (session?.pendingOp != null) || photo is! KeepPostPhoto;
+      if (mounted && queued != _postQueued) {
+        setState(() => _postQueued = queued);
+      }
+    } catch (_) {
+      // Odczyt lokalnej bazy nie może zepsuć ekranu — podpowiedź znika.
+    }
   }
 
   /// Rekordy liczymy z lokalnej historii (offline-first) — bez sieci
@@ -127,6 +156,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
             ? WorkoutShareStatus.shared
             : WorkoutShareStatus.notShared;
       });
+      unawaited(_refreshPostQueued());
       unawaited(_syncAndRefreshProfile());
     } on TrainingSessionDeletedException {
       if (!mounted) return;
@@ -155,10 +185,12 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
       context,
       planName: _session.planName,
       statsLine: postStatsLine(_detail),
-      initialTitle: editing ? _session.postTitle : null,
+      // Zawsze to, co naprawdę zostanie opublikowane — także po „Cofnij”,
+      // bo tytuł i zdjęcie zostają przy treningu.
+      initialTitle: _session.postTitle,
       initialBody: _session.note,
-      initialPhotoUrl: editing && !_photoRemoved ? _session.postPhotoUrl : null,
-      initialPhotoBytes: editing ? _localPhoto : null,
+      initialPhotoUrl: _photoRemoved ? null : _session.postPhotoUrl,
+      initialPhotoBytes: _localPhoto,
       editing: editing,
       pickPhoto: widget.args?.pickPhoto,
     );
@@ -191,6 +223,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
             _photoRemoved = true;
         }
       });
+      unawaited(_refreshPostQueued());
       unawaited(_syncAndRefreshProfile());
     } on TrainingSessionDeletedException {
       if (!mounted) return;
@@ -300,7 +333,8 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                             photoUrl: _photoRemoved || _localPhoto != null
                                 ? null
                                 : _session.postPhotoUrl,
-                            waitingForNetwork: sync.phase == SyncPhase.offline,
+                            waitingForNetwork:
+                                _postQueued && sync.phase == SyncPhase.offline,
                             onShare: () => _openShareSheet(editing: false),
                             onEdit: () => _openShareSheet(editing: true),
                             onUnshare: () => _handleShareChanged(false),

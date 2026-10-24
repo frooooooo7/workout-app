@@ -161,12 +161,13 @@ class ExerciseDatabase {
   Future<void> clearSyncErrors() {
     return run((db) async {
       for (final table in syncedTables) {
-        await db.update(
-          table,
-          {'sync_error': null},
-          where: 'sync_error IS NOT NULL',
-        );
+        await db.update(table, {
+          'sync_error': null,
+        }, where: 'sync_error IS NOT NULL');
       }
+      await db.update(tablePendingPostPhotos, {
+        'sync_error': null,
+      }, where: 'sync_error IS NOT NULL');
     });
   }
 
@@ -191,13 +192,18 @@ class ExerciseDatabase {
              WHERE pending_op IS NOT NULL AND sync_error IS NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries
              WHERE pending_op IS NOT NULL AND sync_error IS NULL)
-          + (SELECT COUNT(*) FROM $tablePendingPostPhotos
-             WHERE sync_error IS NULL) AS pending,
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos p
+             WHERE p.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingSessions s
+               WHERE s.local_id = p.session_local_id
+                 AND s.sync_error IS NOT NULL
+             )) AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;

@@ -172,6 +172,7 @@ class TrainingSessionLocalMapper {
     String? serverId,
     String? pendingOp,
     bool clearPendingOp = false,
+    bool fromServer = false,
   }) async {
     await _inTransaction(db, (txn) async {
       final old = await txn.query(
@@ -180,6 +181,21 @@ class TrainingSessionLocalMapper {
         whereArgs: [session.id],
         limit: 1,
       );
+      var postPhotoUrl = session.postPhotoUrl;
+      if (fromServer && old.isNotEmpty) {
+        // Zmiana zdjęcia czeka w kolejce — serwer jeszcze o niej nie wie,
+        // więc jego adres nie może cofnąć tego, co użytkownik już widzi.
+        final queued = await txn.query(
+          ExerciseDatabase.tablePendingPostPhotos,
+          columns: ['session_local_id'],
+          where: 'session_local_id = ?',
+          whereArgs: [session.id],
+          limit: 1,
+        );
+        if (queued.isNotEmpty) {
+          postPhotoUrl = old.first['post_photo_url'] as String?;
+        }
+      }
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
       await txn.insert(ExerciseDatabase.tableTrainingSessions, {
         'local_id': session.id,
@@ -195,7 +211,7 @@ class TrainingSessionLocalMapper {
         'plan_color_key': session.planColorKey,
         'plan_icon_key': session.planIconKey,
         'post_title': session.postTitle,
-        'post_photo_url': session.postPhotoUrl,
+        'post_photo_url': postPhotoUrl,
         'created_at': old.isEmpty ? now : old.first['created_at'],
         'updated_at': now,
         'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),

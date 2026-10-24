@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/navigation/app_router.dart';
@@ -57,8 +55,9 @@ void main() {
     ServiceLocator.currentUser.value = null;
   });
 
-  testWidgets('redirects protected deep links when no session is restored',
-      (tester) async {
+  testWidgets('redirects protected deep links when no session is restored', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     var resolveCalls = 0;
@@ -78,8 +77,9 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, '/login');
   });
 
-  testWidgets('keeps protected deep links after restoring a session',
-      (tester) async {
+  testWidgets('keeps protected deep links after restoring a session', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     final user = AuthUser(
@@ -172,8 +172,9 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, '/app/plans');
   });
 
-  testWidgets('center tap without active session switches to training branch',
-      (tester) async {
+  testWidgets('center tap without active session switches to training branch', (
+    tester,
+  ) async {
     await setDesktopViewport(tester);
 
     final user = AuthUser(
@@ -450,7 +451,8 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
   }
 
   @override
-  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 class _NoSeenStore implements FeedSeenStore {

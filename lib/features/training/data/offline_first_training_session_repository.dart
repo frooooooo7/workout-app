@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart' show Database;
 
@@ -308,6 +307,8 @@ class OfflineFirstTrainingSessionRepository
           clearPostTitle: title == null,
           note: body,
           clearNote: body == null,
+          // Usunięte zdjęcie znika od razu, nie dopiero po wysyłce.
+          clearPostPhotoUrl: draft.photo is RemovePostPhoto,
         ),
         beforeSync: (db) => PendingPostPhotoStore.put(db, localId, draft.photo),
       );
@@ -321,20 +322,17 @@ class OfflineFirstTrainingSessionRepository
     final remote = _remote;
     if (remote == null) throw StateError('Training session not found');
     try {
-      var session = await remote.sharePost(sessionId, title: title, body: body);
+      // Najpierw zdjęcie, potem udostępnienie: gdy wysyłka zdjęcia się nie
+      // uda, post nie trafia do feedu bez niego, a UI zgodnie mówi „błąd”.
       switch (draft.photo) {
         case KeepPostPhoto():
           break;
         case SetPostPhoto(:final photo):
-          session = await remote.uploadPostPhoto(
-            sessionId,
-            photo.bytes,
-            photo.filename,
-          );
+          await remote.uploadPostPhoto(sessionId, photo.bytes, photo.filename);
         case RemovePostPhoto():
-          session = await remote.deletePostPhoto(sessionId);
+          await remote.deletePostPhoto(sessionId);
       }
-      return session;
+      return await remote.sharePost(sessionId, title: title, body: body);
     } on ApiException catch (e) {
       if (!isGoneFailure(e)) rethrow;
       await _historyCache.removeSessions({sessionId});
@@ -343,16 +341,26 @@ class OfflineFirstTrainingSessionRepository
   }
 
   @override
-  Future<Uint8List?> pendingPostPhoto(String sessionId) async {
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async {
     final row = await _findRow(sessionId);
-    if (row == null) return null;
+    if (row == null) return const KeepPostPhoto();
     final pending = await _localDb.run(
       (db) => PendingPostPhotoStore.find(db, row['local_id'] as String),
     );
-    if (pending == null || pending.op != PendingPostPhotoOp.upload) {
-      return null;
+    if (pending == null) return const KeepPostPhoto();
+    switch (pending.op) {
+      case PendingPostPhotoOp.remove:
+        return const RemovePostPhoto();
+      case PendingPostPhotoOp.upload:
+        final bytes = pending.bytes;
+        if (bytes == null || bytes.isEmpty) return const KeepPostPhoto();
+        return SetPostPhoto(
+          PickedPostPhoto(
+            bytes: bytes,
+            filename: pending.filename ?? 'post.jpg',
+          ),
+        );
     }
-    return pending.bytes;
   }
 
   @override

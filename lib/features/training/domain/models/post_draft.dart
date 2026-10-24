@@ -1,11 +1,19 @@
 import 'dart:typed_data';
 
-/// Najdłuższy tytuł posta (jak na serwerze — w znakach Unicode).
+/// Najdłuższy tytuł posta. Serwer liczy punkty kodowe Unicode (Postgres
+/// `char_length`), więc aplikacja liczy tak samo — patrz [postTitleLength].
 const postTitleMaxLength = 80;
 
-/// Najdłuższy opis posta w arkuszu udostępniania. Opis to notatka treningu,
-/// która na serwerze może mieć do 2000 znaków — post celowo jest krótszy.
-const postBodyMaxLength = 500;
+/// Najdłuższy opis posta. Opis to notatka treningu, którą serwer przyjmuje
+/// do 2000 jednostek UTF-16 (`string.length` w zod) — patrz [postBodyLength].
+/// Ten sam limit co notatka, żeby arkusz nigdy nie uciął dłuższej notatki.
+const postBodyMaxLength = 2000;
+
+/// Długość tytułu tak, jak liczy ją serwer (punkty kodowe).
+int postTitleLength(String text) => text.runes.length;
+
+/// Długość opisu tak, jak liczy ją serwer (jednostki UTF-16).
+int postBodyLength(String text) => text.length;
 
 /// Zdjęcie wybrane do posta, jeszcze niewysłane.
 class PickedPostPhoto {

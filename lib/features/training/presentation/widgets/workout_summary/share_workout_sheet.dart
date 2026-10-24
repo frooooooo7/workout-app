@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/utils/duration_formatter.dart';
+import '../../../../../core/utils/polish_plural.dart';
 import '../../../../feed/presentation/widgets/post_photo.dart';
 import '../../../domain/models/post_draft.dart';
 import '../../../domain/models/training_history_models.dart';
@@ -12,13 +13,7 @@ import '../session_details/session_details_formatters.dart';
 /// Linia pod nazwą treningu w arkuszu: „58 min · 4,2 t · 18 serii”.
 String postStatsLine(TrainingSessionDetail detail) {
   final sets = detail.completedSetsCount;
-  final setsWord = sets == 1
-      ? 'seria'
-      : (sets % 10 >= 2 &&
-            sets % 10 <= 4 &&
-            (sets % 100 < 12 || sets % 100 > 14))
-      ? 'serie'
-      : 'serii';
+  final setsWord = polishPlural(sets, 'seria', 'serie', 'serii');
   final parts = <String>[
     formatDuration(detail.durationSec),
     if (detail.totalVolumeKg > 0) formatVolumeKg(detail.totalVolumeKg),
@@ -323,26 +318,29 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
               label: 'Tytuł',
               trailing: _titleController.text.isEmpty
                   ? 'opcjonalnie'
-                  : '${_titleController.text.characters.length}/$postTitleMaxLength',
+                  : '${postTitleLength(_titleController.text)}/$postTitleMaxLength',
             ),
             _PostField(
               key: const ValueKey('share-sheet-title'),
               controller: _titleController,
               hint: widget.planName,
               maxLength: postTitleMaxLength,
+              measure: postTitleLength,
               textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: 12),
             _FieldLabel(
               label: 'Opis',
-              trailing:
-                  '${_bodyController.text.characters.length}/$postBodyMaxLength',
+              trailing: _bodyController.text.isEmpty
+                  ? 'opcjonalnie'
+                  : '${postBodyLength(_bodyController.text)}/$postBodyMaxLength',
             ),
             _PostField(
               key: const ValueKey('share-sheet-body'),
               controller: _bodyController,
               hint: 'Jak poszło? Napisz coś obserwującym…',
               maxLength: postBodyMaxLength,
+              measure: postBodyLength,
               minLines: 3,
               maxLines: 6,
             ),
@@ -648,6 +646,7 @@ class _PostField extends StatelessWidget {
     required this.controller,
     required this.hint,
     required this.maxLength,
+    required this.measure,
     this.minLines = 1,
     this.maxLines = 1,
     this.textInputAction,
@@ -656,6 +655,7 @@ class _PostField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final int maxLength;
+  final int Function(String text) measure;
   final int minLines;
   final int maxLines;
   final TextInputAction? textInputAction;
@@ -672,12 +672,7 @@ class _PostField extends StatelessWidget {
       maxLines: maxLines,
       textInputAction: textInputAction,
       textCapitalization: TextCapitalization.sentences,
-      inputFormatters: [
-        LengthLimitingTextInputFormatter(
-          maxLength,
-          maxLengthEnforcement: MaxLengthEnforcement.enforced,
-        ),
-      ],
+      inputFormatters: [PostLengthFormatter(maxLength, measure)],
       style: const TextStyle(
         color: AppColors.textPrimary,
         fontSize: 15,
@@ -854,4 +849,39 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   bool shouldRepaint(_DashedBorderPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+/// Limit długości liczony tak jak na serwerze ([measure]), a nie w
+/// grafemach jak [LengthLimitingTextInputFormatter]. Wklejony za długi tekst
+/// jest ucinany na granicy grafemu, więc emoji nigdy nie zostaje rozcięte.
+/// Tekst już dłuższy od limitu (np. stara notatka) nie jest ucinany —
+/// można go tylko skracać.
+class PostLengthFormatter extends TextInputFormatter {
+  PostLengthFormatter(this.maxLength, this.measure);
+
+  final int maxLength;
+  final int Function(String text) measure;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final newLength = measure(newValue.text);
+    if (newLength <= maxLength) return newValue;
+    final oldLength = measure(oldValue.text);
+    if (oldLength > maxLength) {
+      return newLength <= oldLength ? newValue : oldValue;
+    }
+    final buffer = StringBuffer();
+    for (final char in newValue.text.characters) {
+      if (measure('$buffer$char') > maxLength) break;
+      buffer.write(char);
+    }
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
 }

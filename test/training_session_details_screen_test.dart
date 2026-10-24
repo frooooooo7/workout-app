@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/data/offline_first_training_session_repository.dart';
@@ -521,5 +519,6 @@ class _FakeSessionRepository implements TrainingSessionRepository {
   }
 
   @override
-  Future<Uint8List?> pendingPostPhoto(String sessionId) async => null;
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }

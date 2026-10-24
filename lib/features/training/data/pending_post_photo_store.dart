@@ -31,6 +31,16 @@ enum PendingPostPhotoOp { upload, remove }
 abstract final class PendingPostPhotoStore {
   static const _table = ExerciseDatabase.tablePendingPostPhotos;
 
+  static int _lastVersion = 0;
+
+  /// Rosnący znacznik zapisu (mikrosekundy) — dwa zapisy w tej samej
+  /// milisekundzie nie mogą dostać tej samej wersji.
+  static int _nextVersion() {
+    final now = DateTime.now().toUtc().microsecondsSinceEpoch;
+    _lastVersion = now > _lastVersion ? now : _lastVersion + 1;
+    return _lastVersion;
+  }
+
   static Future<void> put(
     DatabaseExecutor db,
     String sessionLocalId,
@@ -45,7 +55,7 @@ abstract final class PendingPostPhotoStore {
           'op': PendingPostPhotoOp.upload.name,
           'bytes': photo.bytes,
           'filename': photo.filename,
-          'created_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'created_at': _nextVersion(),
           'sync_error': null,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       case RemovePostPhoto():
@@ -54,7 +64,7 @@ abstract final class PendingPostPhotoStore {
           'op': PendingPostPhotoOp.remove.name,
           'bytes': null,
           'filename': null,
-          'created_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+          'created_at': _nextVersion(),
           'sync_error': null,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
@@ -73,14 +83,34 @@ abstract final class PendingPostPhotoStore {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// Wszystko, co czeka na wysłanie (bez odrzuconych przez serwer).
+  /// Wszystko, co czeka na wysłanie (bez odrzuconych przez serwer) — bez
+  /// bajtów zdjęć; te czyta [bytesOf] tylko dla wysyłanego wpisu.
   static Future<List<PendingPostPhoto>> all(DatabaseExecutor db) async {
     final rows = await db.query(
       _table,
+      columns: ['session_local_id', 'op', 'filename', 'created_at'],
       where: 'sync_error IS NULL',
       orderBy: 'created_at',
     );
     return rows.map(_fromRow).toList();
+  }
+
+  /// Bajty zdjęcia w wersji [version]; `null`, gdy wpis zmieniono albo
+  /// usunięto w międzyczasie.
+  static Future<Uint8List?> bytesOf(
+    DatabaseExecutor db,
+    String sessionLocalId,
+    int version,
+  ) async {
+    final rows = await db.query(
+      _table,
+      columns: ['bytes'],
+      where: 'session_local_id = ? AND created_at = ?',
+      whereArgs: [sessionLocalId, version],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _bytes(rows.first['bytes']);
   }
 
   /// Usuwa wpis sesji. Z [onlyVersion] — tylko gdy od odczytu nikt go nie
@@ -99,16 +129,19 @@ abstract final class PendingPostPhotoStore {
     );
   }
 
+  /// Oznacza wpis jako odrzucony przez serwer — tylko w wersji
+  /// [onlyVersion], więc nowsze zdjęcie nie dziedziczy cudzego błędu.
   static Future<int> markRejected(
     DatabaseExecutor db,
     String sessionLocalId,
-    String reason,
-  ) {
+    String reason, {
+    required int onlyVersion,
+  }) {
     return db.update(
       _table,
       {'sync_error': reason},
-      where: 'session_local_id = ?',
-      whereArgs: [sessionLocalId],
+      where: 'session_local_id = ? AND created_at = ?',
+      whereArgs: [sessionLocalId, onlyVersion],
     );
   }
 
@@ -116,17 +149,18 @@ abstract final class PendingPostPhotoStore {
     final op = row['op'] == PendingPostPhotoOp.remove.name
         ? PendingPostPhotoOp.remove
         : PendingPostPhotoOp.upload;
-    final raw = row['bytes'];
     return PendingPostPhoto(
       sessionLocalId: row['session_local_id'] as String,
       op: op,
       version: row['created_at'] as int,
-      bytes: raw is Uint8List
-          ? raw
-          : raw is List<int>
-          ? Uint8List.fromList(raw)
-          : null,
+      bytes: _bytes(row['bytes']),
       filename: row['filename'] as String?,
     );
   }
+
+  static Uint8List? _bytes(Object? raw) => raw is Uint8List
+      ? raw
+      : raw is List<int>
+      ? Uint8List.fromList(raw)
+      : null;
 }

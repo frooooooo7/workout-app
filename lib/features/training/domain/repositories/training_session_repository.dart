@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import '../models/custom_training_plan.dart';
 import '../models/post_draft.dart';
 import '../models/training_session.dart';
@@ -46,9 +44,10 @@ abstract interface class TrainingSessionRepository {
   /// serwer.
   Future<TrainingSession> sharePost(String sessionId, PostDraft draft);
 
-  /// Zdjęcie posta wybrane na tym urządzeniu i jeszcze niewysłane; `null`,
-  /// gdy nic nie czeka (albo czeka usunięcie).
-  Future<Uint8List?> pendingPostPhoto(String sessionId);
+  /// Zmiana zdjęcia posta zrobiona na tym urządzeniu i jeszcze niewysłana:
+  /// [SetPostPhoto] (nowe zdjęcie), [RemovePostPhoto] (usunięcie) albo
+  /// [KeepPostPhoto], gdy nic nie czeka.
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId);
 
   /// Sesja do edycji/powtórzenia: z lokalnej bazy, a gdy jej tam nie ma
   /// (np. z innego urządzenia) — pobrana z serwera i zapisana lokalnie.

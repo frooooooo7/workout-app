@@ -180,16 +180,26 @@ class _TrainingSessionDetailsScreenState
     final pendingPhoto = await repository.pendingPostPhoto(widget.sessionId);
     if (!mounted) return;
     final editing = _sharedToProfile;
+    // Lokalna sesja jest źródłem prawdy (także celowo wyczyszczone pola);
+    // szczegóły z serwera tylko wtedy, gdy na tym urządzeniu jej nie ma.
+    final title = local != null ? local.postTitle : detail.postTitle;
+    final body = local != null ? local.note : detail.note;
+    final photoUrl = switch (pendingPhoto) {
+      RemovePostPhoto() => null,
+      _ => local != null ? local.postPhotoUrl : detail.postPhotoUrl,
+    };
+    final photoBytes = switch (pendingPhoto) {
+      SetPostPhoto(:final photo) => photo.bytes,
+      _ => null,
+    };
     final result = await showShareWorkoutSheet(
       context,
       planName: local?.planName ?? detail.plan.name,
       statsLine: postStatsLine(detail),
-      initialTitle: editing ? (local?.postTitle ?? detail.postTitle) : null,
-      initialBody: local?.note ?? detail.note,
-      initialPhotoUrl: editing
-          ? (local?.postPhotoUrl ?? detail.postPhotoUrl)
-          : null,
-      initialPhotoBytes: editing ? pendingPhoto : null,
+      initialTitle: title,
+      initialBody: body,
+      initialPhotoUrl: photoUrl,
+      initialPhotoBytes: photoBytes,
       editing: editing,
       pickPhoto: widget.pickPhoto,
     );
@@ -209,11 +219,19 @@ class _TrainingSessionDetailsScreenState
     final wasShared = _sharedToProfile;
     setState(() => _shareSaving = true);
     try {
-      await repository.sharePost(widget.sessionId, draft);
+      final updated = await repository.sharePost(widget.sessionId, draft);
       if (!mounted) return;
       setState(() {
         _sharedToProfile = true;
         _shareSaving = false;
+        // Ciche przeładowanie pomija wersję bez nowszego `updatedAt` (np.
+        // niewysłana sesja), więc nowa treść trafia na ekran od razu.
+        _detail = _detail?.withPost(
+          sharedToProfile: true,
+          note: updated.note,
+          postTitle: updated.postTitle,
+          postPhotoUrl: updated.postPhotoUrl,
+        );
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -226,7 +244,6 @@ class _TrainingSessionDetailsScreenState
         ),
       );
       unawaited(_syncAndRefreshProfile());
-      unawaited(_load(silent: true));
     } on TrainingSessionDeletedException {
       if (!mounted) return;
       setState(() => _shareSaving = false);

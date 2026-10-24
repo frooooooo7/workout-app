@@ -6,6 +6,7 @@ import 'package:gym/core/network/api_client.dart';
 import 'package:gym/features/library/data/exercise_database.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/data/offline_first_training_session_repository.dart';
+import 'package:gym/features/training/data/pending_post_photo_store.dart';
 import 'package:gym/features/training/data/sync/training_session_sync_engine.dart';
 import 'package:gym/features/training/data/training_session_remote_data_source.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
@@ -50,6 +51,14 @@ void main() {
     return repo.finish(session.id);
   }
 
+  Future<List<int>?> pendingBytes(
+    OfflineFirstTrainingSessionRepository repo,
+    String id,
+  ) async {
+    final change = await repo.pendingPostPhoto(id);
+    return change is SetPostPhoto ? change.photo.bytes : null;
+  }
+
   final photo = PickedPostPhoto(
     bytes: Uint8List.fromList([1, 2, 3, 4]),
     filename: 'gym.jpg',
@@ -72,7 +81,7 @@ void main() {
     expect(shared.sharedToProfile, isTrue);
     expect(shared.postTitle, 'Nowy rekord');
     expect(shared.note, 'W końcu 120 kg');
-    expect(await repo.pendingPostPhoto(session.id), [1, 2, 3, 4]);
+    expect(await pendingBytes(repo, session.id), [1, 2, 3, 4]);
     expect(remote.log, isEmpty);
     await db.run((db) async {
       final row = (await db.query(
@@ -114,7 +123,7 @@ void main() {
 
     expect(remote.log, ['create', 'upload:$_serverId:gym.jpg']);
     expect(remote.createdSessions.single.postTitle, 'Tytuł');
-    expect(await repo.pendingPostPhoto(session.id), isNull);
+    expect(await repo.pendingPostPhoto(session.id), isA<KeepPostPhoto>());
     final stored = await repo.getById(session.id);
     expect(stored?.postPhotoUrl, '/uploads/post-photos/p.webp');
     expect((await db.countSyncBacklog()).pending, 0);
@@ -129,7 +138,7 @@ void main() {
     await TrainingSessionSyncEngine(remote: remote, localDb: db).flush();
 
     expect(remote.log, ['create', 'upload:$_serverId:gym.jpg']);
-    expect(await repo.pendingPostPhoto(session.id), [1, 2, 3, 4]);
+    expect(await pendingBytes(repo, session.id), [1, 2, 3, 4]);
   });
 
   test('a session deleted on the server drops its queued photo', () async {
@@ -142,7 +151,7 @@ void main() {
 
     await TrainingSessionSyncEngine(remote: remote, localDb: db).flush();
 
-    expect(await repo.pendingPostPhoto(session.id), isNull);
+    expect(await repo.pendingPostPhoto(session.id), isA<KeepPostPhoto>());
     expect((await db.countSyncBacklog()).pending, 0);
   });
 
@@ -172,6 +181,86 @@ void main() {
       final rows = await db.query(ExerciseDatabase.tablePendingPostPhotos);
       expect(rows, isEmpty);
     });
+  });
+
+  test(
+    'removing the photo hides it at once and survives a server pull',
+    () async {
+      final remote = _SpyRemote();
+      final repo = repoWith(remote);
+      final session = await finishedSession(repo);
+      await repo.sharePost(session.id, PostDraft(photo: SetPostPhoto(photo)));
+      final engine = TrainingSessionSyncEngine(remote: remote, localDb: db);
+      await engine.flush();
+      expect(
+        (await repo.getById(session.id))?.postPhotoUrl,
+        '/uploads/post-photos/p.webp',
+      );
+
+      remote.failDelete = const ApiException('network_error');
+      final updated = await repo.sharePost(
+        session.id,
+        const PostDraft(photo: RemovePostPhoto()),
+      );
+      expect(updated.postPhotoUrl, isNull);
+      expect(await repo.pendingPostPhoto(session.id), isA<RemovePostPhoto>());
+
+      // PUT sesji wraca z serwera ze starym adresem — nie może go przywrócić.
+      await engine.flush();
+      expect((await repo.getById(session.id))?.postPhotoUrl, isNull);
+    },
+  );
+
+  test(
+    'a rejected photo is counted as failed and retried after clearing',
+    () async {
+      final remote = _SpyRemote(
+        failUpload: const ApiException('invalid_file', statusCode: 400),
+      );
+      final repo = repoWith(remote);
+      final session = await finishedSession(repo);
+      await repo.sharePost(session.id, PostDraft(photo: SetPostPhoto(photo)));
+
+      await TrainingSessionSyncEngine(remote: remote, localDb: db).flush();
+      var backlog = await db.countSyncBacklog();
+      expect(backlog.failed, 1);
+      expect(backlog.pending, 0);
+
+      await db.clearSyncErrors();
+      backlog = await db.countSyncBacklog();
+      expect(backlog.pending, 1);
+      expect(backlog.failed, 0);
+    },
+  );
+
+  test('a rejection of an older upload does not mark a newer photo', () async {
+    final repo = repoWith(_SpyRemote());
+    final session = await finishedSession(repo);
+    await repo.sharePost(session.id, PostDraft(photo: SetPostPhoto(photo)));
+    final old = await db.run(
+      (db) async => (await PendingPostPhotoStore.all(db)).single,
+    );
+    expect(old.bytes, isNull, reason: 'all() reads metadata only');
+
+    await repo.sharePost(
+      session.id,
+      PostDraft(
+        photo: SetPostPhoto(
+          PickedPostPhoto(bytes: Uint8List.fromList([9]), filename: 'b.png'),
+        ),
+      ),
+    );
+    await db.run(
+      (db) => PendingPostPhotoStore.markRejected(
+        db,
+        old.sessionLocalId,
+        'invalid_file',
+        onlyVersion: old.version,
+      ),
+    );
+
+    expect((await db.countSyncBacklog()).failed, 0);
+    expect(await pendingBytes(repo, session.id), [9]);
   });
 
   test('toBody sends postTitle with the session', () {
@@ -212,6 +301,7 @@ class _SpyRemote extends TrainingSessionRemoteDataSource {
     : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => ''));
 
   final ApiException? failUpload;
+  ApiException? failDelete;
   final List<String> log = [];
   final List<TrainingSession> createdSessions = [];
   String? _photoUrl;
@@ -262,6 +352,8 @@ class _SpyRemote extends TrainingSessionRemoteDataSource {
   @override
   Future<TrainingSession> deletePostPhoto(String serverId) async {
     log.add('delete-photo:$serverId');
+    final failure = failDelete;
+    if (failure != null) throw failure;
     _photoUrl = null;
     return TrainingSession(
       id: serverId,

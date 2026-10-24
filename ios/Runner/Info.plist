@@ -67,6 +67,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Aplikacja potrzebuje dostępu do zdjęć, aby dodać obraz do własnego ćwiczenia.</string>
+	<string>Aplikacja potrzebuje dostępu do zdjęć, aby dodać obraz do ćwiczenia, avatara albo posta z treningu.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikacja potrzebuje aparatu, aby zrobić zdjęcie do posta z treningu albo avatara.</string>
 </dict>
 </plist>

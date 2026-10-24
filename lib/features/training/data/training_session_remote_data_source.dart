@@ -1,9 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/training_session.dart';
 
 /// Sesja z `GET /training-sessions/history` razem z jej `updatedAt`
@@ -253,16 +251,10 @@ class TrainingSessionRemoteDataSource {
     Uint8List bytes,
     String filename,
   ) async {
-    final name = _normalizePhotoFilename(filename);
     final data = await _api.postMultipart(
       '/training-sessions/$serverId/post-photo',
       files: [
-        http.MultipartFile.fromBytes(
-          'photo',
-          bytes,
-          filename: name,
-          contentType: MediaType('image', _photoSubtype(name)),
-        ),
+        imageMultipartFile('photo', bytes, filename, fallbackName: 'post.jpg'),
       ],
       auth: true,
     );
@@ -276,20 +268,6 @@ class TrainingSessionRemoteDataSource {
       auth: true,
     );
     return _fromJson(data as Map<String, dynamic>);
-  }
-
-  static String _normalizePhotoFilename(String filename) {
-    final lower = filename.toLowerCase();
-    const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
-    if (allowed.any(lower.endsWith)) return filename;
-    return 'post.jpg';
-  }
-
-  static String _photoSubtype(String filename) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return 'png';
-    if (lower.endsWith('.webp')) return 'webp';
-    return 'jpeg';
   }
 
   /// `DELETE /training-sessions/:id` → 204 (także powtórnie).
