@@ -140,12 +140,18 @@ class PlanDetailsScreen extends StatelessWidget {
                   SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final planExercise = currentPlan.exercises[index];
-                      final hasRir = planExercise.sets.any(
-                        (s) => s.rir != null && s.rir!.isNotEmpty,
-                      );
-                      final hasTempo = planExercise.sets.any(
-                        (s) => s.tempo != null && s.tempo!.isNotEmpty,
-                      );
+                      // Wyłączony RIR / tempo w Ustawieniach planu chowa
+                      // kolumnę, nawet gdy serie mają stare wartości.
+                      final hasRir =
+                          currentPlan.showRir &&
+                          planExercise.sets.any(
+                            (s) => s.rir != null && s.rir!.isNotEmpty,
+                          );
+                      final hasTempo =
+                          currentPlan.showTempo &&
+                          planExercise.sets.any(
+                            (s) => s.tempo != null && s.tempo!.isNotEmpty,
+                          );
                       return _ExerciseCard(
                         key: ValueKey(planExercise.id),
                         planExercise: planExercise,

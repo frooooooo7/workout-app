@@ -180,7 +180,7 @@ class _Header extends StatelessWidget {
 }
 
 /// Odcinek kardio. Zrobiony zielenieje, aktywny ma obwódkę w kolorze
-/// akcentu, a przesunięcie w lewo usuwa go.
+/// akcentu. Znaczek odcinka otwiera arkusz z rodzajem i usuwaniem.
 class CardioSetRow extends StatelessWidget {
   const CardioSetRow({
     super.key,
@@ -346,13 +346,7 @@ class CardioSetRow extends StatelessWidget {
       customSemanticsActions: {
         const CustomSemanticsAction(label: 'Usuń odcinek'): removable,
       },
-      child: Dismissible(
-        key: ValueKey('session-set-dismiss-${set.id}'),
-        direction: DismissDirection.endToStart,
-        onDismissed: (_) => removable(),
-        background: const _DeleteBackground(),
-        child: content,
-      ),
+      child: content,
     );
   }
 
@@ -555,30 +549,6 @@ class CardioTotalsBar extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DeleteBackground extends StatelessWidget {
-  const _DeleteBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 18),
-        decoration: BoxDecoration(
-          color: AppColors.trendDown.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Icon(
-          Icons.delete_outline_rounded,
-          color: AppColors.trendDown,
-          size: 20,
-        ),
       ),
     );
   }

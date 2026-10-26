@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/plan_colors.dart';
@@ -383,6 +384,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
+          hideKeyboard();
           final exercise = await context.push<Exercise>(
             '/app/training/create-plan/pick-exercise',
           );
@@ -433,6 +435,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                   Expanded(
                     child: TextField(
                       controller: _nameController,
+                      onTapOutside: hideKeyboardOnTapOutside,
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 24,
@@ -460,6 +463,7 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
                 const SizedBox(height: 10),
                 TextField(
                   controller: _noteController,
+                  onTapOutside: hideKeyboardOnTapOutside,
                   maxLines: 2,
                   minLines: 1,
                   style: const TextStyle(color: Colors.white, fontSize: 14),

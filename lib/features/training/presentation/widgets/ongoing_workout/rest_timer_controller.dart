@@ -15,6 +15,9 @@ import '../../../domain/services/rest_timer_scheduler.dart';
 /// Odliczanie idzie od godziny końca przerwy, nie od liczby tyknięć — przy
 /// zablokowanym ekranie system wstrzymuje timery, a po powrocie licznik od
 /// razu pokazuje prawdziwy czas (albo kończy przerwę, jeśli już minęła).
+///
+/// Po końcu przerwy panel nie znika — [isFinished] trzyma „0:00” na
+/// ekranie, aż użytkownik go zamknie albo zacznie kolejną serię.
 class RestTimerController extends ChangeNotifier {
   RestTimerController({this.scheduler, DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -71,10 +74,20 @@ class RestTimerController extends ChangeNotifier {
 
   bool get isActive => _ticker?.isActive == true;
 
+  /// Przerwa minęła, a użytkownik jeszcze nie wrócił do serii: panel zostaje
+  /// z „0:00” i czerwoną obwódką, aż do „OK”, kolejnej przerwy albo
+  /// odhaczenia serii.
+  bool get isFinished => _finished;
+  bool _finished = false;
+
+  /// Panel odpoczynku jest na ekranie (odliczanie albo „koniec przerwy”).
+  bool get isVisible => isActive || _finished;
+
   /// Startuje (albo restartuje) przerwę. Zwraca `false`, gdy lokalny licznik
   /// ruszył, ale powiadomienia systemowego nie udało się zaplanować.
   Future<bool> start(Duration duration) async {
     _ticker?.cancel();
+    _finished = false;
     _lifecycle ??= AppLifecycleListener(onResume: sync);
     selectedDuration = duration;
     _total = duration;
@@ -87,6 +100,13 @@ class RestTimerController extends ChangeNotifier {
 
   /// „+15 s”: wydłuża bieżącą przerwę i przesuwa powiadomienie.
   Future<bool> extend(Duration extra) async {
+    // Po końcu przerwy „+15 s” odlicza jeszcze chwilę od zera.
+    if (_finished) {
+      final keep = selectedDuration;
+      final scheduled = await start(extra);
+      selectedDuration = keep;
+      return scheduled;
+    }
     final endsAt = _endsAt;
     if (!isActive || endsAt == null) return true;
     _total += extra;
@@ -103,6 +123,7 @@ class RestTimerController extends ChangeNotifier {
   void stop() {
     _ticker?.cancel();
     _endsAt = null;
+    _finished = false;
     final pending = scheduler?.cancelRestFinished();
     if (pending != null) unawaited(pending.catchError((_) {}));
     _reset();
@@ -128,6 +149,7 @@ class RestTimerController extends ChangeNotifier {
     if (left <= Duration.zero) {
       _ticker?.cancel();
       _endsAt = null;
+      _finished = true;
       // Koniec przerwy czuć w dłoni; dźwięk daje powiadomienie systemowe.
       unawaited(HapticFeedback.heavyImpact());
       _reset();

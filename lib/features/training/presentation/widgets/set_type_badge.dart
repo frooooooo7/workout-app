@@ -86,3 +86,38 @@ Future<SetType?> showSetTypePicker(BuildContext context, SetType current) {
     ],
   );
 }
+
+/// Wybór w arkuszu serii treningu na żywo: nowy rodzaj albo usunięcie.
+typedef SetOptionsChoice = ({SetType? type, bool remove});
+
+/// Arkusz serii w trakcie treningu: rodzaj serii i — gdy [removeLabel] nie
+/// jest `null` — „Usuń serię” na dole. Usuwanie jest tu, a nie pod
+/// przesunięciem palcem, bo przesunięcie łatwo pomylić ze zmianą ćwiczenia.
+Future<SetOptionsChoice?> showSetOptionsSheet(
+  BuildContext context, {
+  required String title,
+  required SetType current,
+  String? removeLabel,
+}) {
+  return showAppActionSheet<SetOptionsChoice>(
+    context,
+    title: title,
+    actions: [
+      for (final type in SetType.values)
+        AppSheetAction<SetOptionsChoice>(
+          value: (type: type, remove: false),
+          icon: _setTypeIcon(type),
+          label: type.label,
+          subtitle: type.description,
+          selected: type == current,
+        ),
+      if (removeLabel != null)
+        AppSheetAction<SetOptionsChoice>(
+          value: (type: null, remove: true),
+          icon: Icons.delete_outline_rounded,
+          label: removeLabel,
+          destructive: true,
+        ),
+    ],
+  );
+}

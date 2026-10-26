@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../../../core/utils/keyboard.dart';
 import '../../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../domain/models/training_session.dart';
 import '../../../domain/repositories/previous_performance_repository.dart';
@@ -164,11 +165,34 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     );
   }
 
-  Future<void> _pickSetType(int setIndex) async {
-    final picked = await showSetTypePicker(context, _sets[setIndex].setType);
-    if (picked == null || !mounted || setIndex >= _sets.length) return;
-    if (picked == _sets[setIndex].setType) return;
-    _handleSetChanged(setIndex, _sets[setIndex].copyWith(setType: picked));
+  /// Znaczek serii: rodzaj serii albo usunięcie (z „Cofnij” na ekranie).
+  Future<void> _openSetOptions(int setIndex) async {
+    hideKeyboard();
+    final set = _sets[setIndex];
+    final cardio = widget.exercise.tracking.tracksDuration;
+    final label = setRowLabels(_sets.map((s) => s.setType))[setIndex];
+    final title = set.setType == SetType.warmup
+        ? 'Rozgrzewka'
+        : cardio
+        ? 'Odcinek $label'
+        : 'Seria $label';
+    final choice = await showSetOptionsSheet(
+      context,
+      title: title,
+      current: set.setType,
+      removeLabel: _sets.length > 1
+          ? (cardio ? 'Usuń odcinek' : 'Usuń serię')
+          : null,
+    );
+    if (choice == null || !mounted || setIndex >= _sets.length) return;
+    if (_sets[setIndex].id != set.id) return;
+    if (choice.remove) {
+      _removeSet(setIndex);
+      return;
+    }
+    final picked = choice.type;
+    if (picked == null || picked == set.setType) return;
+    _handleSetChanged(setIndex, set.copyWith(setType: picked));
   }
 
   /// Przepisuje ciężar i powtórzenia poprzedniego wyniku do serii.
@@ -207,7 +231,6 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   void _removeSet(int setIndex) {
     final stopwatch = widget.stopwatch;
     if (stopwatch?.setId == _sets[setIndex].id) stopwatch!.stop();
-    // Dismissible musi zniknąć z drzewa w tej samej klatce.
     setState(
       () => _sets = List<TrainingSessionSet>.from(_sets)..removeAt(setIndex),
     );
@@ -313,7 +336,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
               focused: widget.focused,
               stopwatch: widget.stopwatch,
               onChanged: _handleSetChanged,
-              onPickType: (i) => unawaited(_pickSetType(i)),
+              onPickType: (i) => unawaited(_openSetOptions(i)),
               onRemove: _sets.length > 1 ? _removeSet : null,
               onStartStopwatch: widget.stopwatch == null
                   ? null
@@ -337,7 +360,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                   layout: layout,
                   focused: widget.focused,
                   onChanged: _handleSetChanged,
-                  onPickType: (i) => unawaited(_pickSetType(i)),
+                  onPickType: (i) => unawaited(_openSetOptions(i)),
                   onFillPrevious: _fillFromPrevious,
                   onRemove: _sets.length > 1 ? _removeSet : null,
                 );
@@ -471,10 +494,17 @@ class _NoteField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    // Długa notatka zawija się w kilka linii, ale Enter to „Gotowe” —
+    // klawiatura się chowa, a notatka jest już zapisana (onChanged).
+    final field = TextField(
       controller: controller,
       focusNode: focusNode,
       onChanged: onChanged,
+      onSubmitted: (_) => focusNode.unfocus(),
+      onTapOutside: hideKeyboardOnTapOutside,
+      textInputAction: TextInputAction.done,
+      keyboardType: TextInputType.text,
+      textAlignVertical: TextAlignVertical.center,
       maxLength: maxExerciseNoteLength,
       minLines: 1,
       maxLines: 4,
@@ -505,7 +535,24 @@ class _NoteField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+        suffixIconConstraints: const BoxConstraints(minWidth: 44),
+        suffixIcon: ListenableBuilder(
+          listenable: focusNode,
+          builder: (context, _) => focusNode.hasFocus
+              ? IconButton(
+                  key: const ValueKey('exercise-note-done'),
+                  tooltip: 'Zapisz notatkę',
+                  onPressed: focusNode.unfocus,
+                  icon: const Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: AppColors.success,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
       ),
     );
+    return field;
   }
 }

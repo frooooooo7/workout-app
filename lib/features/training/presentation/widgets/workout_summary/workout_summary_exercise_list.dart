@@ -75,6 +75,8 @@ class _ExerciseRow extends StatelessWidget {
     final topSet = exercise.topSet;
     final volume = exercise.volumeKg;
 
+    final trimmedNote = exercise.note?.trim() ?? '';
+    final note = trimmedNote.isEmpty ? null : trimmedNote;
     final cardio = formatCardioSummary(exercise);
     final subtitleParts = <String>[
       exercise.tracking.isCardio
@@ -140,6 +142,37 @@ class _ExerciseRow extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (note != null) ...[
+                  const SizedBox(height: 5),
+                  Row(
+                    key: ValueKey('summary-exercise-note-$index'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 1),
+                        child: Icon(
+                          Icons.sticky_note_2_outlined,
+                          size: 13,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          note,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (volumeShare > 0) ...[
                   const SizedBox(height: 7),
                   ClipRRect(

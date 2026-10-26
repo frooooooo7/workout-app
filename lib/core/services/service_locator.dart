@@ -512,6 +512,12 @@ class ServiceLocator {
     _trainingSessionDataChanges.value++;
   }
 
+  /// Plan zmieniony poza edytorem (np. „Zaktualizuj plan” po treningu) —
+  /// zakładka Plany i ekran Trening wczytują plany jeszcze raz.
+  static void notifyTrainingPlansChanged() {
+    _trainingPlanDataChanges.value++;
+  }
+
   /// Id (lokalne i serwerowe) treningów usuniętych na tym urządzeniu, których
   /// usunięcie nie dotarło jeszcze na serwer. Feed i aktywności profilu je
   /// ukrywają (id posta = id sesji na serwerze).

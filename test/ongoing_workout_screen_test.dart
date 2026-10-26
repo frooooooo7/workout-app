@@ -84,50 +84,84 @@ void main() {
     await cubit.close();
   });
 
-  testWidgets('adds a set and removes it with a swipe to the left', (
-    tester,
-  ) async {
-    final repository = _FakeTrainingSessionRepository(_session());
-    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+  testWidgets(
+    'removes a set from the set sheet, with undo; a swipe does not delete',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_session());
+      final cubit = TrainingSessionCubit(repository, autoRefresh: false);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: OngoingWorkoutScreen(
-          args: OngoingWorkoutArgs(
-            initialSession: repository.session,
-            sessionCubit: cubit,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OngoingWorkoutScreen(
+            args: OngoingWorkoutArgs(
+              initialSession: repository.session,
+              sessionCubit: cubit,
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
+      expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('add-session-set-button')));
-    await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(const ValueKey('add-session-set-button')));
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsOneWidget);
-    expect(repository.session.exercises.first.sets, hasLength(2));
+      expect(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        findsOneWidget,
+      );
+      expect(repository.session.exercises.first.sets, hasLength(2));
 
-    await tester.drag(
-      find.byKey(const ValueKey('session-set-type-0-1')),
-      const Offset(-500, 0),
-    );
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 1));
+      // Przesunięcie wiersza w lewo (jak przy zmianie ćwiczenia) nie usuwa
+      // już serii.
+      await tester.drag(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.session.exercises.first.sets, hasLength(2));
+      // Swipe przewinął do następnego ćwiczenia — wracamy.
+      await tester.drag(find.byType(PageView), const Offset(500, 0));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
-    expect(repository.session.exercises.first.sets, hasLength(1));
-    // Ostatniej serii nie da się usunąć — wiersz się nie przesuwa.
-    await tester.drag(
-      find.byKey(const ValueKey('session-set-type-0-0')),
-      const Offset(-500, 0),
-    );
-    await tester.pumpAndSettle();
-    expect(repository.session.exercises.first.sets, hasLength(1));
+      // Usuwanie: znaczek serii → „Usuń serię”.
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('SERIA 2'), findsOneWidget);
+      await tester.tap(find.text('Usuń serię'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
 
-    await cubit.close();
-  });
+      expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
+      expect(repository.session.exercises.first.sets, hasLength(1));
+
+      // „Cofnij” przywraca serię na jej miejsce.
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        findsOneWidget,
+      );
+      expect(repository.session.exercises.first.sets, hasLength(2));
+
+      // Ostatniej serii nie da się usunąć — arkusz nie ma tej opcji.
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń serię'));
+      await tester.pumpAndSettle();
+      ScaffoldMessenger.of(
+        tester.element(find.byType(OngoingWorkoutScreen)),
+      ).removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-0')));
+      await tester.pumpAndSettle();
+      expect(find.text('Usuń serię'), findsNothing);
+
+      await cubit.close();
+    },
+  );
 
   testWidgets('checking a set counts working sets only and turns it green', (
     tester,

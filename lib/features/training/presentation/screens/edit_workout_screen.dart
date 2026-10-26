@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../library/domain/models/exercise.dart';
@@ -743,6 +744,7 @@ class _TextFieldState extends State<_TextField> {
       key: widget.fieldKey,
       controller: _controller,
       onChanged: widget.onChanged,
+      onTapOutside: hideKeyboardOnTapOutside,
       maxLines: widget.maxLines,
       keyboardType: widget.keyboardType,
       style: const TextStyle(color: Colors.white, fontSize: 14),

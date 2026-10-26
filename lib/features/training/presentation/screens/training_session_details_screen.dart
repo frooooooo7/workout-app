@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
@@ -812,6 +813,10 @@ class _DetailContentState extends State<_DetailContent> {
                 exercise: exercises[i],
                 index: i,
                 isHighlighted: _highlightedIndex == i,
+                hideRir:
+                    PlanColors.styles.styleFor(widget.detail.plan.name)
+                        ?.showRir ==
+                    false,
               ),
             ),
         ],

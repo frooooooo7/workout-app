@@ -8,16 +8,20 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/sync/sync_status.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
+import '../../domain/repositories/training_plan_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/plan_update_from_session.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/training_session_detail_mapper.dart';
 import '../widgets/new_records_banner.dart';
 import '../widgets/session_details/session_muscle_map.dart';
+import '../widgets/workout_summary/plan_update_card.dart';
 import '../widgets/workout_summary/share_workout_sheet.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
@@ -33,7 +37,12 @@ class WorkoutSummaryArgs {
     this.statsRepository,
     this.user,
     this.pickPhoto,
+    this.planRepository,
   });
+
+  /// Test seam; domyślnie [ServiceLocator.trainingPlanRepository] — plan, z
+  /// którego był trening („Zaktualizuj plan”).
+  final TrainingPlanRepository? planRepository;
 
   /// Ukończona sesja — źródło wszystkich metryk na ekranie.
   final TrainingSession session;
@@ -81,6 +90,13 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   /// Post (sesja albo jego zdjęcie) czeka jeszcze w kolejce wysyłki.
   bool _postQueued = false;
 
+  /// „Zaktualizuj plan” — propozycja nowych wartości planu i plan sprzed
+  /// zmiany (do „Cofnij”). `null`, gdy trening nie był z planu albo nic się
+  /// nie zmieniło.
+  PlanUpdateProposal? _planUpdate;
+  CustomTrainingPlan? _planBeforeUpdate;
+  PlanUpdateStatus _planUpdateStatus = PlanUpdateStatus.proposed;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +108,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
     unawaited(_loadRecords());
+    unawaited(_loadPlanUpdate());
     ServiceLocator.syncStatus.addListener(_refreshPostQueued);
   }
 
@@ -136,6 +153,57 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
       setState(() => _records = records);
     } catch (_) {
       /* bez rekordów — reszta podsumowania działa */
+    }
+  }
+
+  TrainingPlanRepository? get _planRepository {
+    try {
+      return widget.args?.planRepository ??
+          ServiceLocator.trainingPlanRepository;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Plan treningu i to, co by się w nim zmieniło. Błąd odczytu po prostu
+  /// chowa kartę — reszta podsumowania działa.
+  Future<void> _loadPlanUpdate() async {
+    final repository = _planRepository;
+    final planId = _session.planLocalId ?? _session.planServerId;
+    if (repository == null || planId == null) return;
+    try {
+      final plan = await repository.getById(planId);
+      if (plan == null) return;
+      final proposal = planUpdateFromSession(plan, _session);
+      if (!mounted || proposal == null) return;
+      setState(() {
+        _planBeforeUpdate = plan;
+        _planUpdate = proposal;
+      });
+    } catch (_) {
+      /* bez karty planu */
+    }
+  }
+
+  Future<void> _savePlan(CustomTrainingPlan plan, PlanUpdateStatus done) async {
+    final repository = _planRepository;
+    if (repository == null) return;
+    final previous = _planUpdateStatus;
+    setState(() => _planUpdateStatus = PlanUpdateStatus.saving);
+    try {
+      await repository.update(plan);
+      ServiceLocator.notifyTrainingPlansChanged();
+      if (!mounted) return;
+      setState(() => _planUpdateStatus = done);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _planUpdateStatus = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zapisać planu. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -340,6 +408,35 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                             onUnshare: () => _handleShareChanged(false),
                           ),
                         ),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _planUpdate == null
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: PlanUpdateCard(
+                                  planName: _planUpdate!.plan.name,
+                                  changes: _planUpdate!.changes,
+                                  status: _planUpdateStatus,
+                                  onUpdate: () => unawaited(
+                                    _savePlan(
+                                      _planUpdate!.plan,
+                                      PlanUpdateStatus.updated,
+                                    ),
+                                  ),
+                                  onDismiss: () =>
+                                      setState(() => _planUpdate = null),
+                                  onUndo: () => unawaited(
+                                    _savePlan(
+                                      _planBeforeUpdate!,
+                                      PlanUpdateStatus.proposed,
+                                    ),
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(height: 12),
                       StaggeredReveal(
