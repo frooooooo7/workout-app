@@ -53,7 +53,11 @@ class RestTimerPill extends StatelessWidget {
     required this.onSkip,
     required this.onChangeDuration,
     this.title = 'Odpoczynek',
+    this.finished = false,
   });
+
+  /// Przerwa minęła: „0:00”, czerwona obwódka i „OK” zamiast „Pomiń”.
+  final bool finished;
 
   /// „Odpoczynek” albo „Przerwa po rundzie 2” w superserii.
   final String title;
@@ -73,14 +77,22 @@ class RestTimerPill extends StatelessWidget {
       borderRadius: BorderRadius.circular(26),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
+        child: AnimatedContainer(
           key: const Key('rest-timer-pill'),
+          duration: const Duration(milliseconds: 250),
           height: 92,
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
-            color: WorkoutColors.restPanel,
+            color: finished
+                ? Color.alphaBlend(
+                    AppColors.trendDown.withValues(alpha: 0.12),
+                    WorkoutColors.restPanel,
+                  )
+                : WorkoutColors.restPanel,
             borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            border: finished
+                ? Border.all(color: AppColors.trendDown, width: 2.5)
+                : Border.all(color: Colors.white.withValues(alpha: 0.09)),
           ),
           child: Row(
             children: [
@@ -96,12 +108,19 @@ class RestTimerPill extends StatelessWidget {
                       children: [
                         ValueListenableBuilder<Duration>(
                           valueListenable: remaining,
-                          builder: (context, value, _) =>
-                              _RestRing(remaining: value, total: total),
+                          builder: (context, value, _) => _RestRing(
+                            remaining: finished ? Duration.zero : value,
+                            total: total,
+                            finished: finished,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _RestLabels(title: title, caption: caption),
+                          child: _RestLabels(
+                            title: finished ? 'Koniec przerwy' : title,
+                            caption: caption,
+                            finished: finished,
+                          ),
                         ),
                       ],
                     ),
@@ -123,9 +142,13 @@ class RestTimerPill extends StatelessWidget {
                     const SizedBox(height: 6),
                     _PillButton(
                       key: const Key('rest-timer-skip'),
-                      label: 'Pomiń',
-                      color: WorkoutAccent.of(context).fill,
-                      textColor: WorkoutAccent.of(context).onFill,
+                      label: finished ? 'OK' : 'Pomiń',
+                      color: finished
+                          ? AppColors.trendDown
+                          : WorkoutAccent.of(context).fill,
+                      textColor: finished
+                          ? Colors.black
+                          : WorkoutAccent.of(context).onFill,
                       onTap: onSkip,
                     ),
                   ],
@@ -140,10 +163,15 @@ class RestTimerPill extends StatelessWidget {
 }
 
 class _RestLabels extends StatelessWidget {
-  const _RestLabels({required this.title, required this.caption});
+  const _RestLabels({
+    required this.title,
+    required this.caption,
+    this.finished = false,
+  });
 
   final String title;
   final String? caption;
+  final bool finished;
 
   @override
   Widget build(BuildContext context) {
@@ -155,8 +183,8 @@ class _RestLabels extends StatelessWidget {
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: finished ? AppColors.trendDown : AppColors.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w800,
           ),
@@ -175,8 +203,8 @@ class _RestLabels extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 2),
-        const Text(
-          'dotknij, by zmienić czas',
+        Text(
+          finished ? 'czas wracać do serii' : 'dotknij, by zmienić czas',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -193,15 +221,24 @@ class _RestLabels extends StatelessWidget {
 /// Pierścień 64 px z czasem w środku. Z sekundy na sekundę przesuwa się
 /// płynnie; ostatnie 3 sekundy pulsują.
 class _RestRing extends StatelessWidget {
-  const _RestRing({required this.remaining, required this.total});
+  const _RestRing({
+    required this.remaining,
+    required this.total,
+    this.finished = false,
+  });
 
   final Duration remaining;
   final Duration total;
 
+  /// Koniec przerwy: pełny czerwony pierścień i czerwone „0:00”.
+  final bool finished;
+
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final fraction = total.inMilliseconds == 0
+    final fraction = finished
+        ? 1.0
+        : total.inMilliseconds == 0
         ? 0.0
         : (remaining.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
     final seconds = remaining.inSeconds;
@@ -209,7 +246,10 @@ class _RestRing extends StatelessWidget {
     final label = Text(
       formatRestRemaining(remaining),
       key: const ValueKey('rest-timer-remaining-label'),
-      style: AppTextStyles.number(size: 20),
+      style: AppTextStyles.number(
+        size: 20,
+        color: finished ? AppColors.trendDown : AppColors.textPrimary,
+      ),
     );
     return SizedBox(
       width: 64,
@@ -227,7 +267,9 @@ class _RestRing extends StatelessWidget {
               size: const Size.square(64),
               painter: _RingPainter(
                 fraction: value,
-                color: WorkoutAccent.of(context).strong,
+                color: finished
+                    ? AppColors.trendDown
+                    : WorkoutAccent.of(context).strong,
               ),
             ),
           ),

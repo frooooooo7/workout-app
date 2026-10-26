@@ -10,6 +10,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
@@ -434,6 +435,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         return _KeepAlivePage(
           key: ValueKey('exercise-page-${first.id}'),
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: EdgeInsets.fromLTRB(12, 12, 12, bottomInset),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -533,7 +535,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Panel znika pod klawiaturą — nie zasłania pól serii w trakcie pisania.
   bool _restDockVisible(BuildContext context) =>
-      (_rest.isActive || _noRest != null || _stopwatch.isActive) &&
+      (_rest.isVisible || _noRest != null || _stopwatch.isActive) &&
       MediaQuery.viewInsetsOf(context).bottom == 0;
 
   Widget _buildRestDock(BuildContext context) {
@@ -569,6 +571,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
         builder: (context, _) => RestTimerPill(
           title: _restTitle,
+          finished: _rest.isFinished,
           remaining: _rest.remaining,
           total: _rest.total,
           caption: _upNextCaption(),
@@ -682,6 +685,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _showWorkoutMenu(BuildContext context) async {
+    hideKeyboard();
     final session = _draftSession.value;
     if (session == null) return;
     final hasExercises = session.exercises.isNotEmpty;
@@ -791,6 +795,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _finish(BuildContext context, TrainingSession session) async {
+    hideKeyboard();
     final confirmed = await showAppConfirmDialog(
       context,
       title: 'Zakończyć trening?',
@@ -835,6 +840,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Zwija ekran — trening trwa dalej i wraca z karty na ekranie Trening.
   Future<void> _leaveWorkout(BuildContext context) async {
+    hideKeyboard();
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     if (!context.mounted) return;
@@ -846,6 +852,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     BuildContext context,
     TrainingSession session,
   ) async {
+    hideKeyboard();
     final confirmed = await showAppConfirmDialog(
       context,
       title: 'Odrzucić trening?',
@@ -869,6 +876,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (session == null) return;
 
     final wasEmpty = session.exercises.isEmpty;
+    // Inaczej po powrocie z listy ćwiczeń ostatnie pole dostaje fokus
+    // z powrotem i klawiatura wyskakuje sama.
+    hideKeyboard();
 
     final picked =
         await (widget.args?.pickExercise?.call(context) ??
@@ -912,6 +922,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Ręczny wybór długości przerwy (menu ⋯ albo dotknięcie panelu).
   Future<void> _pickRestDuration(BuildContext context) async {
+    hideKeyboard();
     final duration = await showRestDurationPicker(context, controller: _rest);
     if (duration == null || !context.mounted) return;
     setState(() {
@@ -1053,6 +1064,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final exercises = List<TrainingSessionExercise>.from(session.exercises);
     final exercise = exercises[exerciseIndex];
     if (exercise.sets.length <= 1) return;
+    final removed = exercise.sets[setIndex];
     final sets = List<TrainingSessionSet>.from(exercise.sets)
       ..removeAt(setIndex);
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
@@ -1060,7 +1072,62 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _draftSession.value = session.copyWith(exercises: exercises);
       _hasUnsavedDraft = true;
     });
-    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    final cubit = context.read<TrainingSessionCubit>();
+    _scheduleDraftSave(cubit);
+    final cardio = exercise.tracking.tracksDuration;
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    // Nad panelem odpoczynku, żeby go nie zasłaniać.
+    final dockHeight = _restDockVisible(context) ? 92 + 16 + 8 : 0;
+    messenger.showSnackBar(
+      SnackBar(
+        key: const ValueKey('set-removed-snackbar'),
+        content: Text(
+          cardio ? 'Usunięto odcinek' : 'Usunięto serię',
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: AppColors.surfaceVariant,
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(12, 0, 12, 12.0 + dockHeight),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        action: SnackBarAction(
+          label: 'Cofnij',
+          textColor: AppColors.primaryVariant,
+          onPressed: () => _restoreSet(cubit, exercise.id, setIndex, removed),
+        ),
+      ),
+    );
+  }
+
+  /// „Cofnij” po usunięciu serii — wraca na swoje miejsce.
+  void _restoreSet(
+    TrainingSessionCubit cubit,
+    String exerciseId,
+    int setIndex,
+    TrainingSessionSet set,
+  ) {
+    final session = _draftSession.value;
+    if (!mounted || session == null) return;
+    final exerciseIndex = session.exercises.indexWhere(
+      (e) => e.id == exerciseId,
+    );
+    if (exerciseIndex == -1) return;
+    final exercises = List<TrainingSessionExercise>.from(session.exercises);
+    final exercise = exercises[exerciseIndex];
+    if (exercise.sets.any((s) => s.id == set.id)) return;
+    final sets = List<TrainingSessionSet>.from(exercise.sets)
+      ..insert(setIndex.clamp(0, exercise.sets.length), set);
+    exercises[exerciseIndex] = exercise.copyWith(sets: sets);
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+    });
+    _scheduleDraftSave(cubit);
   }
 
   void _scheduleDraftSave(TrainingSessionCubit cubit) {
@@ -1176,6 +1243,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     BuildContext context,
     TrainingSession session,
   ) async {
+    hideKeyboard();
     final selectedIndex = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: AppColors.surface,

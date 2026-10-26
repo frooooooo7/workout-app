@@ -77,6 +77,47 @@ void main() {
       rest.dispose();
     });
 
+    testWidgets('stays on screen at 0:00 after the rest ends', (tester) async {
+      var now = DateTime(2026, 10, 14, 12);
+      final rest = RestTimerController(clock: () => now);
+      await rest.start(const Duration(seconds: 30));
+      expect(rest.isFinished, isFalse);
+      expect(rest.isVisible, isTrue);
+
+      now = now.add(const Duration(seconds: 31));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(rest.isActive, isFalse);
+      expect(rest.isFinished, isTrue);
+      expect(rest.isVisible, isTrue);
+      expect(rest.remaining.value, Duration.zero);
+
+      // „+15 s” po końcu przerwy odlicza jeszcze chwilę.
+      await rest.extend(const Duration(seconds: 15));
+      expect(rest.isActive, isTrue);
+      expect(rest.isFinished, isFalse);
+      expect(rest.remaining.value, const Duration(seconds: 15));
+      expect(rest.selectedDuration, const Duration(seconds: 30));
+
+      now = now.add(const Duration(seconds: 16));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(rest.isFinished, isTrue);
+
+      // „OK” zamyka panel.
+      rest.stop();
+      expect(rest.isFinished, isFalse);
+      expect(rest.isVisible, isFalse);
+
+      // Kolejna przerwa też czyści stan końca.
+      await rest.start(const Duration(seconds: 5));
+      now = now.add(const Duration(seconds: 6));
+      rest.sync();
+      expect(rest.isFinished, isTrue);
+      await rest.start(const Duration(seconds: 5));
+      expect(rest.isFinished, isFalse);
+
+      rest.dispose();
+    });
+
     testWidgets('shows every second once with a running clock', (tester) async {
       final rest = RestTimerController(clock: () => tester.binding.clock.now());
       await rest.start(const Duration(seconds: 5));

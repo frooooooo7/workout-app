@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../library/domain/models/exercise_tracking.dart';
 
@@ -230,6 +231,10 @@ class _TableCellInputState extends State<TableCellInput> {
       controller: _controller,
       onChanged: widget.onChanged,
       keyboardType: widget.keyboardType,
+      // „Gotowe” na klawiaturze i dotknięcie obok pola (np. odhaczenie
+      // serii) chowają klawiaturę.
+      textInputAction: TextInputAction.done,
+      onTapOutside: hideKeyboardOnTapOutside,
       textAlign: TextAlign.center,
       style: look.textStyle,
       decoration: InputDecoration(

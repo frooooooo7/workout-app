@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 
 class LibraryHeader extends StatelessWidget {
@@ -107,6 +108,7 @@ class _SearchBarState extends State<_SearchBar> {
               data: _fieldTheme,
               child: TextField(
                 controller: widget.controller,
+                onTapOutside: hideKeyboardOnTapOutside,
                 onChanged: widget.onChanged,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 cursorColor: AppColors.primary,

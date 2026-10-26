@@ -314,12 +314,15 @@ class TrainingSession {
                     (set) => TrainingSessionSet(
                       plannedWeight: set.weight,
                       plannedReps: set.reps,
-                      plannedRir: set.rir,
-                      plannedTempo: set.tempo,
+                      // Plan z wyłączonym RIR / tempem (Ustawienia planu) nie
+                      // przenosi starych wartości do treningu — inaczej
+                      // trafiłyby do historii, choć kolumny nie było widać.
+                      plannedRir: plan.showRir ? set.rir : null,
+                      plannedTempo: plan.showTempo ? set.tempo : null,
                       actualWeight: set.weight,
                       actualReps: set.reps,
-                      actualRir: set.rir,
-                      actualTempo: set.tempo,
+                      actualRir: plan.showRir ? set.rir : null,
+                      actualTempo: plan.showTempo ? set.tempo : null,
                       plannedDurationSeconds: set.durationSeconds,
                       plannedDistanceM: set.distanceM,
                     ),

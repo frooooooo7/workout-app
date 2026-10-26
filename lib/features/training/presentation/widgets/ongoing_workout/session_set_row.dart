@@ -17,7 +17,8 @@ import 'workout_accent.dart';
 /// Wiersz serii w treningu na żywo: numer / rodzaj, wynik z poprzedniego
 /// treningu, pola i duży przycisk odhaczenia. Zrobiona seria zielenieje,
 /// następna do zrobienia ([active]) jest wyróżniona i ma podpowiedź
-/// progresji w polu ciężaru. Przesunięcie w lewo usuwa serię.
+/// progresji w polu ciężaru. Znaczek serii otwiera arkusz z rodzajem serii
+/// i usuwaniem.
 class SessionSetRow extends StatelessWidget {
   const SessionSetRow({
     super.key,
@@ -243,13 +244,7 @@ class SessionSetRow extends StatelessWidget {
       customSemanticsActions: {
         const CustomSemanticsAction(label: 'Usuń serię'): removable,
       },
-      child: Dismissible(
-        key: ValueKey('session-set-dismiss-${set.id}'),
-        direction: DismissDirection.endToStart,
-        onDismissed: (_) => removable(),
-        background: const _DeleteBackground(),
-        child: content,
-      ),
+      child: content,
     );
   }
 
@@ -386,45 +381,6 @@ class _PreviousCell extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: cell,
-      ),
-    );
-  }
-}
-
-/// Czerwone tło odsłaniane przy przesuwaniu serii w lewo.
-class _DeleteBackground extends StatelessWidget {
-  const _DeleteBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 18),
-        decoration: BoxDecoration(
-          color: AppColors.trendDown.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Usuń',
-              style: TextStyle(
-                color: AppColors.trendDown,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(width: 6),
-            Icon(
-              Icons.delete_outline_rounded,
-              color: AppColors.trendDown,
-              size: 20,
-            ),
-          ],
-        ),
       ),
     );
   }

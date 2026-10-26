@@ -22,7 +22,12 @@ class SessionExerciseCard extends StatelessWidget {
     required this.exercise,
     required this.index,
     this.isHighlighted = false,
+    this.hideRir = false,
   });
+
+  /// Plan treningu ma wyłączony RIR (Ustawienia planu) — bez kolumny, nawet
+  /// gdy stare serie mają wartości przepisane z planu.
+  final bool hideRir;
 
   final TrainingExerciseDetail exercise;
   final int index;
@@ -39,6 +44,11 @@ class SessionExerciseCard extends StatelessWidget {
         ? exercise.bestPaceSecondsPerKm
         : null;
     final note = exercise.note?.trim();
+    // Kolumna RIR tylko wtedy, gdy któraś seria go ma — plan bez RIR-u
+    // nie pokazuje pustej kolumny z kreskami.
+    final showRir = !hideRir && exercise.sets.any(
+      (set) => set.actual?.rir != null || set.planned?.rir != null,
+    );
     final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
 
     return AnimatedContainer(
@@ -138,7 +148,7 @@ class SessionExerciseCard extends StatelessWidget {
             const SizedBox(height: 14),
             const Divider(height: 1, color: AppColors.border),
             const SizedBox(height: 8),
-            _SetTableHeader(tracking: tracking),
+            _SetTableHeader(tracking: tracking, showRir: showRir),
             for (var i = 0; i < exercise.sets.length; i++)
               tracking.isCardio
                   ? _CardioSetRow(
@@ -151,6 +161,7 @@ class SessionExerciseCard extends StatelessWidget {
                       set: exercise.sets[i],
                       label: setLabels[i],
                       showWeight: tracking.tracksWeight,
+                      showRir: showRir,
                     ),
           ],
           if (bestPace != null)
@@ -239,9 +250,10 @@ class _ExerciseThumbnail extends StatelessWidget {
 }
 
 class _SetTableHeader extends StatelessWidget {
-  const _SetTableHeader({required this.tracking});
+  const _SetTableHeader({required this.tracking, required this.showRir});
 
   final ExerciseTracking tracking;
+  final bool showRir;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +282,8 @@ class _SetTableHeader extends StatelessWidget {
                 if (tracking.tracksWeight)
                   const Expanded(flex: 4, child: Text('CIĘŻAR', style: style)),
                 const Expanded(flex: 3, child: Text('POWT.', style: style)),
-                const Expanded(flex: 2, child: Text('RIR', style: style)),
+                if (showRir)
+                  const Expanded(flex: 2, child: Text('RIR', style: style)),
                 const SizedBox(width: 22),
               ],
       ),
@@ -355,9 +368,13 @@ class _SetRow extends StatelessWidget {
     required this.set,
     required this.label,
     this.showWeight = true,
+    this.showRir = true,
   });
 
   final TrainingExerciseSetDetail set;
+
+  /// Kolumna RIR (gdy któraś seria ćwiczenia go ma).
+  final bool showRir;
 
   /// Ćwiczenie na same powtórzenia nie ma kolumny ciężaru.
   final bool showWeight;
@@ -442,10 +459,11 @@ class _SetRow extends StatelessWidget {
             flex: 3,
             child: Text(reps?.toString() ?? '—', style: valueStyle),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(rir?.toString() ?? '—', style: valueStyle),
-          ),
+          if (showRir)
+            Expanded(
+              flex: 2,
+              child: Text(rir?.toString() ?? '—', style: valueStyle),
+            ),
           SizedBox(
             width: 22,
             child: Icon(
