@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/data/exercise_library_prefetch.dart';
@@ -64,6 +66,53 @@ void main() {
 
       expect(result.failedImages, 1);
       expect(result.isComplete, isFalse);
+    });
+
+    test('stops early when the first round of images all fail', () async {
+      var attempts = 0;
+      final prefetcher = ExerciseLibraryPrefetcher(
+        pullExercises: () async {},
+        loadExercises: () async => [
+          for (var i = 0; i < 20; i++)
+            _exercise('$i', imageUrl: 'https://cdn.test/$i.webp'),
+        ],
+        cacheImage: (_) async {
+          attempts++;
+          throw Exception('offline');
+        },
+        concurrency: 4,
+      );
+
+      final result = await prefetcher.run();
+
+      // Kilka żądań już w locie, ale nie cała lista.
+      expect(attempts, lessThan(2 * 4));
+      expect(result.failedImages, 20);
+      expect(result.isComplete, isFalse);
+    });
+
+    test('gives up on an image that hangs', () async {
+      final prefetcher = ExerciseLibraryPrefetcher(
+        pullExercises: () async {},
+        loadExercises: () async => [
+          _exercise('1', imageUrl: 'https://cdn.test/slow.webp'),
+        ],
+        cacheImage: (_) => Completer<void>().future,
+        imageTimeout: const Duration(milliseconds: 20),
+      );
+
+      expect((await prefetcher.run()).failedImages, 1);
+    });
+
+    test('does not wait forever for the exercise list', () async {
+      final prefetcher = ExerciseLibraryPrefetcher(
+        pullExercises: () => Completer<void>().future,
+        loadExercises: () async => [_exercise('1')],
+        cacheImage: (_) async {},
+        pullTimeout: const Duration(milliseconds: 20),
+      );
+
+      expect((await prefetcher.run()).exercises, 1);
     });
 
     test('an empty library (offline first login) is not complete', () async {
@@ -135,6 +184,7 @@ void main() {
       );
       await tester.pump();
 
+      expect(find.text('Nie udało się pobrać bazy ćwiczeń'), findsOneWidget);
       expect(find.text('Spróbuj ponownie'), findsOneWidget);
       expect(find.text('Pomiń na razie'), findsOneWidget);
       expect(done, 0);

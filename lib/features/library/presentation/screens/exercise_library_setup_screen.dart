@@ -87,9 +87,8 @@ class _ExerciseLibrarySetupScreenState
   Widget build(BuildContext context) {
     final progress = _total == 0 ? null : _done / _total;
     final status = _failed
-        ? 'Nie udało się pobrać wszystkiego. Sprawdź internet i spróbuj '
-              'ponownie. Możesz też pominąć, a pobierzemy resztę przy '
-              'następnym uruchomieniu.'
+        ? 'Sprawdź internet i spróbuj ponownie. Możesz też pominąć, '
+              'a pobierzemy resztę przy następnym uruchomieniu.'
         : !_listReady
         ? 'Pobieranie listy ćwiczeń…'
         : 'Pobieranie ilustracji: $_done z $_total';
@@ -120,8 +119,10 @@ class _ExerciseLibrarySetupScreenState
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'Pobieramy bazę ćwiczeń',
+                Text(
+                  _failed
+                      ? 'Nie udało się pobrać bazy ćwiczeń'
+                      : 'Pobieramy bazę ćwiczeń',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.screenTitle,
                 ),

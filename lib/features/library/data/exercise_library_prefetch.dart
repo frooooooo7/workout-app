@@ -55,6 +55,8 @@ class ExerciseLibraryPrefetcher {
     required this.loadExercises,
     required this.cacheImage,
     this.concurrency = 4,
+    this.imageTimeout = const Duration(seconds: 8),
+    this.pullTimeout = const Duration(seconds: 8),
   });
 
   /// Synchronizacja ćwiczeń z serwerem (błędy sieci połyka sama).
@@ -68,11 +70,23 @@ class ExerciseLibraryPrefetcher {
 
   final int concurrency;
 
+  /// Bez sieci pojedyncze żądanie potrafi wisieć do limitu klienta HTTP —
+  /// ekran ma szybko pokazać „Spróbuj ponownie”, a nie czekać minutami.
+  final Duration imageTimeout;
+
+  /// Lista z serwera — po tym czasie bierzemy to, co już jest w lokalnej
+  /// bazie (synchronizacja dokończy się w tle).
+  final Duration pullTimeout;
+
   /// [onProgress] dostaje liczbę gotowych i wszystkich ilustracji.
   Future<ExerciseLibraryPrefetchResult> run({
     void Function(int done, int total)? onProgress,
   }) async {
-    await pullExercises();
+    try {
+      await pullExercises().timeout(pullTimeout);
+    } on TimeoutException {
+      /* bez sieci: dalej z lokalną bazą */
+    }
     final exercises = await loadExercises();
     final urls = <String>{
       for (final exercise in exercises)
@@ -82,14 +96,19 @@ class ExerciseLibraryPrefetcher {
 
     var done = 0;
     var failed = 0;
+    var succeeded = 0;
     onProgress?.call(0, urls.length);
+
+    // Pierwsza runda w całości nieudana = brak sieci; nie męczymy reszty.
+    bool offline() => succeeded == 0 && failed >= concurrency;
 
     var next = 0;
     Future<void> worker() async {
-      while (next < urls.length) {
+      while (next < urls.length && !offline()) {
         final url = urls[next++];
         try {
-          await cacheImage(url);
+          await cacheImage(url).timeout(imageTimeout);
+          succeeded++;
         } catch (_) {
           failed++;
         }
@@ -103,7 +122,8 @@ class ExerciseLibraryPrefetcher {
     return ExerciseLibraryPrefetchResult(
       exercises: exercises.length,
       images: urls.length,
-      failedImages: failed,
+      // Pominięte po wykryciu braku sieci też się nie pobrały.
+      failedImages: urls.length - succeeded,
     );
   }
 }

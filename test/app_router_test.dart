@@ -5,6 +5,7 @@ import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/feed/domain/models/cursor_page.dart';
 import 'package:gym/features/library/data/exercise_library_prefetch.dart';
+import 'package:gym/features/library/presentation/screens/exercise_library_setup_screen.dart';
 import 'package:gym/features/feed/domain/models/post_comment.dart';
 import 'package:gym/features/feed/domain/models/post_detail.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
@@ -136,7 +137,7 @@ void main() {
     final uri = router.routeInformationProvider.value.uri;
     expect(uri.path, '/setup/library');
     expect(uri.queryParameters['next'], '/app/activity');
-    expect(find.text('Pobieramy bazę ćwiczeń'), findsOneWidget);
+    expect(find.byType(ExerciseLibrarySetupScreen), findsOneWidget);
   });
 
   testWidgets('skips the library download once it was done on this device', (
