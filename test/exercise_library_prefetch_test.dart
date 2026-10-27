@@ -97,6 +97,7 @@ void main() {
             },
             onDone: () => done++,
             onSkip: () {},
+            minimumDuration: const Duration(milliseconds: 500),
           ),
         ),
       );
@@ -105,6 +106,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 15));
       expect(find.text('Pobieranie ilustracji: 1 z 2'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 15));
+      // Ekran nie znika od razu, nawet gdy wszystko już pobrane.
+      expect(done, 0);
+      await tester.pump(const Duration(milliseconds: 500));
       expect(done, 1);
     });
 
@@ -125,6 +129,7 @@ void main() {
             },
             onDone: () => done++,
             onSkip: () => skipped++,
+            minimumDuration: Duration.zero,
           ),
         ),
       );

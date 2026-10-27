@@ -12,6 +12,7 @@ class ExerciseLibrarySetupScreen extends StatefulWidget {
     required this.prefetch,
     required this.onDone,
     required this.onSkip,
+    this.minimumDuration = const Duration(seconds: 2),
   });
 
   final Future<ExerciseLibraryPrefetchResult> Function({
@@ -25,6 +26,10 @@ class ExerciseLibrarySetupScreen extends StatefulWidget {
   /// Użytkownik nie chce czekać (np. brak sieci) — spróbujemy przy
   /// następnym uruchomieniu.
   final VoidCallback onSkip;
+
+  /// Na szybkim Wi-Fi wszystko pobiera się w ułamku sekundy — ekran nie
+  /// może tylko mignąć, użytkownik ma zdążyć przeczytać, co się dzieje.
+  final Duration minimumDuration;
 
   @override
   State<ExerciseLibrarySetupScreen> createState() =>
@@ -51,6 +56,7 @@ class _ExerciseLibrarySetupScreenState
       _done = 0;
       _total = 0;
     });
+    final started = DateTime.now();
     ExerciseLibraryPrefetchResult? result;
     try {
       result = await widget.prefetch(
@@ -68,6 +74,9 @@ class _ExerciseLibrarySetupScreenState
     }
     if (!mounted) return;
     if (result != null && result.isComplete) {
+      final left = widget.minimumDuration - DateTime.now().difference(started);
+      if (left > Duration.zero) await Future<void>.delayed(left);
+      if (!mounted) return;
       widget.onDone();
     } else {
       setState(() => _failed = true);
