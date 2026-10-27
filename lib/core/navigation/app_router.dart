@@ -36,6 +36,7 @@ import '../../features/feed/presentation/screens/post_details_screen.dart';
 import '../../features/library/domain/models/exercise.dart';
 import '../../features/library/presentation/bloc/exercise_details_cubit.dart';
 import '../../features/library/presentation/screens/exercise_details_screen.dart';
+import '../../features/library/presentation/screens/exercise_library_setup_screen.dart';
 import '../../features/library/presentation/screens/library_screen.dart';
 import '../../features/library/presentation/screens/pick_exercise_screen.dart';
 import '../../features/profile/domain/models/user_profile.dart';
@@ -116,6 +117,15 @@ GoRouter buildRouter({
         ServiceLocator.currentUser.value = user;
       }
 
+      // Pierwsze logowanie na tym urządzeniu: najpierw jednorazowo pobieramy
+      // bazę ćwiczeń z ilustracjami (offline), potem reszta przekierowań.
+      if (await ServiceLocator.needsExerciseLibrarySetup(user.id)) {
+        return Uri(
+          path: '/setup/library',
+          queryParameters: {'next': state.uri.toString()},
+        ).toString();
+      }
+
       // Świeże konto najpierw przechodzi onboarding profilu (chyba że
       // w tej sesji odłożyło go na później).
       final needsOnboarding =
@@ -171,6 +181,32 @@ GoRouter buildRouter({
                 context.go('/app/training');
               },
             ),
+          );
+        },
+      ),
+
+      // Jednorazowe pobranie bazy ćwiczeń po pierwszym logowaniu.
+      GoRoute(
+        path: '/setup/library',
+        builder: (context, s) {
+          final user = ServiceLocator.currentUser.value;
+          if (user == null) return const _LoadingScreen();
+          final next = s.uri.queryParameters['next'];
+          final target =
+              next != null &&
+                  (next.startsWith('/app/') || next == '/onboarding')
+              ? next
+              : '/app/training';
+          return ExerciseLibrarySetupScreen(
+            prefetch: ServiceLocator.prefetchExerciseLibrary,
+            onDone: () async {
+              await ServiceLocator.markExerciseLibraryReady(user.id);
+              if (context.mounted) context.go(target);
+            },
+            onSkip: () {
+              ServiceLocator.deferExerciseLibrarySetup(user.id);
+              context.go(target);
+            },
           );
         },
       ),

@@ -4,6 +4,7 @@ import 'package:gym/core/navigation/app_router.dart';
 import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/feed/domain/models/cursor_page.dart';
+import 'package:gym/features/library/data/exercise_library_prefetch.dart';
 import 'package:gym/features/feed/domain/models/post_comment.dart';
 import 'package:gym/features/feed/domain/models/post_detail.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
@@ -53,6 +54,7 @@ void main() {
     ServiceLocator.debugSetFeed();
     ServiceLocator.debugSetUserScopedRepositories();
     ServiceLocator.currentUser.value = null;
+    ServiceLocator.debugResetExerciseLibrarySetup();
   });
 
   testWidgets('redirects protected deep links when no session is restored', (
@@ -106,6 +108,61 @@ void main() {
     expect(ServiceLocator.currentUser.value, user);
     expect(router.routeInformationProvider.value.uri.path, '/app/activity');
     expect(find.text('Twój feed jest pusty'), findsOneWidget);
+  });
+
+  testWidgets('first login on a device opens the exercise library download', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+    ServiceLocator.debugResetExerciseLibrarySetup(
+      store: _MemoryLibraryReadyStore(),
+    );
+    const user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+
+    final router = buildRouter(
+      initialLocation: '/app/activity',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final uri = router.routeInformationProvider.value.uri;
+    expect(uri.path, '/setup/library');
+    expect(uri.queryParameters['next'], '/app/activity');
+    expect(find.text('Pobieramy bazę ćwiczeń'), findsOneWidget);
+  });
+
+  testWidgets('skips the library download once it was done on this device', (
+    tester,
+  ) async {
+    await setDesktopViewport(tester);
+    ServiceLocator.debugResetExerciseLibrarySetup(
+      store: _MemoryLibraryReadyStore({'user-1'}),
+    );
+    const user = AuthUser(
+      id: 'user-1',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+    );
+
+    final router = buildRouter(
+      initialLocation: '/app/activity',
+      resolveUser: () async => user,
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(router.routeInformationProvider.value.uri.path, '/app/activity');
   });
 
   testWidgets('redirects legacy /app/training/plans to /app/plans', (
@@ -471,4 +528,16 @@ class _FakeTrainingStatsRepository implements TrainingStatsRepository {
   @override
   Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
       const [];
+}
+
+class _MemoryLibraryReadyStore implements ExerciseLibraryReadyStore {
+  _MemoryLibraryReadyStore([Set<String>? ready]) : _ready = {...?ready};
+
+  final Set<String> _ready;
+
+  @override
+  Future<bool> isReady(String userId) async => _ready.contains(userId);
+
+  @override
+  Future<void> markReady(String userId) async => _ready.add(userId);
 }

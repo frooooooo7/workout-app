@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
+import '../images/offline_network_image.dart';
 import '../notifications/local_notifications.dart';
 import '../network/api_client.dart';
 import '../session/session_manager.dart';
@@ -19,6 +20,7 @@ import '../../features/auth/data/placeholder_password_reset_repository.dart';
 import '../../features/auth/domain/models/auth_models.dart';
 import '../../features/auth/domain/repositories/password_reset_repository.dart';
 import '../../features/library/data/exercise_database.dart';
+import '../../features/library/data/exercise_library_prefetch.dart';
 import '../../features/library/data/exercise_remote_data_source.dart';
 import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
@@ -293,6 +295,8 @@ class ServiceLocator {
       settings: restTimerNotificationSettings,
     );
     workoutReminderSettings = const SharedPreferencesWorkoutReminderSettings();
+    exerciseLibraryReadyStore =
+        const SharedPreferencesExerciseLibraryReadyStore();
     workoutReminderScheduler = WorkoutReminderNotificationScheduler(
       notifications: localNotifications,
     );
@@ -555,6 +559,68 @@ class ServiceLocator {
     final updated = current.copyWith(firstName: firstName, lastName: lastName);
     currentUser.value = updated;
     await tokenStorage.saveUser(updated);
+  }
+
+  // ── Jednorazowe pobranie bazy ćwiczeń ──────────────────────────────────
+
+  /// Ustawiane w [init]; bez niego (testy widgetów) router nie kieruje na
+  /// ekran pobierania bazy ćwiczeń.
+  static ExerciseLibraryReadyStore? exerciseLibraryReadyStore;
+  static final Set<String> _exerciseLibraryReadyUsers = {};
+  static String? _exerciseLibrarySetupDeferredForUserId;
+
+  /// Czy po zalogowaniu trzeba jeszcze pobrać bazę ćwiczeń z ilustracjami
+  /// na to urządzenie. Na webie obrazki cache'uje przeglądarka.
+  static Future<bool> needsExerciseLibrarySetup(String userId) async {
+    final store = exerciseLibraryReadyStore;
+    if (kIsWeb || store == null) return false;
+    if (_exerciseLibrarySetupDeferredForUserId == userId) return false;
+    if (_exerciseLibraryReadyUsers.contains(userId)) return false;
+    try {
+      if (await store.isReady(userId)) {
+        _exerciseLibraryReadyUsers.add(userId);
+        return false;
+      }
+    } catch (_) {
+      // Bez dostępu do ustawień nie blokujemy wejścia do aplikacji.
+      return false;
+    }
+    return true;
+  }
+
+  static Future<void> markExerciseLibraryReady(String userId) async {
+    _exerciseLibraryReadyUsers.add(userId);
+    try {
+      await exerciseLibraryReadyStore?.markReady(userId);
+    } catch (_) {
+      /* przy następnym starcie pobierze się jeszcze raz */
+    }
+  }
+
+  @visibleForTesting
+  static void debugResetExerciseLibrarySetup({
+    ExerciseLibraryReadyStore? store,
+  }) {
+    exerciseLibraryReadyStore = store;
+    _exerciseLibraryReadyUsers.clear();
+    _exerciseLibrarySetupDeferredForUserId = null;
+  }
+
+  /// „Pomiń na razie” — w tej sesji aplikacji router już nie pyta.
+  static void deferExerciseLibrarySetup(String userId) {
+    _exerciseLibrarySetupDeferredForUserId = userId;
+  }
+
+  /// Pobiera ćwiczenia konta z serwera, a potem wszystkie ilustracje na dysk.
+  static Future<ExerciseLibraryPrefetchResult> prefetchExerciseLibrary({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    await (_exerciseScopeFuture ?? Future<void>.value());
+    return ExerciseLibraryPrefetcher(
+      pullExercises: () async => _exerciseSyncEngine?.pull(),
+      loadExercises: () => exerciseRepository.getAll(),
+      cacheImage: OfflineImageStore.instance.load,
+    ).run(onProgress: onProgress);
   }
 
   /// Konto, które w tej sesji aplikacji odłożyło onboarding na później
