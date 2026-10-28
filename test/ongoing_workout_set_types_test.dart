@@ -116,6 +116,13 @@ class _FakePreviousPerformance implements PreviousPerformanceRepository {
     required String exerciseId,
     required String exerciseName,
   }) async => byExerciseId[exerciseId];
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
+  }) async => [?byExerciseId[exerciseId]];
 }
 
 class _ThrowingPreviousPerformance implements PreviousPerformanceRepository {
@@ -123,6 +130,13 @@ class _ThrowingPreviousPerformance implements PreviousPerformanceRepository {
   Future<List<TrainingSessionSet>?> lastCompletedSets({
     required String exerciseId,
     required String exerciseName,
+  }) async => throw StateError('db closed');
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
   }) async => throw StateError('db closed');
 }
 

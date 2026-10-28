@@ -356,6 +356,8 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                   exerciseIndex: widget.exerciseIndex,
                   sets: _sets,
                   previous: previous,
+                  earlier: history?.earlierSets ?? const [],
+                  legs: isLegExercise(exercise.exerciseMuscles),
                   record: _record,
                   layout: layout,
                   focused: widget.focused,
@@ -384,6 +386,8 @@ class _SetTable extends StatelessWidget {
     required this.exerciseIndex,
     required this.sets,
     required this.previous,
+    required this.earlier,
+    required this.legs,
     required this.record,
     required this.layout,
     required this.focused,
@@ -396,6 +400,10 @@ class _SetTable extends StatelessWidget {
   final int exerciseIndex;
   final List<TrainingSessionSet> sets;
   final List<TrainingSessionSet>? previous;
+
+  /// Serie z wcześniejszych treningów (od najnowszego) — do progresji.
+  final List<List<TrainingSessionSet>> earlier;
+  final bool legs;
   final ExerciseRecordBaseline? record;
   final SetTableLayout layout;
   final bool focused;
@@ -438,7 +446,12 @@ class _SetTable extends StatelessWidget {
                     ? progressionHintFor(
                         sets[i],
                         previousSet,
-                        stepKg: WorkoutAccentScope.progressionStepOf(context),
+                        settings: WorkoutAccentScope.progressionOf(context),
+                        earlier: [
+                          for (final sessionSets in earlier)
+                            previousSetFor(sets, i, sessionSets),
+                        ],
+                        legs: legs,
                       )
                     : null,
                 onChanged: (set) => onChanged(i, set),

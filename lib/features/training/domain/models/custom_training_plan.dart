@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/theme/plan_colors.dart';
 
 import '../../../library/domain/models/exercise.dart';
+import 'progression_settings.dart';
 
 class ExerciseSet {
   ExerciseSet({
@@ -139,6 +140,7 @@ class CustomTrainingPlan {
     this.iconKey,
     this.goal,
     this.progressionStepKg,
+    this.progression,
     this.highlightPlanColor = true,
     this.showRir = true,
     this.showTempo = true,
@@ -172,8 +174,20 @@ class CustomTrainingPlan {
 
   final PlanGoal? goal;
 
-  /// Krok podpowiedzi progresji (`+2,5`); `null` = domyślny krok aplikacji.
+  /// Krok progresji z wersji sprzed Ustawień → Progresja (w kg). Plan, który
+  /// go ma, a nie ma [progression], liczy się jako „Stały krok” z tym krokiem.
   final double? progressionStepKg;
+
+  /// Własna metoda progresji planu; `null` = jak w ustawieniach konta.
+  final ProgressionSettings? progression;
+
+  /// Metoda planu (własna albo przeniesiona ze starego kroku); `null` = jak
+  /// w ustawieniach konta.
+  ProgressionSettings? get planProgression =>
+      progression ??
+      (progressionStepKg == null
+          ? null
+          : ProgressionSettings.legacyStep(progressionStepKg!));
 
   /// Aktywna seria, check i przerwa w kolorze planu zamiast niebieskiego.
   final bool highlightPlanColor;
@@ -198,7 +212,7 @@ class CustomTrainingPlan {
     highlightPlanColor: highlightPlanColor,
     showRir: showRir,
     showTempo: showTempo,
-    progressionStepKg: progressionStepKg,
+    progression: planProgression,
   );
 
   /// Przerwa po serii [exercise]: własna albo domyślna planu.
@@ -248,6 +262,7 @@ class CustomTrainingPlan {
     String? iconKey,
     PlanGoal? goal,
     double? progressionStepKg,
+    ProgressionSettings? progression,
     bool? highlightPlanColor,
     bool? showRir,
     bool? showTempo,
@@ -257,6 +272,7 @@ class CustomTrainingPlan {
     bool clearIconKey = false,
     bool clearGoal = false,
     bool clearProgressionStep = false,
+    bool clearProgression = false,
   }) {
     return CustomTrainingPlan(
       id: id ?? this.id,
@@ -272,6 +288,7 @@ class CustomTrainingPlan {
       progressionStepKg: clearProgressionStep
           ? null
           : (progressionStepKg ?? this.progressionStepKg),
+      progression: clearProgression ? null : (progression ?? this.progression),
       highlightPlanColor: highlightPlanColor ?? this.highlightPlanColor,
       showRir: showRir ?? this.showRir,
       showTempo: showTempo ?? this.showTempo,

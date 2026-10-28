@@ -11,6 +11,15 @@ abstract interface class PreviousPerformanceRepository {
     required String exerciseId,
     required String exerciseName,
   });
+
+  /// Ukończone serie tego ćwiczenia z ostatnich [limit] treningów, od
+  /// najnowszego — progresja patrzy kilka treningów wstecz („zwiększaj po
+  /// 2 treningach”, deload). Pusta lista, gdy ćwiczenia jeszcze nie robiono.
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
+  });
 }
 
 /// Poprzednia seria pasująca do serii [index] z [current].

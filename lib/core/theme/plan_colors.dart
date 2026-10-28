@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
+import '../../features/training/domain/models/progression_settings.dart';
 
 /// Akcent planu treningowego — ten sam plan ma ten sam kolor na każdym
 /// ekranie (trening, historia, kalendarz).
@@ -118,7 +119,7 @@ class PlanStyle {
     this.highlightPlanColor = true,
     this.showRir = true,
     this.showTempo = true,
-    this.progressionStepKg,
+    this.progression,
   });
 
   static const fallback = PlanStyle();
@@ -128,7 +129,9 @@ class PlanStyle {
   final bool highlightPlanColor;
   final bool showRir;
   final bool showTempo;
-  final double? progressionStepKg;
+
+  /// Metoda progresji planu; `null` = jak w ustawieniach konta.
+  final ProgressionSettings? progression;
 
   @override
   bool operator ==(Object other) =>
@@ -138,7 +141,7 @@ class PlanStyle {
       other.highlightPlanColor == highlightPlanColor &&
       other.showRir == showRir &&
       other.showTempo == showTempo &&
-      other.progressionStepKg == progressionStepKg;
+      other.progression == progression;
 
   @override
   int get hashCode => Object.hash(
@@ -147,7 +150,7 @@ class PlanStyle {
     highlightPlanColor,
     showRir,
     showTempo,
-    progressionStepKg,
+    progression,
   );
 }
 

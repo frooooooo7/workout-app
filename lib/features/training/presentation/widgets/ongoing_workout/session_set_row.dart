@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../domain/models/progression_settings.dart';
 import '../../../domain/models/training_session.dart';
 import '../../../domain/services/live_workout_insights.dart';
 import '../table_cell_input.dart';
@@ -146,17 +147,12 @@ class SessionSetRow extends StatelessWidget {
           ],
           SizedBox(
             width: layout.repsWidth,
-            child: TableCellInput(
+            child: _RepsField(
               key: ValueKey('session-set-reps-$exerciseIndex-$setIndex'),
-              value: set.actualReps ?? '',
-              hint: set.plannedReps,
+              set: set,
               look: _look(completed: completed, highlighted: highlighted),
-              onChanged: (value) => onChanged(
-                set.copyWith(
-                  actualReps: value,
-                  clearActualReps: value.trim().isEmpty,
-                ),
-              ),
+              progression: highlighted ? progression : null,
+              onChanged: onChanged,
             ),
           ),
           if (layout.showRir) ...[
@@ -295,7 +291,9 @@ class _WeightField extends StatelessWidget {
       valueKg: set.actualWeight,
       // Propozycja z progresji ma pierwszeństwo przed ciężarem z planu.
       hintKg: hint == null ? set.plannedWeight : null,
-      fallbackHint: hint == null ? '' : formatWeightNumber(hint.weightKg),
+      fallbackHint: hint == null
+          ? ''
+          : formatStepNumber(unit.fromKg(hint.weightKg)),
       look: look,
       onChanged: (value) => onChanged(
         set.copyWith(
@@ -304,35 +302,120 @@ class _WeightField extends StatelessWidget {
         ),
       ),
     );
-    if (hint == null || !hint.isIncrease) return field;
+    if (hint == null) return field;
+    final String text;
+    if (hint.isDeload) {
+      final percent = ((1 - ProgressionSettings.deloadFactor) * 100).round();
+      text = '−$percent%';
+    } else if (hint.isIncrease) {
+      text = '+${formatStepNumber(unit.fromKg(hint.deltaKg))}';
+    } else {
+      return field;
+    }
+    return _Tagged(
+      field: field,
+      tag: _HintTag(
+        key: const Key('progression-hint-tag'),
+        text: text,
+        deload: hint.isDeload,
+        semanticLabel: 'Propozycja: ${formatWeightWithUnit(hint.weightKg)}',
+      ),
+    );
+  }
+}
+
+/// Pole powtórzeń; przy podwójnej progresji placeholder to cel na dziś,
+/// a znaczek `+1` mówi, o ile więcej niż poprzednio.
+class _RepsField extends StatelessWidget {
+  const _RepsField({
+    super.key,
+    required this.set,
+    required this.look,
+    required this.progression,
+    required this.onChanged,
+  });
+
+  final TrainingSessionSet set;
+  final TableCellInputLook look;
+  final ProgressionHint? progression;
+  final ValueChanged<TrainingSessionSet> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final target = progression?.reps;
+    final field = TableCellInput(
+      value: set.actualReps ?? '',
+      hint: target?.toString() ?? set.plannedReps,
+      look: look,
+      onChanged: (value) => onChanged(
+        set.copyWith(actualReps: value, clearActualReps: value.trim().isEmpty),
+      ),
+    );
+    final hint = progression;
+    if (hint == null || !hint.addsReps) return field;
+    return _Tagged(
+      field: field,
+      tag: _HintTag(
+        key: const Key('progression-reps-tag'),
+        text: '+${hint.repsDelta}',
+        semanticLabel: 'Propozycja: ${hint.reps} powtórzeń',
+      ),
+    );
+  }
+}
+
+class _Tagged extends StatelessWidget {
+  const _Tagged({required this.field, required this.tag});
+
+  final Widget field;
+  final Widget tag;
+
+  @override
+  Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
         field,
-        Positioned(
-          right: 4,
-          top: -9,
-          child: Semantics(
-            label: 'Propozycja: ${formatWeightWithUnit(hint.weightKg)}',
-            child: Container(
-              key: const Key('progression-hint-tag'),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: WorkoutColors.progressionTag,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                '+${formatWeightNumber(hint.deltaKg, unit: unit)}',
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
+        Positioned(right: 4, top: -9, child: tag),
+      ],
+    );
+  }
+}
+
+/// Mały znaczek nad polem: zielony przy zwyżce, bursztynowy przy deloadzie.
+class _HintTag extends StatelessWidget {
+  const _HintTag({
+    super.key,
+    required this.text,
+    required this.semanticLabel,
+    this.deload = false,
+  });
+
+  final String text;
+  final String semanticLabel;
+  final bool deload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: deload
+              ? WorkoutColors.deloadTag
+              : WorkoutColors.progressionTag,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: deload ? AppColors.statAmber : AppColors.success,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
           ),
         ),
-      ],
+      ),
     );
   }
 }

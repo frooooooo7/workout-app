@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 19;
+  static const _dbVersion = 20;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -312,6 +312,7 @@ class ExerciseDatabase {
     await _addCardioColumns(db);
     await _addPlanSharingColumns(db);
     await _addPostColumns(db);
+    await _addPlanProgressionColumn(db);
   }
 
   /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
@@ -801,7 +802,18 @@ class ExerciseDatabase {
     if (oldVersion < 19) {
       await _addPostColumns(db);
     }
+    if (oldVersion < 20) {
+      await _addPlanProgressionColumn(db);
+    }
   }
+
+  /// v20: własna metoda progresji planu (JSON); `NULL` = jak w ustawieniach.
+  Future<void> _addPlanProgressionColumn(Database db) => _addColumnIfMissing(
+    db,
+    table: tableTrainingPlans,
+    column: 'progression',
+    definition: 'TEXT',
+  );
 
   /// `ALTER TABLE ... ADD COLUMN` bez ryzyka duplikatu — tabela utworzona
   /// w tej samej ścieżce upgrade'u (np. `oldVersion < 6`) ma już nową kolumnę.

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/units/weight_unit.dart';
+import 'package:gym/features/training/domain/models/progression_settings.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/services/live_workout_insights.dart';
 import 'package:gym/features/training/presentation/widgets/ongoing_workout/next_exercise_card.dart';
@@ -93,10 +94,13 @@ void main() {
   });
 
   group('progression hint', () {
+    const fixed = ProgressionSettings(method: ProgressionMethod.fixed);
+
     test('adds a step when all planned reps were done last time', () {
       final hint = progressionHintFor(
         _set('', '', completed: false, planned: '6-8'),
         _set('92,5', '8'),
+        settings: fixed,
       );
       expect(hint?.weightKg, 95);
       expect(hint?.deltaKg, 2.5);
@@ -107,6 +111,16 @@ void main() {
       final hint = progressionHintFor(
         _set('', '', completed: false, planned: '8'),
         _set('92,5', '5'),
+        settings: fixed,
+      );
+      expect(hint?.weightKg, 92.5);
+      expect(hint?.isIncrease, isFalse);
+    });
+
+    test('no step by default — progression is off until chosen', () {
+      final hint = progressionHintFor(
+        _set('', '', completed: false, planned: '8'),
+        _set('92,5', '8'),
       );
       expect(hint?.weightKg, 92.5);
       expect(hint?.isIncrease, isFalse);
@@ -117,14 +131,11 @@ void main() {
         progressionHintFor(
           _set('', '', completed: false, type: SetType.warmup),
           _set('60', '10'),
+          settings: fixed,
         ),
         isNull,
       );
       expect(progressionHintFor(_set('', ''), _set('', '12')), isNull);
-    });
-
-    test('uses 5 lb steps in pounds', () {
-      expect(progressionStepKg(WeightUnit.lb), closeTo(2.268, 0.001));
     });
   });
 
