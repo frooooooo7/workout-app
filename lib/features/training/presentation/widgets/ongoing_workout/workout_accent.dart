@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/plan_colors.dart';
+import '../../../domain/models/progression_settings.dart';
 
 /// Kolor zaznaczenia na ekranie treningu: aktywna seria, check, przerwa.
 ///
@@ -58,21 +59,22 @@ class WorkoutAccentScope extends InheritedWidget {
   const WorkoutAccentScope({
     super.key,
     required this.accent,
-    this.progressionStepKg,
+    this.progression = ProgressionSettings.off,
     required super.child,
   });
 
   final WorkoutAccent accent;
 
-  /// Krok podpowiedzi progresji z ustawień planu; `null` = domyślny.
-  final double? progressionStepKg;
+  /// Metoda progresji treningu (planu albo konta).
+  final ProgressionSettings progression;
 
-  static double? progressionStepOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<WorkoutAccentScope>()
-      ?.progressionStepKg;
+  static ProgressionSettings progressionOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<WorkoutAccentScope>()
+          ?.progression ??
+      ProgressionSettings.off;
 
   @override
   bool updateShouldNotify(WorkoutAccentScope oldWidget) =>
-      accent != oldWidget.accent ||
-      progressionStepKg != oldWidget.progressionStepKg;
+      accent != oldWidget.accent || progression != oldWidget.progression;
 }

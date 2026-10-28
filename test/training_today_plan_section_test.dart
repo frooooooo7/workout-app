@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/services/service_locator.dart';
+import 'package:gym/features/training/domain/models/progression_settings.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/training_home_insights.dart';
@@ -165,6 +167,22 @@ void main() {
     expect(find.text('92,5 × 6'), findsOneWidget);
     expect(find.text('12 powt.'), findsOneWidget);
     expect(find.text('~60 min'), findsOneWidget);
+    // Progresja domyślnie wyłączona: ten sam ciężar, powtórzenie więcej.
+    expect(
+      find.bySemanticsLabel(
+        'Do pobicia: Wyciskanie sztangi na ławce 92,5 kg × 7, rekord 92,5',
+      ),
+      findsOneWidget,
+    );
+
+    // Stały krok z ustawień: o krok więcej przy tych samych powtórzeniach.
+    ServiceLocator.progressionSettings.notifier.value =
+        const ProgressionSettings(method: ProgressionMethod.fixed);
+    addTearDown(
+      () => ServiceLocator.progressionSettings.notifier.value =
+          ProgressionSettings.off,
+    );
+    await tester.pump();
     expect(
       find.bySemanticsLabel(
         'Do pobicia: Wyciskanie sztangi na ławce 95 kg × 6, rekord 92,5',

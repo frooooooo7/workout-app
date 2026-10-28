@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/utils/polish_plural.dart';
@@ -7,6 +8,7 @@ import '../../../../core/widgets/app_pressable.dart';
 import '../../../../core/widgets/skeleton.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_home_insights.dart';
 import 'training_day_status.dart';
 import 'training_plan_exercises_table.dart';
@@ -104,11 +106,15 @@ class TrainingTodayPlanSection extends StatelessWidget {
           ),
         customItem,
       ],
-      child: _PlanContent(
-        plan: plan,
-        insights: insights,
-        onOpen: () => onOpenPlan(plan),
-        onStart: sessionInProgress ? null : () => onStartPlan(plan),
+      // „Do pobicia” zależy od metody progresji z ustawień.
+      child: ValueListenableBuilder<ProgressionSettings>(
+        valueListenable: ServiceLocator.progressionSettings.notifier,
+        builder: (context, _, _) => _PlanContent(
+          plan: plan,
+          insights: insights,
+          onOpen: () => onOpenPlan(plan),
+          onStart: sessionInProgress ? null : () => onStartPlan(plan),
+        ),
       ),
     );
   }
@@ -316,7 +322,12 @@ class _PlanContent extends StatelessWidget {
     final muscles = _muscleSummary(plan.exercises);
     final setsCount = plan.exercises.fold<int>(0, (s, e) => s + e.sets.length);
     final durationSec = insights.durationFor(plan.name);
-    final record = recordToBeatFor(plan.exercises, insights.bests);
+    final record = recordToBeatFor(
+      plan.exercises,
+      insights.bests,
+      settings:
+          plan.planProgression ?? ServiceLocator.progressionSettings.current,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -9,13 +10,16 @@ import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/progression_settings.dart';
 import '../widgets/ongoing_workout/rest_timer_controls.dart'
     show formatRestRemaining;
+import '../widgets/progression/plan_progression_sheet.dart';
 
 /// Ustawienia planu zwracane do edycji planu.
 typedef PlanSettingsResult = ({
   PlanGoal? goal,
   double? progressionStepKg,
+  ProgressionSettings? progression,
   bool highlightPlanColor,
   bool showRir,
   bool showTempo,
@@ -34,10 +38,9 @@ class PlanSettingsScreen extends StatefulWidget {
 }
 
 class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
-  static const _steps = [1.25, 2.5, 5.0];
-
   late PlanGoal? _goal = widget.plan.goal;
-  late double? _step = widget.plan.progressionStepKg;
+  late double? _legacyStep = widget.plan.progressionStepKg;
+  late ProgressionSettings? _progression = widget.plan.progression;
   late bool _highlight = widget.plan.highlightPlanColor;
   late bool _showRir = widget.plan.showRir;
   late bool _showTempo = widget.plan.showTempo;
@@ -50,12 +53,38 @@ class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
   void _done() {
     Navigator.of(context).pop((
       goal: _goal,
-      progressionStepKg: _step,
+      progressionStepKg: _legacyStep,
+      progression: _progression,
       highlightPlanColor: _highlight,
       showRir: _showRir,
       showTempo: _showTempo,
       isPublic: _isPublic,
     ));
+  }
+
+  /// Własna metoda planu (także przeniesiona ze starego kroku w kg).
+  ProgressionSettings? get _ownProgression =>
+      _progression ??
+      (_legacyStep == null
+          ? null
+          : ProgressionSettings.legacyStep(_legacyStep!));
+
+  String _summary(ProgressionSettings settings) =>
+      settings.inUnit(WeightUnits.current).summary;
+
+  Future<void> _pickProgression(ProgressionSettings account) async {
+    final picked = await showPlanProgressionSheet(
+      context,
+      planName: widget.plan.name,
+      own: _ownProgression,
+      account: account,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      // Nowy wybór zastępuje stary krok z wersji sprzed metod progresji.
+      _legacyStep = null;
+      _progression = picked.progression;
+    });
   }
 
   @override
@@ -108,27 +137,54 @@ class _PlanSettingsScreenState extends State<PlanSettingsScreen> {
                     const SizedBox(height: 24),
                     const Text('PROGRESJA', style: AppTextStyles.eyebrow),
                     const SizedBox(height: 10),
-                    _Card(
-                      children: [
-                        Row(
+                    ValueListenableBuilder<ProgressionSettings>(
+                      valueListenable:
+                          ServiceLocator.progressionSettings.notifier,
+                      builder: (context, account, _) {
+                        final own = _ownProgression;
+                        return _Card(
                           children: [
-                            const Expanded(
-                              child: Text('Krok ciężaru', style: _titleStyle),
-                            ),
-                            _Segmented(
-                              values: [
-                                for (final step in _steps) _formatKg(step),
-                              ],
-                              selected: _steps.indexOf(_step ?? 2.5),
-                              lastSuffix: ' kg',
-                              onChanged: (i) =>
-                                  setState(() => _step = _steps[i]),
+                            AppPressable(
+                              key: const ValueKey('plan-progression-row'),
+                              onTap: () => _pickProgression(account),
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Metoda w tym planie',
+                                          style: _titleStyle,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          own == null
+                                              ? 'Jak w ustawieniach: '
+                                                    '${_summary(account)}'
+                                              : _summary(own),
+                                          style: AppTextStyles.caption,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Zmień',
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 14),
-                        _ProgressionPreview(stepKg: _step ?? 2.5),
-                      ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                     const Text(
@@ -207,11 +263,6 @@ const _titleStyle = TextStyle(
   fontSize: 15,
   fontWeight: FontWeight.w800,
 );
-
-String _formatKg(double kg) {
-  final text = kg == kg.roundToDouble() ? kg.toStringAsFixed(0) : kg.toString();
-  return text.replaceAll('.', ',');
-}
 
 class _Card extends StatelessWidget {
   const _Card({required this.children});
@@ -293,113 +344,6 @@ class _GoalCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Segmented extends StatelessWidget {
-  const _Segmented({
-    required this.values,
-    required this.selected,
-    required this.onChanged,
-    this.lastSuffix = '',
-  });
-
-  final List<String> values;
-  final int selected;
-  final ValueChanged<int> onChanged;
-  final String lastSuffix;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppColors.tile,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < values.length; i++)
-            Semantics(
-              button: true,
-              selected: i == selected,
-              child: GestureDetector(
-                key: ValueKey('plan-step-$i'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  height: 34,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: i == selected
-                        ? AppColors.surfaceVariant
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text(
-                    i == values.length - 1
-                        ? '${values[i]}$lastSuffix'
-                        : values[i],
-                    style: AppTextStyles.number(
-                      size: 16,
-                      color: i == selected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// „W trakcie treningu 92,5 → +2,5” — jak krok zmieni podpowiedź.
-class _ProgressionPreview extends StatelessWidget {
-  const _ProgressionPreview({required this.stepKg});
-
-  final double stepKg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text('W trakcie treningu', style: AppTextStyles.caption),
-          ),
-          Text(
-            '${formatWeightNumber(92.5)} → ',
-            style: AppTextStyles.number(size: 16),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            child: Container(
-              key: ValueKey(stepKg),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF12301F),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                '+${_formatKg(stepKg)}',
-                style: AppTextStyles.number(size: 14, color: AppColors.success),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

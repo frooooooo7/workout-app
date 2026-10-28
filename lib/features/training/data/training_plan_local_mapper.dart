@@ -7,6 +7,7 @@ import '../../library/data/exercise_database.dart';
 import '../../library/data/exercise_dto.dart';
 import '../../library/domain/models/exercise.dart';
 import '../domain/models/custom_training_plan.dart';
+import '../domain/models/progression_settings.dart';
 
 class LocalTrainingPlanRecord {
   const LocalTrainingPlanRecord({
@@ -30,6 +31,15 @@ class TrainingPlanLocalMapper {
 
   static String encodeDays(List<int> days) => jsonEncode(days);
 
+  static ProgressionSettings? _progressionFromColumn(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return ProgressionSettings.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
   static List<int> decodeDays(String raw) =>
       (jsonDecode(raw) as List).map((d) => d as int).toList();
 
@@ -41,6 +51,9 @@ class TrainingPlanLocalMapper {
     'icon_key': plan.iconKey,
     'goal': plan.goal?.apiName,
     'progression_step_kg': plan.progressionStepKg,
+    'progression': plan.progression == null
+        ? null
+        : jsonEncode(plan.progression!.toJson()),
     'highlight_plan_color': plan.highlightPlanColor ? 1 : 0,
     'show_rir': plan.showRir ? 1 : 0,
     'show_tempo': plan.showTempo ? 1 : 0,
@@ -190,6 +203,7 @@ class TrainingPlanLocalMapper {
         goal: PlanGoal.fromApi(planRow['goal'] as String?),
         progressionStepKg: (planRow['progression_step_kg'] as num?)
             ?.toDouble(),
+        progression: _progressionFromColumn(planRow['progression']),
         highlightPlanColor: (planRow['highlight_plan_color'] as int?) != 0,
         showRir: (planRow['show_rir'] as int?) != 0,
         showTempo: (planRow['show_tempo'] as int?) != 0,

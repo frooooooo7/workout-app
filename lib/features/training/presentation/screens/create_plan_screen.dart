@@ -286,6 +286,8 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         clearGoal: goal == null,
         progressionStepKg: result.progressionStepKg,
         clearProgressionStep: result.progressionStepKg == null,
+        progression: result.progression,
+        clearProgression: result.progression == null,
         highlightPlanColor: result.highlightPlanColor,
         showRir: result.showRir,
         showTempo: result.showTempo,

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/service_locator.dart';
 import '../../notifications/presentation/bloc/social_notification_settings_cubit.dart';
+import '../../training/presentation/screens/progression_settings_screen.dart';
 import 'bloc/change_password_cubit.dart';
 import 'bloc/delete_account_cubit.dart';
 import 'bloc/notification_settings_cubit.dart';
@@ -16,6 +17,7 @@ import 'screens/notification_settings_screen.dart';
 const kChangePasswordRoute = '/app/profile/settings/change-password';
 const kNotificationSettingsRoute = '/app/profile/settings/notifications';
 const kHelpRoute = '/app/profile/settings/help';
+const kProgressionSettingsRoute = '/app/profile/settings/progression';
 const kDeleteAccountRoute = '/app/profile/settings/delete-account';
 
 /// Ustawienia powiadomień — z ustawień profilu i z centrum powiadomień.
@@ -62,6 +64,11 @@ List<RouteBase> buildAccountSettingsRoutes(
       parentNavigatorKey: rootNavigatorKey,
       path: 'notifications',
       builder: (_, _) => buildNotificationSettingsPage(),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: 'progression',
+      builder: (_, _) => const ProgressionSettingsScreen(),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,

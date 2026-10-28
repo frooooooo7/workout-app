@@ -14,6 +14,7 @@ import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
+import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
@@ -312,10 +313,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _loadHistory(TrainingSessionExercise exercise) async {
-    final (previous, bests) = await (
-      _loadPreviousSets(exercise),
+    final (recent, bests) = await (
+      _loadRecentSets(exercise),
       _bests ??= _loadBests(),
     ).wait;
+    final previous = recent.isEmpty ? null : recent.first;
     final key = statsExerciseKey(exercise);
     final best = bests?.records[key];
     final record = best != null
@@ -327,26 +329,29 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     setState(() {
       _history[exercise.id] = ExerciseHistoryInsights(
         previousSets: previous,
+        earlierSets: recent.skip(1).toList(),
         record: record,
         bestPaceSecondsPerKm: bests?.paces[key],
       );
     });
   }
 
-  /// Poprzedni wynik ćwiczenia; brak danych lub błąd odczytu to po prostu
-  /// brak kolumny — nigdy błąd na ekranie treningu.
-  Future<List<TrainingSessionSet>?> _loadPreviousSets(
+  /// Ostatnie wyniki ćwiczenia (od najnowszego; tyle, ile potrzebuje
+  /// progresja). Brak danych lub błąd odczytu to po prostu brak kolumny —
+  /// nigdy błąd na ekranie treningu.
+  Future<List<List<TrainingSessionSet>>> _loadRecentSets(
     TrainingSessionExercise exercise,
   ) async {
     final repository = _previousPerformance;
-    if (repository == null) return null;
+    if (repository == null) return const [];
     try {
-      return await repository.lastCompletedSets(
+      return await repository.recentCompletedSets(
         exerciseId: exercise.exerciseId,
         exerciseName: exercise.exerciseName,
+        limit: ProgressionSettings.deloadAfterFailures,
       );
     } catch (_) {
-      return null;
+      return const [];
     }
   }
 
@@ -422,7 +427,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           },
           child: WorkoutAccentScope(
             accent: _accentOf(session),
-            progressionStepKg: _planStyleOf(session)?.progressionStepKg,
+            progression: _progressionOf(session),
             child: Scaffold(
               backgroundColor: AppColors.background,
               body: SafeArea(
@@ -509,6 +514,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     return PlanColors.styles.styleFor(session.planName) ??
         PlanStyle(colorKey: session.planColorKey, iconKey: session.planIconKey);
   }
+
+  /// Metoda progresji tego treningu: własna planu albo z ustawień konta.
+  ProgressionSettings _progressionOf(TrainingSession session) =>
+      _planStyleOf(session)?.progression ??
+      ServiceLocator.progressionSettings.current;
 
   WorkoutAccent _accentOf(TrainingSession session) {
     final style = _planStyleOf(session);
@@ -796,21 +806,28 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           : 'Teraz: $name · ${formatSetDuration(target)}';
     }
     final name = memberLabel == null ? setName : '$memberLabel · $setName';
-    final previous = _history[exercise.id]?.previousSets;
+    final history = _history[exercise.id];
+    final previous = history?.previousSets;
     final previousSet = previous == null || previous.isEmpty
         ? null
         : previousSetFor(exercise.sets, setIndex, previous);
     // Bez wpisanego ciężaru — ten z podpowiedzi progresji w polu KG.
+    final hint = progressionHintFor(
+      set,
+      previousSet,
+      settings: _progressionOf(session),
+      earlier: [
+        for (final sets
+            in history?.earlierSets ?? const <List<TrainingSessionSet>>[])
+          previousSetFor(exercise.sets, setIndex, sets),
+      ],
+      legs: isLegExercise(exercise.exerciseMuscles),
+    );
     final weight =
-        parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
-        progressionHintFor(
-          set,
-          previousSet,
-          stepKg: _planStyleOf(session)?.progressionStepKg,
-        )?.weightKg;
+        parseWeightKg(set.actualWeight ?? set.plannedWeight) ?? hint?.weightKg;
     final reps = (set.actualReps?.trim().isNotEmpty ?? false)
         ? set.actualReps!.trim()
-        : set.plannedReps.trim();
+        : (hint?.reps?.toString() ?? set.plannedReps.trim());
     final load = [
       if (weight != null && weight > 0) formatWeightWithUnit(weight),
       if (reps.isNotEmpty) reps,

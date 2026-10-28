@@ -31,6 +31,7 @@ import '../../features/feed/data/shared_preferences_feed_cache.dart';
 import '../../features/feed/data/shared_preferences_feed_seen_store.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/domain/services/feed_post_events.dart';
+import '../../features/training/data/progression_settings_store.dart';
 import '../../features/training/data/local_previous_performance_repository.dart';
 import '../../features/training/data/local_training_stats_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
@@ -129,6 +130,10 @@ class ServiceLocator {
 
   /// Nieprzeczytane powiadomienia (dzwonek, plakietka w dolnym pasku).
   static final unreadNotifications = UnreadNotificationsCounter();
+
+  /// Metoda progresji konta (Ustawienia → Progresja).
+  static final progressionSettings = ProgressionSettingsStore();
+  static ProgressionSettingsRemote? _progressionRemote;
 
   /// Dziennik masy ciała w bazie konta (offline-first). `null` bez
   /// zalogowanego użytkownika (i w testach bez bazy) — karty i zapisy wagi
@@ -285,6 +290,7 @@ class ServiceLocator {
     _bodyMeasurementsRemote = ApiBodyMeasurementsRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
     notificationsRepository = ApiNotificationsRepository(apiClient);
+    _progressionRemote = ApiProgressionSettingsRemote(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
     final localNotifications = LocalNotifications();
@@ -351,6 +357,12 @@ class ServiceLocator {
     _scopeUserId = requestedUserId;
     unreadNotifications.attach(
       requestedUserId == null ? null : notificationsRepository,
+    );
+    unawaited(
+      progressionSettings.attach(
+        requestedUserId,
+        requestedUserId == null ? null : _progressionRemote,
+      ),
     );
 
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((

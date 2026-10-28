@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/post_draft.dart';
+import 'package:gym/features/training/domain/models/progression_settings.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/previous_performance_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
@@ -756,6 +758,12 @@ void main() {
   testWidgets('a checked set that beats the record shows a gold burst', (
     tester,
   ) async {
+    ServiceLocator.progressionSettings.notifier.value =
+        const ProgressionSettings(method: ProgressionMethod.fixed);
+    addTearDown(
+      () => ServiceLocator.progressionSettings.notifier.value =
+          ProgressionSettings.off,
+    );
     final session = _session(
       firstSet: TrainingSessionSet(
         plannedReps: '8',
@@ -840,9 +848,57 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('progression off: suggests the last weight without a tag', (
+    tester,
+  ) async {
+    final session = _session(firstSet: TrainingSessionSet(plannedReps: '6-8'));
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            previousPerformance: _FakePreviousPerformance({
+              'bench': [
+                TrainingSessionSet(
+                  actualWeight: '92.5',
+                  actualReps: '8',
+                  completed: true,
+                ),
+              ],
+            }),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final field = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const ValueKey('session-set-weight-0-0')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.decoration?.hintText, '92,5');
+    expect(find.text('+2,5'), findsNothing);
+
+    await cubit.close();
+  });
+
   testWidgets('the progression hint is a placeholder, not a typed value', (
     tester,
   ) async {
+    // Progresja domyślnie wyłączona — tu konto ma stały krok 2,5 kg.
+    ServiceLocator.progressionSettings.notifier.value =
+        const ProgressionSettings(method: ProgressionMethod.fixed);
+    addTearDown(
+      () => ServiceLocator.progressionSettings.notifier.value =
+          ProgressionSettings.off,
+    );
     final session = _session(firstSet: TrainingSessionSet(plannedReps: '6-8'));
     final repository = _FakeTrainingSessionRepository(session);
     final cubit = TrainingSessionCubit(repository, autoRefresh: false);
@@ -1132,6 +1188,13 @@ class _FakePreviousPerformance implements PreviousPerformanceRepository {
     required String exerciseId,
     required String exerciseName,
   }) async => byExerciseId[exerciseId];
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
+  }) async => [?byExerciseId[exerciseId]];
 }
 
 class _FakeStatsRepository implements TrainingStatsRepository {

@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../../library/data/exercise_remote_data_source.dart';
 import '../domain/models/custom_training_plan.dart';
+import '../domain/models/progression_settings.dart';
 
 class TrainingPlanRemoteDataSource {
   const TrainingPlanRemoteDataSource(this._api);
@@ -49,6 +50,7 @@ class TrainingPlanRemoteDataSource {
       iconKey: json['iconKey'] as String?,
       goal: PlanGoal.fromApi(json['goal'] as String?),
       progressionStepKg: (json['progressionStepKg'] as num?)?.toDouble(),
+      progression: ProgressionSettings.fromJson(json['progression']),
       highlightPlanColor: json['highlightPlanColor'] as bool? ?? true,
       showRir: json['showRir'] as bool? ?? true,
       showTempo: json['showTempo'] as bool? ?? true,
@@ -89,6 +91,7 @@ class TrainingPlanRemoteDataSource {
       'iconKey': plan.iconKey,
       'goal': plan.goal?.apiName,
       'progressionStepKg': plan.progressionStepKg,
+      'progression': plan.progression?.toJson(),
       'highlightPlanColor': plan.highlightPlanColor,
       'showRir': plan.showRir,
       'showTempo': plan.showTempo,
