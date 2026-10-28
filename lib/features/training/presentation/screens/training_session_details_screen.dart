@@ -163,9 +163,13 @@ class _TrainingSessionDetailsScreenState
       if (!mounted || silent) return;
       setState(() {
         _loading = false;
-        _error = error is ApiException && error.statusCode == 410
-            ? 'Ten trening został usunięty.'
-            : 'Nie udało się pobrać szczegółów sesji.';
+        _error = switch (error) {
+          ApiException(statusCode: 410) => 'Ten trening został usunięty.',
+          ApiException(statusCode: null) =>
+            'Brak połączenia, a tego treningu nie ma jeszcze na telefonie. '
+                'Spróbuj ponownie po powrocie do sieci.',
+          _ => 'Nie udało się pobrać szczegółów sesji.',
+        };
       });
     }
   }
@@ -814,7 +818,8 @@ class _DetailContentState extends State<_DetailContent> {
                 index: i,
                 isHighlighted: _highlightedIndex == i,
                 hideRir:
-                    PlanColors.styles.styleFor(widget.detail.plan.name)
+                    PlanColors.styles
+                        .styleFor(widget.detail.plan.name)
                         ?.showRir ==
                     false,
               ),

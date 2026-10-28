@@ -59,9 +59,8 @@ void main() {
   test('first page includes a workout finished offline', () async {
     final session = await sessions.startFromPlan(_plan());
     await sessions.finish(session.id);
-    remote.onGetSessions = () async => _page([
-      _serverItem('server-old', DateTime.utc(2020)),
-    ]);
+    remote.onGetSessions = () async =>
+        _page([_serverItem('server-old', DateTime.utc(2020))]);
 
     final page = await history.getSessions(
       status: TrainingSessionStatus.completed,
@@ -71,27 +70,35 @@ void main() {
     expect(page.isFromCache, isFalse);
   });
 
-  test('offline without cache still shows workouts saved on this phone', () async {
-    final session = await sessions.startFromPlan(_plan());
-    await sessions.finish(session.id);
-    remote.onGetSessions = () async => throw const ApiException('network_error');
+  test(
+    'offline without cache still shows workouts saved on this phone',
+    () async {
+      final session = await sessions.startFromPlan(_plan());
+      await sessions.finish(session.id);
+      remote.onGetSessions = () async =>
+          throw const ApiException('network_error');
 
-    final page = await history.getSessions(
-      status: TrainingSessionStatus.completed,
-    );
+      final page = await history.getSessions(
+        status: TrainingSessionStatus.completed,
+      );
 
-    expect(page.isFromCache, isTrue);
-    expect(page.items.single.id, session.id);
-  });
+      expect(page.isFromCache, isTrue);
+      expect(page.items.single.id, session.id);
+    },
+  );
 
-  test('offline without cache and without local workouts reports the error', () async {
-    remote.onGetSessions = () async => throw const ApiException('network_error');
+  test(
+    'offline without cache and without local workouts reports the error',
+    () async {
+      remote.onGetSessions = () async =>
+          throw const ApiException('network_error');
 
-    await expectLater(
-      history.getSessions(status: TrainingSessionStatus.completed),
-      throwsA(isA<ApiException>()),
-    );
-  });
+      await expectLater(
+        history.getSessions(status: TrainingSessionStatus.completed),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
 
   test('detail of an unsynced workout comes from the phone', () async {
     final session = await sessions.startFromPlan(_plan());
@@ -104,10 +111,52 @@ void main() {
     expect(remote.detailCalls, 0);
   });
 
+  test(
+    'detail of a synced workout opens from the phone while the server hangs',
+    () async {
+      final session = await sessions.startFromPlan(_plan());
+      await sessions.finish(session.id);
+      await _markSynced(db, session.id, serverId: 'server-1');
+
+      // Bez internetu (np. Wi-Fi bez sieci) zapytanie wisi aż do timeoutu.
+      final server = Completer<TrainingSessionDetail>();
+      remote.onGetDetail = (_) => server.future;
+
+      final detail = await history
+          .getSessionDetail('server-1')
+          .timeout(const Duration(seconds: 2));
+
+      expect(detail.id, 'server-1');
+      expect(detail.exercises.single.exerciseName, 'Bench');
+      expect(
+        remote.detailCalls,
+        1,
+        reason: 'server refreshes it in background',
+      );
+
+      // Odpowiedź serwera trafia do cache i każe ekranowi przeładować dane.
+      server.complete(_serverDetail('server-1', note: 'z serwera'));
+      for (var i = 0; i < 200 && freshNotices == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(freshNotices, 1);
+      remote.onGetDetail = (_) async =>
+          throw const ApiException('network_error');
+      final refreshed = await history.getSessionDetail('server-1');
+      expect(refreshed.note, 'z serwera');
+    },
+  );
+
+  test('offline detail without a phone copy reports the error', () async {
+    await expectLater(
+      history.getSessionDetail('unknown'),
+      throwsA(isA<ApiException>()),
+    );
+  });
+
   test('slow server falls back to the cached page', () async {
-    remote.onGetSessions = () async => _page([
-      _serverItem('cached', DateTime.utc(2021)),
-    ]);
+    remote.onGetSessions = () async =>
+        _page([_serverItem('cached', DateTime.utc(2021))]);
     await history.getSessions(status: TrainingSessionStatus.completed);
 
     final slow = Completer<TrainingSessionPage>();
@@ -128,7 +177,8 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
     expect(freshNotices, 1, reason: 'screens re-read after fresh data');
-    remote.onGetSessions = () async => throw const ApiException('network_error');
+    remote.onGetSessions = () async =>
+        throw const ApiException('network_error');
     final afterRefresh = await history.getSessions(
       status: TrainingSessionStatus.completed,
     );
@@ -138,9 +188,8 @@ void main() {
   });
 
   test('unchanged server response does not ask screens to reload', () async {
-    remote.onGetSessions = () async => _page([
-      _serverItem('same', DateTime.utc(2021)),
-    ]);
+    remote.onGetSessions = () async =>
+        _page([_serverItem('same', DateTime.utc(2021))]);
     await history.getSessions(status: TrainingSessionStatus.completed);
 
     final cachedRead = await history.getSessions(
@@ -151,6 +200,36 @@ void main() {
     expect(cachedRead.isFromCache, isTrue);
     expect(freshNotices, 0);
   });
+}
+
+Future<void> _markSynced(
+  ExerciseDatabase db,
+  String localId, {
+  required String serverId,
+}) {
+  return db.run(
+    (database) => database.update(
+      ExerciseDatabase.tableTrainingSessions,
+      {'server_id': serverId, 'pending_op': null},
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    ),
+  );
+}
+
+TrainingSessionDetail _serverDetail(String id, {String? note}) {
+  final startedAt = DateTime.utc(2026, 10, 1, 18);
+  return TrainingSessionDetail(
+    id: id,
+    startedAt: startedAt,
+    endedAt: startedAt.add(const Duration(hours: 1)),
+    durationSec: 3600,
+    status: TrainingSessionStatus.completed,
+    plan: const TrainingPlanSummary(id: '', name: 'FBW'),
+    note: note,
+    exercises: const [],
+    updatedAt: DateTime.now().toUtc(),
+  );
 }
 
 ApiClient _offlineApi() =>
@@ -200,6 +279,7 @@ class _HistoryRemote extends TrainingHistoryRemoteDataSource {
 
   Future<TrainingSessionPage> Function()? onGetSessions;
   int detailCalls = 0;
+  Future<TrainingSessionDetail> Function(String sessionId)? onGetDetail;
 
   @override
   Future<TrainingSessionPage> getSessions({
@@ -217,6 +297,8 @@ class _HistoryRemote extends TrainingHistoryRemoteDataSource {
   @override
   Future<TrainingSessionDetail> getSessionDetail(String sessionId) async {
     detailCalls++;
+    final handler = onGetDetail;
+    if (handler != null) return handler(sessionId);
     throw const ApiException('network_error');
   }
 }
