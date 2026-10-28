@@ -48,6 +48,7 @@ class SessionExerciseCard extends StatefulWidget {
     this.embedded = false,
     this.focused = true,
     this.stopwatch,
+    this.onLongPress,
   });
 
   final int exerciseIndex;
@@ -77,6 +78,9 @@ class SessionExerciseCard extends StatefulWidget {
 
   /// Stoper odcinków kardio (wspólny dla treningu).
   final CardioStopwatchController? stopwatch;
+
+  /// Przytrzymanie nagłówka (miniatura i nazwa) — menu kolejności ćwiczeń.
+  final VoidCallback? onLongPress;
 
   @override
   State<SessionExerciseCard> createState() => _SessionExerciseCardState();
@@ -261,52 +265,57 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              ExerciseThumb(
-                imageUrl: exercise.exerciseImageUrl,
-                size: thumbSize,
-                radius: widget.embedded ? 12 : 14,
-                cardio: cardio,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      exercise.exerciseName,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 17,
-                        height: 1.2,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (subtitle.isNotEmpty) ...[
-                      const SizedBox(height: 3),
+          GestureDetector(
+            key: ValueKey('session-exercise-header-${widget.exerciseIndex}'),
+            behavior: HitTestBehavior.opaque,
+            onLongPress: widget.onLongPress,
+            child: Row(
+              children: [
+                ExerciseThumb(
+                  imageUrl: exercise.exerciseImageUrl,
+                  size: thumbSize,
+                  radius: widget.embedded ? 12 : 14,
+                  cardio: cardio,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        subtitle,
+                        exercise.exerciseName,
                         style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                          fontSize: 17,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              _HistoryButton(
-                key: ValueKey(
-                  'session-exercise-details-${widget.exerciseIndex}',
+                const SizedBox(width: 12),
+                _HistoryButton(
+                  key: ValueKey(
+                    'session-exercise-details-${widget.exerciseIndex}',
+                  ),
+                  onTap: () => unawaited(
+                    openExerciseDetailsFromSession(context, exercise),
+                  ),
                 ),
-                onTap: () => unawaited(
-                  openExerciseDetailsFromSession(context, exercise),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           ExerciseStatChips(
             last: history?.lastResult(exercise),

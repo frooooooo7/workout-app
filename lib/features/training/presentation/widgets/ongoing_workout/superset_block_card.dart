@@ -12,6 +12,7 @@ class SupersetBlockCard extends StatelessWidget {
     required this.round,
     required this.totalRounds,
     required this.members,
+    this.onLongPress,
   });
 
   final String group;
@@ -20,6 +21,9 @@ class SupersetBlockCard extends StatelessWidget {
 
   /// Karty ćwiczeń grupy, w kolejności planu.
   final List<Widget> members;
+
+  /// Przytrzymanie nagłówka superserii — menu kolejności ćwiczeń.
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -33,47 +37,52 @@ class SupersetBlockCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SupersetChip(group: group),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'na zmianę, bez przerwy',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+          GestureDetector(
+            key: const ValueKey('superset-header'),
+            behavior: HitTestBehavior.opaque,
+            onLongPress: onLongPress,
+            child: Row(
+              children: [
+                SupersetChip(group: group),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'na zmianę, bez przerwy',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-              Semantics(
-                label: 'Runda $round z $totalRounds',
-                excludeSemantics: true,
-                child: Text.rich(
-                  key: const ValueKey('superset-round-label'),
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: 'Runda $round',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w800,
+                Semantics(
+                  label: 'Runda $round z $totalRounds',
+                  excludeSemantics: true,
+                  child: Text.rich(
+                    key: const ValueKey('superset-round-label'),
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Runda $round',
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      TextSpan(text: ' z $totalRounds'),
-                    ],
-                  ),
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                        TextSpan(text: ' z $totalRounds'),
+                      ],
+                    ),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           DecoratedBox(

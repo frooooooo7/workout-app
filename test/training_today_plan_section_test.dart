@@ -40,6 +40,7 @@ Future<void> _pump(
   Future<void> Function(CustomTrainingPlan)? onStartPlan,
   ValueChanged<int>? onCreatePlanForDay,
   VoidCallback? onStartCustom,
+  bool sessionInProgress = false,
 }) {
   return tester.pumpWidget(
     MaterialApp(
@@ -55,6 +56,7 @@ Future<void> _pump(
             onStartPlan: onStartPlan ?? (_) async {},
             onCreatePlanForDay: onCreatePlanForDay ?? (_) {},
             onStartCustom: onStartCustom ?? () {},
+            sessionInProgress: sessionInProgress,
           ),
         ),
       ),
@@ -63,6 +65,36 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('a workout in progress greys out the start button', (
+    tester,
+  ) async {
+    final scheduled = _plan('Legs', const [3]);
+    var started = 0;
+    var custom = 0;
+
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [scheduled],
+      sessionInProgress: true,
+      onStartPlan: (_) async => started++,
+      onStartCustom: () => custom++,
+    );
+
+    expect(find.text('Rozpocznij Legs'), findsOneWidget);
+    expect(find.byKey(const ValueKey('start-disabled-hint')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('start-workout-button')));
+    await tester.pumpAndSettle();
+    expect(started, 0);
+
+    // „Trening bez planu” w menu też jest nieaktywny.
+    await tester.tap(find.byKey(const ValueKey('plan-card-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Trening bez planu'));
+    await tester.pumpAndSettle();
+    expect(custom, 0);
+  });
+
   testWidgets('training day: plan summary, opens details and starts', (
     tester,
   ) async {

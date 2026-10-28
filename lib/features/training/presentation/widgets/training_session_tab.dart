@@ -166,6 +166,7 @@ class _TrainingSessionBody extends StatelessWidget {
         onStartPlan: onStartPlan,
         onStartCustom: onStartCustom,
         onCreatePlanForDay: onCreatePlanForDay,
+        sessionInProgress: active != null,
       ),
       TrainingLastSessionSection(
         state: historyState,

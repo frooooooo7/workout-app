@@ -50,6 +50,15 @@ class RestTimerController extends ChangeNotifier {
   DateTime? _endsAt;
   bool _disposed = false;
 
+  /// Koniec bieżącej albo właśnie minionej przerwy (panel na „0:00”) —
+  /// do zapamiętania przy wyjściu z ekranu treningu.
+  DateTime? get endsAt => _endsAt ?? (_finished ? _finishedAt : null);
+  DateTime? _finishedAt;
+
+  /// `false`: zamknięcie kontrolera nie odwołuje powiadomienia — trening
+  /// trwa dalej, tylko ekran został zwinięty.
+  bool cancelNotificationOnDispose = true;
+
   /// Po powrocie na pierwszy plan licznik od razu łapie prawdziwy czas,
   /// zamiast czekać na najbliższe tyknięcie.
   AppLifecycleListener? _lifecycle;
@@ -73,6 +82,34 @@ class RestTimerController extends ChangeNotifier {
   }
 
   bool get isActive => _ticker?.isActive == true;
+
+  /// Wznawia przerwę zapamiętaną przy wyjściu z ekranu. Powiadomienie jest
+  /// już zaplanowane, więc nie planuje go drugi raz. Przerwa, która minęła
+  /// niedawno ([finishedGrace]), wraca jako „0:00”; starsza — wcale.
+  void restore({
+    required DateTime endsAt,
+    required Duration total,
+    Duration finishedGrace = const Duration(minutes: 10),
+  }) {
+    if (_disposed) return;
+    final now = _clock();
+    _ticker?.cancel();
+    _lifecycle ??= AppLifecycleListener(onResume: sync);
+    _total = total;
+    if (!endsAt.isAfter(now)) {
+      _endsAt = null;
+      _finished = now.difference(endsAt) <= finishedGrace;
+      _finishedAt = _finished ? endsAt : null;
+      remaining.value = Duration.zero;
+      notifyListeners();
+      return;
+    }
+    _finished = false;
+    _endsAt = endsAt;
+    _ticker = Timer.periodic(_tickInterval, (_) => sync());
+    sync();
+    notifyListeners();
+  }
 
   /// Przerwa minęła, a użytkownik jeszcze nie wrócił do serii: panel zostaje
   /// z „0:00” i czerwoną obwódką, aż do „OK”, kolejnej przerwy albo
@@ -150,6 +187,7 @@ class RestTimerController extends ChangeNotifier {
       _ticker?.cancel();
       _endsAt = null;
       _finished = true;
+      _finishedAt = endsAt;
       // Koniec przerwy czuć w dłoni; dźwięk daje powiadomienie systemowe.
       unawaited(HapticFeedback.heavyImpact());
       _reset();
@@ -171,8 +209,10 @@ class RestTimerController extends ChangeNotifier {
     _disposed = true;
     _ticker?.cancel();
     _lifecycle?.dispose();
-    final pending = scheduler?.cancelRestFinished();
-    if (pending != null) unawaited(pending.catchError((_) {}));
+    if (cancelNotificationOnDispose) {
+      final pending = scheduler?.cancelRestFinished();
+      if (pending != null) unawaited(pending.catchError((_) {}));
+    }
     remaining.dispose();
     super.dispose();
   }
