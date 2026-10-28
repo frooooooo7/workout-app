@@ -91,10 +91,18 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
-    final data = await BodyHighlighterAssetLoader.instance.loadModelData(
-      widget.gender,
-      widget.view,
-    );
+    final BodyModelData data;
+    try {
+      data = await BodyHighlighterAssetLoader.instance.loadModelData(
+        widget.gender,
+        widget.view,
+      );
+    } catch (_) {
+      // Np. web bez internetu nie dociągnie pliku z sylwetką — zamiast
+      // wiecznego spinnera zostawiamy puste miejsce.
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     if (!mounted) return;
 
@@ -194,12 +202,15 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _modelData == null) {
+    if (_isLoading) {
       return SizedBox(
         width: widget.width,
         height: widget.height,
         child: const Center(child: CircularProgressIndicator.adaptive()),
       );
+    }
+    if (_modelData == null) {
+      return SizedBox(width: widget.width, height: widget.height);
     }
 
     return SizedBox(
