@@ -51,8 +51,12 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false" />
+        <!-- Własny odbiornik zamiast ScheduledNotificationBootReceiver z wtyczki:
+             najpierw wyrzuca przeterminowany alarm końca przerwy (inaczej po
+             restarcie telefonu apka wyskakuje na ekranie blokady), potem
+             przekazuje resztę do wtyczki. -->
         <receiver
-            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:name=".BootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
