@@ -29,6 +29,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
     required this.onStartCustom,
     this.insights = TrainingHomeInsights.empty,
     this.today,
+    this.sessionInProgress = false,
   });
 
   /// 1 = poniedziałek … 7 = niedziela.
@@ -46,6 +47,10 @@ class TrainingTodayPlanSection extends StatelessWidget {
   /// Test seam; domyślnie [DateTime.now].
   final DateTime? today;
 
+  /// Trwa już trening — „Rozpocznij” jest wyszarzony (wraca się do niego
+  /// paskiem „Trwa trening” nad kartą).
+  final bool sessionInProgress;
+
   @override
   Widget build(BuildContext context) {
     if (isLoading && plans.isEmpty) return const _PlanCardSkeleton();
@@ -61,7 +66,11 @@ class TrainingTodayPlanSection extends StatelessWidget {
         if (plan.selectedDays.contains(selectedDay)) plan,
     ];
 
-    final customItem = _MenuItem('Trening bez planu', onStartCustom);
+    final customItem = _MenuItem(
+      'Trening bez planu',
+      onStartCustom,
+      enabled: !sessionInProgress,
+    );
 
     if (scheduled.isEmpty) {
       final hasPlans = plans.isNotEmpty;
@@ -90,7 +99,11 @@ class TrainingTodayPlanSection extends StatelessWidget {
       menu: [
         _MenuItem('Szczegóły planu', () => onOpenPlan(plan)),
         for (final other in scheduled.skip(1))
-          _MenuItem('Rozpocznij ${other.name}', () => onStartPlan(other)),
+          _MenuItem(
+            'Rozpocznij ${other.name}',
+            () => onStartPlan(other),
+            enabled: !sessionInProgress,
+          ),
         customItem,
       ],
       // „Do pobicia” zależy od metody progresji z ustawień.
@@ -100,7 +113,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
           plan: plan,
           insights: insights,
           onOpen: () => onOpenPlan(plan),
-          onStart: () => onStartPlan(plan),
+          onStart: sessionInProgress ? null : () => onStartPlan(plan),
         ),
       ),
     );
@@ -142,10 +155,11 @@ class TrainingTodayPlanSection extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem(this.label, this.onSelected);
+  const _MenuItem(this.label, this.onSelected, {this.enabled = true});
 
   final String label;
   final VoidCallback onSelected;
+  final bool enabled;
 }
 
 /// Wspólna rama karty: poświata w kolorze planu, plakietka dnia i menu.
@@ -276,7 +290,11 @@ class _MoreMenu extends StatelessWidget {
         onSelected: (index) => items[index].onSelected(),
         itemBuilder: (context) => [
           for (var i = 0; i < items.length; i++)
-            PopupMenuItem<int>(value: i, child: Text(items[i].label)),
+            PopupMenuItem<int>(
+              value: i,
+              enabled: items[i].enabled,
+              child: Text(items[i].label),
+            ),
         ],
       ),
     );
@@ -294,7 +312,9 @@ class _PlanContent extends StatelessWidget {
   final CustomTrainingPlan plan;
   final TrainingHomeInsights insights;
   final VoidCallback onOpen;
-  final VoidCallback onStart;
+
+  /// `null` — trwa inny trening, przycisk wyszarzony.
+  final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -394,6 +414,19 @@ class _PlanContent extends StatelessWidget {
           icon: Icons.play_arrow_rounded,
           onTap: onStart,
         ),
+        if (onStart == null) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Trwa trening — dokończ go, zanim zaczniesz kolejny.',
+            key: ValueKey('start-disabled-hint'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSubtle,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -561,28 +594,37 @@ class _CardButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+
+  /// `null` — przycisk wyszarzony i nieaktywny.
+  final VoidCallback? onTap;
   final bool secondary;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = secondary ? AppColors.iconOnTile : AppColors.onPrimary;
+    final disabled = onTap == null;
+    final foreground = disabled
+        ? AppColors.textMuted
+        : (secondary ? AppColors.iconOnTile : AppColors.onPrimary);
     return Semantics(
       button: true,
+      enabled: !disabled,
       label: label,
       excludeSemantics: true,
       child: AppPressable(
         onTap: onTap,
+        enabled: !disabled,
         child: Container(
           height: 50,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: secondary ? AppColors.tile : AppColors.primary,
+            color: disabled
+                ? AppColors.tile
+                : (secondary ? AppColors.tile : AppColors.primary),
             borderRadius: BorderRadius.circular(16),
-            border: secondary
+            border: secondary || disabled
                 ? Border.all(color: AppColors.borderStrong)
                 : null,
-            boxShadow: secondary
+            boxShadow: secondary || disabled
                 ? null
                 : [
                     BoxShadow(
