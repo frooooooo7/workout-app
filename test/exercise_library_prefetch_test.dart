@@ -153,7 +153,8 @@ void main() {
 
       expect(find.text('Pobieramy bazę ćwiczeń'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 15));
-      expect(find.text('Pobieranie ilustracji: 1 z 2'), findsOneWidget);
+      expect(find.text('1 / 2'), findsOneWidget);
+      expect(find.text('50%'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 15));
       // Ekran nie znika od razu, nawet gdy wszystko już pobrane.
       expect(done, 0);
