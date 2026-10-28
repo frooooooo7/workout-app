@@ -81,7 +81,11 @@ class RestTimerPill extends StatelessWidget {
           key: const Key('rest-timer-pill'),
           duration: const Duration(milliseconds: 250),
           height: 92,
-          padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+          // Grubsza czerwona ramka „koniec przerwy” zjada miejsce w środku —
+          // mniejszy odstęp, żeby przyciski się zmieściły.
+          padding: finished
+              ? const EdgeInsets.fromLTRB(12.5, 8.5, 10.5, 8.5)
+              : const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
             color: finished
                 ? Color.alphaBlend(
