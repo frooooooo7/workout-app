@@ -790,7 +790,6 @@ class _Chip extends StatelessWidget {
           height: 36,
           constraints: const BoxConstraints(minWidth: 46),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? color : AppColors.tile,
             borderRadius: BorderRadius.circular(11),
@@ -802,22 +801,26 @@ class _Chip extends StatelessWidget {
                   : AppColors.borderStrong,
             ),
           ),
-          child: Text(
-            label,
-            style: ghost
-                ? const TextStyle(
-                    color: AppColors.primaryVariant,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  )
-                : AppTextStyles.number(
-                    size: 17,
-                    color: selected
-                        ? (color.computeLuminance() > 0.45
-                              ? AppColors.background
-                              : AppColors.onPrimary)
-                        : AppColors.textSubtle,
-                  ),
+          // Center z widthFactor: 1 — chip ma szerokość tekstu, nie wiersza.
+          child: Center(
+            widthFactor: 1,
+            child: Text(
+              label,
+              style: ghost
+                  ? const TextStyle(
+                      color: AppColors.primaryVariant,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    )
+                  : AppTextStyles.number(
+                      size: 17,
+                      color: selected
+                          ? (color.computeLuminance() > 0.45
+                                ? AppColors.background
+                                : AppColors.onPrimary)
+                          : AppColors.textSubtle,
+                    ),
+            ),
           ),
         ),
       ),
