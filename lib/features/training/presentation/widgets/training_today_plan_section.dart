@@ -41,7 +41,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
   final Future<void> Function(CustomTrainingPlan plan) onStartPlan;
   final ValueChanged<int> onCreatePlanForDay;
 
-  /// Trening bez planu (wybór rodzaju aktywności).
+  /// Trening bez planu — pusta sesja, ćwiczenia dodaje się w trakcie.
   final VoidCallback onStartCustom;
   final TrainingHomeInsights insights;
 
@@ -57,8 +57,9 @@ class TrainingTodayPlanSection extends StatelessWidget {
     if (isLoading && plans.isEmpty) return const _PlanCardSkeleton();
 
     final now = today ?? DateTime.now();
-    final date = startOfWeekContaining(now)
-        .add(Duration(days: selectedDay - 1));
+    final date = startOfWeekContaining(
+      now,
+    ).add(Duration(days: selectedDay - 1));
     final badge = _dayBadge(date, now);
     final caption = 'Plan na ${_weekdayAccusative[selectedDay - 1]}';
     final scheduled = [
@@ -75,7 +76,13 @@ class TrainingTodayPlanSection extends StatelessWidget {
       onTap: sessionInProgress ? null : onStartCustom,
     );
 
-    if (scheduled.isEmpty && insights.weekDonePlans[selectedDay] == null) {
+    final doneAny = insights.weekDonePlans[selectedDay] != null;
+    final pending = [
+      for (final plan in scheduled)
+        if (!_isDone(plan)) plan,
+    ];
+
+    if (scheduled.isEmpty && !doneAny) {
       final hasPlans = plans.isNotEmpty;
       return _PlanCardShell(
         key: const ValueKey('plan-card-rest'),
@@ -94,38 +101,43 @@ class TrainingTodayPlanSection extends StatelessWidget {
       );
     }
 
-    // Trening tego dnia już zrobiony (plan z tego dnia albo wolny trening
-    // w dzień bez planu): zamiast „Rozpocznij” — informacja o ukończeniu.
-    final doneName = insights.weekDonePlans[selectedDay];
-    if (doneName != null) {
-      final donePlan = _planNamed(plans, doneName);
-      final planned = scheduled.where((p) => _sameName(p.name, doneName));
-      if (scheduled.isEmpty || planned.isNotEmpty) {
-        return _PlanCardShell(
-          key: const ValueKey('plan-card-done'),
-          badge: badge,
-          caption: caption,
-          color: PlanColors.of(doneName),
-          menu: [
-            if (donePlan != null) ...[
-              _MenuItem('Szczegóły planu', () => onOpenPlan(donePlan)),
-              _MenuItem(
-                'Powtórz ${donePlan.name}',
-                () => onStartPlan(donePlan),
-                enabled: !sessionInProgress,
-              ),
-            ],
+    // Wszystko, co zaplanowano na ten dzień, jest zrobione (albo zrobiono
+    // wolny trening w dzień bez planu): zamiast „Rozpocznij” — informacja
+    // o ukończeniu. Dopóki któryś plan dnia czeka, karta pokazuje jego.
+    if (pending.isEmpty) {
+      return _PlanCardShell(
+        key: const ValueKey('plan-card-done'),
+        badge: badge,
+        caption: caption,
+        color: scheduled.isEmpty ? null : PlanColors.of(scheduled.first.name),
+        menu: [
+          for (final plan in scheduled) ...[
+            _MenuItem(
+              scheduled.length == 1
+                  ? 'Szczegóły planu'
+                  : 'Szczegóły ${plan.name}',
+              () => onOpenPlan(plan),
+            ),
+            _MenuItem(
+              'Powtórz ${plan.name}',
+              () => onStartPlan(plan),
+              enabled: !sessionInProgress,
+            ),
           ],
-          child: _DoneContent(
-            planName: doneName,
-            onOpenPlan: donePlan == null ? null : () => onOpenPlan(donePlan),
-            customButton: customButton,
-          ),
-        );
-      }
+        ],
+        child: _DoneContent(
+          title: scheduled.isEmpty
+              ? insights.weekDonePlans[selectedDay]!
+              : scheduled.map((p) => p.name).join(' · '),
+          onOpenPlan: scheduled.length == 1
+              ? () => onOpenPlan(scheduled.first)
+              : null,
+          customButton: customButton,
+        ),
+      );
     }
 
-    final plan = scheduled.first;
+    final plan = pending.first;
     return _PlanCardShell(
       key: ValueKey('plan-card-${plan.id}'),
       badge: badge,
@@ -133,7 +145,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
       color: PlanColors.of(plan.name),
       menu: [
         _MenuItem('Szczegóły planu', () => onOpenPlan(plan)),
-        for (final other in scheduled.skip(1))
+        for (final other in pending.skip(1))
           _MenuItem(
             'Rozpocznij ${other.name}',
             () => onStartPlan(other),
@@ -154,18 +166,11 @@ class TrainingTodayPlanSection extends StatelessWidget {
     );
   }
 
-  static bool _sameName(String a, String b) =>
-      a.trim().toLowerCase() == b.trim().toLowerCase();
-
-  static CustomTrainingPlan? _planNamed(
-    List<CustomTrainingPlan> plans,
-    String name,
-  ) {
-    for (final plan in plans) {
-      if (_sameName(plan.name, name)) return plan;
-    }
-    return null;
-  }
+  bool _isDone(CustomTrainingPlan plan) => insights.isPlanDone(
+    selectedDay,
+    planIds: [plan.id, plan.clientId],
+    planName: plan.name,
+  );
 
   static const _weekdayAccusative = [
     'poniedziałek',
@@ -597,14 +602,15 @@ class _RestDayContent extends StatelessWidget {
 
 class _DoneContent extends StatelessWidget {
   const _DoneContent({
-    required this.planName,
+    required this.title,
     required this.onOpenPlan,
     required this.customButton,
   });
 
-  final String planName;
+  /// Nazwa ukończonego planu (planów) albo wolnego treningu.
+  final String title;
 
-  /// `null`, gdy plan już nie istnieje (np. wolny trening).
+  /// `null` przy wolnym treningu i przy kilku planach (są w menu ⋯).
   final VoidCallback? onOpenPlan;
   final Widget customButton;
 
@@ -637,7 +643,7 @@ class _DoneContent extends StatelessWidget {
                   const Text('Trening ukończony', style: _titleStyle),
                   const SizedBox(height: 4),
                   Text(
-                    planName,
+                    title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _subtitleStyle,

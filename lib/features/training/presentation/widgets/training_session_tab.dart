@@ -102,14 +102,18 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
   }
 
   /// Wolny trening — od razu pusta sesja, ćwiczenia dodaje się w trakcie.
+  /// Wyjście bez ćwiczeń anuluje sesję.
   Future<void> _startCustom(BuildContext context) async {
     final historyCubit = context.read<TrainingHistoryCubit>();
     final homeCubit = context.read<TrainingHomeCubit>();
+    final sessionCubit = context.read<TrainingSessionCubit>();
     final opened = await startWorkout(
       context,
       start: (cubit) => cubit.startCustom(),
     );
     if (!opened) return;
+    // Przypadkowe dotknięcie nie zostawia pustej „trwającej” sesji.
+    await discardEmptyCustomSession(sessionCubit);
     historyCubit.refresh();
     homeCubit.refresh();
   }

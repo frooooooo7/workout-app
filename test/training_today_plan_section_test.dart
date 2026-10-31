@@ -242,6 +242,17 @@ void main() {
     expect(opened, same(push));
     await choose('Rozpocznij Pull Volume');
     expect(started, same(pull));
+
+    // „Trening bez planu” jest przyciskiem karty, nie pozycją menu.
+    await tester.tap(find.byKey(const ValueKey('plan-card-menu')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(PopupMenuItem<int>),
+        matching: find.text('Trening bez planu'),
+      ),
+      findsNothing,
+    );
     expect(custom, isFalse);
   });
 
@@ -295,7 +306,12 @@ void main() {
       tester,
       selectedDay: 3,
       plans: [legs],
-      insights: const TrainingHomeInsights(weekDonePlans: {3: 'Legs'}),
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Legs'},
+        weekDoneKeys: {
+          3: {'name:legs'},
+        },
+      ),
       onOpenPlan: (p) => opened = p,
       onStartPlan: (p) async => repeated = p,
     );
@@ -332,6 +348,134 @@ void main() {
 
     expect(find.text('Trening ukończony'), findsNothing);
     expect(find.text('Rozpocznij Legs'), findsOneWidget);
+  });
+
+  testWidgets('a free workout after the plan keeps the day completed', (
+    tester,
+  ) async {
+    // Najnowszy trening dnia to wolny, ale Legs też był zrobiony.
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [
+        _plan('Legs', const [3]),
+      ],
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Niestandardowa'},
+        weekDoneKeys: {
+          3: {'name:legs'},
+        },
+      ),
+    );
+
+    expect(find.text('Trening ukończony'), findsOneWidget);
+    expect(find.textContaining('Rozpocznij'), findsNothing);
+  });
+
+  testWidgets('a renamed plan stays done when matched by id', (tester) async {
+    final renamed = _plan('Legs A', const [3]);
+
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [renamed],
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Legs'},
+        weekDoneKeys: {
+          3: {'id:${renamed.id}'},
+        },
+      ),
+    );
+
+    expect(find.text('Trening ukończony'), findsOneWidget);
+    expect(find.text('Legs A'), findsOneWidget);
+  });
+
+  testWidgets('two plans on a day: the card moves on to the one not done', (
+    tester,
+  ) async {
+    final cardio = _plan('Kardio', const [3]);
+    final push = _plan('Push', const [3]);
+    CustomTrainingPlan? started;
+
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [cardio, push],
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Kardio'},
+        weekDoneKeys: {
+          3: {'id:${cardio.id}'},
+        },
+      ),
+      onStartPlan: (p) async => started = p,
+    );
+
+    expect(find.text('Trening ukończony'), findsNothing);
+    expect(find.text('Rozpocznij Push'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('start-workout-button')));
+    expect(started, same(push));
+  });
+
+  testWidgets('two plans on a day, both done: completion with both in menu', (
+    tester,
+  ) async {
+    final cardio = _plan('Kardio', const [3]);
+    final push = _plan('Push', const [3]);
+    CustomTrainingPlan? repeated;
+
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [cardio, push],
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Push'},
+        weekDoneKeys: {
+          3: {'id:${cardio.id}', 'id:${push.id}'},
+        },
+      ),
+      onStartPlan: (p) async => repeated = p,
+    );
+
+    expect(find.text('Trening ukończony'), findsOneWidget);
+    expect(find.text('Kardio · Push'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('plan-card-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Powtórz Push'));
+    await tester.pumpAndSettle();
+    expect(repeated, same(push));
+  });
+
+  testWidgets('the completed card greys out repeat and free workout too', (
+    tester,
+  ) async {
+    var custom = 0;
+    var repeated = 0;
+
+    await _pump(
+      tester,
+      selectedDay: 3,
+      plans: [
+        _plan('Legs', const [3]),
+      ],
+      sessionInProgress: true,
+      insights: TrainingHomeInsights(
+        weekDonePlans: const {3: 'Legs'},
+        weekDoneKeys: {
+          3: {'name:legs'},
+        },
+      ),
+      onStartCustom: () => custom++,
+      onStartPlan: (_) async => repeated++,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('start-custom-button')));
+    await tester.tap(find.byKey(const ValueKey('plan-card-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Powtórz Legs'));
+    await tester.pumpAndSettle();
+    expect(custom, 0);
+    expect(repeated, 0);
   });
 
   testWidgets('free workout done on a day without plan shows completion', (
