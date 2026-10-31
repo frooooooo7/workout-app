@@ -32,6 +32,21 @@ class ProfileCubit extends Cubit<ProfileState> {
       ),
     );
 
+    if (!isRefresh && state.profile == null) {
+      // Lokalna kopia profilu z ostatniej wizyty — ekran jest od razu,
+      // a świeże dane (i obserwowani) dochodzą po odpowiedzi serwera.
+      UserProfile? cached;
+      try {
+        cached = await _repository.cachedOwnProfile();
+      } catch (_) {
+        /* bez kopii czekamy na serwer */
+      }
+      if (isClosed) return;
+      if (cached != null && state.profile == null) {
+        emit(state.copyWith(profile: cached, loading: false));
+      }
+    }
+
     try {
       final results = await Future.wait([
         _repository.getOwnProfile(),

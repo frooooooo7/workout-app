@@ -29,13 +29,15 @@ class ExerciseDetailsHero extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (provider == null)
-          fallback
-        else
+        // Tło pod ilustracją: bez internetu obrazek, którego nie ma na dysku,
+        // ładuje się do 20 s — ekran nie może przez ten czas świecić pustką.
+        fallback,
+        if (provider != null)
           Image(
             image: provider,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => fallback,
+            errorBuilder: (context, error, stackTrace) =>
+                const SizedBox.shrink(),
             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
               if (wasSynchronouslyLoaded) return child;
               return AnimatedOpacity(

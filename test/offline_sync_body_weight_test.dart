@@ -24,6 +24,10 @@ class _FakeRemote implements BodyWeightRepository {
   /// Wstrzymuje najbliższy `save` do czasu `complete()`.
   Completer<void>? saveGate;
 
+  /// Wstrzymuje każdy `GET` — jak Wi-Fi bez internetu, gdzie żądanie wisi
+  /// do timeoutu zamiast od razu zawieść.
+  Completer<void>? listGate;
+
   void _checkNetwork() {
     if (offline) throw const ApiException('network_error');
   }
@@ -31,6 +35,8 @@ class _FakeRemote implements BodyWeightRepository {
   @override
   Future<List<BodyWeightEntry>> list({int limit = 1000}) async {
     calls.add('GET');
+    final gate = listGate;
+    if (gate != null) await gate.future;
     _checkNetwork();
     final dates = server.keys.toList()..sort();
     return [
@@ -98,6 +104,7 @@ void main() {
       localDb: db,
       syncEngine: sync,
       clock: () => DateTime(2026, 10, 4, 12),
+      initialPullGrace: const Duration(milliseconds: 100),
     );
   });
 
@@ -259,6 +266,44 @@ void main() {
     remote.offline = true;
     expect(await repo.list(), isEmpty);
   });
+
+  test(
+    'list reads locally at once while a sync request hangs in the queue',
+    () async {
+      remote.server['2026-10-03'] = 80.0;
+      await repo.list(); // pierwsze pobranie
+      remote.listGate = Completer<void>();
+      // Pobranie w tle wisi, jak żądanie na Wi-Fi bez internetu.
+      final hanging = sync.pull();
+
+      final entries = await repo.list().timeout(const Duration(seconds: 1));
+
+      expect(entries, [BodyWeightEntry(date: yesterday, weightKg: 80.0)]);
+      remote.listGate!.complete();
+      await hanging;
+    },
+  );
+
+  test(
+    'first list waits only briefly for a server that never answers',
+    () async {
+      remote.server['2026-10-03'] = 80.0;
+      remote.listGate = Completer<void>();
+
+      final entries = await repo.list().timeout(const Duration(seconds: 1));
+      expect(entries, isEmpty);
+
+      // Odpowiedź dochodzi w tle i zgłasza zmianę danych.
+      remote.listGate!.complete();
+      for (var i = 0; i < 200 && dataChanges == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(dataChanges, greaterThan(0));
+      expect(await repo.list(), [
+        BodyWeightEntry(date: yesterday, weightKg: 80.0),
+      ]);
+    },
+  );
 
   test('cubit reloads when sync changes local data', () async {
     final changes = ValueNotifier(0);

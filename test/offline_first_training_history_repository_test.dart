@@ -100,6 +100,61 @@ void main() {
     },
   );
 
+  test(
+    'first page without cache shows phone workouts while the server hangs',
+    () async {
+      final session = await sessions.startFromPlan(_plan());
+      await sessions.finish(session.id);
+      final server = Completer<TrainingSessionPage>();
+      remote.onGetSessions = () => server.future;
+      final impatient = OfflineFirstTrainingHistoryRepository(
+        remote: remote,
+        localCache: TrainingHistoryLocalCache(db),
+        localSessions: TrainingSessionLocalHistory(db),
+        onFreshData: () => freshNotices++,
+        freshDataDebounce: Duration.zero,
+        slowNetworkGrace: const Duration(milliseconds: 50),
+      );
+
+      final page = await impatient
+          .getSessions(status: TrainingSessionStatus.completed)
+          .timeout(const Duration(seconds: 2));
+
+      expect(page.items.map((item) => item.id), [session.id]);
+      expect(page.isFromCache, isTrue);
+
+      // Odpowiedź serwera dociera w tle i każe ekranowi przeładować listę.
+      server.complete(_page([_serverItem('server-old', DateTime.utc(2020))]));
+      for (var i = 0; i < 200 && freshNotices == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(freshNotices, 1);
+    },
+  );
+
+  test(
+    'first page without cache and without phone workouts keeps waiting',
+    () async {
+      final server = Completer<TrainingSessionPage>();
+      remote.onGetSessions = () => server.future;
+      final impatient = OfflineFirstTrainingHistoryRepository(
+        remote: remote,
+        localCache: TrainingHistoryLocalCache(db),
+        localSessions: TrainingSessionLocalHistory(db),
+        slowNetworkGrace: const Duration(milliseconds: 50),
+      );
+
+      final pending = impatient.getSessions(
+        status: TrainingSessionStatus.completed,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      server.complete(_page([_serverItem('server-1', DateTime.utc(2020))]));
+
+      final page = await pending;
+      expect(page.items.single.id, 'server-1');
+    },
+  );
+
   test('detail of an unsynced workout comes from the phone', () async {
     final session = await sessions.startFromPlan(_plan());
     await sessions.finish(session.id);

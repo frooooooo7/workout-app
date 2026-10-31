@@ -54,12 +54,20 @@ class BodyWeightSyncEngine extends SyncEngineBase {
   Future<void> ensureInitialPull({
     Duration maxAge = SyncEngineBase.defaultPullMaxAge,
   }) {
+    // Świeża próba (np. nieudana offline) — nie ustawiamy się w kolejce.
+    if (!isPullDue(maxAge)) return Future<void>.value();
     return runCoalesced('initial-pull', () async {
       if (!isPullDue(maxAge)) return;
-      if (await _localDb.readSyncState(pulledAtKey) != null) return;
+      if (await hasPulled()) return;
       await _pullImpl();
     });
   }
+
+  /// Czy dziennik był już kiedyś pobrany z serwera. Odczyt idzie prosto do
+  /// lokalnej bazy, z pominięciem kolejki synchronizacji — ta potrafi stać
+  /// za żądaniem wiszącym do timeoutu (Wi-Fi bez internetu).
+  Future<bool> hasPulled() async =>
+      await _localDb.readSyncState(pulledAtKey) != null;
 
   static String _attemptKey(String date) => 'body_weight:$date';
 

@@ -8,6 +8,11 @@ import '../models/user_profile.dart';
 abstract class ProfileRepository {
   Future<UserProfile> getOwnProfile();
 
+  /// Ostatni własny profil zapisany na tym urządzeniu albo `null`. Odczyt
+  /// z lokalnej bazy — nigdy nie czeka na sieć, więc ekrany pokazują dane
+  /// od razu, a `getOwnProfile` odświeża je w tle.
+  Future<UserProfile?> cachedOwnProfile();
+
   Future<UserProfile> getUserProfile(String userId);
 
   Future<List<FollowingUser>> getFollowing({int limit = 20, int offset = 0});

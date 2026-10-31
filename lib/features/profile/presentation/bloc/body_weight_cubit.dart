@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../domain/models/body_weight_entry.dart';
+import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/body_weight_repository.dart';
 import '../../domain/repositories/profile_repository.dart';
 import '../../domain/services/body_weight_trend.dart';
@@ -154,21 +155,32 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
     }
   }
 
-  /// Cel jest w `/profile/me`, jak pozostałe dane profilu — bez sieci
-  /// po prostu go nie znamy.
+  /// Cel jest w `/profile/me`. Najpierw lokalna kopia profilu (ekran ma cel
+  /// od razu, także offline), potem świeża wartość z serwera.
   Future<void> _loadGoal() async {
     final profile = _profile;
     if (profile == null) return;
     try {
-      final own = await profile.getOwnProfile();
+      final cached = await profile.cachedOwnProfile();
       if (isClosed) return;
-      final goal = own.details?.targetWeightKg;
-      emit(
-        state.copyWith(goalLoaded: true, goalKg: goal, clearGoal: goal == null),
-      );
+      if (cached != null && !state.goalLoaded) _emitGoal(cached);
+    } catch (_) {
+      /* bez kopii czekamy na serwer */
+    }
+    try {
+      final own = await profile.getOwnProfile();
+      if (isClosed || state.savingGoal) return;
+      _emitGoal(own);
     } catch (_) {
       /* zostaje poprzedni stan celu */
     }
+  }
+
+  void _emitGoal(UserProfile own) {
+    final goal = own.details?.targetWeightKg;
+    emit(
+      state.copyWith(goalLoaded: true, goalKg: goal, clearGoal: goal == null),
+    );
   }
 
   /// Ustawia cel; `null` usuwa go.

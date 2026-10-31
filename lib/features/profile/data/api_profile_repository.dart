@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../../../core/network/api_client.dart';
@@ -8,6 +9,7 @@ import '../domain/models/profile_details.dart';
 import '../domain/models/profile_stats.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/repositories/profile_repository.dart';
+import 'own_profile_cache.dart';
 
 class ApiProfileRepository implements ProfileRepository {
   ApiProfileRepository(this._api);
@@ -22,19 +24,42 @@ class ApiProfileRepository implements ProfileRepository {
   Set<String> ownAvatarUrlsFor(String userId) =>
       Set.unmodifiable(_ownAvatarUrls[userId] ?? const <String>{});
 
-  UserProfile _rememberOwn(UserProfile profile) {
+  /// Lokalna kopia własnego profilu; podpinana po otwarciu bazy konta.
+  OwnProfileCache? _cache;
+
+  // ignore: use_setters_to_change_properties
+  void attachCache(OwnProfileCache? cache) => _cache = cache;
+
+  /// Parsuje odpowiedź `/profile/me*`, zapamiętuje awatar i odkłada kopię
+  /// do cache (błąd zapisu nigdy nie psuje odpowiedzi).
+  UserProfile _rememberOwn(Map<String, dynamic> json) {
+    final profile = userProfileFromJson(json);
     final url = profile.avatarUrl;
     if (url != null && url.isNotEmpty) {
       (_ownAvatarUrls[profile.id] ??= <String>{}).add(url);
     }
+    final cache = _cache;
+    if (cache != null) {
+      unawaited(cache.write(json).then<void>((_) {}, onError: (Object _) {}));
+    }
     return profile;
+  }
+
+  @override
+  Future<UserProfile?> cachedOwnProfile() async {
+    try {
+      final json = await _cache?.read();
+      return json == null ? null : userProfileFromJson(json);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   Future<UserProfile> getOwnProfile() async {
     final data =
         await _api.get('/profile/me', auth: true) as Map<String, dynamic>;
-    return _rememberOwn(userProfileFromJson(data));
+    return _rememberOwn(data);
   }
 
   @override
@@ -55,7 +80,7 @@ class ApiProfileRepository implements ProfileRepository {
     final data =
         await _api.patch('/profile/me', body, auth: true)
             as Map<String, dynamic>;
-    return _rememberOwn(userProfileFromJson(data));
+    return _rememberOwn(data);
   }
 
   @override
@@ -63,7 +88,7 @@ class ApiProfileRepository implements ProfileRepository {
     final data =
         await _api.patch('/profile/me', {'targetWeightKg': kg}, auth: true)
             as Map<String, dynamic>;
-    return _rememberOwn(userProfileFromJson(data));
+    return _rememberOwn(data);
   }
 
   @override
@@ -86,7 +111,7 @@ class ApiProfileRepository implements ProfileRepository {
       const <String, dynamic>{},
       auth: true,
     );
-    return _rememberOwn(userProfileFromJson(data as Map<String, dynamic>));
+    return _rememberOwn(data as Map<String, dynamic>);
   }
 
   @override
@@ -102,7 +127,7 @@ class ApiProfileRepository implements ProfileRepository {
       files: [file],
       auth: true,
     );
-    return _rememberOwn(userProfileFromJson(data as Map<String, dynamic>));
+    return _rememberOwn(data as Map<String, dynamic>);
   }
 
   @override
@@ -110,7 +135,7 @@ class ApiProfileRepository implements ProfileRepository {
     final data = await _api.delete('/profile/me/avatar', auth: true);
     // 204 bez treści — dociągamy aktualny profil.
     if (data is! Map<String, dynamic>) return getOwnProfile();
-    return _rememberOwn(userProfileFromJson(data));
+    return _rememberOwn(data);
   }
 
   @override
