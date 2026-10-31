@@ -109,6 +109,10 @@ class OfflineFirstTrainingHistoryRepository
   }) async {
     final isFirstPage = cursor == null || cursor.isEmpty;
 
+    // Strona z telefonu po przekroczeniu [slowNetworkGrace] jest już
+    // kompletna (bez usuniętych, ze wszystkimi lokalnymi sesjami) — nie
+    // przechodzi drugi raz przez dokładanie lokalnych sesji.
+    var servedFromPhone = false;
     try {
       final page = await _preferFresh<TrainingSessionPage>(
         fetch: () async {
@@ -133,14 +137,19 @@ class OfflineFirstTrainingHistoryRepository
         decodeCache: _remote.pageFromCachedJson,
         slowFallback: !isFirstPage
             ? null
-            : () => _localOnlyPage(
-                status: status,
-                planId: planId,
-                query: query,
-                from: from,
-                to: to,
-              ),
+            : () async {
+                final local = await _localOnlyPage(
+                  status: status,
+                  planId: planId,
+                  query: query,
+                  from: from,
+                  to: to,
+                );
+                servedFromPhone = local != null;
+                return local;
+              },
       );
+      if (servedFromPhone) return page;
       final visible = await _withoutPendingDeletions(page);
       if (!isFirstPage) return visible;
       return await _withLocalSessions(

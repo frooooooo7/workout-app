@@ -70,6 +70,18 @@ class ProfileDetails {
         'targetWeightKg': targetWeightKg,
       };
 
+  /// Tylko pola, które różnią się od [base] — do `PATCH`, żeby zapis jednej
+  /// zmiany nie cofał na serwerze pól, których użytkownik nie ruszał (a które
+  /// lokalna kopia mogła mieć nieaktualne). `null` w różnicy czyści pole.
+  Map<String, dynamic> changedJson(ProfileDetails base) {
+    final mine = toJson();
+    final theirs = base.toJson();
+    return {
+      for (final key in mine.keys)
+        if (mine[key] != theirs[key]) key: mine[key],
+    };
+  }
+
   @override
   bool operator ==(Object other) =>
       other is ProfileDetails &&

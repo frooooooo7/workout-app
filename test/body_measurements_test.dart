@@ -288,6 +288,22 @@ void main() {
       },
     );
 
+    test('first list waits for a pull that is already running', () async {
+      remote.server['2026-10-03'] = _e(10, 3, {_waist: 85});
+      remote.listGate = Completer<void>();
+      final running = sync.pull();
+      await Future<void>.delayed(Duration.zero);
+
+      final listing = repo.list();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      remote.listGate!.complete();
+
+      expect(await listing, [
+        _e(10, 3, {_waist: 85}),
+      ]);
+      await running;
+    });
+
     test('rejects empty, out of range and future entries locally', () async {
       expect(
         () => repo.save(_e(10, 4, {})),

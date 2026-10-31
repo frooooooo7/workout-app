@@ -155,21 +155,26 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
     }
   }
 
+  /// Zwiększane przy każdym zapisie celu — odpowiedź GET wysłanego wcześniej
+  /// jest wtedy nieaktualna i nie może cofnąć nowego celu.
+  int _goalVersion = 0;
+
   /// Cel jest w `/profile/me`. Najpierw lokalna kopia profilu (ekran ma cel
   /// od razu, także offline), potem świeża wartość z serwera.
   Future<void> _loadGoal() async {
     final profile = _profile;
     if (profile == null) return;
+    final version = _goalVersion;
     try {
       final cached = await profile.cachedOwnProfile();
-      if (isClosed) return;
+      if (isClosed || version != _goalVersion) return;
       if (cached != null && !state.goalLoaded) _emitGoal(cached);
     } catch (_) {
       /* bez kopii czekamy na serwer */
     }
     try {
       final own = await profile.getOwnProfile();
-      if (isClosed || state.savingGoal) return;
+      if (isClosed || version != _goalVersion) return;
       _emitGoal(own);
     } catch (_) {
       /* zostaje poprzedni stan celu */
@@ -187,6 +192,7 @@ class BodyWeightCubit extends Cubit<BodyWeightState> {
   Future<bool> saveGoal(double? kg) async {
     final profile = _profile;
     if (profile == null || state.savingGoal) return false;
+    _goalVersion++;
     emit(state.copyWith(savingGoal: true));
     try {
       final updated = await profile.updateTargetWeight(kg);

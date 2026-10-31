@@ -305,6 +305,20 @@ void main() {
     },
   );
 
+  test('first list waits for a pull that is already running', () async {
+    remote.server['2026-10-03'] = 80.0;
+    remote.listGate = Completer<void>();
+    final running = sync.pull();
+    await Future<void>.delayed(Duration.zero);
+
+    final listing = repo.list();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    remote.listGate!.complete();
+
+    expect(await listing, [BodyWeightEntry(date: yesterday, weightKg: 80.0)]);
+    await running;
+  });
+
   test('cubit reloads when sync changes local data', () async {
     final changes = ValueNotifier(0);
     final cubit = BodyWeightCubit(repo, dataChanges: changes);

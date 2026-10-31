@@ -421,7 +421,9 @@ class ServiceLocator {
     );
     _exerciseDatabase = database;
     // Własny profil (Dane i cele, cel masy ciała) otwiera się z lokalnej kopii.
-    _apiProfileRepository?.attachCache(DatabaseOwnProfileCache(database));
+    _apiProfileRepository?.attachCache(
+      DatabaseOwnProfileCache(database, userId: userId),
+    );
 
     final exerciseSync = ExerciseSyncEngine(
       remote: _remoteDataSource,

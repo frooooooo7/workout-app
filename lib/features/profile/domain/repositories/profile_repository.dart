@@ -42,12 +42,17 @@ abstract class ProfileRepository {
   /// `PATCH /profile/me` — wysyła tylko przekazane (nie-null) pola.
   /// Pusty [bio] czyści opis. [details] idą w całości — puste pola
   /// czyszczą wartości na serwerze.
+  ///
+  /// Z [detailsBaseline] idą tylko te pola [details], które się od niego
+  /// różnią — gdy punkt odniesienia ekranu mógł się zestarzeć (lokalna kopia
+  /// profilu), zapis nie cofa pól, których użytkownik nie ruszał.
   Future<UserProfile> updateProfile({
     String? firstName,
     String? lastName,
     String? bio,
     String? handle,
     ProfileDetails? details,
+    ProfileDetails? detailsBaseline,
   });
 
   /// Ustawia cel masy ciała; `null` usuwa cel. Pozostałe dane bez zmian.

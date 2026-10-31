@@ -59,6 +59,7 @@ class _FakeRepository extends Fake implements ProfileRepository {
     String? bio,
     String? handle,
     ProfileDetails? details,
+    ProfileDetails? detailsBaseline,
   }) async {
     if (updateError != null) throw updateError!;
     updates.add({'handle': ?handle, 'bio': ?bio, 'details': ?details});

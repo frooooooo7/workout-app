@@ -111,8 +111,18 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
       final profile = await _repository.getOwnProfile();
       if (isClosed) return;
       if (cached != null && state.hasChanges) {
-        // Użytkownik już coś zmienił — jego szkic zostaje.
-        emit(state.copyWith(initial: profile, refreshing: false));
+        // Użytkownik już coś zmienił — jego pola zostają, a pozostałe biorą
+        // wartości ze świeżego profilu (inaczej zapis wysłałby stare).
+        emit(
+          state.copyWith(
+            initial: profile,
+            draft: state.draft.rebased(
+              from: state.savedDetails,
+              onto: profile.details ?? ProfileDetails.empty,
+            ),
+            refreshing: false,
+          ),
+        );
         return;
       }
       emit(
@@ -146,6 +156,9 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
       final previousWeight = state.savedDetails.weightKg;
       final updated = await _repository.updateProfile(
         details: state.draft.toDetails(),
+        // Punkt odniesienia mógł się zestarzeć (lokalna kopia) — idą tylko
+        // pola zmienione przez użytkownika.
+        detailsBaseline: state.savedDetails,
       );
       await logProfileWeightChange(
         bodyWeight,

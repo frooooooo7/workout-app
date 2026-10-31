@@ -40,6 +40,7 @@ class _FakeRepository extends Fake implements ProfileRepository {
     String? bio,
     String? handle,
     ProfileDetails? details,
+    ProfileDetails? detailsBaseline,
   }) async {
     sentDetails.add(details);
     return _profile.copyWith(details: details);

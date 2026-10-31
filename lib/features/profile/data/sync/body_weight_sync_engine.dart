@@ -54,8 +54,6 @@ class BodyWeightSyncEngine extends SyncEngineBase {
   Future<void> ensureInitialPull({
     Duration maxAge = SyncEngineBase.defaultPullMaxAge,
   }) {
-    // Świeża próba (np. nieudana offline) — nie ustawiamy się w kolejce.
-    if (!isPullDue(maxAge)) return Future<void>.value();
     return runCoalesced('initial-pull', () async {
       if (!isPullDue(maxAge)) return;
       if (await hasPulled()) return;

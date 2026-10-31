@@ -13,6 +13,10 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   final ProfileRepository _repository;
 
+  /// Zwiększane przy [applyProfile] — odpowiedź pobrania wysłanego wcześniej
+  /// nie może cofnąć profilu, który ekran edycji właśnie zwrócił.
+  int _appliedVersion = 0;
+
   Future<void> load() => _fetchProfile(isRefresh: false);
 
   Future<void> refresh() => _fetchProfile(isRefresh: true);
@@ -23,6 +27,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> _fetchProfile({required bool isRefresh}) async {
     if (isRefresh && state.refreshing) return;
     if (isClosed) return;
+    final version = _appliedVersion;
 
     emit(
       state.copyWith(
@@ -42,7 +47,9 @@ class ProfileCubit extends Cubit<ProfileState> {
         /* bez kopii czekamy na serwer */
       }
       if (isClosed) return;
-      if (cached != null && state.profile == null) {
+      if (cached != null &&
+          state.profile == null &&
+          version == _appliedVersion) {
         emit(state.copyWith(profile: cached, loading: false));
       }
     }
@@ -55,7 +62,9 @@ class ProfileCubit extends Cubit<ProfileState> {
       if (isClosed) return;
       emit(
         state.copyWith(
-          profile: results[0] as UserProfile,
+          profile: version == _appliedVersion
+              ? results[0] as UserProfile
+              : state.profile,
           following: results[1] as List<FollowingUser>,
           loading: false,
           refreshing: false,
@@ -90,6 +99,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   /// na ponowne pobranie.
   void applyProfile(UserProfile profile) {
     if (isClosed) return;
+    _appliedVersion++;
     emit(state.copyWith(profile: profile, clearError: true));
   }
 }

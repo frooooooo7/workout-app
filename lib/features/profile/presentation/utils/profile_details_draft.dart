@@ -73,6 +73,38 @@ class ProfileDetailsDraft {
   ProfileDetails toDetails() =>
       goalOnto(bodyOnto(ProfileDetails(targetWeightKg: targetWeightKg)));
 
+  /// Szkic przeniesiony ze starego punktu odniesienia [from] na świeży [onto]:
+  /// pole, którego użytkownik nie ruszył (równe wartości z [from]), bierze
+  /// wartość z [onto]; zmienione przez niego zostaje.
+  ProfileDetailsDraft rebased({
+    required ProfileDetails from,
+    required ProfileDetails onto,
+  }) {
+    T? pick<T>(T? mine, T? old, T? fresh) => mine == old ? fresh : mine;
+    return ProfileDetailsDraft(
+      gender: pick(gender, from.gender, onto.gender),
+      birthDate: pick(birthDate, from.birthDate, onto.birthDate),
+      heightCm: pick(heightCm, from.heightCm, onto.heightCm),
+      weightKg: pick(weightKg, from.weightKg, onto.weightKg),
+      trainingGoal: pick(trainingGoal, from.trainingGoal, onto.trainingGoal),
+      experienceLevel: pick(
+        experienceLevel,
+        from.experienceLevel,
+        onto.experienceLevel,
+      ),
+      weeklyTrainingDays: pick(
+        weeklyTrainingDays,
+        from.weeklyTrainingDays,
+        onto.weeklyTrainingDays,
+      ),
+      targetWeightKg: pick(
+        targetWeightKg,
+        from.targetWeightKg,
+        onto.targetWeightKg,
+      ),
+    );
+  }
+
   /// Każde pole można wyczyścić — `clear*` ustawia null.
   ProfileDetailsDraft copyWith({
     Gender? gender,

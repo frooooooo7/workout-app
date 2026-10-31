@@ -30,16 +30,31 @@ class ApiProfileRepository implements ProfileRepository {
   // ignore: use_setters_to_change_properties
   void attachCache(OwnProfileCache? cache) => _cache = cache;
 
+  int _ownRequestSeq = 0;
+  int _ownWrittenSeq = 0;
+
+  /// Znacznik żądania `/profile/me*`: cache bierzemy w chwili WYSŁANIA
+  /// (odpowiedź konta A, spóźniona po przelogowaniu, nie może trafić do bazy
+  /// konta B), a numer pilnuje kolejności zapisów.
+  ({OwnProfileCache? cache, int seq}) _begin() =>
+      (cache: _cache, seq: ++_ownRequestSeq);
+
   /// Parsuje odpowiedź `/profile/me*`, zapamiętuje awatar i odkłada kopię
-  /// do cache (błąd zapisu nigdy nie psuje odpowiedzi).
-  UserProfile _rememberOwn(Map<String, dynamic> json) {
+  /// do cache. Kopię zapisuje tylko odpowiedź na żądanie nowsze niż to, które
+  /// już coś zapisało — stary GET, który dotarł po świeżym PATCH, nie cofa
+  /// kopii. Błąd zapisu nigdy nie psuje odpowiedzi.
+  UserProfile _rememberOwn(
+    Map<String, dynamic> json,
+    ({OwnProfileCache? cache, int seq}) ticket,
+  ) {
     final profile = userProfileFromJson(json);
     final url = profile.avatarUrl;
     if (url != null && url.isNotEmpty) {
       (_ownAvatarUrls[profile.id] ??= <String>{}).add(url);
     }
-    final cache = _cache;
-    if (cache != null) {
+    final cache = ticket.cache;
+    if (cache != null && ticket.seq > _ownWrittenSeq) {
+      _ownWrittenSeq = ticket.seq;
       unawaited(cache.write(json).then<void>((_) {}, onError: (Object _) {}));
     }
     return profile;
@@ -57,9 +72,10 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> getOwnProfile() async {
+    final ticket = _begin();
     final data =
         await _api.get('/profile/me', auth: true) as Map<String, dynamic>;
-    return _rememberOwn(data);
+    return _rememberOwn(data, ticket);
   }
 
   @override
@@ -69,26 +85,31 @@ class ApiProfileRepository implements ProfileRepository {
     String? bio,
     String? handle,
     ProfileDetails? details,
+    ProfileDetails? detailsBaseline,
   }) async {
+    final ticket = _begin();
     final body = <String, dynamic>{
       'firstName': ?firstName,
       'lastName': ?lastName,
       'bio': ?bio,
       'handle': ?handle,
-      ...?details?.toJson(),
+      ...?(detailsBaseline == null
+          ? details?.toJson()
+          : details?.changedJson(detailsBaseline)),
     };
     final data =
         await _api.patch('/profile/me', body, auth: true)
             as Map<String, dynamic>;
-    return _rememberOwn(data);
+    return _rememberOwn(data, ticket);
   }
 
   @override
   Future<UserProfile> updateTargetWeight(double? kg) async {
+    final ticket = _begin();
     final data =
         await _api.patch('/profile/me', {'targetWeightKg': kg}, auth: true)
             as Map<String, dynamic>;
-    return _rememberOwn(data);
+    return _rememberOwn(data, ticket);
   }
 
   @override
@@ -106,16 +127,18 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile> completeOnboarding() async {
+    final ticket = _begin();
     final data = await _api.post(
       '/profile/me/onboarding/complete',
       const <String, dynamic>{},
       auth: true,
     );
-    return _rememberOwn(data as Map<String, dynamic>);
+    return _rememberOwn(data as Map<String, dynamic>, ticket);
   }
 
   @override
   Future<UserProfile> uploadAvatar(Uint8List bytes, String filename) async {
+    final ticket = _begin();
     final file = imageMultipartFile(
       'avatar',
       bytes,
@@ -127,15 +150,16 @@ class ApiProfileRepository implements ProfileRepository {
       files: [file],
       auth: true,
     );
-    return _rememberOwn(data as Map<String, dynamic>);
+    return _rememberOwn(data as Map<String, dynamic>, ticket);
   }
 
   @override
   Future<UserProfile> removeAvatar() async {
+    final ticket = _begin();
     final data = await _api.delete('/profile/me/avatar', auth: true);
     // 204 bez treści — dociągamy aktualny profil.
     if (data is! Map<String, dynamic>) return getOwnProfile();
-    return _rememberOwn(data);
+    return _rememberOwn(data, ticket);
   }
 
   @override
