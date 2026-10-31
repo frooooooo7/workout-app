@@ -16,6 +16,7 @@ import 'training_record_to_beat.dart';
 
 /// Karta planu wybranego dnia (domyślnie dziś): nazwa planu, partie,
 /// ćwiczenia z ostatnimi wynikami, rekord do pobicia i „Rozpocznij”.
+/// Zrobiony trening dnia zastępuje „Rozpocznij” informacją o ukończeniu.
 /// W dzień wolny i bez planów — ta sama karta z odpowiednią akcją.
 class TrainingTodayPlanSection extends StatelessWidget {
   const TrainingTodayPlanSection({
@@ -56,9 +57,8 @@ class TrainingTodayPlanSection extends StatelessWidget {
     if (isLoading && plans.isEmpty) return const _PlanCardSkeleton();
 
     final now = today ?? DateTime.now();
-    final date = startOfWeekContaining(
-      now,
-    ).add(Duration(days: selectedDay - 1));
+    final date = startOfWeekContaining(now)
+        .add(Duration(days: selectedDay - 1));
     final badge = _dayBadge(date, now);
     final caption = 'Plan na ${_weekdayAccusative[selectedDay - 1]}';
     final scheduled = [
@@ -66,28 +66,63 @@ class TrainingTodayPlanSection extends StatelessWidget {
         if (plan.selectedDays.contains(selectedDay)) plan,
     ];
 
-    final customItem = _MenuItem(
-      'Trening bez planu',
-      onStartCustom,
-      enabled: !sessionInProgress,
+    // „Trening bez planu” jest zawsze widocznym przyciskiem na karcie.
+    final customButton = _CardButton(
+      key: const ValueKey('start-custom-button'),
+      label: 'Trening bez planu',
+      icon: Icons.bolt_rounded,
+      secondary: true,
+      onTap: sessionInProgress ? null : onStartCustom,
     );
 
-    if (scheduled.isEmpty) {
+    if (scheduled.isEmpty && insights.weekDonePlans[selectedDay] == null) {
       final hasPlans = plans.isNotEmpty;
       return _PlanCardShell(
         key: const ValueKey('plan-card-rest'),
         badge: badge,
         caption: caption,
-        menu: [customItem],
         child: hasPlans
             ? _RestDayContent(
                 nextWorkout: _nextWorkout(plans, selectedDay),
                 onCreatePlan: () => onCreatePlanForDay(selectedDay),
+                customButton: customButton,
               )
             : _NoPlansContent(
                 onCreatePlan: () => onCreatePlanForDay(selectedDay),
+                customButton: customButton,
               ),
       );
+    }
+
+    // Trening tego dnia już zrobiony (plan z tego dnia albo wolny trening
+    // w dzień bez planu): zamiast „Rozpocznij” — informacja o ukończeniu.
+    final doneName = insights.weekDonePlans[selectedDay];
+    if (doneName != null) {
+      final donePlan = _planNamed(plans, doneName);
+      final planned = scheduled.where((p) => _sameName(p.name, doneName));
+      if (scheduled.isEmpty || planned.isNotEmpty) {
+        return _PlanCardShell(
+          key: const ValueKey('plan-card-done'),
+          badge: badge,
+          caption: caption,
+          color: PlanColors.of(doneName),
+          menu: [
+            if (donePlan != null) ...[
+              _MenuItem('Szczegóły planu', () => onOpenPlan(donePlan)),
+              _MenuItem(
+                'Powtórz ${donePlan.name}',
+                () => onStartPlan(donePlan),
+                enabled: !sessionInProgress,
+              ),
+            ],
+          ],
+          child: _DoneContent(
+            planName: doneName,
+            onOpenPlan: donePlan == null ? null : () => onOpenPlan(donePlan),
+            customButton: customButton,
+          ),
+        );
+      }
     }
 
     final plan = scheduled.first;
@@ -104,7 +139,6 @@ class TrainingTodayPlanSection extends StatelessWidget {
             () => onStartPlan(other),
             enabled: !sessionInProgress,
           ),
-        customItem,
       ],
       // „Do pobicia” zależy od metody progresji z ustawień.
       child: ValueListenableBuilder<ProgressionSettings>(
@@ -114,9 +148,23 @@ class TrainingTodayPlanSection extends StatelessWidget {
           insights: insights,
           onOpen: () => onOpenPlan(plan),
           onStart: sessionInProgress ? null : () => onStartPlan(plan),
+          customButton: customButton,
         ),
       ),
     );
+  }
+
+  static bool _sameName(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  static CustomTrainingPlan? _planNamed(
+    List<CustomTrainingPlan> plans,
+    String name,
+  ) {
+    for (final plan in plans) {
+      if (_sameName(plan.name, name)) return plan;
+    }
+    return null;
   }
 
   static const _weekdayAccusative = [
@@ -168,8 +216,8 @@ class _PlanCardShell extends StatelessWidget {
     super.key,
     required this.badge,
     required this.caption,
-    required this.menu,
     required this.child,
+    this.menu = const [],
     this.color,
   });
 
@@ -254,7 +302,7 @@ class _PlanCardShell extends StatelessWidget {
                         ),
                       ),
                     ),
-                    _MoreMenu(items: menu),
+                    if (menu.isNotEmpty) _MoreMenu(items: menu),
                   ],
                 ),
                 child,
@@ -307,6 +355,7 @@ class _PlanContent extends StatelessWidget {
     required this.insights,
     required this.onOpen,
     required this.onStart,
+    required this.customButton,
   });
 
   final CustomTrainingPlan plan;
@@ -315,6 +364,7 @@ class _PlanContent extends StatelessWidget {
 
   /// `null` — trwa inny trening, przycisk wyszarzony.
   final VoidCallback? onStart;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +477,8 @@ class _PlanContent extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 8),
+        customButton,
       ],
     );
   }
@@ -488,11 +540,13 @@ class _RestDayContent extends StatelessWidget {
   const _RestDayContent({
     required this.nextWorkout,
     required this.onCreatePlan,
+    required this.customButton,
   });
 
   /// „Pull · piątek”; `null`, gdy żaden plan nie ma przypisanych dni.
   final String? nextWorkout;
   final VoidCallback onCreatePlan;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
@@ -534,15 +588,90 @@ class _RestDayContent extends StatelessWidget {
           secondary: true,
           onTap: onCreatePlan,
         ),
+        const SizedBox(height: 8),
+        customButton,
+      ],
+    );
+  }
+}
+
+class _DoneContent extends StatelessWidget {
+  const _DoneContent({
+    required this.planName,
+    required this.onOpenPlan,
+    required this.customButton,
+  });
+
+  final String planName;
+
+  /// `null`, gdy plan już nie istnieje (np. wolny trening).
+  final VoidCallback? onOpenPlan;
+  final Widget customButton;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.success.withValues(alpha: 0.16),
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                key: ValueKey('done-check-icon'),
+                color: AppColors.success,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Trening ukończony', style: _titleStyle),
+                  const SizedBox(height: 4),
+                  Text(
+                    planName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _subtitleStyle,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (onOpenPlan != null) ...[
+          _CardButton(
+            key: const ValueKey('done-plan-details-button'),
+            label: 'Szczegóły planu',
+            icon: Icons.view_list_rounded,
+            secondary: true,
+            onTap: onOpenPlan,
+          ),
+          const SizedBox(height: 8),
+        ],
+        customButton,
       ],
     );
   }
 }
 
 class _NoPlansContent extends StatelessWidget {
-  const _NoPlansContent({required this.onCreatePlan});
+  const _NoPlansContent({
+    required this.onCreatePlan,
+    required this.customButton,
+  });
 
   final VoidCallback onCreatePlan;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
@@ -563,6 +692,8 @@ class _NoPlansContent extends StatelessWidget {
           icon: Icons.add_rounded,
           onTap: onCreatePlan,
         ),
+        const SizedBox(height: 8),
+        customButton,
       ],
     );
   }
