@@ -307,7 +307,7 @@ void main() {
       expect(maps, hasLength(2)); // przód i tył
       final expected = {
         MuscleHighlight(muscle: 'quadriceps', intensity: MuscleIntensity.high),
-        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.medium),
+        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.high),
         MuscleHighlight(muscle: 'hamstring', intensity: MuscleIntensity.low),
         MuscleHighlight(muscle: 'upper-back', intensity: MuscleIntensity.high),
       };
@@ -315,6 +315,55 @@ void main() {
         expect(highlights, expected);
       }
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tapping a ranking row shows where its sets come from', (
+      tester,
+    ) async {
+      const muscles = MuscleDistribution(
+        muscles: [
+          MuscleStat(
+            muscle: MuscleGroup.chest,
+            sets: 9,
+            volumeKg: 0,
+            share: 1,
+            intensity: 1,
+            sources: [
+              MuscleSource(
+                exerciseName: 'Wyciskanie sztangi',
+                sets: 6,
+                targetSets: 6,
+                volumeKg: 0,
+              ),
+              MuscleSource(
+                exerciseName: 'Rozpiętki',
+                sets: 3,
+                targetSets: 0,
+                volumeKg: 0,
+              ),
+            ],
+          ),
+        ],
+        regions: [],
+        neglected: [],
+      );
+      await _pump(tester, const StatsMusclesCard(muscles: muscles));
+
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
+      expect(find.text('GŁÓWNE'), findsOneWidget);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(find.text('Wyciskanie sztangi'), findsOneWidget);
+      expect(find.text('cel · 6 serii'), findsOneWidget);
+      expect(find.text('Rozpiętki'), findsOneWidget);
+      expect(find.text('wspomaga · 3 serie'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
     });
 
     testWidgets('empty bodyMap leaves the figures unlit', (tester) async {

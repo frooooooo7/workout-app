@@ -270,6 +270,35 @@ class TrainingHabits {
 /// Praca jednej pozycji rankingu. Pozycją jest grupa tak, jak ćwiczenie jest
 /// otagowane: zbiorcze („Nogi”, „Plecy”, „Barki”) zostają zbiorcze — nie
 /// wiemy, który konkretnie mięsień pracował, więc nie zgadujemy.
+/// Ćwiczenie, z którego bierze się praca mięśnia — żeby użytkownik widział,
+/// skąd wzięła się dana liczba.
+class MuscleSource {
+  const MuscleSource({
+    required this.exerciseName,
+    required this.sets,
+    required this.targetSets,
+    required this.volumeKg,
+  });
+
+  final String exerciseName;
+
+  /// Ukończone serie tego ćwiczenia (rozgrzewki się nie liczą).
+  final int sets;
+
+  /// Z nich: serie, w których mięsień był pierwszym tagiem (celem). Reszta
+  /// to praca wspomagająca.
+  final int targetSets;
+
+  /// Objętość tych serii; 0 przy treningu bez ciężaru.
+  final double volumeKg;
+
+  /// Mięsień był celem we wszystkich seriach tego ćwiczenia.
+  bool get isTarget => targetSets == sets;
+
+  /// Mięsień tylko pomagał, w żadnej serii nie był celem.
+  bool get isSupport => targetSets == 0;
+}
+
 class MuscleStat {
   const MuscleStat({
     required this.muscle,
@@ -277,7 +306,11 @@ class MuscleStat {
     required this.volumeKg,
     required this.share,
     required this.intensity,
+    this.sources = const [],
   });
+
+  /// Ćwiczenia, które złożyły się na ten mięsień, od największej liczby serii.
+  final List<MuscleSource> sources;
 
   final MuscleGroup muscle;
   final double sets;
@@ -288,6 +321,9 @@ class MuscleStat {
 
   /// 0..1 względem najmocniej trenowanej pozycji rankingu.
   final double intensity;
+
+  /// Czy mięsień należał w tym okresie do mocno trenowanych.
+  bool get isStrong => intensity >= MuscleDistribution.strongThreshold;
 }
 
 class RegionStat {
@@ -318,8 +354,12 @@ class MuscleDistribution {
   /// Od najmocniej trenowanej pozycji.
   final List<MuscleStat> muscles;
 
+  /// Od tej części serii najmocniej trenowanej pozycji mięsień liczy się jako
+  /// „mocno trenowany”; poniżej jest „lekko”, bez serii „brak”.
+  static const strongThreshold = 0.5;
+
   /// Podświetlenie manekina: konkretne mięśnie (grupy zbiorcze rozwinięte na
-  /// mięśnie swojego regionu) → 0..1 względem najmocniej podświetlonego.
+  /// mięśnie swojego regionu) → 0..1 względem najmocniej trenowanej grupy.
   final Map<MuscleGroup, double> bodyMap;
 
   /// Od największego udziału.

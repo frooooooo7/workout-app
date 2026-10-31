@@ -511,6 +511,78 @@ void main() {
       },
     );
 
+    test('collects which exercises feed each muscle', () {
+      final result = MuscleDistributionCalculator.compute([
+        _session(
+          DateTime(2026, 9, 14),
+          exercises: [
+            _exercise(
+              'Wyciskanie',
+              [_set(weight: '80', reps: '10'), _set(weight: '80', reps: '10')],
+              muscles: ['chest', 'triceps'],
+            ),
+            _exercise(
+              'Prostowanie',
+              [_set(weight: '20', reps: '10')],
+              muscles: ['triceps'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 9, 16),
+          exercises: [
+            _exercise(
+              'Wyciskanie',
+              [_set(weight: '85', reps: '8')],
+              muscles: ['chest', 'triceps'],
+            ),
+          ],
+        ),
+      ]);
+
+      final triceps = result.muscles.firstWhere(
+        (s) => s.muscle == MuscleGroup.triceps,
+      );
+      // Ta sama nazwa z dwóch sesji składa się w jedno źródło.
+      expect(triceps.sources.map((s) => s.exerciseName), [
+        'Wyciskanie',
+        'Prostowanie',
+      ]);
+      expect(triceps.sources.first.sets, 3);
+      expect(triceps.sources.first.isSupport, isTrue);
+      expect(triceps.sources.last.isTarget, isTrue);
+      expect(triceps.sources.first.volumeKg, 1600 + 680);
+    });
+
+    test(
+      'a coarse tag does not outshine a specific muscle on the body map',
+      () {
+        // „Nogi” (4 serie) i łydki (1 seria): łydki leżą w grupie zbiorczej,
+        // więc nie mogą świecić mocniej niż cała grupa.
+        final result = MuscleDistributionCalculator.compute([
+          _session(
+            DateTime(2026, 9, 14),
+            exercises: [
+              _exercise(
+                'Przysiad',
+                List.generate(4, (_) => _set(weight: '100', reps: '5')),
+                muscles: ['legs'],
+              ),
+              _exercise(
+                'Wspięcia',
+                [_set(weight: '50', reps: '15')],
+                muscles: ['calves'],
+              ),
+            ],
+          ),
+        ]);
+
+        expect(result.bodyMap[MuscleGroup.quads], 1);
+        expect(result.bodyMap[MuscleGroup.calves], 1);
+        expect(result.bodyMap[MuscleGroup.chest], isNull);
+      },
+    );
+
     test(
       'forearms are never reported as neglected (the backend has no group)',
       () {

@@ -69,7 +69,7 @@ void main() {
       intensity: 1,
     );
 
-    testWidgets('percentages add up and the centre shows real sets', (
+    testWidgets('region percentages add up and the centre shows real sets', (
       tester,
     ) async {
       await _pump(
@@ -93,9 +93,9 @@ void main() {
         ),
       );
 
-      // 34 + 33 + 33 w legendzie partii i w rankingu — razem 200%.
-      expect(find.text('34%'), findsNWidgets(2));
-      expect(find.text('33%'), findsNWidgets(4));
+      // 34 + 33 + 33 w legendzie partii; ranking nie pokazuje już procentów.
+      expect(find.text('34%'), findsOneWidget);
+      expect(find.text('33%'), findsNWidgets(2));
       // Środek koła: serie z otagowanych ćwiczeń (jak w kafelku „Serie”),
       // a nie ważona suma partii (60).
       expect(find.text('40'), findsOneWidget);
@@ -121,7 +121,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('<1%', findRichText: true), findsNWidgets(2));
+      expect(find.text('<1%', findRichText: true), findsOneWidget);
       expect(find.text('0%', findRichText: true), findsNothing);
     });
 
