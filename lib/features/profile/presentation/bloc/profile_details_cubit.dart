@@ -154,17 +154,24 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
     emit(state.copyWith(saving: true, clearError: true));
     try {
       final previousWeight = state.savedDetails.weightKg;
+      final sent = state.draft.toDetails();
+      // Wagę do dziennika dopisujemy tylko, gdy użytkownik sam ją zmienił —
+      // inaczej odpowiedź z nowszą wagą z serwera (lokalna kopia była stara)
+      // dałaby fałszywy pomiar z dzisiejszą datą.
+      final weightEdited = sent.weightKg != previousWeight;
       final updated = await _repository.updateProfile(
-        details: state.draft.toDetails(),
+        details: sent,
         // Punkt odniesienia mógł się zestarzeć (lokalna kopia) — idą tylko
         // pola zmienione przez użytkownika.
         detailsBaseline: state.savedDetails,
       );
-      await logProfileWeightChange(
-        bodyWeight,
-        previous: previousWeight,
-        current: updated.details?.weightKg,
-      );
+      if (weightEdited) {
+        await logProfileWeightChange(
+          bodyWeight,
+          previous: previousWeight,
+          current: updated.details?.weightKg,
+        );
+      }
       if (isClosed) return;
       emit(state.copyWith(initial: updated, saving: false, saved: updated));
     } catch (error) {

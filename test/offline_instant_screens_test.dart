@@ -22,25 +22,30 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'body_weight_test.dart' show FakeBodyWeightRepository;
 
-UserProfile _profile({double? target, int? weeklyDays, String bio = 'Hej'}) =>
-    UserProfile(
-      id: 'me',
-      firstName: 'Jan',
-      lastName: 'Kowalski',
-      handle: 'jan',
-      bio: bio,
-      stats: const ProfileStats(
-        followingCount: 1,
-        followersCount: 2,
-        workoutsCount: 3,
-      ),
-      isOwnProfile: true,
-      details: ProfileDetails(
-        heightCm: 180,
-        targetWeightKg: target,
-        weeklyTrainingDays: weeklyDays,
-      ),
-    );
+UserProfile _profile({
+  double? target,
+  int? weeklyDays,
+  double? weightKg,
+  String bio = 'Hej',
+}) => UserProfile(
+  id: 'me',
+  firstName: 'Jan',
+  lastName: 'Kowalski',
+  handle: 'jan',
+  bio: bio,
+  stats: const ProfileStats(
+    followingCount: 1,
+    followersCount: 2,
+    workoutsCount: 3,
+  ),
+  isOwnProfile: true,
+  details: ProfileDetails(
+    heightCm: 180,
+    weightKg: weightKg,
+    targetWeightKg: target,
+    weeklyTrainingDays: weeklyDays,
+  ),
+);
 
 /// Profil z lokalną kopią; `GET /profile/me` wisi do [complete]/[fail], jak
 /// zapytanie na Wi-Fi bez internetu.
@@ -57,6 +62,9 @@ class _HangingProfileRepository extends Fake implements ProfileRepository {
 
   final updates = <({ProfileDetails? details, ProfileDetails? baseline})>[];
 
+  /// Waga, którą serwer ma „naprawdę” (np. z pomiaru z innego urządzenia).
+  double? serverWeightKg;
+
   @override
   Future<UserProfile?> cachedOwnProfile() async => cached;
 
@@ -70,7 +78,15 @@ class _HangingProfileRepository extends Fake implements ProfileRepository {
     ProfileDetails? detailsBaseline,
   }) async {
     updates.add((details: details, baseline: detailsBaseline));
-    return _profile().copyWith(details: details);
+    final d = details ?? ProfileDetails.empty;
+    return _profile().copyWith(
+      details: ProfileDetails(
+        heightCm: d.heightCm,
+        weightKg: serverWeightKg ?? d.weightKg,
+        weeklyTrainingDays: d.weeklyTrainingDays,
+        targetWeightKg: d.targetWeightKg,
+      ),
+    );
   }
 
   @override
@@ -395,6 +411,24 @@ void main() {
       expect(sent.details!.changedJson(sent.baseline!), {
         'heightCm': 185,
       }, reason: 'weight, weekly goal and target stay as the server has them');
+      await cubit.close();
+    });
+
+    test('a newer server weight is not logged as a fake measurement', () async {
+      final repo = _HangingProfileRepository(
+        cached: _profile(weeklyDays: 3, weightKg: 82),
+      )..serverWeightKg = 80;
+      final log = FakeBodyWeightRepository();
+      final cubit = ProfileDetailsCubit(repo, bodyWeight: log);
+
+      unawaited(cubit.load());
+      repo.fail();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      cubit.updateDraft(cubit.state.draft.copyWith(heightCm: 185));
+      await cubit.save();
+
+      expect(repo.updates, hasLength(1));
+      expect(log.saved, isEmpty);
       await cubit.close();
     });
 
