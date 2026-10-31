@@ -7,6 +7,7 @@ import 'package:gym/features/training/domain/repositories/training_stats_reposit
 import 'package:gym/features/training/presentation/screens/training_stats_screen.dart';
 import 'package:gym/features/training/presentation/widgets/session_details/session_section_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_kpi_grid.dart';
+import 'package:gym/features/training/presentation/widgets/stats/stats_tab_bar.dart';
 
 import 'body_weight_test.dart' show FakeBodyWeightRepository;
 
@@ -78,6 +79,13 @@ Future<void> _pump(
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+Future<void> _openTab(WidgetTester tester, String label) async {
+  await tester.tap(
+    find.descendant(of: find.byType(StatsTabBar), matching: find.text(label)),
+  );
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
 Finder _tile(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(StatsKpiTile));
 
@@ -95,6 +103,8 @@ void main() {
     ]);
     await _pump(tester, repository, bodyWeight: bodyWeight);
     await tester.pumpAndSettle();
+    await _openTab(tester, 'Ciało');
+    await tester.pumpAndSettle();
 
     expect(find.text('Masa ciała'), findsOneWidget);
     expect(find.text('82,8 kg'), findsOneWidget);
@@ -110,6 +120,7 @@ void main() {
     final bodyWeight = FakeBodyWeightRepository()..listError = Exception('x');
     await _pump(tester, repository, bodyWeight: bodyWeight);
     await tester.pumpAndSettle();
+    await _openTab(tester, 'Ciało');
 
     expect(find.text('Masa ciała'), findsNothing);
   });
@@ -177,29 +188,31 @@ void main() {
     // Cel z profilu dociąga się po pierwszym rysunku.
     await tester.pump(const Duration(milliseconds: 300));
 
-    for (final title in [
-      'Wnioski',
-      'Cel tygodnia',
-      'Przebieg w czasie',
-      'Rekordy',
-      'Rekordy sesji',
-      'Partie mięśni',
-      'Regeneracja',
-      'Progres ćwiczeń',
-      'Najczęstsze ćwiczenia',
-      'Zakresy powtórzeń',
-      'Aktywność',
-      'Nawyki treningowe',
-    ]) {
-      // „Rekordy” to też etykieta kafelka — szukamy tytułu karty sekcji.
-      // `.first`: tytuł bywa też tekstem wierszy (np. plakietka „Regeneracja”).
-      final card = find.widgetWithText(SessionSectionCard, title).first;
-      await tester.scrollUntilVisible(
-        card,
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(card, findsOneWidget, reason: title);
+    const tabs = {
+      'Przegląd': ['Wnioski', 'Przebieg w czasie'],
+      'Postępy': [
+        'Rekordy',
+        'Rekordy sesji',
+        'Progres ćwiczeń',
+        'Najczęstsze ćwiczenia',
+        'Zakresy powtórzeń',
+      ],
+      'Ciało': ['Partie mięśni', 'Regeneracja'],
+      'Regularność': ['Cel tygodnia', 'Aktywność', 'Nawyki treningowe'],
+    };
+    for (final MapEntry(key: tab, value: titles) in tabs.entries) {
+      await _openTab(tester, tab);
+      for (final title in titles) {
+        // „Rekordy” to też etykieta kafelka — szukamy tytułu karty sekcji.
+        // `.first`: tytuł bywa też tekstem wierszy (np. plakietka „Regeneracja”).
+        final card = find.widgetWithText(SessionSectionCard, title).first;
+        await tester.scrollUntilVisible(
+          card,
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(card, findsOneWidget, reason: '$tab / $title');
+      }
     }
     expect(tester.takeException(), isNull);
   });
@@ -236,6 +249,47 @@ void main() {
     expect(find.text('Statystyki'), findsOneWidget);
   });
 
+  testWidgets('tabs split the cards and keep the range and card state', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([
+        _session(DateTime(2026, 9, 15, 18)),
+        _session(DateTime(2026, 9, 3, 18)),
+      ]),
+    );
+    final trend = find.widgetWithText(SessionSectionCard, 'Przebieg w czasie');
+    expect(trend, findsOneWidget);
+    expect(find.widgetWithText(SessionSectionCard, 'Rekordy'), findsNothing);
+    expect(find.text('Partie mięśni'), findsNothing);
+
+    await tester.tap(find.descendant(of: trend, matching: find.text('Serie')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('serie łącznie'), findsOneWidget);
+
+    await _openTab(tester, 'Postępy');
+    expect(find.widgetWithText(SessionSectionCard, 'Rekordy'), findsOneWidget);
+    expect(trend, findsNothing);
+
+    // Zakres obowiązuje we wszystkich zakładkach.
+    await tester.tap(find.text('3 mies.'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await _openTab(tester, 'Przegląd');
+    expect(find.text('serie łącznie'), findsOneWidget, reason: 'metric kept');
+  });
+
+  testWidgets('empty range keeps whole-history cards on their tab', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeStatsRepository([_session(DateTime(2026, 1, 5))]));
+    expect(find.text('Brak treningów w tym okresie.'), findsOneWidget);
+
+    await _openTab(tester, 'Ciało');
+    expect(find.text('Partie mięśni'), findsNothing);
+    expect(find.widgetWithText(SessionSectionCard, 'Regeneracja'), findsOne);
+  });
+
   testWidgets('chart metric survives a range change', (tester) async {
     await _pump(
       tester,
@@ -254,11 +308,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('serie łącznie'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('3 mies.'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // Zakres stoi nad zakładkami i nie przewija się z treścią.
     await tester.tap(find.text('3 mies.'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('serie łącznie'), findsOneWidget);

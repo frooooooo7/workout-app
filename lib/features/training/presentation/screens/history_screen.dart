@@ -12,6 +12,7 @@ import '../../../../core/widgets/skeleton.dart';
 import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
 import '../bloc/workout_history_cubit.dart';
+import '../widgets/stats/stats_tab_bar.dart';
 import '../widgets/stats/training_stats_view.dart';
 import '../widgets/workout_history/history_month_calendar.dart';
 import '../widgets/workout_history/history_month_navigator.dart';
@@ -60,6 +61,9 @@ class _WorkoutHistoryView extends StatefulWidget {
 
 class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   HistorySegment _segment = HistorySegment.sessions;
+
+  /// Zakładka statystyk przeżywa przejście na listę sesji i z powrotem.
+  StatsTab _statsTab = StatsTab.overview;
 
   void _selectSegment(HistorySegment segment) {
     if (segment == _segment) return;
@@ -133,6 +137,8 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
                   child: TrainingStatsView(
                     onStartWorkout: () => context.go('/app/training'),
                     bodyWeightRepository: ServiceLocator.bodyWeightRepository,
+                    initialTab: _statsTab,
+                    onTabChanged: (tab) => _statsTab = tab,
                   ),
                 ),
               ] else
