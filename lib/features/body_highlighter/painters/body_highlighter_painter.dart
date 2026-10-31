@@ -54,7 +54,7 @@ class BodyHighlighterPainter extends CustomPainter {
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
           Offset.zero & pixelSize,
-          Paint()..filterQuality = FilterQuality.medium,
+          Paint()..filterQuality = FilterQuality.low,
         );
         return;
       }

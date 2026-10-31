@@ -11,10 +11,18 @@ import 'package:flutter/painting.dart';
 /// podczas samego przewijania ekranu, gdy treść manekina się nie zmienia.
 /// Gdy kolory się ustabilizują, rysujemy sylwetkę raz do [ui.Image] i potem
 /// tylko wklejamy bitmapę.
+///
+/// Cache rozpoznaje wyłącznie rozmiar i DPR. O zmianie treści (dane, kolory,
+/// podświetlenia, styl) dowiaduje się tylko z [invalidate], więc jego właściciel
+/// musi je wołać przy każdej takiej zmianie — inaczej sylwetka będzie nieaktualna.
 class BodySnapshotCache {
   ui.Image? _image;
   Size _size = Size.zero;
   double _devicePixelRatio = 1;
+
+  /// Ostatnia próba zdjęcia się nie udała — nie ponawiamy jej w każdej klatce,
+  /// dopiero po [invalidate] (zmianie treści).
+  bool _failed = false;
 
   /// Ile razy faktycznie wyrenderowano zdjęcie (przydatne w testach).
   @visibleForTesting
@@ -38,6 +46,7 @@ class BodySnapshotCache {
     double devicePixelRatio,
     void Function(ui.Canvas canvas) paintContent,
   ) {
+    if (_failed) return null;
     final pixelWidth = (size.width * devicePixelRatio).ceil();
     final pixelHeight = (size.height * devicePixelRatio).ceil();
     if (pixelWidth <= 0 || pixelHeight <= 0) return null;
@@ -59,6 +68,7 @@ class BodySnapshotCache {
       return image;
     } catch (_) {
       invalidate();
+      _failed = true;
       return null;
     }
   }
@@ -67,6 +77,7 @@ class BodySnapshotCache {
   void invalidate() {
     _image?.dispose();
     _image = null;
+    _failed = false;
   }
 
   void dispose() => invalidate();
