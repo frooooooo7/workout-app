@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 20;
+  static const _dbVersion = 21;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -52,6 +52,10 @@ class ExerciseDatabase {
   /// jeden wiersz na sesję (`op` = `upload` / `remove`). Bajty trzymamy
   /// w bazie, bo na webie nie ma trwałych plików.
   static const tablePendingPostPhotos = 'pending_post_photos';
+
+  /// Okładki planów czekające na wysłanie albo usunięcie na serwerze —
+  /// jeden wiersz na plan (`op` = `upload` / `remove`), jak zdjęcia postów.
+  static const tablePendingPlanCovers = 'pending_plan_covers';
 
   /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
   static const syncedTables = [
@@ -168,6 +172,9 @@ class ExerciseDatabase {
       await db.update(tablePendingPostPhotos, {
         'sync_error': null,
       }, where: 'sync_error IS NOT NULL');
+      await db.update(tablePendingPlanCovers, {
+        'sync_error': null,
+      }, where: 'sync_error IS NOT NULL');
     });
   }
 
@@ -197,13 +204,23 @@ class ExerciseDatabase {
                SELECT 1 FROM $tableTrainingSessions s
                WHERE s.local_id = p.session_local_id
                  AND s.sync_error IS NOT NULL
-             )) AS pending,
+             ))
+          + (SELECT COUNT(*) FROM $tablePendingPlanCovers c
+             WHERE c.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingPlans p
+               WHERE p.local_id = c.plan_local_id
+                 AND p.sync_error IS NOT NULL
+             ))
+          + (SELECT COUNT(*) FROM $tableSyncState
+             WHERE key = 'plan_order_pending')
+            AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tablePendingPostPhotos WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPlanCovers WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;
@@ -313,6 +330,7 @@ class ExerciseDatabase {
     await _addPlanSharingColumns(db);
     await _addPostColumns(db);
     await _addPlanProgressionColumn(db);
+    await _addPlanCoverColumns(db);
   }
 
   /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
@@ -805,6 +823,35 @@ class ExerciseDatabase {
     if (oldVersion < 20) {
       await _addPlanProgressionColumn(db);
     }
+    if (oldVersion < 21) {
+      await _addPlanCoverColumns(db);
+    }
+  }
+
+  /// v21: okładka planu, miejsce planu na liście i kolejka okładek.
+  Future<void> _addPlanCoverColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingPlans,
+      column: 'cover_url',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingPlans,
+      column: 'sort_order',
+      definition: 'INTEGER',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePendingPlanCovers (
+        plan_local_id TEXT PRIMARY KEY NOT NULL,
+        op TEXT NOT NULL,
+        bytes BLOB,
+        filename TEXT,
+        created_at INTEGER NOT NULL,
+        sync_error TEXT
+      )
+    ''');
   }
 
   /// v20: własna metoda progresji planu (JSON); `NULL` = jak w ustawieniach.

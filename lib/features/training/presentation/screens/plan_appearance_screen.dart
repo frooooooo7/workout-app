@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -8,6 +10,17 @@ import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/theme/plan_icons.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/widgets/app_pressable.dart';
+import '../../domain/models/post_draft.dart';
+import '../widgets/plans/plan_cover_image.dart';
+import '../widgets/workout_summary/share_workout_sheet.dart' show pickPostPhoto;
+
+/// Wynik ekranu „Wygląd planu”. [cover] mówi, co zrobić z okładką względem
+/// tego, co ekran dostał.
+typedef PlanAppearanceResult = ({
+  String? colorKey,
+  String? iconKey,
+  PostPhotoChange cover,
+});
 
 /// Wybór wyglądu planu: kolor (albo „Auto” z nazwy) i znak — litera lub
 /// ikona — z podglądem karty planu na żywo.
@@ -19,7 +32,18 @@ class PlanAppearanceScreen extends StatefulWidget {
     required this.selectedDays,
     this.colorKey,
     this.iconKey,
+    this.coverUrl,
+    this.coverBytes,
+    this.pickPhoto,
   });
+
+  /// Okładka, z którą ekran startuje (z serwera albo świeżo wybrana).
+  final String? coverUrl;
+  final Uint8List? coverBytes;
+
+  /// Test seam; domyślnie galeria / aparat.
+  final Future<PickedPostPhoto?> Function(BuildContext, ImageSource)?
+  pickPhoto;
 
   final String planName;
 
@@ -37,6 +61,75 @@ class _PlanAppearanceScreenState extends State<PlanAppearanceScreen> {
   late String? _colorKey = widget.colorKey;
   late String? _iconKey = widget.iconKey;
   late bool _useIcon = widget.iconKey != null;
+
+  late final bool _hadCover =
+      (widget.coverBytes != null && widget.coverBytes!.isNotEmpty) ||
+      widget.coverUrl != null;
+  PickedPostPhoto? _picked;
+  bool _coverRemoved = false;
+
+  bool get _hasCover => _picked != null || (_hadCover && !_coverRemoved);
+
+  Uint8List? get _coverBytes =>
+      _picked?.bytes ?? (_coverRemoved ? null : widget.coverBytes);
+  String? get _coverUrl => _picked != null || _coverRemoved
+      ? null
+      : widget.coverUrl;
+
+  Future<void> _changeCover() async {
+    final pick = widget.pickPhoto ?? pickPostPhoto;
+    final picker = ImagePicker();
+    ImageSource source = ImageSource.gallery;
+    if (picker.supportsImageSource(ImageSource.camera)) {
+      final chosen = await showModalBottomSheet<ImageSource>(
+        context: context,
+        backgroundColor: AppColors.surface,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Zrób zdjęcie'),
+                onTap: () => Navigator.of(context).pop(ImageSource.camera),
+              ),
+              ListTile(
+                key: const ValueKey('plan-cover-gallery'),
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Wybierz z galerii'),
+                onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (chosen == null || !mounted) return;
+      source = chosen;
+    }
+    final photo = await pick(context, source);
+    if (photo == null || !mounted) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _picked = photo;
+      _coverRemoved = false;
+    });
+  }
+
+  void _removeCover() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _picked = null;
+      _coverRemoved = true;
+    });
+  }
+
+  PostPhotoChange get _coverChange {
+    final picked = _picked;
+    if (picked != null) return SetPostPhoto(picked);
+    if (_coverRemoved && _hadCover) return const RemovePostPhoto();
+    return const KeepPostPhoto();
+  }
 
   Color get _color => _colorKey == null
       ? PlanColors.automatic(widget.planName)
@@ -65,9 +158,12 @@ class _PlanAppearanceScreenState extends State<PlanAppearanceScreen> {
   }
 
   void _done() {
-    Navigator.of(
-      context,
-    ).pop((colorKey: _colorKey, iconKey: _useIcon ? _iconKey : null));
+    final PlanAppearanceResult result = (
+      colorKey: _colorKey,
+      iconKey: _useIcon ? _iconKey : null,
+      cover: _coverChange,
+    );
+    Navigator.of(context).pop(result);
   }
 
   @override
@@ -99,9 +195,21 @@ class _PlanAppearanceScreenState extends State<PlanAppearanceScreen> {
                       days: widget.selectedDays,
                       color: color ?? _color,
                       iconKey: _useIcon ? _iconKey : null,
+                      coverBytes: _coverBytes,
+                      coverUrl: _coverUrl,
                     ),
                   ),
                   const SizedBox(height: 26),
+                  const _SectionLabel('ZDJĘCIE OKŁADKI'),
+                  const SizedBox(height: 12),
+                  _CoverPicker(
+                    bytes: _coverBytes,
+                    url: _coverUrl,
+                    color: _color,
+                    onPick: _changeCover,
+                    onRemove: _hasCover ? _removeCover : null,
+                  ),
+                  const SizedBox(height: 28),
                   _SectionLabel(
                     'KOLOR',
                     trailing: _colorKey == null
@@ -243,6 +351,8 @@ class _Preview extends StatelessWidget {
     required this.days,
     required this.color,
     required this.iconKey,
+    this.coverBytes,
+    this.coverUrl,
   });
 
   final String name;
@@ -250,6 +360,8 @@ class _Preview extends StatelessWidget {
   final List<int> days;
   final Color color;
   final String? iconKey;
+  final Uint8List? coverBytes;
+  final String? coverUrl;
 
   static const _dayLetters = ['P', 'W', 'Ś', 'C', 'P', 'S', 'N'];
 
@@ -273,13 +385,36 @@ class _Preview extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              PlanBadge(
-                name: name,
-                color: color,
-                iconKey: iconKey,
-                size: 48,
-                radius: AppRadius.md,
-              ),
+              if (coverBytes != null || coverUrl != null)
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.7),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.md - 1.5),
+                    child: SizedBox.expand(
+                      child: PlanCoverImage(
+                        url: coverUrl,
+                        bytes: coverBytes,
+                        cacheWidth: 160,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                PlanBadge(
+                  name: name,
+                  color: color,
+                  iconKey: iconKey,
+                  size: 48,
+                  radius: AppRadius.md,
+                ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -354,6 +489,153 @@ class _Preview extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Okładka planu: puste pole „Dodaj zdjęcie” albo zdjęcie 16:9 z przyciskami
+/// „Zmień” i „Usuń”.
+class _CoverPicker extends StatelessWidget {
+  const _CoverPicker({
+    required this.bytes,
+    required this.url,
+    required this.color,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final Uint8List? bytes;
+  final String? url;
+  final Color color;
+  final VoidCallback onPick;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCover = bytes != null || url != null;
+    if (!hasCover) {
+      return Semantics(
+        button: true,
+        label: 'Dodaj zdjęcie okładki',
+        excludeSemantics: true,
+        child: AppPressable(
+          onTap: onPick,
+          pressedScale: 0.98,
+          child: Container(
+            key: const ValueKey('plan-cover-add'),
+            height: 110,
+            decoration: BoxDecoration(
+              color: AppColors.tile,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.borderStrong),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_a_photo_outlined, color: color, size: 26),
+                const SizedBox(height: 8),
+                const Text(
+                  'Dodaj zdjęcie',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Opcjonalne. Pokaże się na liście i w planie.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: AppColors.surfaceVariant),
+            PlanCoverImage(url: url, bytes: bytes, cacheWidth: 900),
+            Positioned(
+              right: 10,
+              bottom: 10,
+              child: Row(
+                children: [
+                  _CoverButton(
+                    key: const ValueKey('plan-cover-change'),
+                    icon: Icons.edit_outlined,
+                    label: 'Zmień',
+                    onTap: onPick,
+                  ),
+                  const SizedBox(width: 8),
+                  if (onRemove != null)
+                    _CoverButton(
+                      key: const ValueKey('plan-cover-remove'),
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Usuń',
+                      onTap: onRemove!,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoverButton extends StatelessWidget {
+  const _CoverButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPressable(
+      onTap: onTap,
+      pressedScale: 0.95,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: Colors.white),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -93,12 +94,17 @@ class _FakeRepository implements BodyMeasurementsRepository {
   Object? listError;
   Object? saveError;
 
+  /// Wstrzymuje `list` — jak Wi-Fi bez internetu (żądanie wisi do timeoutu).
+  Completer<void>? listGate;
+
   void _checkNetwork() {
     if (offline) throw const ApiException('network_error');
   }
 
   @override
   Future<List<BodyMeasurementEntry>> list({int limit = 1000}) async {
+    final gate = listGate;
+    if (gate != null) await gate.future;
     _checkNetwork();
     if (listError != null) throw listError!;
     final dates = server.keys.toList()..sort();
@@ -220,6 +226,7 @@ void main() {
         localDb: db,
         syncEngine: sync,
         clock: () => DateTime(2026, 10, 4, 12),
+        initialPullGrace: const Duration(milliseconds: 100),
       );
     });
 
@@ -244,6 +251,57 @@ void main() {
 
       expect(remote.server.values, [saved]);
       expect((await db.countSyncBacklog()).pending, 0);
+    });
+
+    test(
+      'list reads locally at once while a sync request hangs in the queue',
+      () async {
+        remote.server['2026-10-03'] = _e(10, 3, {_waist: 85});
+        await repo.list(); // pierwsze pobranie
+        remote.listGate = Completer<void>();
+        final hanging = sync.pull();
+
+        final entries = await repo.list().timeout(const Duration(seconds: 1));
+
+        expect(entries, [
+          _e(10, 3, {_waist: 85}),
+        ]);
+        remote.listGate!.complete();
+        await hanging;
+      },
+    );
+
+    test(
+      'first list waits only briefly for a server that never answers',
+      () async {
+        remote.server['2026-10-03'] = _e(10, 3, {_waist: 85});
+        remote.listGate = Completer<void>();
+
+        final entries = await repo.list().timeout(const Duration(seconds: 1));
+        expect(entries, isEmpty);
+
+        remote.listGate!.complete();
+        await sync.pull();
+        expect(await repo.list(), [
+          _e(10, 3, {_waist: 85}),
+        ]);
+      },
+    );
+
+    test('first list waits for a pull that is already running', () async {
+      remote.server['2026-10-03'] = _e(10, 3, {_waist: 85});
+      remote.listGate = Completer<void>();
+      final running = sync.pull();
+      await Future<void>.delayed(Duration.zero);
+
+      final listing = repo.list();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      remote.listGate!.complete();
+
+      expect(await listing, [
+        _e(10, 3, {_waist: 85}),
+      ]);
+      await running;
     });
 
     test('rejects empty, out of range and future entries locally', () async {

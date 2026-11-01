@@ -358,10 +358,19 @@ class _FakeTrainingPlanRepository implements TrainingPlanRepository {
   Future<CustomTrainingPlan?> getById(String id) async => null;
 
   @override
-  Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> create(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
 
   @override
-  Future<CustomTrainingPlan> update(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> update(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
+
+  @override
+  Future<void> reorder(List<String> orderedIds) async {}
 
   @override
   Future<void> delete(String id) async {}

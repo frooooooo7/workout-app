@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/theme/plan_colors.dart';
@@ -147,6 +149,9 @@ class CustomTrainingPlan {
     this.isPublic = false,
     this.copiedFrom,
     this.copyCount = 0,
+    this.coverUrl,
+    this.coverBytes,
+    this.sortOrder,
   }) : id = id ?? const Uuid().v4();
 
   /// Domyślna przerwa nowego planu (i planów sprzed tej funkcji).
@@ -204,6 +209,20 @@ class CustomTrainingPlan {
 
   /// Ile razy inni skopiowali ten plan.
   final int copyCount;
+
+  /// Okładka planu (własne zdjęcie) na serwerze; `null` — bez zdjęcia.
+  final String? coverUrl;
+
+  /// Okładka wybrana na tym urządzeniu, jeszcze niewysłana — ma
+  /// pierwszeństwo przed [coverUrl], żeby zdjęcie było widać od razu offline.
+  final Uint8List? coverBytes;
+
+  /// Miejsce na liście planów (0 = pierwszy); `null` — plan jeszcze nie był
+  /// przesuwany, więc stoi na górze (najnowsze pierwsze).
+  final int? sortOrder;
+
+  bool get hasCover =>
+      (coverBytes != null && coverBytes!.isNotEmpty) || coverUrl != null;
 
   /// Wygląd i ustawienia treningu dla ekranów znających tylko nazwę planu.
   PlanStyle get style => PlanStyle(
@@ -268,6 +287,10 @@ class CustomTrainingPlan {
     bool? showTempo,
     bool? isPublic,
     int? copyCount,
+    String? coverUrl,
+    Uint8List? coverBytes,
+    int? sortOrder,
+    bool clearCover = false,
     bool clearColorKey = false,
     bool clearIconKey = false,
     bool clearGoal = false,
@@ -295,6 +318,9 @@ class CustomTrainingPlan {
       isPublic: isPublic ?? this.isPublic,
       copiedFrom: copiedFrom,
       copyCount: copyCount ?? this.copyCount,
+      coverUrl: clearCover ? null : (coverUrl ?? this.coverUrl),
+      coverBytes: clearCover ? null : (coverBytes ?? this.coverBytes),
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 }

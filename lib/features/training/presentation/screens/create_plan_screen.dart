@@ -16,6 +16,7 @@ import '../../../../core/widgets/app_header.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/services/rest_history.dart';
 import '../../domain/services/superset_groups.dart';
@@ -27,6 +28,7 @@ import '../widgets/ongoing_workout/rest_timer_controls.dart'
 import '../widgets/ongoing_workout/superset_block_card.dart' show SupersetChip;
 import '../widgets/plan_editor/plan_rest_sheet.dart';
 import '../widgets/plan_editor/rest_chip.dart';
+import '../widgets/plans/plan_card.dart';
 import 'plan_appearance_screen.dart';
 import 'plan_settings_screen.dart';
 
@@ -69,6 +71,9 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
 
   /// Wygląd i ustawienia planu (bez nazwy, notatki, dni i ćwiczeń).
   late CustomTrainingPlan _settings;
+
+  /// Co zrobić z okładką przy zapisie (wysyłana w tle, także offline).
+  PostPhotoChange _coverChange = const KeepPostPhoto();
 
   Future<List<TrainingSession>?>? _history;
 
@@ -247,18 +252,19 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
   }
 
   Future<void> _openAppearance() async {
-    final result = await Navigator.of(context)
-        .push<({String? colorKey, String? iconKey})>(
-          MaterialPageRoute(
-            builder: (_) => PlanAppearanceScreen(
-              planName: _nameController.text,
-              subtitle: _musclesSummary(),
-              selectedDays: _selectedDays,
-              colorKey: _settings.colorKey,
-              iconKey: _settings.iconKey,
-            ),
-          ),
-        );
+    final result = await Navigator.of(context).push<PlanAppearanceResult>(
+      MaterialPageRoute(
+        builder: (_) => PlanAppearanceScreen(
+          planName: _nameController.text,
+          subtitle: _musclesSummary(),
+          selectedDays: _selectedDays,
+          colorKey: _settings.colorKey,
+          iconKey: _settings.iconKey,
+          coverUrl: _settings.coverUrl,
+          coverBytes: _settings.coverBytes,
+        ),
+      ),
+    );
     if (result == null || !mounted) return;
     setState(() {
       _settings = _settings.copyWith(
@@ -267,6 +273,20 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
         iconKey: result.iconKey,
         clearIconKey: result.iconKey == null,
       );
+      switch (result.cover) {
+        case KeepPostPhoto():
+          break;
+        case SetPostPhoto(:final photo):
+          _coverChange = result.cover;
+          _settings = _settings.copyWith(coverBytes: photo.bytes);
+        case RemovePostPhoto():
+          // Zdjęcie wybrane w tej sesji i od razu usunięte nie ma czego
+          // kasować na serwerze.
+          _coverChange = widget.existingPlan?.hasCover == true
+              ? result.cover
+              : const KeepPostPhoto();
+          _settings = _settings.copyWith(clearCover: true);
+      }
     });
   }
 
@@ -339,9 +359,15 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     );
 
     if (widget.existingPlan != null) {
-      await context.read<TrainingPlansCubit>().updatePlan(plan);
+      await context.read<TrainingPlansCubit>().updatePlan(
+        plan,
+        cover: _coverChange,
+      );
     } else {
-      await context.read<TrainingPlansCubit>().addPlan(plan);
+      await context.read<TrainingPlansCubit>().addPlan(
+        plan,
+        cover: _coverChange,
+      );
     }
     if (!mounted) return;
     context.pop();
@@ -405,10 +431,49 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     );
   }
 
+  /// Karta planu tak, jak będzie wyglądać na liście — zmienia się razem
+  /// z nazwą, wyglądem, dniami i ćwiczeniami.
+  Widget _buildPreview() {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _nameController,
+      builder: (context, value, _) {
+        final name = value.text.trim();
+        final preview = _settings.copyWith(
+          name: name.isEmpty ? 'Nowy plan' : name,
+          exercises: _exercises,
+          selectedDays: _selectedDays,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Text('PODGLĄD NA LIŚCIE', style: AppTextStyles.eyebrow),
+            ),
+            ExcludeSemantics(
+              child: IgnorePointer(
+                child: PlanCard(
+                  key: const ValueKey('plan-live-preview'),
+                  plan: preview,
+                  isToday: false,
+                  onTap: () {},
+                  onStart: () {},
+                  onMore: () {},
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _buildPreview(),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
           decoration: BoxDecoration(
