@@ -2,18 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/plan_colors.dart';
+import '../../../../core/theme/plan_icons.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../../core/utils/polish_plural.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
-import '../../../library/data/exercise_image_uri.dart';
+import '../../../../core/widgets/app_pressable.dart';
 import '../../../library/domain/models/exercise_tracking.dart';
 import '../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../library/presentation/widgets/exercise_actions_sheet.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/services/plan_exercise_summary.dart';
 import '../bloc/training_plans_cubit.dart';
 import '../bloc/training_session_cubit.dart';
 import '../utils/start_workout.dart';
-import '../widgets/plan_days_list.dart';
-import '../widgets/plan_details_stats_card.dart';
+import '../widgets/ongoing_workout/exercise_thumb.dart';
+import '../widgets/ongoing_workout/rest_timer_controls.dart';
+import '../widgets/plans/plan_cover_image.dart';
+import '../widgets/training_day_status.dart';
 import 'create_plan_screen.dart';
 
 class PlanDetailsArgs {
@@ -28,6 +35,8 @@ class PlanDetailsArgs {
   });
 }
 
+/// Podgląd planu: nagłówek z okładką (albo kolorem planu), skrót w liczbach,
+/// dni, cel i ćwiczenia w zwartej liście — serie dopiero po rozwinięciu.
 class PlanDetailsScreen extends StatelessWidget {
   const PlanDetailsScreen({super.key, required this.args});
 
@@ -52,125 +61,966 @@ class PlanDetailsScreen extends StatelessWidget {
               body: Center(
                 child: Text(
                   'Nie znaleziono planu',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: AppColors.textPrimary),
                 ),
               ),
             );
           }
+          return _PlanDetailsView(plan: currentPlan, args: args);
+        },
+      ),
+    );
+  }
+}
 
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            appBar: AppBar(
-              backgroundColor: AppColors.background,
+class _PlanDetailsView extends StatelessWidget {
+  const _PlanDetailsView({required this.plan, required this.args});
+
+  final CustomTrainingPlan plan;
+  final PlanDetailsArgs args;
+
+  void _edit(BuildContext context) {
+    context.push(
+      '/app/training/create-plan',
+      extra: CreatePlanArgs(cubit: args.cubit, existingPlan: plan),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = PlanColors.of(plan.name, colorKey: plan.colorKey);
+    final blocks = _exerciseBlocks(plan);
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(
+          AppSpacing.pageGutter,
+          AppSpacing.xs,
+          AppSpacing.pageGutter,
+          AppSpacing.md,
+        ),
+        child: SizedBox(
+          height: 54,
+          child: FilledButton.icon(
+            key: const ValueKey('plan-details-start'),
+            onPressed: plan.exercises.isEmpty
+                ? null
+                : () => startPlanWorkout(context, plan),
+            icon: const Icon(Icons.play_arrow_rounded, size: 24),
+            label: const Text('Rozpocznij trening'),
+            style: FilledButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: PlanColors.onAccent(color),
+              disabledBackgroundColor: AppColors.surfaceVariant,
+              disabledForegroundColor: AppColors.textMuted,
               elevation: 0,
-              iconTheme: const IconThemeData(color: Colors.white),
-              title: Text(
-                currentPlan.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
+      body: CustomScrollView(
+        slivers: [
+          _PlanHeroBar(
+            plan: plan,
+            color: color,
+            onBack: () => Navigator.of(context).maybePop(),
+            onEdit: () => _edit(context),
+            onMore: () => _showPlanActions(context, plan),
+          ),
+          SliverToBoxAdapter(
+            child: _PlanSummary(plan: plan, color: color),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pageGutter,
+              AppSpacing.lg,
+              AppSpacing.pageGutter,
+              AppSpacing.xs,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  const Text('ĆWICZENIA', style: _eyebrow),
+                  const SizedBox(width: AppSpacing.sm),
+                  if (plan.exercises.length > 1)
+                    Expanded(
+                      child: Text(
+                        'Stuknij, aby zobaczyć serie',
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _eyebrow.copyWith(
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pageGutter,
+              0,
+              AppSpacing.pageGutter,
+              AppSpacing.xl,
+            ),
+            sliver: SliverList.separated(
+              itemCount: blocks.length,
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
+              itemBuilder: (context, index) {
+                final block = blocks[index];
+                final plan = this.plan;
+                Widget tile(int exerciseIndex, {bool grouped = false}) =>
+                    _ExerciseTile(
+                      key: ValueKey(plan.exercises[exerciseIndex].id),
+                      plan: plan,
+                      planExercise: plan.exercises[exerciseIndex],
+                      color: color,
+                      grouped: grouped,
+                      onMore: () =>
+                          _showExerciseActions(context, plan, exerciseIndex),
+                    );
+                if (block.group == null) return tile(block.indices.single);
+                return _SupersetBlock(
+                  letter: block.group!,
+                  restSeconds: plan.restFor(plan.exercises[block.indices.last]),
+                  children: [
+                    for (final i in block.indices) tile(i, grouped: true),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _eyebrow = TextStyle(
+  color: AppColors.textLabel,
+  fontSize: 11.5,
+  fontWeight: FontWeight.w800,
+  letterSpacing: 1.1,
+);
+
+/// Kolejne ćwiczenia z tą samą literą superserii w jednym bloku.
+class _ExerciseBlock {
+  const _ExerciseBlock(this.group, this.indices);
+
+  final String? group;
+  final List<int> indices;
+}
+
+List<_ExerciseBlock> _exerciseBlocks(CustomTrainingPlan plan) {
+  final blocks = <_ExerciseBlock>[];
+  var i = 0;
+  while (i < plan.exercises.length) {
+    final group = plan.exercises[i].supersetGroup;
+    var end = i + 1;
+    if (group != null) {
+      while (end < plan.exercises.length &&
+          plan.exercises[end].supersetGroup == group) {
+        end++;
+      }
+    }
+    blocks.add(_ExerciseBlock(group, [for (var k = i; k < end; k++) k]));
+    i = end;
+  }
+  return blocks;
+}
+
+/// Zwijany nagłówek: okładka (albo kolor planu) z nazwą na dole, przyciski
+/// wstecz / edycja / więcej na półprzezroczystych kółkach.
+class _PlanHeroBar extends StatelessWidget {
+  const _PlanHeroBar({
+    required this.plan,
+    required this.color,
+    required this.onBack,
+    required this.onEdit,
+    required this.onMore,
+  });
+
+  final CustomTrainingPlan plan;
+  final Color color;
+  final VoidCallback onBack;
+  final VoidCallback onEdit;
+  final VoidCallback onMore;
+
+  static const _toolbar = 60.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    final expanded = plan.hasCover ? 250.0 : 188.0;
+    return SliverAppBar(
+      pinned: true,
+      automaticallyImplyLeading: false,
+      backgroundColor: AppColors.background,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      toolbarHeight: _toolbar,
+      expandedHeight: expanded,
+      flexibleSpace: LayoutBuilder(
+        builder: (context, constraints) {
+          final max = expanded + top;
+          final min = _toolbar + top;
+          final t = ((constraints.maxHeight - min) / (max - min)).clamp(
+            0.0,
+            1.0,
+          );
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              _HeroBackground(plan: plan, color: color),
+              // Zwinięty pasek jest jednolity i czytelny.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ColoredBox(
+                    color: AppColors.background.withValues(alpha: 1 - t),
+                  ),
                 ),
               ),
-              actions: [
-                IconButton(
-                  onPressed: () {
-                    context.push(
-                      '/app/training/create-plan',
-                      extra: CreatePlanArgs(
-                        cubit: args.cubit,
-                        existingPlan: currentPlan,
+              Positioned(
+                left: AppSpacing.pageGutter,
+                right: AppSpacing.pageGutter,
+                bottom: AppSpacing.md,
+                child: Opacity(
+                  opacity: Curves.easeIn.transform(t),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              plan.name,
+                              key: const ValueKey('plan-hero-name'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                height: 1.1,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _subtitle(plan),
+                              style: const TextStyle(
+                                color: AppColors.textSubtle,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+                    ],
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Więcej',
-                  onPressed: () => _showPlanActions(context, currentPlan),
-                  icon: const Icon(Icons.more_horiz, color: Colors.white),
+              ),
+              Positioned(
+                top: top,
+                left: 0,
+                right: 0,
+                height: _toolbar,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                  ),
+                  child: Row(
+                    children: [
+                      _RoundAction(
+                        icon: Icons.arrow_back_rounded,
+                        tooltip: 'Wstecz',
+                        onTap: onBack,
+                      ),
+                      Expanded(
+                        child: Opacity(
+                          opacity: Curves.easeIn.transform(1 - t),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.xs,
+                            ),
+                            child: Text(
+                              plan.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      _RoundAction(
+                        key: const ValueKey('plan-details-edit'),
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Edytuj plan',
+                        onTap: onEdit,
+                      ),
+                      const SizedBox(width: 6),
+                      _RoundAction(
+                        key: const ValueKey('plan-details-more'),
+                        icon: Icons.more_horiz_rounded,
+                        tooltip: 'Więcej',
+                        onTap: onMore,
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  static String _subtitle(CustomTrainingPlan plan) {
+    final parts = [
+      ?plan.goal?.label,
+      if (plan.exercises.isNotEmpty) '~${plan.estimatedMinutes} min',
+      if (plan.copiedFrom?.handle case final handle?) 'od @$handle',
+    ];
+    return parts.join(' · ');
+  }
+}
+
+class _HeroBackground extends StatelessWidget {
+  const _HeroBackground({required this.plan, required this.color});
+
+  final CustomTrainingPlan plan;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (plan.hasCover) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          const ColoredBox(color: AppColors.surfaceVariant),
+          PlanCoverImage.of(plan, cacheWidth: 1200),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0, 0.35, 1],
+                colors: [
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.05),
+                  AppColors.background,
+                ],
+              ),
             ),
-            bottomNavigationBar: SafeArea(
-              minimum: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: () => startPlanWorkout(context, currentPlan),
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Rozpocznij trening'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+          ),
+        ],
+      );
+    }
+    final icon = PlanIcons.choices[plan.iconKey];
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [color.withValues(alpha: 0.34), AppColors.background],
+            ),
+          ),
+        ),
+        Positioned(
+          right: -14,
+          top: 36,
+          child: Opacity(
+            opacity: 0.16,
+            child: icon != null
+                ? Icon(icon, size: 150, color: color)
+                : Text(
+                    plan.name.trim().isEmpty
+                        ? '?'
+                        : plan.name.trim().characters.first.toUpperCase(),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 150,
+                      height: 1,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: AppPressable(
+        onTap: onTap,
+        pressedScale: 0.92,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.38),
+          ),
+          child: Icon(icon, size: 21, color: AppColors.textPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pod nagłówkiem: trzy liczby, dni tygodnia, ustawienia i notatka.
+class _PlanSummary extends StatelessWidget {
+  const _PlanSummary({required this.plan, required this.color});
+
+  final CustomTrainingPlan plan;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final setCount = plan.exercises.fold(0, (sum, e) => sum + e.sets.length);
+    final note = plan.note?.trim() ?? '';
+    final progression = plan.planProgression;
+    final chips = <(IconData, String)>[
+      (
+        Icons.timer_outlined,
+        'Przerwa ${formatRestRemaining(Duration(seconds: plan.defaultRestSeconds))}',
+      ),
+      if (progression != null && !progression.isOff)
+        (Icons.trending_up_rounded, 'Progresja: ${progression.method.label}'),
+      if (!plan.showRir) (Icons.visibility_off_outlined, 'Bez RIR'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageGutter,
+        AppSpacing.xs,
+        AppSpacing.pageGutter,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _StatTile(
+                  value: '${plan.exercises.length}',
+                  label: polishPlural(
+                    plan.exercises.length,
+                    'ćwiczenie',
+                    'ćwiczenia',
+                    'ćwiczeń',
+                  ),
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _StatTile(
+                  value: '$setCount',
+                  label: polishPlural(setCount, 'seria', 'serie', 'serii'),
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: _StatTile(
+                  value: plan.exercises.isEmpty
+                      ? '–'
+                      : '~${plan.estimatedMinutes}',
+                  label: 'min',
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _DaysRow(days: plan.selectedDays, color: color),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (icon, label) in chips)
+                _InfoChip(icon: icon, label: label),
+            ],
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: AppColors.border.withValues(alpha: 0.7),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.sticky_note_2_outlined,
+                      color: AppColors.textMuted,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      note,
+                      style: const TextStyle(
+                        color: AppColors.textSubtle,
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: Color.lerp(color, Colors.white, 0.2),
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DaysRow extends StatelessWidget {
+  const _DaysRow({required this.days, required this.color});
+
+  final List<int> days;
+  final Color color;
+
+  static const _labels = ['P', 'W', 'Ś', 'C', 'P', 'S', 'N'];
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = days.toSet();
+    if (selected.isEmpty) {
+      return const Row(
+        children: [
+          Icon(Icons.event_busy_rounded, color: AppColors.textMuted, size: 16),
+          SizedBox(width: 6),
+          Text(
+            'Bez stałych dni',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
+    }
+    final names = [
+      for (var day = 1; day <= 7; day++)
+        if (selected.contains(day)) kTrainingWeekdayFullNames[day - 1],
+    ];
+    return Semantics(
+      label: 'Dni treningowe: ${names.join(', ')}',
+      excludeSemantics: true,
+      child: Row(
+        children: [
+          for (var day = 1; day <= 7; day++)
+            Expanded(
+              child: Center(
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected.contains(day)
+                        ? color.withValues(alpha: 0.2)
+                        : null,
+                    border: Border.all(
+                      color: selected.contains(day)
+                          ? color
+                          : AppColors.borderStrong,
+                      width: selected.contains(day) ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Text(
+                    _labels[day - 1],
+                    style: TextStyle(
+                      color: selected.contains(day)
+                          ? Color.lerp(color, Colors.white, 0.25)
+                          : AppColors.textMuted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ),
             ),
-            body: SafeArea(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSubtle,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Superseria: ćwiczenia w jednej ramce z paskiem w kolorze superserii.
+class _SupersetBlock extends StatelessWidget {
+  const _SupersetBlock({
+    required this.letter,
+    required this.restSeconds,
+    required this.children,
+  });
+
+  final String letter;
+  final int restSeconds;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.superset.withValues(alpha: 0.35)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.lg - 1),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: AppColors.superset),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+                      child: Row(
+                        children: [
+                          Text(
+                            'SUPERSERIA $letter',
+                            style: const TextStyle(
+                              color: AppColors.superset,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              'przerwa po rundzie '
+                              '${formatRestRemaining(Duration(seconds: restSeconds))}',
+                              textAlign: TextAlign.end,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...children,
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ćwiczenie w jednej linii: miniatura, nazwa i „4 × 8–10 · 60 kg”.
+/// Stuknięcie rozwija tabelę serii.
+class _ExerciseTile extends StatefulWidget {
+  const _ExerciseTile({
+    super.key,
+    required this.plan,
+    required this.planExercise,
+    required this.color,
+    required this.onMore,
+    this.grouped = false,
+  });
+
+  final CustomTrainingPlan plan;
+  final PlanExercise planExercise;
+  final Color color;
+  final VoidCallback onMore;
+
+  /// W superserii: bez własnej ramki (ramkę daje blok).
+  final bool grouped;
+
+  @override
+  State<_ExerciseTile> createState() => _ExerciseTileState();
+}
+
+class _ExerciseTileState extends State<_ExerciseTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = widget.plan;
+    final planExercise = widget.planExercise;
+    final exercise = planExercise.exercise;
+    // Wyłączony RIR / tempo w Ustawieniach planu chowa kolumnę, nawet gdy
+    // serie mają stare wartości.
+    final hasRir =
+        plan.showRir &&
+        planExercise.sets.any((s) => s.rir != null && s.rir!.isNotEmpty);
+    final hasTempo =
+        plan.showTempo &&
+        planExercise.sets.any((s) => s.tempo != null && s.tempo!.isNotEmpty);
+    final summary = planExerciseSummary(
+      planExercise,
+      formatWeight: (raw) => weightTextForInput(raw),
+      weightUnitLabel: WeightUnits.current.label,
+    );
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          label: '${exercise.name}, $summary',
+          excludeSemantics: true,
+          child: InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+              child: Row(
+                children: [
+                  ExerciseThumb(
+                    imageUrl: exercise.imageUrl,
+                    size: 44,
+                    radius: 12,
+                    cardio: exercise.tracking.isCardio,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (currentPlan.selectedDays.isNotEmpty)
-                          PlanDaysList(selectedDays: currentPlan.selectedDays),
-                        PlanDetailsStatsCard(plan: currentPlan),
-                        if (currentPlan.note != null &&
-                            currentPlan.note!.isNotEmpty)
-                          _NotesSection(note: currentPlan.note!),
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(24, 24, 24, 12),
-                          child: Text(
-                            'Ćwiczenia',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                        Text(
+                          exercise.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          summary,
+                          style: TextStyle(
+                            color: Color.lerp(
+                              widget.color,
+                              AppColors.textSubtle,
+                              0.45,
                             ),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       ],
                     ),
                   ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final planExercise = currentPlan.exercises[index];
-                      // Wyłączony RIR / tempo w Ustawieniach planu chowa
-                      // kolumnę, nawet gdy serie mają stare wartości.
-                      final hasRir =
-                          currentPlan.showRir &&
-                          planExercise.sets.any(
-                            (s) => s.rir != null && s.rir!.isNotEmpty,
-                          );
-                      final hasTempo =
-                          currentPlan.showTempo &&
-                          planExercise.sets.any(
-                            (s) => s.tempo != null && s.tempo!.isNotEmpty,
-                          );
-                      return _ExerciseCard(
-                        key: ValueKey(planExercise.id),
-                        planExercise: planExercise,
-                        hasRir: hasRir,
-                        hasTempo: hasTempo,
-                        onMore: () => _showExerciseActions(
-                          context,
-                          currentPlan,
-                          index,
-                        ),
-                      );
-                    }, childCount: currentPlan.exercises.length),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: IconButton(
+                      tooltip: 'Więcej',
+                      padding: EdgeInsets.zero,
+                      onPressed: widget.onMore,
+                      icon: const Icon(
+                        Icons.more_vert_rounded,
+                        color: AppColors.textSecondary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-          );
-        },
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _expanded
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _PlanSetTable(
+                        exercise: planExercise,
+                        hasRir: hasRir,
+                        hasTempo: hasTempo,
+                      ),
+                      if (planExercise.supersetGroup == null)
+                        Text(
+                          'Przerwa po serii '
+                          '${formatRestRemaining(Duration(seconds: plan.restFor(planExercise)))}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+
+    if (widget.grouped) return body;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Material(color: Colors.transparent, child: body),
       ),
     );
   }
@@ -235,7 +1085,8 @@ Future<void> _showPlanActions(
       final confirmed = await showAppConfirmDialog(
         context,
         title: 'Usunąć plan?',
-        message: '„${plan.name}” zniknie z listy planów. Historia treningów '
+        message:
+            '„${plan.name}” zniknie z listy planów. Historia treningów '
             'pozostanie bez zmian.',
       );
       if (!confirmed || !context.mounted) return;
@@ -247,15 +1098,28 @@ Future<void> _showPlanActions(
 }
 
 /// Kopia planu z nowymi identyfikatorami ćwiczeń i serii — inaczej
-/// synchronizacja potraktowałaby je jako wiersze oryginału.
+/// synchronizacja potraktowałaby je jako wiersze oryginału. Zachowuje wygląd,
+/// przerwy, superserie i ustawienia; nie przenosi dni, okładki ani miejsca
+/// na liście.
 CustomTrainingPlan duplicatePlan(CustomTrainingPlan plan) {
   return CustomTrainingPlan(
     name: '${plan.name} (kopia)',
     note: plan.note,
+    defaultRestSeconds: plan.defaultRestSeconds,
+    colorKey: plan.colorKey,
+    iconKey: plan.iconKey,
+    goal: plan.goal,
+    progressionStepKg: plan.progressionStepKg,
+    progression: plan.progression,
+    highlightPlanColor: plan.highlightPlanColor,
+    showRir: plan.showRir,
+    showTempo: plan.showTempo,
     exercises: [
       for (final planExercise in plan.exercises)
         PlanExercise(
           exercise: planExercise.exercise,
+          restSeconds: planExercise.restSeconds,
+          supersetGroup: planExercise.supersetGroup,
           sets: [
             for (final set in planExercise.sets)
               ExerciseSet(
@@ -339,203 +1203,12 @@ Future<void> _showExerciseActions(
       final confirmed = await showAppConfirmDialog(
         context,
         title: 'Usunąć z planu?',
-        message: '„${planExercise.exercise.name}” i jego serie znikną z tego '
+        message:
+            '„${planExercise.exercise.name}” i jego serie znikną z tego '
             'planu. Ćwiczenie zostanie w bibliotece.',
       );
       if (!confirmed || !context.mounted) return;
       await save([...plan.exercises]..removeAt(index));
-  }
-}
-
-class _NotesSection extends StatelessWidget {
-  const _NotesSection({required this.note});
-
-  final String note;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              note,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ExerciseCard extends StatefulWidget {
-  const _ExerciseCard({
-    super.key,
-    required this.planExercise,
-    required this.hasRir,
-    required this.hasTempo,
-    required this.onMore,
-  });
-
-  final PlanExercise planExercise;
-  final bool hasRir;
-  final bool hasTempo;
-  final VoidCallback onMore;
-
-  @override
-  State<_ExerciseCard> createState() => _ExerciseCardState();
-}
-
-class _ExerciseCardState extends State<_ExerciseCard> {
-  bool _expanded = true;
-
-  @override
-  Widget build(BuildContext context) {
-    final planExercise = widget.planExercise;
-    final hasRir = widget.hasRir;
-    final hasTempo = widget.hasTempo;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(10),
-                    image: switch (exerciseThumbProvider(
-                      context,
-                      planExercise.exercise.imageUrl,
-                      logicalSize: 40,
-                    )) {
-                      final provider? => DecorationImage(
-                        image: provider,
-                        fit: BoxFit.cover,
-                        onError: (_, _) {},
-                      ),
-                      null => null,
-                    },
-                  ),
-                  child: planExercise.exercise.imageUrl == null
-                      ? Icon(
-                          planExercise.exercise.tracking.isCardio
-                              ? Icons.directions_run_rounded
-                              : Icons.fitness_center,
-                          color: AppColors.textMuted,
-                          size: 22,
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        planExercise.exercise.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          planExercise.exercise.tracking.isCardio
-                              ? cardioSegmentsLabel(planExercise.sets.length)
-                              : '${planExercise.sets.length} serie',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  icon: Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: 'Więcej',
-                  onPressed: widget.onMore,
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: AppColors.textSecondary,
-                    size: 18,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-          // Expanded table
-          if (_expanded) ...[
-            const Divider(height: 1, color: AppColors.border),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                children: [
-                  _PlanSetTable(
-                    exercise: planExercise,
-                    hasRir: hasRir,
-                    hasTempo: hasTempo,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }
 
@@ -560,7 +1233,7 @@ class _PlanSetTable extends StatelessWidget {
   );
 
   static const _valueStyle = TextStyle(
-    color: Colors.white,
+    color: AppColors.textPrimary,
     fontSize: 14,
     fontWeight: FontWeight.w600,
   );

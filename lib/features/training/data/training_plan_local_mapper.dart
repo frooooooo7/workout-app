@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
@@ -61,6 +62,8 @@ class TrainingPlanLocalMapper {
     'copied_from_user_id': plan.copiedFrom?.userId,
     'copied_from_handle': plan.copiedFrom?.handle,
     'copy_count': plan.copyCount,
+    'cover_url': plan.coverUrl,
+    'sort_order': plan.sortOrder,
   };
 
   static Future<LocalTrainingPlanRecord?> fromDb(
@@ -124,6 +127,18 @@ class TrainingPlanLocalMapper {
       }
     }
 
+    // Okładka wybrana na tym urządzeniu (jeszcze niewysłana) wygrywa z tą
+    // z serwera; usunięta w kolejce znika od razu.
+    final coverRows = await _queryIn(
+      db,
+      ExerciseDatabase.tablePendingPlanCovers,
+      column: 'plan_local_id',
+      ids: planIds,
+    );
+    final pendingCovers = {
+      for (final row in coverRows) row['plan_local_id'] as String: row,
+    };
+
     final planExercisesByPlan = <String, List<Map<String, dynamic>>>{};
     for (final row in planExerciseRows) {
       final planId = row['plan_local_id'] as String;
@@ -144,6 +159,7 @@ class TrainingPlanLocalMapper {
           setsByPlanExercise: setsByPlanExercise,
           exerciseByLocalId: exerciseByLocalId,
           exerciseByServerId: exerciseByServerId,
+          pendingCover: pendingCovers[planRow['local_id'] as String],
         ),
     ];
   }
@@ -154,6 +170,7 @@ class TrainingPlanLocalMapper {
     required Map<String, List<Map<String, dynamic>>> setsByPlanExercise,
     required Map<String, Exercise> exerciseByLocalId,
     required Map<String, Exercise> exerciseByServerId,
+    Map<String, dynamic>? pendingCover,
   }) {
     final planExercises = <PlanExercise>[];
     for (final planExerciseRow in planExerciseRows) {
@@ -216,6 +233,13 @@ class TrainingPlanLocalMapper {
           null => null,
         },
         copyCount: (planRow['copy_count'] as int?) ?? 0,
+        coverUrl: pendingCover?['op'] == 'remove'
+            ? null
+            : planRow['cover_url'] as String?,
+        coverBytes: pendingCover?['op'] == 'upload'
+            ? _bytes(pendingCover!['bytes'])
+            : null,
+        sortOrder: planRow['sort_order'] as int?,
       ),
       serverId: planRow['server_id'] as String?,
       pendingOp: planRow['pending_op'] as String?,
@@ -372,6 +396,12 @@ class TrainingPlanLocalMapper {
     if (db is Database) return db.transaction(action);
     return action(db);
   }
+
+  static Uint8List? _bytes(Object? raw) => raw is Uint8List
+      ? raw
+      : raw is List<int>
+      ? Uint8List.fromList(raw)
+      : null;
 
   static Future<List<Map<String, dynamic>>> _queryIn(
     DatabaseExecutor db,

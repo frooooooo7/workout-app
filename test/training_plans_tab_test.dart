@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/data/plan_sharing_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/presentation/bloc/training_plans_cubit.dart';
 import 'package:gym/features/training/presentation/widgets/training_plans_tab.dart';
@@ -57,19 +58,59 @@ void main() {
     expect(find.text('Twój tydzień'), findsOneWidget);
     expect(find.text('3/7 dni z planem'), findsOneWidget);
     expect(find.text('Twoje plany'), findsOneWidget);
-    expect(find.text('plany'), findsOneWidget);
-    expect(find.text('ćwiczeń'), findsOneWidget);
     expect(find.text('Push Power'), findsOneWidget);
     expect(find.text('Leg Day'), findsOneWidget);
-    expect(find.text('Ciezkie wyciskania i akcesoria.'), findsOneWidget);
     expect(find.text('DZIŚ'), findsOneWidget);
-    expect(find.text('Start'), findsNWidgets(2));
-    expect(find.text('2 ćwiczenia · 2 serie'), findsOneWidget);
-    expect(find.text('3 ćwiczenia · 3 serie'), findsOneWidget);
+    // Karta jest zwarta: bez ćwiczeń i notatki, z krótkim podsumowaniem.
+    expect(find.text('Ciezkie wyciskania i akcesoria.'), findsNothing);
+    expect(find.text('2 ćw. · 2 serie · ~5 min'), findsOneWidget);
+    expect(find.text('3 ćw. · 3 serie · ~10 min'), findsOneWidget);
+    expect(find.byKey(ValueKey('plan-start-${plans[0].id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('plan-start-${plans[1].id}')), findsOneWidget);
 
     final pushId = plans[0].id;
     expect(find.byKey(ValueKey('plan-day-$pushId-1-selected')), findsOneWidget);
     expect(find.byKey(ValueKey('plan-day-$pushId-3-idle')), findsOneWidget);
+  });
+
+  testWidgets('plans can be reordered and the new order is saved', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingPlanRepository(plans);
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => TrainingPlansCubit(repository),
+          child: Scaffold(body: TrainingPlansTab(now: monday)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('plans-reorder-start')));
+    await tester.pumpAndSettle();
+    expect(find.text('Kolejność planów'), findsOneWidget);
+    expect(find.text('Twój tydzień'), findsNothing);
+
+    // Przeciągnięcie pierwszego planu pod drugi.
+    final handle = find.byKey(const ValueKey('plans-reorder-handle')).first;
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await tester.pump(const Duration(milliseconds: 100));
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(0, 20));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(repository.reordered, [plans[1].id, plans[0].id]);
+
+    await tester.tap(find.byKey(const ValueKey('plans-reorder-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('Twoje plany'), findsOneWidget);
   });
 
   testWidgets('tapping a weekday filters the plan list', (tester) async {
@@ -153,6 +194,9 @@ class _FakeTrainingPlanRepository implements TrainingPlanRepository {
 
   final List<CustomTrainingPlan> _plans;
 
+  /// Ostatnia zapisana kolejność planów.
+  List<String>? reordered;
+
   @override
   Future<List<CustomTrainingPlan>> getAll() async => _plans;
 
@@ -165,10 +209,21 @@ class _FakeTrainingPlanRepository implements TrainingPlanRepository {
   }
 
   @override
-  Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> create(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
 
   @override
-  Future<CustomTrainingPlan> update(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> update(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
+
+  @override
+  Future<void> reorder(List<String> orderedIds) async {
+    reordered = orderedIds;
+  }
 
   @override
   Future<void> delete(String id) async {}
