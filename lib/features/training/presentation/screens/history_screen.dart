@@ -132,7 +132,6 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
 
               if (showStats) ...[
                 const SizedBox(height: AppSpacing.sm),
-                const AppTabScrollEdge(),
                 Expanded(
                   child: TrainingStatsView(
                     onStartWorkout: () => context.go('/app/training'),

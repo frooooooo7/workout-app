@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/widgets/app_tab_header.dart';
 import 'package:gym/features/profile/domain/models/body_weight_entry.dart';
 import 'package:gym/features/profile/domain/repositories/body_weight_repository.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
@@ -277,6 +278,77 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await _openTab(tester, 'Przegląd');
     expect(find.text('serie łącznie'), findsOneWidget, reason: 'metric kept');
+  });
+
+  testWidgets('tabs opened out of order keep their own scroll position', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([
+        _session(DateTime(2026, 9, 15, 18)),
+        _session(DateTime(2026, 9, 3, 18)),
+      ]),
+    );
+    tester.view.physicalSize = const Size(390, 700);
+    await tester.pump();
+
+    double offsetOf(String tab) {
+      final scrollable = find.descendant(
+        of: find.byKey(
+          ValueKey(StatsTab.values.firstWhere((t) => t.label == tab)),
+          skipOffstage: false,
+        ),
+        matching: find.byType(Scrollable, skipOffstage: false),
+      );
+      return tester.state<ScrollableState>(scrollable.first).position.pixels;
+    }
+
+    // Przegląd -> Regularność (przewinięta) -> Postępy: pozycje w stosie
+    // przesuwają się, ale każda zakładka ma zachować własny stan.
+    await _openTab(tester, 'Regularność');
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -150));
+    await tester.pump(const Duration(milliseconds: 400));
+    final scrolledTo = offsetOf('Regularność');
+    expect(scrolledTo, greaterThan(100));
+
+    await _openTab(tester, 'Postępy');
+    expect(offsetOf('Postępy'), 0);
+
+    await _openTab(tester, 'Regularność');
+    expect(offsetOf('Regularność'), scrolledTo);
+  });
+
+  testWidgets('background glow and top line follow the active tab', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _FakeStatsRepository([
+        _session(DateTime(2026, 9, 15, 18)),
+        _session(DateTime(2026, 9, 3, 18)),
+      ]),
+    );
+    tester.view.physicalSize = const Size(390, 700);
+    await tester.pump();
+
+    bool scrolled() => AppTabBackground.scrolledOf(
+      tester.element(find.byType(AppTabScrollEdge)),
+    )!.value;
+
+    expect(scrolled(), isFalse);
+    await _openTab(tester, 'Regularność');
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -150));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(scrolled(), isTrue);
+
+    await _openTab(tester, 'Przegląd');
+    await tester.pump();
+    expect(scrolled(), isFalse, reason: 'Przegląd stoi na górze');
+
+    await _openTab(tester, 'Regularność');
+    await tester.pump();
+    expect(scrolled(), isTrue, reason: 'Regularność wraca przewinięta');
   });
 
   testWidgets('empty range keeps whole-history cards on their tab', (

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/widgets/app_tab_header.dart';
 import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
@@ -67,6 +68,26 @@ class _TrainingStatsViewState extends State<TrainingStatsView> {
   /// czemu karty wchodzą animacją dopiero przy pierwszej wizycie.
   late final Set<StatsTab> _visited = {widget.initialTab};
 
+  /// Osobny kontroler na zakładkę — po przełączeniu odczytujemy z niego
+  /// pozycję przewinięcia nowej zakładki (patrz [_syncScrollChrome]).
+  final _controllers = {
+    for (final tab in StatsTab.values) tab: ScrollController(),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _syncScrollChrome();
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   void _selectTab(StatsTab tab) {
     if (tab == _tab) return;
     setState(() {
@@ -74,6 +95,21 @@ class _TrainingStatsViewState extends State<TrainingStatsView> {
       _visited.add(tab);
     });
     widget.onTabChanged?.call(tab);
+    _syncScrollChrome();
+  }
+
+  /// Poświata tła i linia krawędzi ([AppTabBackground], [AppTabScrollEdge])
+  /// śledzą wyłącznie powiadomienia o przewijaniu, a przełączenie zakładki
+  /// żadnego nie wysyła. Po klatce z nową zakładką wysyłamy więc zerowe
+  /// przesunięcie, które niesie jej aktualny offset.
+  void _syncScrollChrome() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final controller = _controllers[_tab]!;
+      if (controller.hasClients) {
+        controller.position.didUpdateScrollPositionBy(0);
+      }
+    });
   }
 
   @override
@@ -108,12 +144,18 @@ class _TrainingStatsViewState extends State<TrainingStatsView> {
               for (final tab in StatsTab.values)
                 if (_visited.contains(tab))
                   // Offstage + TickerMode: ukryta zakładka zachowuje stan
-                  // i przewinięcie, ale nie liczy animacji ani układu.
+                  // i przewinięcie, ale nie jest malowana, nie przyjmuje
+                  // dotyku i nie liczy animacji (układ nadal się liczy).
+                  // Klucz: lista dzieci jest filtrowana przez `_visited`, więc
+                  // bez niego zakładka odwiedzona „ze środka” przejęłaby
+                  // element (a z nim przewinięcie) sąsiada.
                   Offstage(
+                    key: ValueKey(tab),
                     offstage: tab != _tab,
                     child: TickerMode(
                       enabled: tab == _tab,
                       child: _ScrollPage(
+                        controller: _controllers[tab],
                         onRefresh: cubit.load,
                         children: _cards(tab, snapshot, cubit),
                       ),
@@ -152,6 +194,8 @@ class _TrainingStatsViewState extends State<TrainingStatsView> {
                   ],
                 ),
               ),
+            // Tuż nad przewijaną treścią, pod przypiętym zakresem i zakładkami.
+            const AppTabScrollEdge(),
             Expanded(child: body),
           ],
         );
@@ -281,8 +325,13 @@ class _TrainingStatsViewState extends State<TrainingStatsView> {
 /// powrocie traciłyby stan (wybrane ćwiczenie, zaznaczony dzień) i animowały
 /// się od nowa. Kart w zakładce jest kilka — budujemy wszystkie.
 class _ScrollPage extends StatelessWidget {
-  const _ScrollPage({required this.onRefresh, required this.children});
+  const _ScrollPage({
+    this.controller,
+    required this.onRefresh,
+    required this.children,
+  });
 
+  final ScrollController? controller;
   final Future<void> Function() onRefresh;
   final List<Widget> children;
 
@@ -295,6 +344,7 @@ class _ScrollPage extends StatelessWidget {
         return onRefresh();
       },
       child: SingleChildScrollView(
+        controller: controller,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.fromLTRB(
           AppSpacing.pageGutter,
