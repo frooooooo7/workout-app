@@ -35,7 +35,8 @@ abstract final class ExerciseFilterUtils {
 
     // ── Muscle group ────────────────────────────────────────────────────────
     if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      result = result.where((e) => e.muscles.contains(muscleGroup)).toList();
+      final matches = muscleGroup.filterMatches;
+      result = result.where((e) => e.muscles.any(matches.contains)).toList();
     }
 
     // ── Text search — name only (mirrors backend `lower(name) LIKE %q%`) ───

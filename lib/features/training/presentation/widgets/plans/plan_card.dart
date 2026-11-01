@@ -200,7 +200,7 @@ List<String> planMuscleFocus(CustomTrainingPlan plan, {int limit = 3}) {
   for (final entry in plan.exercises) {
     final groups = entry.exercise.muscles
         .where((m) => m != MuscleGroup.all)
-        .map((m) => m.apiGroup)
+        .map((m) => m.broadGroup)
         .toSet();
     for (final group in groups) {
       weights[group] = (weights[group] ?? 0) + entry.sets.length.clamp(1, 99);

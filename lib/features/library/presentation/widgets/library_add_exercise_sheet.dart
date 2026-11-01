@@ -102,6 +102,9 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
   final _nameFocus = FocusNode();
 
   Set<MuscleGroup> _selectedMuscles = {};
+
+  /// Grupy zbiorcze, które ćwiczenie miało przed edycją.
+  Set<MuscleGroup> _legacyMuscles = {};
   ExerciseCategory _category = ExerciseCategory.compound;
   ExerciseTracking _tracking = ExerciseTracking.weightReps;
   DistanceUnit _distanceUnit = DistanceUnit.km;
@@ -114,13 +117,17 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
   XFile? _pickedImage;
   Uint8List? _previewBytes;
 
-  /// Wybieralne mięśnie pogrupowane w partie ciała. Tylko grupy, które
-  /// przyjmuje API ([MuscleGroup.isApiSupported]) — granularne wartości
-  /// serwer odrzucał, a ćwiczenie zostawało niezsynchronizowane.
-  static final Map<MuscleRegion, List<MuscleGroup>> _selectableMuscles = {
+  /// Wybieralne mięśnie pogrupowane w partie ciała. Konkretne mięśnie i grupy
+  /// jednomięśniowe (klatka, biceps…); grupy zbiorcze (plecy, nogi, barki)
+  /// nie niosą informacji, który mięsień pracuje, więc nowego ćwiczenia nimi
+  /// nie tagujemy. Starsze ćwiczenie, które już je ma, nadal je pokazuje
+  /// ([keep]).
+  static Map<MuscleRegion, List<MuscleGroup>> _selectableMuscles(
+    Set<MuscleGroup> keep,
+  ) => {
     for (final region in MuscleRegion.values)
       region: MuscleGroup.values
-          .where((m) => m.region == region && m.isApiSupported)
+          .where((m) => m.region == region && (!m.isCoarse || keep.contains(m)))
           .toList(growable: false),
   };
 
@@ -137,10 +144,8 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
       _tracking = initial.tracking;
       _distanceUnit = initial.distanceUnit;
       _trackingChosen = true;
-      _selectedMuscles = initial.workingMuscles
-          .map((m) => m.apiGroup)
-          .where((m) => m.isApiSupported)
-          .toSet();
+      _selectedMuscles = initial.workingMuscles.toSet();
+      _legacyMuscles = _selectedMuscles.where((m) => m.isCoarse).toSet();
     }
   }
 
@@ -239,8 +244,8 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
       _errorText = null;
     });
 
-    final musclesList = _selectedMuscles.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    // Kolejność wyboru zostaje: pierwszy tag jest celem ćwiczenia.
+    final musclesList = _selectedMuscles.toList();
 
     Uint8List? imageBytes;
     String? imageFilename;
@@ -478,7 +483,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                for (final entry in _selectableMuscles.entries) ...[
+                for (final entry in _selectableMuscles(_legacyMuscles).entries) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, top: 2),
                     child: Text(

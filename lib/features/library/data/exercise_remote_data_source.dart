@@ -49,7 +49,7 @@ class ExerciseRemoteDataSource {
     if (query != null && query.isNotEmpty) params['q'] = query;
 
     if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      params['muscle'] = muscleGroup.apiGroup.name;
+      params['muscle'] = muscleGroup.name;
     }
 
     if (filter != null && filter != LibraryFilter.all) {

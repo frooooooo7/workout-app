@@ -30,10 +30,10 @@ List<MuscleSource> _sourcesOf(Map<String, _SourceTally>? tallies) {
 /// Rozkłada ukończone serie na grupy mięśni i partie ciała. Mięsień
 /// wymieniony jako pierwszy dostaje całą serię, wspomagające po pół.
 ///
-/// Ranking trzyma grupy tak, jak ćwiczenia są otagowane. Backend zna dla
-/// ćwiczeń tylko grupy zbiorcze (plecy, nogi, barki…), więc „Nogi” nie wolno
-/// rozdzielać na czworogłowe, dwugłowe i łydki — wyszłyby serie, których nikt
-/// nie zrobił. Rozwinięcie na konkretne mięśnie dotyczy wyłącznie mapy ciała
+/// Ranking trzyma grupy tak, jak ćwiczenia są otagowane. Starsze tagi bywają
+/// zbiorcze (plecy, nogi, barki…), więc „Nogi” nie wolno rozdzielać na
+/// czworogłowe, dwugłowe i łydki — wyszłyby serie, których nikt nie zrobił.
+/// Rozwinięcie na konkretne mięśnie dotyczy wyłącznie mapy ciała
 /// ([MuscleDistribution.bodyRoles]), gdzie zapala cały region, jak wszędzie
 /// indziej w aplikacji — ale z tą samą liczbą serii co grupa, bez
 /// mnożenia jej przez liczbę mięśni regionu.
@@ -45,13 +45,12 @@ abstract final class MuscleDistributionCalculator {
   static const neglectedMinWorkouts = 3;
 
   /// Mięśnie, o których brak warto ostrzec. Pomijamy te, których ćwiczenia
-  /// rzadko są tagowane osobno (prostowniki, romboidalne, przywodziciele,
-  /// skośne) oraz przedramiona: backend nie ma dla nich grupy (przy
-  /// synchronizacji stają się bicepsem), więc ostrzeżenie świeciłoby na stałe.
+  /// rzadko są tagowane osobno: kaptury (pracują głównie jako wspomagające
+  /// przy wiosłowaniach), prostowniki, romboidalne, przywodziciele, skośne
+  /// i przedramiona.
   static const keyMuscles = [
     MuscleGroup.chest,
     MuscleGroup.lats,
-    MuscleGroup.traps,
     MuscleGroup.frontDelts,
     MuscleGroup.sideDelts,
     MuscleGroup.rearDelts,
