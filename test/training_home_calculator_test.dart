@@ -65,6 +65,37 @@ void main() {
       expect(insights.weekDonePlans, {1: 'Push', 2: 'Pull'});
     });
 
+    test('keeps every plan done on a day, not only the latest session', () {
+      final legs = _session(
+        'Legs',
+        DateTime(2026, 7, 29, 9),
+      ).copyWith(planLocalId: 'plan-legs', planServerId: 'srv-legs');
+      final custom = _session('Niestandardowa', DateTime(2026, 7, 29, 11));
+      final old = _session('Pull', DateTime(2026, 7, 28, 9));
+
+      final insights = TrainingHomeCalculator.compute([
+        legs,
+        custom,
+        old,
+      ], today: _today);
+
+      expect(insights.weekDonePlans[3], 'Niestandardowa');
+      expect(insights.weekDoneKeys[3], {'id:plan-legs', 'id:srv-legs'});
+      expect(insights.weekDoneKeys[2], {'name:pull'});
+      expect(
+        insights.isPlanDone(3, planIds: ['plan-legs'], planName: 'Renamed'),
+        isTrue,
+      );
+      expect(
+        insights.isPlanDone(3, planIds: ['other'], planName: 'Niestandardowa'),
+        isFalse,
+      );
+      expect(
+        insights.isPlanDone(2, planIds: [null], planName: ' PULL '),
+        isTrue,
+      );
+    });
+
     test('takes the top set of the most recent session as last result', () {
       final insights = TrainingHomeCalculator.compute([
         _session('Push', DateTime(2026, 7, 20, 18), sets: [('100', '3')]),
