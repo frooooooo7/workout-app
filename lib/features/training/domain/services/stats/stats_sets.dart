@@ -1,5 +1,6 @@
 import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
+import '../muscle_roles.dart';
 import '../training_session_detail_mapper.dart' show parseReps, parseWeightKg;
 
 /// Ukończona seria (bez rozgrzewek) z wartościami rozparsowanymi z tekstu klawiatury. Liczymy
@@ -45,8 +46,10 @@ DateTime statsDay(DateTime local) =>
     DateTime(local.year, local.month, local.day);
 
 /// Grupy mięśni ćwiczenia w kolejności tagów (pierwsza to główna), bez
-/// nieznanych nazw i sentinela `all`.
-List<MuscleGroup> taggedMuscles(TrainingSessionExercise exercise) => [
-  for (final raw in exercise.exerciseMuscles)
-    if (MuscleGroup.tryParse(raw) case final m? when m != MuscleGroup.all) m,
-];
+/// nieznanych nazw, sentinela `all` i powtórzeń — te same reguły co na mapie
+/// sesji ([distinctMuscleTags]).
+List<MuscleGroup> taggedMuscles(TrainingSessionExercise exercise) =>
+    distinctMuscleTags([
+      for (final raw in exercise.exerciseMuscles)
+        ?MuscleGroup.tryParse(raw),
+    ]);

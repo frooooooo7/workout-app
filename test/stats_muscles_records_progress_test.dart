@@ -5,6 +5,7 @@ import 'package:gym/features/body_highlighter/models/muscle_intensity.dart';
 import 'package:gym/features/body_highlighter/widgets/muscle_body_highlighter.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_exercise_progress_card.dart';
@@ -269,7 +270,7 @@ void main() {
       tester,
     ) async {
       // Ranking mówi „Plecy najmocniej”, ale manekin ma świecić wyłącznie
-      // to, co jest w bodyMap.
+      // to, co jest w bodyRoles.
       const muscles = MuscleDistribution(
         muscles: [
           MuscleStat(
@@ -287,13 +288,13 @@ void main() {
             intensity: 0.33,
           ),
         ],
-        bodyMap: {
-          MuscleGroup.quads: 1,
-          MuscleGroup.calves: 0.5,
-          MuscleGroup.hamstrings: 0.2,
-          // Dwa mięśnie w tym samym obszarze manekina: wygrywa mocniejszy.
-          MuscleGroup.lats: 0.3,
-          MuscleGroup.rhomboids: 0.9,
+        bodyRoles: {
+          MuscleGroup.quads: MuscleRole.primary,
+          MuscleGroup.calves: MuscleRole.primary,
+          MuscleGroup.hamstrings: MuscleRole.secondary,
+          // Dwa mięśnie w tym samym obszarze manekina: wygrywa główny.
+          MuscleGroup.lats: MuscleRole.secondary,
+          MuscleGroup.rhomboids: MuscleRole.primary,
         },
         regions: [
           RegionStat(region: MuscleRegion.back, sets: 12, share: 0.75),

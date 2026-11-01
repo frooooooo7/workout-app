@@ -1,5 +1,6 @@
 import '../../../library/domain/models/exercise.dart';
 import 'training_summary_stats.dart';
+import 'muscle_role.dart';
 
 /// Zakres ekranu statystyk.
 enum StatsRange {
@@ -306,8 +307,16 @@ class MuscleStat {
     required this.volumeKg,
     required this.share,
     required this.intensity,
+    this.role = MuscleRole.primary,
+    this.targetSets = 0,
     this.sources = const [],
   });
+
+  /// Cel czy wsparcie — te same reguły co na mapie sesji.
+  final MuscleRole role;
+
+  /// Serie, w których mięsień był celem (pierwszym tagiem ćwiczenia).
+  final int targetSets;
 
   /// Ćwiczenia, które złożyły się na ten mięsień, od największej liczby serii.
   final List<MuscleSource> sources;
@@ -321,9 +330,6 @@ class MuscleStat {
 
   /// 0..1 względem najmocniej trenowanej pozycji rankingu.
   final double intensity;
-
-  /// Czy mięsień należał w tym okresie do mocno trenowanych.
-  bool get isStrong => intensity >= MuscleDistribution.strongThreshold;
 }
 
 class RegionStat {
@@ -343,7 +349,7 @@ class MuscleDistribution {
     required this.muscles,
     required this.regions,
     required this.neglected,
-    this.bodyMap = const {},
+    this.bodyRoles = const {},
     this.taggedSets = 0,
   });
 
@@ -354,13 +360,14 @@ class MuscleDistribution {
   /// Od najmocniej trenowanej pozycji.
   final List<MuscleStat> muscles;
 
-  /// Od tej części serii najmocniej trenowanej pozycji mięsień liczy się jako
-  /// „mocno trenowany”; poniżej jest „lekko”, bez serii „brak”.
-  static const strongThreshold = 0.5;
+  /// Najwięcej serii „celowych” wśród mięśni — odniesienie do ról.
+  int get leaderTargetSets =>
+      muscles.fold<int>(0, (a, m) => m.targetSets > a ? m.targetSets : a);
 
   /// Podświetlenie manekina: konkretne mięśnie (grupy zbiorcze rozwinięte na
-  /// mięśnie swojego regionu) → 0..1 względem najmocniej trenowanej grupy.
-  final Map<MuscleGroup, double> bodyMap;
+  /// mięśnie swojego regionu) → rola. Mięsień objęty kilkoma grupami ma
+  /// ważniejszą z ról.
+  final Map<MuscleGroup, MuscleRole> bodyRoles;
 
   /// Od największego udziału.
   final List<RegionStat> regions;

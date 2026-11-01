@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/body_model_data.dart';
@@ -6,6 +7,7 @@ import '../models/body_side.dart';
 import '../models/body_highlighter_style.dart';
 import '../models/muscle_highlight.dart';
 import '../models/muscle_intensity.dart';
+import 'body_snapshot_cache.dart';
 
 /// Painter responsible for rendering anatomical body mannequin paths and active highlights.
 class BodyHighlighterPainter extends CustomPainter {
@@ -14,17 +16,54 @@ class BodyHighlighterPainter extends CustomPainter {
   final Set<MuscleHighlight> highlights;
   final BodyHighlighterStyle style;
 
+  /// Opcjonalny cache bitmapy. Gdy podany i [animating] jest `false`, sylwetka
+  /// rysuje się wektorowo tylko raz, a kolejne klatki (np. przewijanie ekranu)
+  /// jedynie wklejają gotowy obraz.
+  final BodySnapshotCache? snapshotCache;
+  final double devicePixelRatio;
+
+  /// `true` w trakcie animacji kolorów — wtedy zdjęcie byłoby od razu
+  /// nieaktualne, więc rysujemy wektorowo i nie tworzymy zdjęć.
+  final bool animating;
+
   BodyHighlighterPainter({
     required this.data,
     required this.animatedMuscleColors,
     required this.highlights,
     required this.style,
+    this.snapshotCache,
+    this.devicePixelRatio = 1.0,
+    this.animating = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
+    final cache = snapshotCache;
+    if (cache != null && !animating) {
+      final image =
+          cache.imageFor(size, devicePixelRatio) ??
+          cache.render(size, devicePixelRatio, (c) => _paintVector(c, size));
+      if (image != null) {
+        final pixelSize = Size(
+          image.width / devicePixelRatio,
+          image.height / devicePixelRatio,
+        );
+        canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          Offset.zero & pixelSize,
+          Paint()..filterQuality = FilterQuality.low,
+        );
+        return;
+      }
+    }
+
+    _paintVector(canvas, size);
+  }
+
+  void _paintVector(ui.Canvas canvas, Size size) {
     final vb = data.viewBox;
 
     // Calculate aspect-fit scale and centering offsets
@@ -114,6 +153,9 @@ class BodyHighlighterPainter extends CustomPainter {
     return oldDelegate.data != data ||
         oldDelegate.animatedMuscleColors != animatedMuscleColors ||
         oldDelegate.highlights != highlights ||
-        oldDelegate.style != style;
+        oldDelegate.style != style ||
+        oldDelegate.animating != animating ||
+        oldDelegate.devicePixelRatio != devicePixelRatio ||
+        oldDelegate.snapshotCache != snapshotCache;
   }
 }

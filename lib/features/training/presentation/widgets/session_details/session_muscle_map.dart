@@ -12,6 +12,7 @@ import '../../../../library/presentation/widgets/exercise_details/exercise_muscl
     show exercisePrimaryMuscleColor, exerciseSecondaryMuscleColor;
 import '../../../domain/models/training_history_models.dart';
 import '../../../domain/models/training_stats.dart' show MuscleSource;
+import '../../../domain/services/muscle_roles.dart' show muscleRoleReason;
 import 'body_muscle_paths.dart';
 import 'muscle_load.dart';
 import 'session_details_formatters.dart';
@@ -143,8 +144,10 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
                 body:
                     'Pierwszy mięsień z listy ćwiczenia to jego cel, kolejne '
                     'tylko pomagają. Mięsień jest „główny”, gdy był celem '
-                    'w którymś ćwiczeniu i dostał co najmniej ćwierć serii '
-                    'najczęściej trenowanej partii. Reszta jest wspomagająca.',
+                    'w którymś ćwiczeniu i w co najmniej ćwierci tylu serii '
+                    'co mięsień, który był celem najczęściej. Reszta jest '
+                    'wspomagająca. Ćwiczenia na czas (kardio, deska) tylko '
+                    'wspomagają, o ile w treningu są też serie na powtórzenia.',
               ),
               SizedBox(height: 12),
               _MethodologyPoint(
@@ -595,7 +598,11 @@ class _SelectedMuscleDetail extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            muscleRoleReason(load, leaderPrimarySets: leaderPrimarySets),
+            muscleRoleReason(
+              role: load.role,
+              targetSets: load.primarySets,
+              leaderTargetSets: leaderPrimarySets,
+            ),
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 12,

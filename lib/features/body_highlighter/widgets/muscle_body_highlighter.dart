@@ -13,6 +13,7 @@ import '../models/muscle_highlight.dart';
 import '../models/muscle_intensity.dart';
 import '../models/muscle_region.dart';
 import '../painters/body_highlighter_painter.dart';
+import '../painters/body_snapshot_cache.dart';
 
 /// Reusable anatomical body highlighter widget.
 class MuscleBodyHighlighter extends StatefulWidget {
@@ -49,6 +50,10 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
   late AnimationController _animController;
   late Animation<double> _animProgress;
 
+  /// Bitmapa gotowej sylwetki — chroni przed ponownym rasteryzowaniem
+  /// wektorów w każdej klatce przewijania, gdy kolory stoją w miejscu.
+  final BodySnapshotCache _snapshot = BodySnapshotCache();
+
   Map<String, Color> _oldColors = {};
   Map<String, Color> _targetColors = {};
   Map<String, Color> _currentColors = {};
@@ -56,10 +61,10 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: widget.animationDuration,
-    )..addListener(_onAnimTick);
+    _animController =
+        AnimationController(vsync: this, duration: widget.animationDuration)
+          ..addListener(_onAnimTick)
+          ..addStatusListener(_onAnimStatus);
 
     _animProgress = CurvedAnimation(
       parent: _animController,
@@ -84,7 +89,9 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
   @override
   void dispose() {
     _animController.removeListener(_onAnimTick);
+    _animController.removeStatusListener(_onAnimStatus);
     _animController.dispose();
+    _snapshot.dispose();
     super.dispose();
   }
 
@@ -106,6 +113,7 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
 
     if (!mounted) return;
 
+    _snapshot.invalidate();
     setState(() {
       _modelData = data;
       _isLoading = false;
@@ -151,11 +159,17 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
   void _updateColorsWithAnimation() {
     if (_modelData == null) return;
 
+    _snapshot.invalidate();
     _oldColors = Map.from(_currentColors);
     _targetColors = _computeTargetColors(_modelData!);
 
     _animController.duration = widget.animationDuration;
     _animController.forward(from: 0.0);
+  }
+
+  void _onAnimStatus(AnimationStatus status) {
+    // Koniec animacji: przebudowa, żeby painter zrobił zdjęcie ustalonej sylwetki.
+    if (!status.isAnimating && mounted) setState(() {});
   }
 
   void _onAnimTick() {
@@ -230,6 +244,9 @@ class _MuscleBodyHighlighterState extends State<MuscleBodyHighlighter>
               animatedMuscleColors: _currentColors,
               highlights: widget.highlights,
               style: widget.style,
+              snapshotCache: _snapshot,
+              devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+              animating: _animController.isAnimating,
             ),
           ),
         ),
