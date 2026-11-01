@@ -76,16 +76,14 @@ abstract final class MuscleDistributionCalculator {
       for (final session in sessions)
         if (session.status == TrainingSessionStatus.completed) session,
     ];
-    // Odcinki na czas (kardio, deska) tylko wspomagają, o ile w okresie była
-    // też praca na powtórzenia — tak samo jak na mapie sesji.
-    final hasRepBasedWork = completed.any(
-      (session) => session.exercises.any(
-        (e) => !e.tracking.isCardio && completedSetsOf(e).isNotEmpty,
-      ),
-    );
 
     for (final session in completed) {
       workouts++;
+      // Odcinki na czas (kardio, deska) tylko wspomagają, o ile w tym samym
+      // treningu była też praca na powtórzenia — dokładnie jak na mapie sesji.
+      final hasRepBasedWork = session.exercises.any(
+        (e) => !e.tracking.isCardio && completedSetsOf(e).isNotEmpty,
+      );
       for (final exercise in session.exercises) {
         var sets = 0;
         var volume = 0.0;

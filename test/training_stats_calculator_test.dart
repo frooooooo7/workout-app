@@ -501,6 +501,30 @@ void main() {
         expect(d.bodyRoles[MuscleGroup.quads], MuscleRole.secondary);
       });
 
+      test('a running-only day counts as in the session map, per workout', () {
+        final d = MuscleDistributionCalculator.compute([
+          _session(
+            DateTime(2026, 9, 14),
+            exercises: [
+              _exercise('Wyciskanie', sets(6), muscles: ['chest']),
+            ],
+          ),
+          _session(
+            DateTime(2026, 9, 15),
+            exercises: [
+              _exercise(
+                'Bieg',
+                sets(2),
+                muscles: ['legs'],
+                tracking: ExerciseTracking.durationDistance,
+              ),
+            ],
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.primary);
+      });
+
       test('a period of only timed work still has a primary muscle', () {
         final d = compute([
           _exercise(
