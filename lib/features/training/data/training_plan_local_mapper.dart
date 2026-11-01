@@ -46,7 +46,13 @@ class TrainingPlanLocalMapper {
 
   /// Kolumny wyglądu i ustawień planu w `training_plans` (zapis lokalny,
   /// tworzenie, edycja i pull z serwera).
-  static Map<String, Object?> planSettingsValues(CustomTrainingPlan plan) => {
+  ///
+  /// [includeOrder] = false pomija miejsce na liście: edycja treści planu nie
+  /// może cofnąć przesunięcia (kolejność zapisuje tylko `reorder` i pull).
+  static Map<String, Object?> planSettingsValues(
+    CustomTrainingPlan plan, {
+    bool includeOrder = true,
+  }) => {
     'default_rest_seconds': plan.defaultRestSeconds,
     'color_key': plan.colorKey,
     'icon_key': plan.iconKey,
@@ -63,7 +69,7 @@ class TrainingPlanLocalMapper {
     'copied_from_handle': plan.copiedFrom?.handle,
     'copy_count': plan.copyCount,
     'cover_url': plan.coverUrl,
-    'sort_order': plan.sortOrder,
+    if (includeOrder) 'sort_order': plan.sortOrder,
   };
 
   static Future<LocalTrainingPlanRecord?> fromDb(

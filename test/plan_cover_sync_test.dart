@@ -194,29 +194,124 @@ void main() {
     });
   });
 
+  test('reorder saves the order and sends only the order', () async {
+    final remote = _SpyRemote();
+    final repo = repoWith(remote);
+    final a = await repo.create(plan('A'));
+    final b = await repo.create(plan('B'));
+    final c = await repo.create(plan('C'));
+    await flush(remote);
+    remote.log.clear();
+
+    await repo.reorder([c.id, a.id, b.id]);
+
+    expect([for (final p in await repo.getAll()) p.name], ['C', 'A', 'B']);
+    expect([for (final p in await repo.getAll()) p.sortOrder], [0, 1, 2]);
+    // Plany nie są zmianami do wysłania — czeka tylko kolejność.
+    expect((await db.countSyncBacklog()).pending, 1);
+
+    await flush(remote);
+
+    // Żadnego PUT z treścią planu; jedno żądanie z samą kolejnością.
+    expect(remote.log, ['order']);
+    expect(remote.orders.single, hasLength(3));
+    expect(remote.orders.single.first, remote.serverIdOf['C']);
+    expect((await db.countSyncBacklog()).pending, 0);
+    expect([for (final p in await repo.getAll()) p.name], ['C', 'A', 'B']);
+  });
+
+  test('a pull while the order waits keeps the local order', () async {
+    final remote = _SpyRemote();
+    final repo = repoWith(remote);
+    final a = await repo.create(plan('A'));
+    final b = await repo.create(plan('B'));
+    await flush(remote);
+    await repo.reorder([b.id, a.id]);
+    // Serwer ma jeszcze starą kolejność (A, B).
+    remote.pulled = [
+      plan('A', sortOrder: 0).copyWith(id: remote.serverIdOf['A']),
+      plan('B', sortOrder: 1).copyWith(id: remote.serverIdOf['B']),
+    ];
+
+    await TrainingPlanSyncEngine(remote: remote, localDb: db).pull();
+
+    expect([for (final p in await repo.getAll()) p.name], ['B', 'A']);
+  });
+
+  test('editing a plan does not change its place or send it', () async {
+    final remote = _SpyRemote();
+    final repo = repoWith(remote);
+    final a = await repo.create(plan('A'));
+    final b = await repo.create(plan('B'));
+    await flush(remote);
+    await repo.reorder([b.id, a.id]);
+    await flush(remote);
+    remote.log.clear();
+
+    // Edytor otwarty przed przesunięciem trzyma stare miejsce planu.
+    await repo.update(a.copyWith(name: 'A2', sortOrder: 0));
+    await flush(remote);
+
+    expect([for (final p in await repo.getAll()) p.name], ['B', 'A2']);
+    expect(remote.log, hasLength(1));
+    expect(remote.log.single, startsWith('update:'));
+  });
+
+  test('a backend that rejects the order does not leave it pending', () async {
+    final remote = _SpyRemote(
+      failOrder: const ApiException('not_found', statusCode: 404),
+    );
+    final repo = repoWith(remote);
+    final a = await repo.create(plan('A'));
+    final b = await repo.create(plan('B'));
+    await flush(remote);
+    await repo.reorder([b.id, a.id]);
+
+    await flush(remote);
+
+    expect((await db.countSyncBacklog()).pending, 0);
+    expect([for (final p in await repo.getAll()) p.name], ['B', 'A']);
+  });
+
   test(
-    'reorder saves the order, marks the plans and sends sortOrder',
+    'a network failure keeps the order pending for the next cycle',
     () async {
-      final remote = _SpyRemote();
+      final remote = _SpyRemote(failOrder: const ApiException('network_error'));
       final repo = repoWith(remote);
       final a = await repo.create(plan('A'));
       final b = await repo.create(plan('B'));
-      final c = await repo.create(plan('C'));
       await flush(remote);
-      remote.log.clear();
-      remote.sentSortOrders.clear();
-
-      await repo.reorder([c.id, a.id, b.id]);
-
-      expect([for (final p in await repo.getAll()) p.name], ['C', 'A', 'B']);
-      expect([for (final p in await repo.getAll()) p.sortOrder], [0, 1, 2]);
+      await repo.reorder([b.id, a.id]);
 
       await flush(remote);
-      expect(remote.sentSortOrders.toSet(), {0, 1, 2});
-      // Po wysyłce kolejność została taka sama.
-      expect([for (final p in await repo.getAll()) p.name], ['C', 'A', 'B']);
+      expect((await db.countSyncBacklog()).pending, 1);
+
+      remote.failOrder = null;
+      await flush(remote);
+      expect((await db.countSyncBacklog()).pending, 0);
+      expect(remote.orders, hasLength(2));
     },
   );
+
+  test('a cover of a rejected plan is not counted as pending', () async {
+    final remote = _SpyRemote();
+    final repo = repoWith(remote);
+    final created = await repo.create(plan('Push'), cover: SetPostPhoto(photo));
+    expect((await db.countSyncBacklog()).pending, 2);
+
+    await db.run(
+      (database) => database.update(
+        ExerciseDatabase.tableTrainingPlans,
+        {'sync_error': 'invalid'},
+        where: 'local_id = ?',
+        whereArgs: [created.id],
+      ),
+    );
+
+    // Plan i okładka nic nie wyślą — licznik nie czeka na nie w nieskończoność.
+    expect((await db.countSyncBacklog()).pending, 0);
+    expect((await db.countSyncBacklog()).failed, 1);
+  });
 
   test('a plan that was never moved stays on top of the sorted ones', () async {
     final remote = _SpyRemote();
@@ -230,33 +325,40 @@ void main() {
     expect([for (final p in await repo.getAll()) p.name], ['Nowy', 'B', 'A']);
   });
 
-  test('the request body carries sortOrder only for moved plans', () {
+  test('the plan body never carries the order', () {
     final remote = _SpyRemote();
-    expect(
-      remote.toBody(plan('A'), exerciseServerIdsByLocalId: const {}),
-      isNot(contains('sortOrder')),
-    );
     expect(
       remote.toBody(
         plan('A', sortOrder: 2),
         exerciseServerIdsByLocalId: const {},
       ),
-      containsPair('sortOrder', 2),
+      isNot(contains('sortOrder')),
     );
   });
 }
 
 class _SpyRemote extends TrainingPlanRemoteDataSource {
-  _SpyRemote({this.failUpload})
+  _SpyRemote({this.failUpload, this.failOrder})
     : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => ''));
 
   ApiException? failUpload;
+  ApiException? failOrder;
   final List<String> log = [];
-  final List<int?> sentSortOrders = [];
+  final List<List<String>> orders = [];
+  final Map<String, String> serverIdOf = {};
+  List<CustomTrainingPlan> pulled = const [];
   int _created = 0;
 
   @override
-  Future<List<CustomTrainingPlan>> getAll() async => const [];
+  Future<List<CustomTrainingPlan>> getAll() async => pulled;
+
+  @override
+  Future<void> setOrder(List<String> serverIds) async {
+    log.add('order');
+    orders.add(serverIds);
+    final error = failOrder;
+    if (error != null) throw error;
+  }
 
   @override
   Future<CustomTrainingPlan> create(
@@ -264,13 +366,13 @@ class _SpyRemote extends TrainingPlanRemoteDataSource {
     required Map<String, String> exerciseServerIdsByLocalId,
   }) async {
     log.add('create');
-    sentSortOrders.add(plan.sortOrder);
     // Pierwszy plan dostaje znane id, kolejne — własne (inaczej pull
     // uznałby je za duplikaty jednego planu).
     _created++;
     final id = _created == 1
         ? _planServerId
         : _planServerId.replaceRange(0, 1, 'abcdef'[_created]);
+    serverIdOf[plan.name] = id;
     return plan.copyWith(id: id);
   }
 
@@ -281,7 +383,6 @@ class _SpyRemote extends TrainingPlanRemoteDataSource {
     required Map<String, String> exerciseServerIdsByLocalId,
   }) async {
     log.add('update:$serverId');
-    sentSortOrders.add(plan.sortOrder);
     return plan.copyWith(id: serverId);
   }
 

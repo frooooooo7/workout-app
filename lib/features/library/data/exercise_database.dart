@@ -205,7 +205,14 @@ class ExerciseDatabase {
                WHERE s.local_id = p.session_local_id
                  AND s.sync_error IS NOT NULL
              ))
-          + (SELECT COUNT(*) FROM $tablePendingPlanCovers WHERE sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPlanCovers c
+             WHERE c.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingPlans p
+               WHERE p.local_id = c.plan_local_id
+                 AND p.sync_error IS NOT NULL
+             ))
+          + (SELECT COUNT(*) FROM $tableSyncState
+             WHERE key = 'plan_order_pending')
             AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)

@@ -101,8 +101,6 @@ class TrainingPlanRemoteDataSource {
       'showRir': plan.showRir,
       'showTempo': plan.showTempo,
       'isPublic': plan.isPublic,
-      // Brak miejsca (plan jeszcze nie przesuwany) zostawia je serwerowi.
-      'sortOrder': ?plan.sortOrder,
       'exercises': plan.exercises.asMap().entries.map((entry) {
         final pe = entry.value;
         return {
@@ -158,6 +156,12 @@ class TrainingPlanRemoteDataSource {
       auth: true,
     );
     return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `PUT /training-plans/order` — kolejność planów (id serwera, od pierwszego).
+  /// Tylko miejsca; treść planów zostaje nietknięta.
+  Future<void> setOrder(List<String> serverIds) async {
+    await _api.put('/training-plans/order', {'ids': serverIds}, auth: true);
   }
 
   /// `POST /training-plans/:id/cover` — okładka planu (multipart `photo`).

@@ -11,6 +11,7 @@ import '../../../library/data/exercise_dto.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../pending_plan_cover_store.dart';
+import '../pending_plan_order_store.dart';
 import '../pending_post_photo_store.dart' show PendingPostPhotoOp;
 import '../training_plan_local_mapper.dart';
 import '../training_plan_remote_data_source.dart';
@@ -135,7 +136,62 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     if (!isStopped && !networkFailedSince(networkMark)) {
       if (await _flushCovers(networkMark)) changed = true;
     }
+    if (!isStopped && !networkFailedSince(networkMark)) {
+      if (await _flushOrder(networkMark)) changed = true;
+    }
     if (changed) notifyDataChanged();
+  }
+
+  /// Wysyła kolejność planów (osobne żądanie — bez treści planów). Plan, który
+  /// serwer jeszcze nie zna, wypada z żądania, a flaga zostaje do następnego
+  /// cyklu, żeby dostał swoje miejsce po utworzeniu. Plan odrzucony przez
+  /// serwer się nie liczy — nie dostanie id.
+  Future<bool> _flushOrder(int networkMark) async {
+    try {
+      final version = await _localDb.run(PendingPlanOrderStore.version);
+      if (version == null) return false;
+      final rows = await _localDb.run(
+        (db) => db.query(
+          ExerciseDatabase.tableTrainingPlans,
+          columns: ['server_id', 'sync_error', 'pending_op'],
+          where: 'is_deleted = 0 AND pending_op IS NOT \'delete\'',
+          orderBy: 'sort_order ASC, updated_at DESC',
+        ),
+      );
+      final ids = <String>[];
+      var complete = true;
+      for (final row in rows) {
+        final serverId = row['server_id'] as String?;
+        if (serverId != null) {
+          ids.add(serverId);
+        } else if (row['sync_error'] == null) {
+          complete = false;
+        }
+      }
+      if (ids.isNotEmpty) {
+        try {
+          await _remote.setOrder(ids);
+        } on ApiException catch (e) {
+          final kind = registerFailure(e);
+          // Serwer nie przyjmie tej kolejności (np. starszy backend) —
+          // zostaje lokalna, a licznik nie wisi w nieskończoność.
+          if (kind != SyncFailureKind.transient) {
+            await _localDb.run(
+              (db) => PendingPlanOrderStore.clear(db, onlyVersion: version),
+            );
+          }
+          return false;
+        }
+      }
+      if (complete) {
+        await _localDb.run(
+          (db) => PendingPlanOrderStore.clear(db, onlyVersion: version),
+        );
+      }
+      return ids.isNotEmpty;
+    } on StateError {
+      return false; /* DB closing */
+    }
   }
 
   /// Wysyła (albo usuwa) okładki planów z kolejki. Okładka planu, którego
@@ -572,6 +628,9 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
         }
       }
 
+      // Przesunięcie czeka na wysłanie — serwer ma jeszcze starą kolejność.
+      final keepLocalOrder =
+          existing != null && await PendingPlanOrderStore.version(db) != null;
       final localId =
           localIdOverride ??
           (existing?['local_id'] as String?) ??
@@ -593,6 +652,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
             plan.selectedDays,
           ),
           ...TrainingPlanLocalMapper.planSettingsValues(plan),
+          if (keepLocalOrder) 'sort_order': existing['sort_order'],
           'created_at': existing?['created_at'] ?? now,
           'updated_at': now,
           'pending_op': null,

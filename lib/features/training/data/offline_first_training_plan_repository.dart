@@ -8,6 +8,7 @@ import '../domain/models/custom_training_plan.dart';
 import '../domain/models/post_draft.dart';
 import '../domain/repositories/training_plan_repository.dart';
 import 'pending_plan_cover_store.dart';
+import 'pending_plan_order_store.dart';
 import 'sync/training_plan_sync_engine.dart';
 import 'training_plan_local_mapper.dart';
 
@@ -15,8 +16,8 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
   OfflineFirstTrainingPlanRepository({
     required ExerciseDatabase localDb,
     required TrainingPlanSyncEngine syncEngine,
-  })  : _localDb = localDb,
-        _sync = syncEngine;
+  }) : _localDb = localDb,
+       _sync = syncEngine;
 
   final ExerciseDatabase _localDb;
   final TrainingPlanSyncEngine _sync;
@@ -85,32 +86,27 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
     PostPhotoChange cover = const KeepPostPhoto(),
   }) async {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-    final localPlan = plan.id.isEmpty
-        ? plan.copyWith(id: _uuid.v4())
-        : plan;
+    final localPlan = plan.id.isEmpty ? plan.copyWith(id: _uuid.v4()) : plan;
     await _localDb.run((db) async {
       final exerciseServerIds =
           await TrainingPlanLocalMapper.exerciseServerIdsByLocalId(
-        db,
-        localPlan,
-      );
-      await db.insert(
-        ExerciseDatabase.tableTrainingPlans,
-        {
-          'local_id': localPlan.id,
-          'server_id': null,
-          'name': localPlan.name,
-          'note': localPlan.note,
-          'selected_days':
-              TrainingPlanLocalMapper.encodeDays(localPlan.selectedDays),
-          ...TrainingPlanLocalMapper.planSettingsValues(localPlan),
-          'created_at': now,
-          'updated_at': now,
-          'pending_op': 'create',
-          'is_deleted': 0,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+            db,
+            localPlan,
+          );
+      await db.insert(ExerciseDatabase.tableTrainingPlans, {
+        'local_id': localPlan.id,
+        'server_id': null,
+        'name': localPlan.name,
+        'note': localPlan.note,
+        'selected_days': TrainingPlanLocalMapper.encodeDays(
+          localPlan.selectedDays,
+        ),
+        ...TrainingPlanLocalMapper.planSettingsValues(localPlan),
+        'created_at': now,
+        'updated_at': now,
+        'pending_op': 'create',
+        'is_deleted': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await TrainingPlanLocalMapper.replacePlanChildren(
         db,
         localPlan,
@@ -142,8 +138,13 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
         {
           'name': plan.name,
           'note': plan.note,
-          'selected_days': TrainingPlanLocalMapper.encodeDays(plan.selectedDays),
-          ...TrainingPlanLocalMapper.planSettingsValues(plan),
+          'selected_days': TrainingPlanLocalMapper.encodeDays(
+            plan.selectedDays,
+          ),
+          ...TrainingPlanLocalMapper.planSettingsValues(
+            plan,
+            includeOrder: false,
+          ),
           'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
           'pending_op': nextPending,
           'is_deleted': 0,
@@ -177,29 +178,28 @@ class OfflineFirstTrainingPlanRepository implements TrainingPlanRepository {
     };
   }
 
+  /// Zapisuje kolejność lokalnie i zostawia flagę do wysłania. Plany nie
+  /// dostają `pending_op` ani nowego `updated_at` — na serwer idzie sama
+  /// kolejność, nie treść planów (ta mogła zmienić się na innym urządzeniu).
   @override
   Future<void> reorder(List<String> orderedIds) async {
     await _localDb.run((db) async {
       await db.transaction((txn) async {
-        final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+        var changed = false;
         for (final entry in orderedIds.indexed) {
           final (index, id) = entry;
           final row = await _findRow(txn, id);
           if (row == null || (row['is_deleted'] as int? ?? 0) == 1) continue;
           if (row['sort_order'] == index) continue;
-          final pending = row['pending_op'] as String?;
           await txn.update(
             ExerciseDatabase.tableTrainingPlans,
-            {
-              'sort_order': index,
-              'updated_at': now,
-              'pending_op': pending == 'create' ? 'create' : 'update',
-              'sync_error': null,
-            },
+            {'sort_order': index},
             where: 'local_id = ?',
             whereArgs: [row['local_id']],
           );
+          changed = true;
         }
+        if (changed) await PendingPlanOrderStore.mark(txn);
       });
     });
     _scheduleSync();
