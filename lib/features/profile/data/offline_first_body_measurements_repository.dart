@@ -17,6 +17,7 @@ class OfflineFirstBodyMeasurementsRepository
     required ExerciseDatabase localDb,
     required BodyMeasurementsSyncEngine syncEngine,
     DateTime Function() clock = DateTime.now,
+    this.initialPullGrace = const Duration(seconds: 2),
   }) : _localDb = localDb,
        _sync = syncEngine,
        _clock = clock;
@@ -24,6 +25,9 @@ class OfflineFirstBodyMeasurementsRepository
   final ExerciseDatabase _localDb;
   final BodyMeasurementsSyncEngine _sync;
   final DateTime Function() _clock;
+
+  /// Jak długo pierwszy odczyt czeka na pierwsze pobranie z serwera.
+  final Duration initialPullGrace;
 
   static const _table = ExerciseDatabase.tableBodyMeasurementEntries;
 
@@ -45,15 +49,23 @@ class OfflineFirstBodyMeasurementsRepository
     );
   }
 
+  /// Dziennik z już wykonanym pierwszym pobraniem jest kompletny lokalnie —
+  /// ekran otwiera się od razu, a synchronizacja działa w tle. Dopiero przed
+  /// pierwszym pobraniem czekamy na serwer, ale najwyżej [initialPullGrace]:
+  /// Wi-Fi bez internetu nie może trzymać ekranu na loaderze do timeoutu
+  /// (wynik i tak dotrze sygnałem zmiany danych).
+  Future<void> _waitForInitialPull() async {
+    try {
+      if (await _sync.hasPulled()) return;
+      await _sync.ensureInitialPull().timeout(initialPullGrace);
+    } catch (_) {
+      /* offline — pokazujemy to, co jest lokalnie */
+    }
+  }
+
   @override
   Future<List<BodyMeasurementEntry>> list({int limit = 1000}) async {
-    if (!_sync.isStopped) {
-      try {
-        await _sync.ensureInitialPull();
-      } catch (_) {
-        /* offline — pokazujemy to, co jest lokalnie */
-      }
-    }
+    if (!_sync.isStopped) await _waitForInitialPull();
     final rows = await _localDb.run(
       (db) => db.query(
         _table,

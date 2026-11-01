@@ -18,8 +18,10 @@ import 'training_session_local_history.dart';
 /// * Jest cache — oddajemy go od razu (stale-while-revalidate), a sieć
 ///   odświeża zapis w tle. Gdy odpowiedź różni się od cache, [onFreshData]
 ///   daje znać ekranom, żeby przeczytały dane jeszcze raz.
-/// * Brak cache — czekamy na sieć. Błąd: lokalne sesje, a bez nich wyjątek.
-///   Wyjątek: szczegóły sesji, którą mamy w lokalnej bazie, oddajemy od razu
+/// * Brak cache — czekamy na sieć, ale pierwsza strona listy najwyżej
+///   [slowNetworkGrace]: gdy serwer milczy (Wi-Fi bez internetu), pokazujemy
+///   treningi z telefonu, a odpowiedź dochodzi w tle. Błąd: lokalne sesje,
+///   a bez nich wyjątek. Wyjątek: szczegóły sesji, którą mamy w lokalnej bazie, oddajemy od razu
 ///   z telefonu (offline zapytanie wisiałoby do timeoutu).
 /// * Treningi zakończone offline (jeszcze niewysłane) są dokładane do
 ///   pierwszej strony wyników, więc od razu widać je w historii; niewysłana
@@ -34,6 +36,7 @@ class OfflineFirstTrainingHistoryRepository
     TrainingSessionLocalHistory? localSessions,
     VoidCallback? onFreshData,
     this.freshDataDebounce = const Duration(milliseconds: 300),
+    this.slowNetworkGrace = const Duration(seconds: 3),
   }) : _remote = remote,
        _localCache = localCache,
        _localSessions = localSessions,
@@ -48,6 +51,10 @@ class OfflineFirstTrainingHistoryRepository
   /// Kilka odpowiedzi odświeżonych w tle naraz (np. wszystkie strony
   /// miesiąca) daje jedno powiadomienie zamiast serii przeładowań ekranów.
   final Duration freshDataDebounce;
+
+  /// Jak długo pierwsza strona listy bez cache czeka na serwer, zanim pokaże
+  /// treningi z lokalnej bazy.
+  final Duration slowNetworkGrace;
   Timer? _freshDataTimer;
 
   @override
@@ -102,6 +109,10 @@ class OfflineFirstTrainingHistoryRepository
   }) async {
     final isFirstPage = cursor == null || cursor.isEmpty;
 
+    // Strona z telefonu po przekroczeniu [slowNetworkGrace] jest już
+    // kompletna (bez usuniętych, ze wszystkimi lokalnymi sesjami) — nie
+    // przechodzi drugi raz przez dokładanie lokalnych sesji.
+    var servedFromPhone = false;
     try {
       final page = await _preferFresh<TrainingSessionPage>(
         fetch: () async {
@@ -124,7 +135,21 @@ class OfflineFirstTrainingHistoryRepository
         },
         readCache: () => _localCache.readListResponse(cacheKey),
         decodeCache: _remote.pageFromCachedJson,
+        slowFallback: !isFirstPage
+            ? null
+            : () async {
+                final local = await _localOnlyPage(
+                  status: status,
+                  planId: planId,
+                  query: query,
+                  from: from,
+                  to: to,
+                );
+                servedFromPhone = local != null;
+                return local;
+              },
       );
+      if (servedFromPhone) return page;
       final visible = await _withoutPendingDeletions(page);
       if (!isFirstPage) return visible;
       return await _withLocalSessions(
@@ -228,6 +253,7 @@ class OfflineFirstTrainingHistoryRepository
     required Future<(T, Map<String, dynamic>)> Function() fetch,
     required Future<Map<String, dynamic>?> Function() readCache,
     required T Function(Map<String, dynamic> payload) decodeCache,
+    Future<T?> Function()? slowFallback,
   }) async {
     // Cache najpierw — inaczej szybki mock zapisze odpowiedź, a my
     // odczytalibyśmy ją jako „stary” cache w tym samym wywołaniu.
@@ -237,8 +263,30 @@ class OfflineFirstTrainingHistoryRepository
         : _decodeSafely(() => decodeCache(cachedPayload));
     final remote = fetch();
     if (cachedPayload == null || cached == null) {
-      final (fresh, _) = await remote;
-      return fresh;
+      if (slowFallback == null) {
+        final (fresh, _) = await remote;
+        return fresh;
+      }
+      try {
+        final (fresh, _) = await remote.timeout(slowNetworkGrace);
+        return fresh;
+      } on TimeoutException {
+        final fallback = await slowFallback();
+        if (fallback == null) {
+          // Nic lokalnego do pokazania — czekamy dalej na serwer.
+          final (fresh, _) = await remote;
+          return fresh;
+        }
+        // Odpowiedź zapisze się w cache; ekrany dostaną sygnał o świeżych
+        // danych i przeczytają listę jeszcze raz.
+        unawaited(
+          remote.then<void>(
+            (_) => _scheduleFreshDataNotice(),
+            onError: (Object _) {},
+          ),
+        );
+        return fallback;
+      }
     }
     unawaited(
       remote.then<void>((result) {

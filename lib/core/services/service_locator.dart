@@ -64,6 +64,7 @@ import '../../features/profile/data/api_body_weight_repository.dart';
 import '../../features/profile/data/api_profile_repository.dart';
 import '../../features/profile/data/offline_first_body_measurements_repository.dart';
 import '../../features/profile/data/offline_first_body_weight_repository.dart';
+import '../../features/profile/data/own_profile_cache.dart';
 import '../../features/profile/data/sync/body_measurements_sync_engine.dart';
 import '../../features/profile/data/sync/body_weight_sync_engine.dart';
 import '../../features/profile/domain/repositories/body_measurements_repository.dart';
@@ -408,6 +409,7 @@ class ServiceLocator {
     _previousPerformanceRepository = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
+    _apiProfileRepository?.attachCache(null);
     await _exerciseDatabase?.close();
     _exerciseDatabase = null;
     _syncStatus.value = const SyncStatus();
@@ -418,6 +420,10 @@ class ServiceLocator {
       LocalAccountDataCleaner.databaseFileName(userId),
     );
     _exerciseDatabase = database;
+    // Własny profil (Dane i cele, cel masy ciała) otwiera się z lokalnej kopii.
+    _apiProfileRepository?.attachCache(
+      DatabaseOwnProfileCache(database, userId: userId),
+    );
 
     final exerciseSync = ExerciseSyncEngine(
       remote: _remoteDataSource,
