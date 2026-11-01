@@ -266,11 +266,6 @@ class TrainingHabits {
   }
 }
 
-/// Praca jednego mięśnia w oknie. Serie są ułamkowe: mięsień wymieniony
-/// jako pierwszy dostaje całą serię, wspomagające po pół.
-/// Praca jednej pozycji rankingu. Pozycją jest grupa tak, jak ćwiczenie jest
-/// otagowane: zbiorcze („Nogi”, „Plecy”, „Barki”) zostają zbiorcze — nie
-/// wiemy, który konkretnie mięsień pracował, więc nie zgadujemy.
 /// Ćwiczenie, z którego bierze się praca mięśnia — żeby użytkownik widział,
 /// skąd wzięła się dana liczba.
 class MuscleSource {
@@ -300,6 +295,11 @@ class MuscleSource {
   bool get isSupport => targetSets == 0;
 }
 
+/// Praca jednej pozycji rankingu w oknie. Pozycją jest grupa tak, jak ćwiczenie
+/// jest otagowane: zbiorcze („Nogi”, „Plecy”, „Barki”) zostają zbiorcze — nie
+/// wiemy, który konkretnie mięsień pracował, więc nie zgadujemy. Serie są
+/// ułamkowe: mięsień wymieniony jako pierwszy dostaje całą serię, wspomagające
+/// po pół.
 class MuscleStat {
   const MuscleStat({
     required this.muscle,

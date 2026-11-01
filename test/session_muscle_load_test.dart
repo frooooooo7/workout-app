@@ -101,6 +101,21 @@ void main() {
       expect(loads.single.role, MuscleRole.primary);
     });
 
+    test('tag all na początku nie odbiera klatce roli celu', () {
+      final loads = computeMuscleLoads(
+        _session([
+          _exercise(
+            muscles: [MuscleGroup.all, MuscleGroup.chest],
+            sets: [_set(weight: 100, reps: 10)],
+          ),
+        ]),
+      );
+
+      expect(loads.single.muscle, MuscleGroup.chest);
+      expect(loads.single.role, MuscleRole.primary);
+      expect(loads.single.primarySets, 1);
+    });
+
     test('pierwszy tag jest celem, kolejne wspomagają', () {
       final loads = computeMuscleLoads(
         _session([

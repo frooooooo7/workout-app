@@ -122,7 +122,11 @@ class _SessionMuscleMapState extends State<SessionMuscleMap>
           (l) => l.muscle.expanded.any((m) => m.bodyHighlighterSlug == slug),
         )
         .firstOrNull;
-    if (match != null) _toggleSelection(match.muscle);
+    if (match != null) {
+      _toggleSelection(match.muscle);
+    } else {
+      setState(() => _selected = null);
+    }
   }
 
   void _showMethodologyDialog(BuildContext context) {
@@ -376,11 +380,12 @@ class _MapLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return const Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 18,
+      runSpacing: 6,
       children: [
         _LegendDot(color: exercisePrimaryMuscleColor, label: 'Główne'),
-        SizedBox(width: 18),
         _LegendDot(color: exerciseSecondaryMuscleColor, label: 'Wspomagające'),
       ],
     );
@@ -486,6 +491,7 @@ class _MuscleChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: isSelected,
+      onTap: onTap,
       label: '${load.muscle.label}, $role, $sets',
       excludeSemantics: true,
       child: InkWell(
@@ -659,23 +665,20 @@ class _SourceRow extends StatelessWidget {
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+      // Nazwa nad szczegółami: długi opis nie ściska się ani nie wylewa.
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              source.exerciseName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
+          Text(
+            source.exerciseName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: 8),
           Text(
             detail,
-            textAlign: TextAlign.right,
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 11.5,
