@@ -25,6 +25,18 @@ abstract final class MuscleRecoveryCalculator {
         if (seen == null || day.isAfter(seen)) last[unit] = day;
       }
     }
+    // Stare sesje mają grupy zbiorcze („Plecy”), nowe konkretne mięśnie
+    // („Najszersze”). Gdy któryś mięsień grupy był trenowany nie wcześniej niż
+    // ona sama, wiersz zbiorczy tylko by straszył „dawno bez treningu”.
+    for (final group in [...last.keys]) {
+      final groupDay = last[group]!;
+      final covered = group.expanded.any((m) {
+        if (m == group) return false;
+        final day = last[m];
+        return day != null && !day.isBefore(groupDay);
+      });
+      if (covered) last.remove(group);
+    }
     if (last.isEmpty) return const [];
 
     final windowSets = <MuscleGroup, double>{};

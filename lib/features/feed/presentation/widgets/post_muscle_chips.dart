@@ -12,8 +12,10 @@ class PostMuscleChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = muscles.take(maxVisible).toList(growable: false);
-    final rest = muscles.length - visible.length;
+    // Konkretne mięśnie (przednie, boczne barki…) zwijamy do dużych partii.
+    final broad = {for (final m in muscles) m.broadGroup}.toList();
+    final visible = broad.take(maxVisible).toList(growable: false);
+    final rest = broad.length - visible.length;
 
     return Wrap(
       spacing: 6,

@@ -745,6 +745,75 @@ void main() {
       expect(result.first.daysSince <= result.last.daysSince, isTrue);
     });
 
+    test('drops an old broad group once a muscle of it was trained later', () {
+      final sessions = [
+        _session(
+          DateTime(2026, 8, 1, 18),
+          exercises: [
+            _exercise(
+              'Wiosłowanie',
+              [_set(weight: '60', reps: '8')],
+              muscles: ['back'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 9, 14, 18),
+          exercises: [
+            _exercise(
+              'Ściąganie',
+              [_set(weight: '60', reps: '8')],
+              muscles: ['lats'],
+            ),
+          ],
+        ),
+      ];
+      final result = MuscleRecoveryCalculator.compute(
+        all: sessions,
+        inWindow: sessions,
+        windowWeeks: 4,
+        today: DateTime(2026, 9, 16),
+      );
+
+      expect(result.map((r) => r.muscle), [MuscleGroup.lats]);
+    });
+
+    test('keeps a broad group that nothing more specific caught up with', () {
+      final sessions = [
+        _session(
+          DateTime(2026, 9, 14, 18),
+          exercises: [
+            _exercise(
+              'Wiosłowanie',
+              [_set(weight: '60', reps: '8')],
+              muscles: ['back'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 8, 1, 18),
+          exercises: [
+            _exercise(
+              'Ściąganie',
+              [_set(weight: '60', reps: '8')],
+              muscles: ['lats'],
+            ),
+          ],
+        ),
+      ];
+      final result = MuscleRecoveryCalculator.compute(
+        all: sessions,
+        inWindow: sessions,
+        windowWeeks: 4,
+        today: DateTime(2026, 9, 16),
+      );
+
+      expect(result.map((r) => r.muscle).toSet(), {
+        MuscleGroup.back,
+        MuscleGroup.lats,
+      });
+    });
+
     test('is part of the snapshot and ignores the chosen range for "last"', () {
       final snapshot = TrainingStatsCalculator.compute(
         [

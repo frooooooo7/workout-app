@@ -244,8 +244,8 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
       _errorText = null;
     });
 
-    final musclesList = _selectedMuscles.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    // Kolejność wyboru zostaje: pierwszy tag jest celem ćwiczenia.
+    final musclesList = _selectedMuscles.toList();
 
     Uint8List? imageBytes;
     String? imageFilename;
