@@ -61,3 +61,19 @@ Future<bool> startWorkout(
   if (context.mounted) sessionCubit.refresh();
   return true;
 }
+
+/// Po wyjściu z ekranu wolnego treningu: pusta sesja bez planu i bez
+/// żadnego ćwiczenia nie ma czego zachować, a jako „trwająca” blokowałaby
+/// start kolejnych — więc jest anulowana. Zwraca `true`, gdy ją anulowano.
+Future<bool> discardEmptyCustomSession(TrainingSessionCubit cubit) async {
+  await cubit.refresh();
+  final active = cubit.state.activeSession;
+  if (active == null ||
+      active.planLocalId != null ||
+      active.planServerId != null ||
+      active.exercises.isNotEmpty) {
+    return false;
+  }
+  await cubit.cancel(active.id);
+  return true;
+}

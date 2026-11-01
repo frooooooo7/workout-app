@@ -55,7 +55,7 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
       onResumeSession: (session) => _resumeSession(context, session),
       onOpenPlan: (plan) => _openPlan(context, plan),
       onStartPlan: (plan) => _startPlan(context, plan),
-      onStartCustom: () => context.push('/app/training/pick-activity-type'),
+      onStartCustom: () => _startCustom(context),
       onCreatePlanForDay: (day) => _createPlan(context, day),
       onOpenHistoryItem: (item) =>
           context.push('/app/training/history/${item.id}'),
@@ -97,6 +97,23 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
     final homeCubit = context.read<TrainingHomeCubit>();
     final opened = await startPlanWorkout(context, plan);
     if (!opened) return;
+    historyCubit.refresh();
+    homeCubit.refresh();
+  }
+
+  /// Wolny trening — od razu pusta sesja, ćwiczenia dodaje się w trakcie.
+  /// Wyjście bez ćwiczeń anuluje sesję.
+  Future<void> _startCustom(BuildContext context) async {
+    final historyCubit = context.read<TrainingHistoryCubit>();
+    final homeCubit = context.read<TrainingHomeCubit>();
+    final sessionCubit = context.read<TrainingSessionCubit>();
+    final opened = await startWorkout(
+      context,
+      start: (cubit) => cubit.startCustom(),
+    );
+    if (!opened) return;
+    // Przypadkowe dotknięcie nie zostawia pustej „trwającej” sesji.
+    await discardEmptyCustomSession(sessionCubit);
     historyCubit.refresh();
     homeCubit.refresh();
   }
