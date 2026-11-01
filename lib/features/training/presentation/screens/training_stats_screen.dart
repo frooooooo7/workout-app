@@ -68,7 +68,6 @@ class TrainingStatsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const AppTabScrollEdge(),
                 Expanded(
                   child: TrainingStatsView(
                     onStartWorkout: () => context.go('/app/training'),

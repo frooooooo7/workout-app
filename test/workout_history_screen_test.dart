@@ -177,6 +177,29 @@ void main() {
     expect(find.byType(HistoryMonthNavigator), findsOneWidget);
   });
 
+  testWidgets('statistics tab survives a trip to the sessions list', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Statystyki'));
+    await tester.pumpAndSettle();
+    expect(find.text('Przebieg w czasie'), findsOneWidget);
+
+    await tester.tap(find.text('Regularność'));
+    await tester.pumpAndSettle();
+    expect(find.text('Przebieg w czasie'), findsNothing);
+    expect(find.text('Nawyki treningowe'), findsOneWidget);
+
+    await tester.tap(find.text('Sesje'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Statystyki'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nawyki treningowe'), findsOneWidget);
+    expect(find.text('Przebieg w czasie'), findsNothing);
+  });
+
   testWidgets('session row shows the record badge', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
