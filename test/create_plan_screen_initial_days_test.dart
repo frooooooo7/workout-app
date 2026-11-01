@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/presentation/bloc/training_plans_cubit.dart';
 import 'package:gym/features/training/presentation/screens/create_plan_screen.dart';
@@ -36,6 +37,9 @@ void main() {
     await _pumpEditor(tester);
 
     expect(find.text('SUPERSERIA A'), findsNothing);
+    // Podgląd karty na górze spycha listę ćwiczeń niżej.
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-link-0')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('plan-link-0')));
     await tester.pumpAndSettle();
 
@@ -43,6 +47,8 @@ void main() {
     expect(find.text('A1'), findsOneWidget);
     expect(find.text('Przerwa po rundzie'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-unlink-A')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('plan-unlink-A')));
     await tester.pumpAndSettle();
     expect(find.text('SUPERSERIA A'), findsNothing);
@@ -53,6 +59,8 @@ void main() {
   ) async {
     await _pumpEditor(tester);
 
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-rest-chip-0')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('plan-rest-chip-0')));
     await tester.pumpAndSettle();
     expect(find.text('Przerwa po serii'), findsOneWidget);
@@ -122,10 +130,19 @@ class _FakeTrainingPlanRepository implements TrainingPlanRepository {
   Future<CustomTrainingPlan?> getById(String id) async => null;
 
   @override
-  Future<CustomTrainingPlan> create(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> create(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
 
   @override
-  Future<CustomTrainingPlan> update(CustomTrainingPlan plan) async => plan;
+  Future<CustomTrainingPlan> update(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async => plan;
+
+  @override
+  Future<void> reorder(List<String> orderedIds) async {}
 
   @override
   Future<void> delete(String id) async {}

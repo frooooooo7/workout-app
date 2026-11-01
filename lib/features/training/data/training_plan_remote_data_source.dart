@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../../library/data/exercise_remote_data_source.dart';
 import '../domain/models/custom_training_plan.dart';
 import '../domain/models/progression_settings.dart';
@@ -57,6 +60,8 @@ class TrainingPlanRemoteDataSource {
       isPublic: json['isPublic'] as bool? ?? false,
       copyCount: (json['copyCount'] as num?)?.toInt() ?? 0,
       copiedFrom: _authorFromJson(json['copiedFrom']),
+      coverUrl: json['coverUrl'] as String?,
+      sortOrder: (json['sortOrder'] as num?)?.toInt(),
     );
   }
 
@@ -148,6 +153,37 @@ class TrainingPlanRemoteDataSource {
     final data = await _api.put(
       '/training-plans/$serverId',
       toBody(plan, exerciseServerIdsByLocalId: exerciseServerIdsByLocalId),
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `PUT /training-plans/order` — kolejność planów (id serwera, od pierwszego).
+  /// Tylko miejsca; treść planów zostaje nietknięta.
+  Future<void> setOrder(List<String> serverIds) async {
+    await _api.put('/training-plans/order', {'ids': serverIds}, auth: true);
+  }
+
+  /// `POST /training-plans/:id/cover` — okładka planu (multipart `photo`).
+  Future<CustomTrainingPlan> uploadCover(
+    String serverId,
+    Uint8List bytes,
+    String filename,
+  ) async {
+    final data = await _api.postMultipart(
+      '/training-plans/$serverId/cover',
+      files: [
+        imageMultipartFile('photo', bytes, filename, fallbackName: 'cover.jpg'),
+      ],
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `DELETE /training-plans/:id/cover`.
+  Future<CustomTrainingPlan> deleteCover(String serverId) async {
+    final data = await _api.delete(
+      '/training-plans/$serverId/cover',
       auth: true,
     );
     return _fromJson(data as Map<String, dynamic>);
