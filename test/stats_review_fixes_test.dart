@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/muscle_distribution_calculator.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_format.dart';
@@ -88,7 +89,7 @@ void main() {
               RegionStat(region: MuscleRegion.back, sets: 20, share: 1 / 3),
             ],
             neglected: const [],
-            bodyMap: const {MuscleGroup.chest: 1},
+            bodyRoles: const {MuscleGroup.chest: MuscleRole.primary},
           ),
         ),
       );

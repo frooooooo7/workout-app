@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/muscle_distribution_calculator.dart';
@@ -23,7 +24,9 @@ TrainingSessionExercise _exercise(
   List<TrainingSessionSet> sets, {
   List<String> muscles = const ['chest'],
   String id = '',
+  ExerciseTracking tracking = ExerciseTracking.weightReps,
 }) => TrainingSessionExercise(
+  tracking: tracking,
   exerciseId: id,
   exerciseName: name,
   exerciseMuscles: muscles,
@@ -437,6 +440,80 @@ void main() {
   });
 
   group('MuscleDistributionCalculator', () {
+
+    group('roles (shared rules with the session map)', () {
+      MuscleDistribution compute(List<TrainingSessionExercise> exercises) =>
+          MuscleDistributionCalculator.compute([
+            _session(DateTime(2026, 9, 14), exercises: exercises),
+          ]);
+      List<TrainingSessionSet> sets(int n) =>
+          List.generate(n, (_) => _set(weight: '50', reps: '10'));
+      MuscleStat stat(MuscleDistribution d, MuscleGroup m) =>
+          d.muscles.firstWhere((s) => s.muscle == m);
+
+      test('first tag is the target, the rest assist', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(8), muscles: ['chest', 'triceps']),
+          _exercise('Biceps', sets(1), muscles: ['biceps']),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).role, MuscleRole.primary);
+        expect(stat(d, MuscleGroup.triceps).role, MuscleRole.secondary);
+        // 1 seria to mniej niż ćwierć 8 serii lidera.
+        expect(stat(d, MuscleGroup.biceps).role, MuscleRole.secondary);
+        expect(d.leaderTargetSets, 8);
+      });
+
+      test('a tag listed twice is counted once', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(4), muscles: ['chest', 'chest']),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).sets, 4);
+        expect(stat(d, MuscleGroup.chest).targetSets, 4);
+      });
+
+      test('the same exercise done twice is one source row', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(3), muscles: ['chest']),
+          _exercise('wyciskanie ', sets(2), muscles: ['chest']),
+        ]);
+
+        final sources = stat(d, MuscleGroup.chest).sources;
+        expect(sources, hasLength(1));
+        expect(sources.single.sets, 5);
+        expect(sources.single.exerciseName, 'Wyciskanie');
+      });
+
+      test('timed work only assists when there is rep-based work', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(6), muscles: ['chest']),
+          _exercise(
+            'Rower',
+            sets(1),
+            muscles: ['legs'],
+            tracking: ExerciseTracking.durationDistance,
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).role, MuscleRole.primary);
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.secondary);
+        expect(d.bodyRoles[MuscleGroup.quads], MuscleRole.secondary);
+      });
+
+      test('a period of only timed work still has a primary muscle', () {
+        final d = compute([
+          _exercise(
+            'Rower',
+            sets(2),
+            muscles: ['legs'],
+            tracking: ExerciseTracking.durationDistance,
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.primary);
+      });
+    });
     test('primary muscle gets whole sets, secondary half; regions once', () {
       final result = MuscleDistributionCalculator.compute([
         _session(
@@ -499,8 +576,8 @@ void main() {
         // Nie zgadujemy, który mięsień nóg pracował.
         expect(result.muscles.map((m) => m.muscle), [MuscleGroup.legs]);
         expect(result.muscles.single.sets, 3);
-        expect(result.bodyMap.keys.toSet(), MuscleGroup.legs.expanded);
-        expect(result.bodyMap.values, everyElement(1));
+        expect(result.bodyRoles.keys.toSet(), MuscleGroup.legs.expanded);
+        expect(result.bodyRoles.values, everyElement(MuscleRole.primary));
 
         expect(result.neglected, contains(MuscleGroup.chest));
         // Grupa zbiorcza „pokrywa” swoje mięśnie — nie da się stwierdzić braku.
@@ -577,9 +654,9 @@ void main() {
           ),
         ]);
 
-        expect(result.bodyMap[MuscleGroup.quads], 1);
-        expect(result.bodyMap[MuscleGroup.calves], 1);
-        expect(result.bodyMap[MuscleGroup.chest], isNull);
+        expect(result.bodyRoles[MuscleGroup.quads], MuscleRole.primary);
+        expect(result.bodyRoles[MuscleGroup.calves], MuscleRole.primary);
+        expect(result.bodyRoles[MuscleGroup.chest], isNull);
       },
     );
 

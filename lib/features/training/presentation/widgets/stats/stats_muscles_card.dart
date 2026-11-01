@@ -13,6 +13,8 @@ import '../../../../library/domain/models/exercise.dart';
 import '../../../../library/presentation/widgets/exercise_details/exercise_muscle_map.dart'
     show exercisePrimaryMuscleColor, exerciseSecondaryMuscleColor;
 import '../../../domain/models/training_stats.dart';
+import '../../../domain/services/muscle_roles.dart';
+import '../session_details/session_details_formatters.dart' show formatVolumeKg;
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
 
@@ -32,7 +34,7 @@ String _rankLabel(MuscleGroup group) =>
     group.isCoarse ? group.label : group.shortLabel;
 
 /// Rozkład pracy na partie i mięśnie w zakresie: donut partii, manekin
-/// podświetlony poziomem pracy ([MuscleDistribution.bodyMap]), ranking grup
+/// podświetlony rolami mięśni ([MuscleDistribution.bodyRoles]), ranking grup
 /// tak, jak otagowano ćwiczenia, i ostrzeżenie o pominiętych mięśniach.
 class StatsMusclesCard extends StatefulWidget {
   const StatsMusclesCard({super.key, required this.muscles});
@@ -66,7 +68,8 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                 const Text(
                   'Serie na grupę mięśniową, tak jak otagowano ćwiczenia; '
                   'mięśnie wspomagające liczą się po połowie. „Główne” to '
-                  'grupy z co najmniej połową serii najczęściej trenowanej.',
+                  'mięśnie, które były celem ćwiczeń; „wspomagające” tylko '
+                  'pomagały. Te same reguły co na mapie sesji.',
                   style: _captionStyle,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -83,7 +86,7 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                 ],
                 const _SubHeader('MAPA OBCIĄŻENIA'),
                 const SizedBox(height: AppSpacing.sm),
-                _BodyMap(bodyMap: m.bodyMap),
+                _BodyMap(bodyRoles: m.bodyRoles),
                 const SizedBox(height: AppSpacing.lg),
                 const _SubHeader('RANKING MIĘŚNI'),
                 const SizedBox(height: AppSpacing.xs),
@@ -92,6 +95,7 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                       ? m.muscles
                       : m.muscles.take(_collapsedRows).toList(),
                   leaderSets: m.muscles.first.sets,
+                  leaderTargetSets: m.leaderTargetSets,
                   openMuscle: _openMuscle,
                   onToggle: (muscle) => setState(
                     () => _openMuscle = _openMuscle == muscle ? null : muscle,
@@ -280,30 +284,29 @@ class _RegionDonut extends StatelessWidget {
 }
 
 class _BodyMap extends StatelessWidget {
-  const _BodyMap({required this.bodyMap});
+  const _BodyMap({required this.bodyRoles});
 
   /// Konkretne mięśnie → 0..1; grupy zbiorcze są już rozwinięte w domenie.
-  final Map<MuscleGroup, double> bodyMap;
+  final Map<MuscleGroup, MuscleRole> bodyRoles;
 
   static const _style = BodyHighlighterStyle.dark(
     highColor: exercisePrimaryMuscleColor,
     lowColor: exerciseSecondaryMuscleColor,
   );
 
-  /// Dwa poziomy zamiast gradientu: mocno trenowane (co najmniej połowa serii
-  /// lidera okresu) i lekko. Mięśnie bez serii zostają szare.
-  static const _strongIntensity = 1.0;
-  static const _lightIntensity = 0.3;
+  /// Dwie role, jak na mapie sesji: cel świeci mocno, wsparcie słabo. Mięśnie
+  /// bez serii zostają szare.
+  static const _primaryIntensity = 1.0;
+  static const _secondaryIntensity = 0.3;
 
   /// Kilka mięśni trafia w ten sam obszar manekina (np. najszersze
-  /// i romboidalne) — obszar świeci poziomem najmocniejszego z nich.
+  /// i romboidalne) — obszar świeci rolą ważniejszego z nich.
   Set<MuscleHighlight> _highlights() {
     final bySlug = <String, double>{};
-    for (final entry in bodyMap.entries) {
-      if (entry.value <= 0) continue;
-      final level = entry.value >= MuscleDistribution.strongThreshold
-          ? _strongIntensity
-          : _lightIntensity;
+    for (final entry in bodyRoles.entries) {
+      final level = entry.value == MuscleRole.primary
+          ? _primaryIntensity
+          : _secondaryIntensity;
       final slug = entry.key.bodyHighlighterSlug;
       if (level > (bySlug[slug] ?? 0)) bySlug[slug] = level;
     }
@@ -343,8 +346,8 @@ class _BodyMap extends StatelessWidget {
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.xxs,
           children: [
-            _LegendDot(color: _style.highColor, label: 'Mocno trenowane'),
-            _LegendDot(color: _style.lowColor, label: 'Lekko'),
+            _LegendDot(color: _style.highColor, label: 'Główne'),
+            _LegendDot(color: _style.lowColor, label: 'Wspomagające'),
             _LegendDot(
               color: _style.inactiveFill,
               label: 'Brak',
@@ -430,10 +433,12 @@ class _MuscleRanking extends StatelessWidget {
     required this.leaderSets,
     required this.openMuscle,
     required this.onToggle,
+    required this.leaderTargetSets,
   });
 
   final List<MuscleStat> muscles;
   final double leaderSets;
+  final int leaderTargetSets;
   final MuscleGroup? openMuscle;
   final ValueChanged<MuscleGroup> onToggle;
 
@@ -446,6 +451,7 @@ class _MuscleRanking extends StatelessWidget {
             stat: m,
             isOpen: m.muscle == openMuscle,
             onTap: () => onToggle(m.muscle),
+            leaderTargetSets: leaderTargetSets,
             fill: leaderSets > 0 ? (m.sets / leaderSets).clamp(0, 1) : 0,
           ),
       ],
@@ -459,17 +465,19 @@ class _MuscleBar extends StatelessWidget {
     required this.fill,
     required this.isOpen,
     required this.onTap,
+    required this.leaderTargetSets,
   });
 
   final MuscleStat stat;
   final double fill;
   final bool isOpen;
   final VoidCallback onTap;
+  final int leaderTargetSets;
 
   @override
   Widget build(BuildContext context) {
     final sets = formatStatsDecimal(stat.sets);
-    final strong = stat.isStrong;
+    final strong = stat.role == MuscleRole.primary;
     final region = stat.muscle.region;
     final color = region == null
         ? AppColors.primaryVariant
@@ -479,7 +487,7 @@ class _MuscleBar extends StatelessWidget {
       excludeSemantics: true,
       label:
           '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
-          '${strong ? 'główne' : 'lekko'}',
+          '${strong ? 'główne' : 'wspomagające'}',
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -540,7 +548,8 @@ class _MuscleBar extends StatelessWidget {
                   ),
                 ),
               ),
-              if (isOpen) _MuscleSources(stat: stat),
+              if (isOpen)
+              _MuscleSources(stat: stat, leaderTargetSets: leaderTargetSets),
             ],
           ),
         ),
@@ -551,9 +560,10 @@ class _MuscleBar extends StatelessWidget {
 
 /// Skąd wzięły się serie mięśnia: ćwiczenia z okresu, od największego wkładu.
 class _MuscleSources extends StatelessWidget {
-  const _MuscleSources({required this.stat});
+  const _MuscleSources({required this.stat, required this.leaderTargetSets});
 
   final MuscleStat stat;
+  final int leaderTargetSets;
 
   static const _maxRows = 6;
 
@@ -561,9 +571,11 @@ class _MuscleSources extends StatelessWidget {
   Widget build(BuildContext context) {
     final shown = stat.sources.take(_maxRows).toList(growable: false);
     final rest = stat.sources.length - shown.length;
-    final role = stat.isStrong
-        ? 'Główne: co najmniej połowa serii najczęściej trenowanej grupy.'
-        : 'Lekko: mniej niż połowa serii najczęściej trenowanej grupy.';
+    final role = muscleRoleReason(
+      role: stat.role,
+      targetSets: stat.targetSets,
+      leaderTargetSets: leaderTargetSets,
+    );
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: AppSpacing.xs),
@@ -621,6 +633,9 @@ class _SourceRow extends StatelessWidget {
         ? 'wspomaga'
         : 'cel i wspomaga';
     final sets = polishPlural(source.sets, 'seria', 'serie', 'serii');
+    final volume = source.volumeKg > 0
+        ? ' · ${formatVolumeKg(source.volumeKg)}'
+        : '';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -638,7 +653,7 @@ class _SourceRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xs),
           Text(
-            '$role · ${source.sets} $sets',
+            '$role · ${source.sets} $sets$volume',
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 11.5,
@@ -662,7 +677,7 @@ class _RoleBadge extends StatelessWidget {
         : exerciseSecondaryMuscleColor;
     return ConstrainedBox(
       // Stała szerokość wyrównuje kolumnę znaczków.
-      constraints: const BoxConstraints(minWidth: 62),
+      constraints: const BoxConstraints(minWidth: 96),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
@@ -670,7 +685,7 @@ class _RoleBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          strong ? 'GŁÓWNE' : 'LEKKO',
+          strong ? 'GŁÓWNE' : 'WSPOMAGAJĄCE',
           maxLines: 1,
           textAlign: TextAlign.center,
           style: TextStyle(

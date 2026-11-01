@@ -1,9 +1,13 @@
 import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
 import '../../models/training_stats.dart';
+import '../muscle_roles.dart';
 import 'stats_sets.dart';
 
 class _SourceTally {
+  _SourceTally(this.exerciseName);
+
+  final String exerciseName;
   int sets = 0;
   int targetSets = 0;
   double volumeKg = 0;
@@ -14,7 +18,7 @@ List<MuscleSource> _sourcesOf(Map<String, _SourceTally>? tallies) {
   final sources = [
     for (final entry in tallies.entries)
       MuscleSource(
-        exerciseName: entry.key,
+        exerciseName: entry.value.exerciseName,
         sets: entry.value.sets,
         targetSets: entry.value.targetSets,
         volumeKg: entry.value.volumeKg,
@@ -30,7 +34,7 @@ List<MuscleSource> _sourcesOf(Map<String, _SourceTally>? tallies) {
 /// ćwiczeń tylko grupy zbiorcze (plecy, nogi, barki…), więc „Nogi” nie wolno
 /// rozdzielać na czworogłowe, dwugłowe i łydki — wyszłyby serie, których nikt
 /// nie zrobił. Rozwinięcie na konkretne mięśnie dotyczy wyłącznie mapy ciała
-/// ([MuscleDistribution.bodyMap]), gdzie zapala cały region, jak wszędzie
+/// ([MuscleDistribution.bodyRoles]), gdzie zapala cały region, jak wszędzie
 /// indziej w aplikacji — ale z tą samą liczbą serii co grupa, bez
 /// mnożenia jej przez liczbę mięśni regionu.
 abstract final class MuscleDistributionCalculator {
@@ -65,11 +69,23 @@ abstract final class MuscleDistributionCalculator {
     final volumeByUnit = <MuscleGroup, double>{};
     final setsByRegion = <MuscleRegion, double>{};
     final sourcesByUnit = <MuscleGroup, Map<String, _SourceTally>>{};
+    final targetSetsByUnit = <MuscleGroup, int>{};
     var workouts = 0;
     var taggedSets = 0;
 
-    for (final session in sessions) {
-      if (session.status != TrainingSessionStatus.completed) continue;
+    final completed = [
+      for (final session in sessions)
+        if (session.status == TrainingSessionStatus.completed) session,
+    ];
+    // Odcinki na czas (kardio, deska) tylko wspomagają, o ile w okresie była
+    // też praca na powtórzenia — tak samo jak na mapie sesji.
+    final hasRepBasedWork = completed.any(
+      (session) => session.exercises.any(
+        (e) => !e.tracking.isCardio && completedSetsOf(e).isNotEmpty,
+      ),
+    );
+
+    for (final session in completed) {
       workouts++;
       for (final exercise in session.exercises) {
         var sets = 0;
@@ -82,16 +98,29 @@ abstract final class MuscleDistributionCalculator {
 
         final muscles = taggedMuscles(exercise);
         if (muscles.isNotEmpty) taggedSets += sets;
+        final firstIsTarget = targetsItsFirstMuscle(
+          exercise.tracking,
+          hasRepBasedWork: hasRepBasedWork,
+        );
         final regionShare = <MuscleRegion, double>{};
         for (var i = 0; i < muscles.length; i++) {
-          final share = i == 0 ? _primaryShare : _secondaryShare;
+          final isTarget = i == 0 && firstIsTarget;
+          final share = isTarget ? _primaryShare : _secondaryShare;
           final unit = muscles[i];
           final tally = sourcesByUnit
               .putIfAbsent(unit, () => {})
-              .putIfAbsent(exercise.exerciseName, _SourceTally.new);
+              .putIfAbsent(
+                muscleSourceKey(exercise.exerciseName),
+                () => _SourceTally(exercise.exerciseName),
+              );
           tally.sets += sets;
-          tally.targetSets += i == 0 ? sets : 0;
+          tally.targetSets += isTarget ? sets : 0;
           tally.volumeKg += volume;
+          targetSetsByUnit.update(
+            unit,
+            (v) => v + (isTarget ? sets : 0),
+            ifAbsent: () => isTarget ? sets : 0,
+          );
           setsByUnit.update(
             unit,
             (v) => v + sets * share,
@@ -125,6 +154,7 @@ abstract final class MuscleDistributionCalculator {
 
     final totalSets = setsByUnit.values.fold<double>(0, (a, b) => a + b);
     final maxSets = setsByUnit.values.fold<double>(0, (a, b) => a > b ? a : b);
+    final roles = assignMuscleRoles(targetSetsByUnit, setsByUnit.keys);
     final muscles = [
       for (final entry in setsByUnit.entries)
         MuscleStat(
@@ -133,19 +163,22 @@ abstract final class MuscleDistributionCalculator {
           volumeKg: volumeByUnit[entry.key] ?? 0,
           share: entry.value / totalSets,
           intensity: entry.value / maxSets,
+          role: roles[entry.key]!,
+          targetSets: targetSetsByUnit[entry.key] ?? 0,
           sources: _sourcesOf(sourcesByUnit[entry.key]),
         ),
     ]..sort((a, b) => b.sets.compareTo(a.sets));
 
-    // Mapa ciała: grupa zbiorcza zapala wszystkie mięśnie regionu tym samym
-    // poziomem co sama grupa. Gdy mięsień obejmuje kilka grup, liczy się ta
-    // z największym poziomem — nie sumujemy, bo wtedy tag „Nogi” świeciłby
-    // czterokrotnie mocniej niż pojedyncza łydka.
-    final bodyMap = <MuscleGroup, double>{};
-    for (final entry in setsByUnit.entries) {
-      final level = entry.value / maxSets;
+    // Mapa ciała: grupa zbiorcza zapala wszystkie mięśnie regionu rolą samej
+    // grupy. Gdy mięsień obejmuje kilka grup, liczy się ważniejsza rola —
+    // nie sumujemy, bo wtedy tag „Nogi” świeciłby mocniej niż pojedyncza łydka.
+    final bodyRoles = <MuscleGroup, MuscleRole>{};
+    for (final entry in roles.entries) {
       for (final muscle in entry.key.expanded) {
-        if (level > (bodyMap[muscle] ?? 0)) bodyMap[muscle] = level;
+        if (entry.value == MuscleRole.primary ||
+            !bodyRoles.containsKey(muscle)) {
+          bodyRoles[muscle] = entry.value;
+        }
       }
     }
 
@@ -165,7 +198,7 @@ abstract final class MuscleDistributionCalculator {
 
     return MuscleDistribution(
       muscles: List.unmodifiable(muscles),
-      bodyMap: Map.unmodifiable(bodyMap),
+      bodyRoles: Map.unmodifiable(bodyRoles),
       taggedSets: taggedSets,
       regions: List.unmodifiable(regions),
       neglected: workouts >= neglectedMinWorkouts

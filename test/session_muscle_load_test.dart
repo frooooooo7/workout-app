@@ -4,6 +4,7 @@ import 'package:gym/features/body_highlighter/models/muscle_highlight.dart';
 import 'package:gym/features/body_highlighter/models/muscle_intensity.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
+import 'package:gym/features/training/domain/services/muscle_roles.dart';
 import 'package:gym/features/training/presentation/widgets/session_details/muscle_load.dart';
 import 'package:gym/features/training/presentation/widgets/session_details/session_muscle_map.dart';
 
@@ -23,6 +24,81 @@ void main() {
       expect(loads.single.muscle, MuscleGroup.back);
       expect(loads.single.role, MuscleRole.primary);
       expect(loads.single.sets, 1);
+    });
+
+    test('powtórzony tag mięśnia liczy się raz', () {
+      final loads = computeMuscleLoads(
+        _session([
+          _exercise(
+            muscles: [MuscleGroup.chest, MuscleGroup.chest],
+            sets: [_set(weight: 100, reps: 10), _set(weight: 100, reps: 10)],
+          ),
+        ]),
+      );
+
+      expect(loads, hasLength(1));
+      expect(loads.single.sets, 2);
+      expect(loads.single.primarySets, 2);
+      expect(loads.single.sources.single.sets, 2);
+    });
+
+    test('to samo ćwiczenie dwa razy składa się w jedno źródło', () {
+      final loads = computeMuscleLoads(
+        _session([
+          _exercise(
+            name: 'Wyciskanie',
+            muscles: [MuscleGroup.chest],
+            sets: [_set(weight: 100, reps: 10)],
+          ),
+          _exercise(
+            name: 'wyciskanie',
+            muscles: [MuscleGroup.chest],
+            sets: [_set(weight: 100, reps: 8), _set(weight: 100, reps: 8)],
+          ),
+        ]),
+      );
+
+      final sources = loads.single.sources;
+      expect(sources, hasLength(1));
+      expect(sources.single.sets, 3);
+      expect(sources.single.exerciseName, 'Wyciskanie');
+    });
+
+    test('odcinek na czas tylko wspomaga, gdy była praca na powtórzenia', () {
+      final loads = computeMuscleLoads(
+        _session([
+          _exercise(
+            muscles: [MuscleGroup.chest],
+            sets: List.generate(4, (_) => _set(weight: 80, reps: 8)),
+          ),
+          _exercise(
+            name: 'Rower',
+            muscles: [MuscleGroup.legs],
+            tracking: ExerciseTracking.durationDistance,
+            sets: [_set()],
+          ),
+        ]),
+      );
+
+      MuscleLoad of(MuscleGroup m) => loads.firstWhere((l) => l.muscle == m);
+      expect(of(MuscleGroup.chest).role, MuscleRole.primary);
+      expect(of(MuscleGroup.legs).role, MuscleRole.secondary);
+      expect(of(MuscleGroup.legs).primarySets, 0);
+    });
+
+    test('sama sesja kardio ma główny mięsień', () {
+      final loads = computeMuscleLoads(
+        _session([
+          _exercise(
+            name: 'Rower',
+            muscles: [MuscleGroup.legs],
+            tracking: ExerciseTracking.durationDistance,
+            sets: [_set()],
+          ),
+        ]),
+      );
+
+      expect(loads.single.role, MuscleRole.primary);
     });
 
     test('pierwszy tag jest celem, kolejne wspomagają', () {
@@ -185,16 +261,22 @@ void main() {
       );
       MuscleLoad of(MuscleGroup m) => loads.firstWhere((l) => l.muscle == m);
 
+      String why(MuscleGroup m) => muscleRoleReason(
+        role: of(m).role,
+        targetSets: of(m).primarySets,
+        leaderTargetSets: 8,
+      );
+
       expect(
-        muscleRoleReason(of(MuscleGroup.chest), leaderPrimarySets: 8),
+        why(MuscleGroup.chest),
         contains('celem ćwiczenia w 8 seriach'),
       );
       expect(
-        muscleRoleReason(of(MuscleGroup.triceps), leaderPrimarySets: 8),
+        why(MuscleGroup.triceps),
         contains('na pierwszym miejscu'),
       );
       expect(
-        muscleRoleReason(of(MuscleGroup.biceps), leaderPrimarySets: 8),
+        why(MuscleGroup.biceps),
         allOf(contains('tylko w 1 serii'), contains('co najmniej 2')),
       );
     });
@@ -374,8 +456,10 @@ TrainingExerciseDetail _exercise({
   String name = 'Ćwiczenie',
   required List<MuscleGroup> muscles,
   required List<TrainingExerciseSetDetail> sets,
+  ExerciseTracking tracking = ExerciseTracking.weightReps,
 }) {
   return TrainingExerciseDetail(
+    tracking: tracking,
     exerciseId: 'e${muscles.hashCode}',
     exerciseName: name,
     muscles: muscles,
