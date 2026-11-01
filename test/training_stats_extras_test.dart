@@ -814,6 +814,87 @@ void main() {
       expect(shoulders.daysSince, 17);
     });
 
+    test('one trained muscle of a broad group does not hide the group', () {
+      final sessions = [
+        _session(
+          DateTime(2026, 8, 30, 18),
+          exercises: [
+            _exercise(
+              'Przysiad',
+              [_set(weight: '80', reps: '8')],
+              muscles: ['legs'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 9, 14, 18),
+          exercises: [
+            _exercise(
+              'Wspięcia',
+              [_set(weight: '40', reps: '15')],
+              muscles: ['calves'],
+            ),
+          ],
+        ),
+      ];
+      final result = MuscleRecoveryCalculator.compute(
+        all: sessions,
+        inWindow: sessions,
+        windowWeeks: 4,
+        today: DateTime(2026, 9, 16),
+      );
+
+      expect(result.map((r) => r.muscle).toSet(), {
+        MuscleGroup.legs,
+        MuscleGroup.calves,
+      });
+    });
+
+    test(
+      'a broad group goes once all of its key muscles were targeted later',
+      () {
+        List<TrainingSession> sessions() => [
+          _session(
+            DateTime(2026, 8, 30, 18),
+            exercises: [
+              _exercise(
+                'Wyciskanie nad głowę',
+                [_set(weight: '40', reps: '8')],
+                muscles: ['shoulders'],
+              ),
+            ],
+          ),
+          for (final (i, muscle) in [
+            'frontDelts',
+            'sideDelts',
+            'rearDelts',
+          ].indexed)
+            _session(
+              DateTime(2026, 9, 10 + i, 18),
+              exercises: [
+                _exercise(
+                  'Ćw. $i',
+                  [_set(weight: '10', reps: '10')],
+                  muscles: [muscle],
+                ),
+              ],
+            ),
+        ];
+        final all = sessions();
+        final result = MuscleRecoveryCalculator.compute(
+          all: all,
+          inWindow: all,
+          windowWeeks: 4,
+          today: DateTime(2026, 9, 16),
+        );
+
+        expect(
+          result.map((r) => r.muscle),
+          isNot(contains(MuscleGroup.shoulders)),
+        );
+      },
+    );
+
     test('keeps a broad group that nothing more specific caught up with', () {
       final sessions = [
         _session(

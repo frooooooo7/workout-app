@@ -1,6 +1,7 @@
 import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
 import '../../models/training_stats.dart';
+import 'muscle_distribution_calculator.dart';
 import 'stats_sets.dart';
 
 /// Kiedy ostatnio pracowała każda pozycja rankingu mięśni (z całej historii)
@@ -34,14 +35,20 @@ abstract final class MuscleRecoveryCalculator {
       });
     }
     // Stare sesje mają grupy zbiorcze („Plecy”), nowe konkretne mięśnie
-    // („Najszersze”). Gdy któryś mięsień grupy był celem ćwiczenia nie
-    // wcześniej niż ona sama, wiersz zbiorczy tylko by straszył „dawno bez
-    // treningu”. Samo wspomaganie (tylne barki przy wiosłowaniu) nie wystarcza:
-    // reszta grupy mogła być nietknięta.
+    // („Najszersze”). Wiersz zbiorczy znika dopiero, gdy każdy kluczowy mięsień
+    // grupy (nogi: czworogłowe, dwugłowe i łydki; barki: przedni, boczny i tylny) był celem
+    // ćwiczenia nie wcześniej niż ona sama. Jeden mięsień ani samo wspomaganie
+    // nie wystarczą: reszta grupy mogła być nietknięta, a wiersz ma o tym
+    // mówić.
     for (final group in [...last.keys]) {
       final groupDay = last[group]!;
-      final covered = group.expanded.any((m) {
-        if (m == group) return false;
+      final members = group.expanded.difference({group});
+      if (members.isEmpty) continue;
+      final key = members.intersection(
+        MuscleDistributionCalculator.keyMuscles.toSet(),
+      );
+      final required = key.isEmpty ? members : key;
+      final covered = required.every((m) {
         final day = lastAsTarget[m];
         return day != null && !day.isBefore(groupDay);
       });
