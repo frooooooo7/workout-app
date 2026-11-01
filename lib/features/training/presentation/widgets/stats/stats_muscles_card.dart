@@ -10,7 +10,11 @@ import '../../../../body_highlighter/models/body_view.dart' as bh;
 import '../../../../body_highlighter/models/muscle_highlight.dart';
 import '../../../../body_highlighter/widgets/muscle_body_highlighter.dart';
 import '../../../../library/domain/models/exercise.dart';
+import '../../../../library/presentation/widgets/exercise_details/exercise_muscle_map.dart'
+    show exercisePrimaryMuscleColor, exerciseSecondaryMuscleColor;
 import '../../../domain/models/training_stats.dart';
+import '../../../domain/services/muscle_roles.dart';
+import '../session_details/session_details_formatters.dart' show formatVolumeKg;
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
 
@@ -30,7 +34,7 @@ String _rankLabel(MuscleGroup group) =>
     group.isCoarse ? group.label : group.shortLabel;
 
 /// Rozkład pracy na partie i mięśnie w zakresie: donut partii, manekin
-/// podświetlony intensywnością ([MuscleDistribution.bodyMap]), ranking grup
+/// podświetlony rolami mięśni ([MuscleDistribution.bodyRoles]), ranking grup
 /// tak, jak otagowano ćwiczenia, i ostrzeżenie o pominiętych mięśniach.
 class StatsMusclesCard extends StatefulWidget {
   const StatsMusclesCard({super.key, required this.muscles});
@@ -45,6 +49,7 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
   static const _collapsedRows = 6;
 
   bool _expanded = false;
+  MuscleGroup? _openMuscle;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +67,9 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
               children: [
                 const Text(
                   'Serie na grupę mięśniową, tak jak otagowano ćwiczenia; '
-                  'mięśnie wspomagające liczą się po połowie.',
+                  'mięśnie wspomagające liczą się po połowie. „Główne” to '
+                  'mięśnie, które były celem ćwiczeń; „wspomagające” tylko '
+                  'pomagały. Te same reguły co na mapie sesji.',
                   style: _captionStyle,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -79,7 +86,7 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                 ],
                 const _SubHeader('MAPA OBCIĄŻENIA'),
                 const SizedBox(height: AppSpacing.sm),
-                _BodyMap(bodyMap: m.bodyMap),
+                _BodyMap(bodyRoles: m.bodyRoles),
                 const SizedBox(height: AppSpacing.lg),
                 const _SubHeader('RANKING MIĘŚNI'),
                 const SizedBox(height: AppSpacing.xs),
@@ -87,12 +94,12 @@ class _StatsMusclesCardState extends State<StatsMusclesCard> {
                   muscles: _expanded
                       ? m.muscles
                       : m.muscles.take(_collapsedRows).toList(),
-                  // Procenty liczone dla całego rankingu, nie tylko dla
-                  // widocznych wierszy — inaczej zwijanie zmieniałoby liczby.
-                  percents: roundedPercents([
-                    for (final stat in m.muscles) stat.share,
-                  ]),
                   leaderSets: m.muscles.first.sets,
+                  leaderTargetSets: m.leaderTargetSets,
+                  openMuscle: _openMuscle,
+                  onToggle: (muscle) => setState(
+                    () => _openMuscle = _openMuscle == muscle ? null : muscle,
+                  ),
                 ),
                 if (m.muscles.length > _collapsedRows)
                   Align(
@@ -277,20 +284,31 @@ class _RegionDonut extends StatelessWidget {
 }
 
 class _BodyMap extends StatelessWidget {
-  const _BodyMap({required this.bodyMap});
+  const _BodyMap({required this.bodyRoles});
 
   /// Konkretne mięśnie → 0..1; grupy zbiorcze są już rozwinięte w domenie.
-  final Map<MuscleGroup, double> bodyMap;
+  final Map<MuscleGroup, MuscleRole> bodyRoles;
 
-  static const _style = BodyHighlighterStyle.dark();
+  static const _style = BodyHighlighterStyle.dark(
+    highColor: exercisePrimaryMuscleColor,
+    lowColor: exerciseSecondaryMuscleColor,
+  );
+
+  /// Dwie role, jak na mapie sesji: cel świeci mocno, wsparcie słabo. Mięśnie
+  /// bez serii zostają szare.
+  static const _primaryIntensity = 1.0;
+  static const _secondaryIntensity = 0.3;
 
   /// Kilka mięśni trafia w ten sam obszar manekina (np. najszersze
-  /// i romboidalne) — obszar świeci intensywnością najmocniejszego z nich.
+  /// i romboidalne) — obszar świeci rolą ważniejszego z nich.
   Set<MuscleHighlight> _highlights() {
     final bySlug = <String, double>{};
-    for (final entry in bodyMap.entries) {
+    for (final entry in bodyRoles.entries) {
+      final level = entry.value == MuscleRole.primary
+          ? _primaryIntensity
+          : _secondaryIntensity;
       final slug = entry.key.bodyHighlighterSlug;
-      if (entry.value > (bySlug[slug] ?? 0)) bySlug[slug] = entry.value;
+      if (level > (bySlug[slug] ?? 0)) bySlug[slug] = level;
     }
     return {
       for (final e in bySlug.entries)
@@ -323,29 +341,48 @@ class _BodyMap extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.xxs,
           children: [
-            const Text('mniej', style: _captionStyle),
-            const SizedBox(width: 6),
-            for (final color in [
-              _style.lowColor,
-              _style.mediumColor,
-              _style.highColor,
-            ])
-              Container(
-                width: 18,
-                height: 6,
-                margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            const SizedBox(width: 6),
-            const Text('więcej', style: _captionStyle),
+            _LegendDot(color: _style.highColor, label: 'Główne'),
+            _LegendDot(color: _style.lowColor, label: 'Wspomagające'),
+            _LegendDot(
+              color: _style.inactiveFill,
+              label: 'Brak',
+              outline: _style.outlineColor,
+            ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label, this.outline});
+
+  final Color color;
+  final String label;
+  final Color? outline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+            border: outline == null ? null : Border.all(color: outline!),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: _captionStyle),
       ],
     );
   }
@@ -393,24 +430,28 @@ class _Figure extends StatelessWidget {
 class _MuscleRanking extends StatelessWidget {
   const _MuscleRanking({
     required this.muscles,
-    required this.percents,
     required this.leaderSets,
+    required this.openMuscle,
+    required this.onToggle,
+    required this.leaderTargetSets,
   });
 
   final List<MuscleStat> muscles;
-
-  /// Procenty całego rankingu; widoczne wiersze to jego początek.
-  final List<int> percents;
   final double leaderSets;
+  final int leaderTargetSets;
+  final MuscleGroup? openMuscle;
+  final ValueChanged<MuscleGroup> onToggle;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final (i, m) in muscles.indexed)
+        for (final m in muscles)
           _MuscleBar(
             stat: m,
-            percent: percents[i],
+            isOpen: m.muscle == openMuscle,
+            onTap: () => onToggle(m.muscle),
+            leaderTargetSets: leaderTargetSets,
             fill: leaderSets > 0 ? (m.sets / leaderSets).clamp(0, 1) : 0,
           ),
       ],
@@ -421,100 +462,260 @@ class _MuscleRanking extends StatelessWidget {
 class _MuscleBar extends StatelessWidget {
   const _MuscleBar({
     required this.stat,
-    required this.percent,
     required this.fill,
+    required this.isOpen,
+    required this.onTap,
+    required this.leaderTargetSets,
   });
 
   final MuscleStat stat;
-  final int percent;
   final double fill;
+  final bool isOpen;
+  final VoidCallback onTap;
+  final int leaderTargetSets;
 
   @override
   Widget build(BuildContext context) {
     final sets = formatStatsDecimal(stat.sets);
-    final percentText = formatStatsPercent(percent, nonZero: stat.share > 0);
+    final strong = stat.role == MuscleRole.primary;
     final region = stat.muscle.region;
     final color = region == null
         ? AppColors.primaryVariant
         : _regionColor(region);
-    return Semantics(
-      container: true,
-      excludeSemantics: true,
-      label:
-          '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
-          '${percentText == '<1%' ? 'poniżej 1' : percent} procent',
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Expanded(
-                  child: Text(
-                    _rankLabel(stat.muscle),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
+    // Przy dużej czcionce znaczek roli nie mieści się obok liczby serii.
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.15;
+    final badge = _RoleBadge(strong: strong);
+    return Column(
+      children: [
+        // Źródła są poza wykluczonym węzłem, żeby czytnik ekranu je widział.
+        Semantics(
+          container: true,
+          button: true,
+          expanded: isOpen,
+          onTap: onTap,
+          excludeSemantics: true,
+          label:
+              '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
+              '${strong ? 'główne' : 'wspomagające'}',
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _rankLabel(stat.muscle),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        sets,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        ' ${_setsLabel(stat.sets)}',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (!stacked) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        badge,
+                      ],
+                    ],
+                  ),
+                  if (stacked)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: badge,
+                      ),
+                    ),
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: fill),
+                      duration: const Duration(milliseconds: 520),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, _) => LinearProgressIndicator(
+                        value: value,
+                        minHeight: 5,
+                        backgroundColor: AppColors.chartTrack,
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  sets,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-                Text(
-                  ' ${_setsLabel(stat.sets)}',
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                ConstrainedBox(
-                  // Minimalna szerokość wyrównuje kolumnę; przy dużej czcionce
-                  // pole rośnie zamiast łamać „33%” na kilka linii.
-                  constraints: const BoxConstraints(minWidth: 40),
-                  child: Text(
-                    percentText,
-                    maxLines: 1,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: fill),
-                duration: const Duration(milliseconds: 520),
-                curve: Curves.easeOutCubic,
-                builder: (context, value, _) => LinearProgressIndicator(
-                  value: value,
-                  minHeight: 5,
-                  backgroundColor: AppColors.chartTrack,
-                  valueColor: AlwaysStoppedAnimation(color),
-                ),
+                ],
               ),
             ),
-          ],
+          ),
+        ),
+        if (isOpen)
+          _MuscleSources(stat: stat, leaderTargetSets: leaderTargetSets),
+      ],
+    );
+  }
+}
+
+/// Skąd wzięły się serie mięśnia: ćwiczenia z okresu, od największego wkładu.
+class _MuscleSources extends StatelessWidget {
+  const _MuscleSources({required this.stat, required this.leaderTargetSets});
+
+  final MuscleStat stat;
+  final int leaderTargetSets;
+
+  static const _maxRows = 6;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = stat.sources.take(_maxRows).toList(growable: false);
+    final rest = stat.sources.length - shown.length;
+    final role = muscleRoleReason(
+      role: stat.role,
+      targetSets: stat.targetSets,
+      leaderTargetSets: leaderTargetSets,
+    );
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(role, style: _captionStyle),
+          const SizedBox(height: AppSpacing.xs),
+          const _SubHeader('Z TYCH ĆWICZEŃ'),
+          const SizedBox(height: 4),
+          for (final source in shown) _SourceRow(source: source),
+          if (rest > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '+$rest ${polishPlural(rest, 'kolejne ćwiczenie', 'kolejne ćwiczenia', 'kolejnych ćwiczeń')}',
+                style: _captionStyle,
+              ),
+            ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'W rankingu: ${formatStatsDecimal(stat.sets)} '
+            '${_setsLabel(stat.sets)} (cel liczy się za całą serię, '
+            'wspomaganie za pół).',
+            style: _captionStyle,
+          ),
+          if (stat.muscle.isCoarse)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Tag „${stat.muscle.label}” nie wskazuje konkretnego mięśnia, '
+                'więc na sylwetce zapala cały region.',
+                style: _captionStyle,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceRow extends StatelessWidget {
+  const _SourceRow({required this.source});
+
+  final MuscleSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = source.isTarget
+        ? 'cel'
+        : source.isSupport
+        ? 'wspomaga'
+        : 'cel i wspomaga';
+    final sets = polishPlural(source.sets, 'seria', 'serie', 'serii');
+    final volume = source.volumeKg > 0
+        ? ' · ${formatVolumeKg(source.volumeKg)}'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      // Nazwa nad szczegółami: długi opis nie ściska się ani nie wylewa.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            source.exerciseName,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '$role · ${source.sets} $sets$volume',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.strong});
+
+  final bool strong;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = strong
+        ? exercisePrimaryMuscleColor
+        : exerciseSecondaryMuscleColor;
+    return ConstrainedBox(
+      // Stała szerokość wyrównuje kolumnę znaczków.
+      constraints: const BoxConstraints(minWidth: 88),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: strong ? 0.2 : 0.14),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          strong ? 'GŁÓWNE' : 'WSPOMAGAJĄCE',
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: strong ? AppColors.primaryVariant : color,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
         ),
       ),
     );

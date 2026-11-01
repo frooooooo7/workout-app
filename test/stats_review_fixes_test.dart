@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/muscle_distribution_calculator.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_format.dart';
@@ -69,7 +70,7 @@ void main() {
       intensity: 1,
     );
 
-    testWidgets('percentages add up and the centre shows real sets', (
+    testWidgets('region percentages add up and the centre shows real sets', (
       tester,
     ) async {
       await _pump(
@@ -88,14 +89,14 @@ void main() {
               RegionStat(region: MuscleRegion.back, sets: 20, share: 1 / 3),
             ],
             neglected: const [],
-            bodyMap: const {MuscleGroup.chest: 1},
+            bodyRoles: const {MuscleGroup.chest: MuscleRole.primary},
           ),
         ),
       );
 
-      // 34 + 33 + 33 w legendzie partii i w rankingu — razem 200%.
-      expect(find.text('34%'), findsNWidgets(2));
-      expect(find.text('33%'), findsNWidgets(4));
+      // 34 + 33 + 33 w legendzie partii; ranking nie pokazuje już procentów.
+      expect(find.text('34%'), findsOneWidget);
+      expect(find.text('33%'), findsNWidgets(2));
       // Środek koła: serie z otagowanych ćwiczeń (jak w kafelku „Serie”),
       // a nie ważona suma partii (60).
       expect(find.text('40'), findsOneWidget);
@@ -121,7 +122,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('<1%', findRichText: true), findsNWidgets(2));
+      expect(find.text('<1%', findRichText: true), findsOneWidget);
       expect(find.text('0%', findRichText: true), findsNothing);
     });
 

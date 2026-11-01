@@ -1,105 +1,121 @@
 import '../../../../library/domain/models/exercise.dart';
 import '../../../domain/models/training_history_models.dart';
+import '../../../domain/models/training_stats.dart' show MuscleSource;
+import '../../../domain/services/muscle_roles.dart';
 
-/// Udział mięśnia wymienionego jako pierwszy na liście ćwiczenia. Kolejne
-/// traktujemy jako wspomagające i liczymy z połową wagi — inaczej ćwiczenie
-/// wielostawowe zapalałoby trzy partie tak samo mocno jak izolacja jedną.
-const double _primaryShare = 1.0;
-const double _secondaryShare = 0.5;
+export '../../../domain/models/muscle_role.dart' show MuscleRole;
 
 class MuscleLoad {
   const MuscleLoad({
     required this.muscle,
-    required this.volumeKg,
+    required this.role,
     required this.sets,
-    required this.intensity,
-    required this.share,
+    required this.volumeKg,
+    required this.primarySets,
+    required this.sources,
   });
 
+  /// Grupa tak, jak otagowano ćwiczenia („Plecy”, „Biceps”). Grupy zbiorcze
+  /// zostają zbiorcze: tag nie mówi, który mięsień regionu pracował, więc nie
+  /// zgadujemy i nie dzielimy ich na procenty.
   final MuscleGroup muscle;
 
-  /// Objętość przypisana mięśniowi po zastosowaniu udziałów.
-  final double volumeKg;
+  final MuscleRole role;
 
-  /// Liczba ukończonych serii, które dotknęły tego mięśnia.
+  /// Liczba ukończonych serii ćwiczeń, które miały ten mięsień w tagach.
   final int sets;
 
-  /// Znormalizowane obciążenie 0..1 względem najmocniej obciążonego mięśnia
-  /// tej sesji. Napędza wyłącznie podświetlenie manekina (kolor "temperatury") —
-  /// liderowi zawsze przypada pełna intensywność, niezależnie ile innych partii
-  /// pracowało.
-  final double intensity;
+  /// Objętość tych ćwiczeń (bez ważenia). Mięśnie dzielące ćwiczenie liczą ją
+  /// każdy w całości, więc nie sumuje się jej między mięśniami.
+  final double volumeKg;
 
-  /// Udział 0..1 w łącznej objętości (lub liczbie serii, gdy sesja nie ma
-  /// zalogowanych ciężarów) całej sesji. Wszystkie udziały sumują się do 1 —
-  /// to właśnie ta wartość jest pokazywana jako "%" w rankingu, bo realnie
-  /// odpowiada na pytanie "jaki procent dzisiejszej pracy poszedł w ten mięsień".
-  final double share;
+  /// Serie, w których mięsień był celem (pierwszym tagiem ćwiczenia z
+  /// obciążeniem lub powtórzeniami).
+  final int primarySets;
 
-  int get percent => (share * 100).round();
+  /// Ćwiczenia, z których bierze się ten mięsień, od największej liczby serii.
+  final List<MuscleSource> sources;
+
+  bool get isPrimary => role == MuscleRole.primary;
 }
 
-/// Rozkłada objętość sesji na poszczególne mięśnie.
+/// Dzieli mięśnie sesji na główne i wspomagające (reguły w `muscle_roles.dart`,
+/// wspólne ze statystykami okresu).
 ///
-/// Grupy zbiorcze (`plecy`, `nogi`, `barki`) rozwijają się przez
-/// [MuscleGroup.expanded] na wszystkie mięśnie swojego regionu — zapisane
-/// ćwiczenie nie niesie informacji, który dokładnie mięsień pracował, więc
-/// zapalamy cały region zamiast zgadywać.
+/// Ćwiczenia o tej samej nazwie składają się w jedno źródło.
 ///
-/// Gdy sesja nie ma zalogowanych ciężarów (trening z masą własną), objętość
-/// wychodzi zerowa i normalizacja przełącza się na liczbę serii.
+/// Wynik: najpierw główne, w obu grupach od największej liczby serii.
 List<MuscleLoad> computeMuscleLoads(TrainingSessionDetail detail) {
-  final volumeByMuscle = <MuscleGroup, double>{};
   final setsByMuscle = <MuscleGroup, int>{};
+  final targetSetsByMuscle = <MuscleGroup, int>{};
+  final volumeByMuscle = <MuscleGroup, double>{};
+  final sourcesByMuscle = <MuscleGroup, Map<String, MuscleSource>>{};
+
+  final hasRepBasedWork = detail.exercises.any(
+    (e) => e.completedSetsCount > 0 && !e.tracking.isCardio,
+  );
 
   for (final exercise in detail.exercises) {
     final completedSets = exercise.completedSetsCount;
-    if (exercise.muscles.isEmpty || completedSets == 0) continue;
+    final tags = distinctMuscleTags(exercise.muscles);
+    if (tags.isEmpty || completedSets == 0) continue;
 
     final exerciseVolume = exercise.volumeKg;
-
-    for (var i = 0; i < exercise.muscles.length; i++) {
-      final share = i == 0 ? _primaryShare : _secondaryShare;
-      for (final muscle in exercise.muscles[i].expanded) {
-        volumeByMuscle.update(
-          muscle,
-          (value) => value + exerciseVolume * share,
-          ifAbsent: () => exerciseVolume * share,
-        );
-        setsByMuscle.update(
-          muscle,
-          (value) => value + completedSets,
-          ifAbsent: () => completedSets,
-        );
-      }
+    final firstIsTarget = targetsItsFirstMuscle(
+      exercise.tracking,
+      hasRepBasedWork: hasRepBasedWork,
+    );
+    for (var i = 0; i < tags.length; i++) {
+      final muscle = tags[i];
+      final targetSets = i == 0 && firstIsTarget ? completedSets : 0;
+      setsByMuscle.update(
+        muscle,
+        (v) => v + completedSets,
+        ifAbsent: () => completedSets,
+      );
+      volumeByMuscle.update(
+        muscle,
+        (v) => v + exerciseVolume,
+        ifAbsent: () => exerciseVolume,
+      );
+      targetSetsByMuscle.update(
+        muscle,
+        (v) => v + targetSets,
+        ifAbsent: () => targetSets,
+      );
+      final sources = sourcesByMuscle.putIfAbsent(muscle, () => {});
+      final key = muscleSourceKey(exercise.exerciseName);
+      final previous = sources[key];
+      sources[key] = MuscleSource(
+        exerciseName: previous?.exerciseName ?? exercise.exerciseName,
+        sets: (previous?.sets ?? 0) + completedSets,
+        targetSets: (previous?.targetSets ?? 0) + targetSets,
+        volumeKg: (previous?.volumeKg ?? 0) + exerciseVolume,
+      );
     }
   }
 
   if (setsByMuscle.isEmpty) return const [];
 
-  final totalVolume = volumeByMuscle.values.fold<double>(0, (a, b) => a + b);
-  final useVolume = totalVolume > 0;
-
-  double weightOf(MuscleGroup m) =>
-      useVolume ? (volumeByMuscle[m] ?? 0) : (setsByMuscle[m] ?? 0).toDouble();
-
-  final maxWeight = setsByMuscle.keys
-      .map(weightOf)
-      .fold<double>(0, (a, b) => a > b ? a : b);
-  final totalWeight = setsByMuscle.keys
-      .map(weightOf)
-      .fold<double>(0, (a, b) => a + b);
-
-  final loads = setsByMuscle.keys.map((muscle) {
-    return MuscleLoad(
-      muscle: muscle,
-      volumeKg: volumeByMuscle[muscle] ?? 0,
-      sets: setsByMuscle[muscle] ?? 0,
-      intensity: maxWeight > 0 ? weightOf(muscle) / maxWeight : 0,
-      share: totalWeight > 0 ? weightOf(muscle) / totalWeight : 0,
-    );
-  }).toList();
-
-  loads.sort((a, b) => b.intensity.compareTo(a.intensity));
+  final roles = assignMuscleRoles(targetSetsByMuscle, setsByMuscle.keys);
+  final loads = [
+    for (final entry in setsByMuscle.entries)
+      MuscleLoad(
+        muscle: entry.key,
+        role: roles[entry.key]!,
+        sets: entry.value,
+        volumeKg: volumeByMuscle[entry.key] ?? 0,
+        primarySets: targetSetsByMuscle[entry.key] ?? 0,
+        sources: List.unmodifiable(
+          sourcesByMuscle[entry.key]!.values.toList()
+            ..sort((a, b) => b.sets.compareTo(a.sets)),
+        ),
+      ),
+  ]..sort((a, b) {
+      if (a.role != b.role) return a.isPrimary ? -1 : 1;
+      final bySets = b.sets.compareTo(a.sets);
+      // Remis rozstrzyga kolejność enuma — wynik nie zależy od kolejności ćwiczeń.
+      return bySets != 0 ? bySets : a.muscle.index.compareTo(b.muscle.index);
+    });
   return List.unmodifiable(loads);
 }

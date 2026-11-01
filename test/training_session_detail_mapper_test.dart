@@ -68,7 +68,7 @@ void main() {
 
     final loads = computeMuscleLoads(detail);
     expect(loads, isNotEmpty);
-    expect(loads.first.intensity, 1);
+    expect(loads.first.isPrimary, isTrue);
   });
 
   test('maps sharedToProfile from the live session', () {

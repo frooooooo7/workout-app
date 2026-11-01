@@ -5,6 +5,7 @@ import 'package:gym/features/body_highlighter/models/muscle_intensity.dart';
 import 'package:gym/features/body_highlighter/widgets/muscle_body_highlighter.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_exercise_progress_card.dart';
@@ -269,7 +270,7 @@ void main() {
       tester,
     ) async {
       // Ranking mówi „Plecy najmocniej”, ale manekin ma świecić wyłącznie
-      // to, co jest w bodyMap.
+      // to, co jest w bodyRoles.
       const muscles = MuscleDistribution(
         muscles: [
           MuscleStat(
@@ -287,13 +288,13 @@ void main() {
             intensity: 0.33,
           ),
         ],
-        bodyMap: {
-          MuscleGroup.quads: 1,
-          MuscleGroup.calves: 0.5,
-          MuscleGroup.hamstrings: 0.2,
-          // Dwa mięśnie w tym samym obszarze manekina: wygrywa mocniejszy.
-          MuscleGroup.lats: 0.3,
-          MuscleGroup.rhomboids: 0.9,
+        bodyRoles: {
+          MuscleGroup.quads: MuscleRole.primary,
+          MuscleGroup.calves: MuscleRole.primary,
+          MuscleGroup.hamstrings: MuscleRole.secondary,
+          // Dwa mięśnie w tym samym obszarze manekina: wygrywa główny.
+          MuscleGroup.lats: MuscleRole.secondary,
+          MuscleGroup.rhomboids: MuscleRole.primary,
         },
         regions: [
           RegionStat(region: MuscleRegion.back, sets: 12, share: 0.75),
@@ -307,7 +308,7 @@ void main() {
       expect(maps, hasLength(2)); // przód i tył
       final expected = {
         MuscleHighlight(muscle: 'quadriceps', intensity: MuscleIntensity.high),
-        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.medium),
+        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.high),
         MuscleHighlight(muscle: 'hamstring', intensity: MuscleIntensity.low),
         MuscleHighlight(muscle: 'upper-back', intensity: MuscleIntensity.high),
       };
@@ -315,6 +316,55 @@ void main() {
         expect(highlights, expected);
       }
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tapping a ranking row shows where its sets come from', (
+      tester,
+    ) async {
+      const muscles = MuscleDistribution(
+        muscles: [
+          MuscleStat(
+            muscle: MuscleGroup.chest,
+            sets: 9,
+            volumeKg: 0,
+            share: 1,
+            intensity: 1,
+            sources: [
+              MuscleSource(
+                exerciseName: 'Wyciskanie sztangi',
+                sets: 6,
+                targetSets: 6,
+                volumeKg: 0,
+              ),
+              MuscleSource(
+                exerciseName: 'Rozpiętki',
+                sets: 3,
+                targetSets: 0,
+                volumeKg: 0,
+              ),
+            ],
+          ),
+        ],
+        regions: [],
+        neglected: [],
+      );
+      await _pump(tester, const StatsMusclesCard(muscles: muscles));
+
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
+      expect(find.text('GŁÓWNE'), findsOneWidget);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(find.text('Wyciskanie sztangi'), findsOneWidget);
+      expect(find.text('cel · 6 serii'), findsOneWidget);
+      expect(find.text('Rozpiętki'), findsOneWidget);
+      expect(find.text('wspomaga · 3 serie'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
     });
 
     testWidgets('empty bodyMap leaves the figures unlit', (tester) async {
