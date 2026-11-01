@@ -33,7 +33,8 @@ enum MuscleRegion {
 /// rozparsowanie zapisanych ćwiczeń i snapshotów sesji od nich zależy.
 /// Trzy z nich ([back], [legs], [shoulders]) są zbiorcze: na manekinie zapalają
 /// cały swój region przez [expanded], bo nie niosą informacji o konkretnym
-/// mięśniu. Nowe ćwiczenia warto tagować wartościami granularnymi.
+/// mięśniu. Ćwiczenia systemowe i nowe ćwiczenia użytkownika używają wartości
+/// granularnych; zbiorcze zostają w starszych ćwiczeniach i snapshotach sesji.
 enum MuscleGroup {
   all,
 
@@ -159,13 +160,10 @@ enum MuscleGroup {
         _ => {this},
       };
 
-  /// Czy API przyjmuje tę wartość w `muscles` ćwiczenia. Backend
-  /// (`VALID_MUSCLES`) zna tylko 8 grup zapisanych od pierwszego seeda —
-  /// granularne wartości kończyły się `400` i odrzuconą synchronizacją.
-  bool get isApiSupported => this != MuscleGroup.all && apiGroup == this;
-
-  /// Wartość wysyłana do API: grupa granularna → jej grupa zbiorcza.
-  MuscleGroup get apiGroup => switch (this) {
+  /// Grupa nadrzędna: konkretny mięsień → jego grupa zbiorcza (najszersze →
+  /// plecy, czworogłowe → nogi), pozostałe zostają sobą. Służy tam, gdzie
+  /// liczy się duża partia, np. podsumowanie planu.
+  MuscleGroup get broadGroup => switch (this) {
         MuscleGroup.traps ||
         MuscleGroup.lats ||
         MuscleGroup.rhomboids ||
@@ -175,7 +173,7 @@ enum MuscleGroup {
         MuscleGroup.sideDelts ||
         MuscleGroup.rearDelts =>
           MuscleGroup.shoulders,
-        // Brak zbiorczej grupy „ramiona” w API — najbliższe są zginacze.
+        // Brak zbiorczej grupy „ramiona” — najbliższe są zginacze.
         MuscleGroup.forearms => MuscleGroup.biceps,
         MuscleGroup.obliques => MuscleGroup.abs,
         MuscleGroup.quads ||
@@ -186,12 +184,25 @@ enum MuscleGroup {
         _ => this,
       };
 
-  /// `muscles` dla API: bez [all], zmapowane przez [apiGroup], bez
-  /// duplikatów, w kolejności wyboru.
+  /// Mięśnie, które pokazuje zakładka biblioteki o tej grupie. Grupa zbiorcza
+  /// obejmuje swoje konkretne mięśnie (ćwiczenie z tagiem „najszersze”
+  /// pokazuje się pod „Plecy”); tak samo filtruje serwer.
+  Set<MuscleGroup> get filterMatches => switch (this) {
+        MuscleGroup.all => const {},
+        MuscleGroup.back ||
+        MuscleGroup.legs ||
+        MuscleGroup.shoulders =>
+          {this, ...expanded},
+        MuscleGroup.abs => const {MuscleGroup.abs, MuscleGroup.obliques},
+        _ => {this},
+      };
+
+  /// `muscles` dla API: bez [all], bez duplikatów, w kolejności wyboru.
+  /// Serwer przyjmuje zarówno grupy zbiorcze, jak i konkretne mięśnie.
   static List<String> toApiList(Iterable<MuscleGroup> muscles) => [
         ...{
           for (final muscle in muscles)
-            if (muscle != MuscleGroup.all) muscle.apiGroup.name,
+            if (muscle != MuscleGroup.all) muscle.name,
         },
       ];
 

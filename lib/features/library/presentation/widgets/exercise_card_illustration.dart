@@ -12,12 +12,16 @@ class ExerciseCardIllustration extends StatelessWidget {
 
   final Exercise exercise;
 
-  String? get _svgAsset => switch (exercise.muscles.firstOrNull) {
+  /// Partia ćwiczenia po pierwszym tagu; konkretny mięsień liczy się jako jego
+  /// grupa zbiorcza (najszersze → plecy), żeby ikona i kolor były te same.
+  MuscleGroup? get _leadGroup => exercise.muscles.firstOrNull?.broadGroup;
+
+  String? get _svgAsset => switch (_leadGroup) {
         MuscleGroup.chest => 'assets/icons/muscle_chest.svg',
         _ => null,
       };
 
-  IconData get _fallbackIcon => switch (exercise.muscles.firstOrNull) {
+  IconData get _fallbackIcon => switch (_leadGroup) {
         MuscleGroup.back => Icons.accessibility_new_rounded,
         MuscleGroup.legs => Icons.directions_run_rounded,
         MuscleGroup.shoulders => Icons.sports_gymnastics_rounded,
@@ -26,7 +30,7 @@ class ExerciseCardIllustration extends StatelessWidget {
         _ => Icons.fitness_center_rounded,
       };
 
-  Color get _accentColor => switch (exercise.muscles.firstOrNull) {
+  Color get _accentColor => switch (_leadGroup) {
         MuscleGroup.chest => AppColors.primaryVariant,
         MuscleGroup.back => const Color(0xFF4DB6AC),
         MuscleGroup.legs => AppColors.success,
