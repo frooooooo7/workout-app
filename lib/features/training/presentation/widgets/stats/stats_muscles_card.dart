@@ -482,78 +482,99 @@ class _MuscleBar extends StatelessWidget {
     final color = region == null
         ? AppColors.primaryVariant
         : _regionColor(region);
-    return Semantics(
-      container: true,
-      excludeSemantics: true,
-      label:
-          '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
-          '${strong ? 'główne' : 'wspomagające'}',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
+    // Przy dużej czcionce znaczek roli nie mieści się obok liczby serii.
+    final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.15;
+    final badge = _RoleBadge(strong: strong);
+    return Column(
+      children: [
+        // Źródła są poza wykluczonym węzłem, żeby czytnik ekranu je widział.
+        Semantics(
+          container: true,
+          button: true,
+          expanded: isOpen,
+          onTap: onTap,
+          excludeSemantics: true,
+          label:
+              '${_rankLabel(stat.muscle)}: $sets ${_setsLabel(stat.sets)}, '
+              '${strong ? 'główne' : 'wspomagające'}',
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Text(
-                      _rankLabel(stat.muscle),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _rankLabel(stat.muscle),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        sets,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        ' ${_setsLabel(stat.sets)}',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (!stacked) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        badge,
+                      ],
+                    ],
+                  ),
+                  if (stacked)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: badge,
+                      ),
+                    ),
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: fill),
+                      duration: const Duration(milliseconds: 520),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, _) => LinearProgressIndicator(
+                        value: value,
+                        minHeight: 5,
+                        backgroundColor: AppColors.chartTrack,
+                        valueColor: AlwaysStoppedAnimation(color),
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    sets,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  Text(
-                    ' ${_setsLabel(stat.sets)}',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  _RoleBadge(strong: strong),
                 ],
               ),
-              const SizedBox(height: 5),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: fill),
-                  duration: const Duration(milliseconds: 520),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, _) => LinearProgressIndicator(
-                    value: value,
-                    minHeight: 5,
-                    backgroundColor: AppColors.chartTrack,
-                    valueColor: AlwaysStoppedAnimation(color),
-                  ),
-                ),
-              ),
-              if (isOpen)
-              _MuscleSources(stat: stat, leaderTargetSets: leaderTargetSets),
-            ],
+            ),
           ),
         ),
-      ),
+        if (isOpen)
+          _MuscleSources(stat: stat, leaderTargetSets: leaderTargetSets),
+      ],
     );
   }
 }
@@ -596,7 +617,10 @@ class _MuscleSources extends StatelessWidget {
           if (rest > 0)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('+$rest kolejnych ćwiczeń', style: _captionStyle),
+              child: Text(
+                '+$rest ${polishPlural(rest, 'kolejne ćwiczenie', 'kolejne ćwiczenia', 'kolejnych ćwiczeń')}',
+                style: _captionStyle,
+              ),
             ),
           const SizedBox(height: AppSpacing.xs),
           Text(
@@ -638,20 +662,18 @@ class _SourceRow extends StatelessWidget {
         : '';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+      // Nazwa nad szczegółami: długi opis nie ściska się ani nie wylewa.
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              source.exerciseName,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-              ),
+          Text(
+            source.exerciseName,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: AppSpacing.xs),
           Text(
             '$role · ${source.sets} $sets$volume',
             style: const TextStyle(
@@ -677,7 +699,7 @@ class _RoleBadge extends StatelessWidget {
         : exerciseSecondaryMuscleColor;
     return ConstrainedBox(
       // Stała szerokość wyrównuje kolumnę znaczków.
-      constraints: const BoxConstraints(minWidth: 96),
+      constraints: const BoxConstraints(minWidth: 88),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(

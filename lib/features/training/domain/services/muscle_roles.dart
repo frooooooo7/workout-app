@@ -68,7 +68,8 @@ String muscleRoleReason({
   }
   final needed = (leaderTargetSets * primaryMinShareOfLeader).ceil();
   return 'Wspomagający: był celem tylko w $targetSets '
-      '${_inSets(targetSets)}, a do głównych trzeba co najmniej $needed.';
+      '${_inSets(targetSets)}, a żeby być głównym, trzeba być celem w co '
+      'najmniej $needed ${_inSets(needed)}.';
 }
 
 String _inSets(int n) => n == 1 ? 'serii' : 'seriach';
