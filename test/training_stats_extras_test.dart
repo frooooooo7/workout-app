@@ -778,6 +778,42 @@ void main() {
       expect(result.map((r) => r.muscle), [MuscleGroup.lats]);
     });
 
+    test('a broad group stays when later work only assisted its muscles', () {
+      final sessions = [
+        _session(
+          DateTime(2026, 8, 30, 18),
+          exercises: [
+            _exercise(
+              'Wyciskanie nad głowę',
+              [_set(weight: '40', reps: '8')],
+              muscles: ['shoulders'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 9, 14, 18),
+          exercises: [
+            _exercise(
+              'Wiosłowanie',
+              [_set(weight: '60', reps: '8')],
+              muscles: ['lats', 'rearDelts'],
+            ),
+          ],
+        ),
+      ];
+      final result = MuscleRecoveryCalculator.compute(
+        all: sessions,
+        inWindow: sessions,
+        windowWeeks: 4,
+        today: DateTime(2026, 9, 16),
+      );
+
+      final shoulders = result.firstWhere(
+        (r) => r.muscle == MuscleGroup.shoulders,
+      );
+      expect(shoulders.daysSince, 17);
+    });
+
     test('keeps a broad group that nothing more specific caught up with', () {
       final sessions = [
         _session(

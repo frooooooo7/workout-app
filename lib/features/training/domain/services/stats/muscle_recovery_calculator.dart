@@ -17,22 +17,32 @@ abstract final class MuscleRecoveryCalculator {
     required DateTime today,
   }) {
     final last = <MuscleGroup, DateTime>{};
+    // Kiedy mięsień był ostatnio celem ćwiczenia (nie tylko pomagał).
+    final lastAsTarget = <MuscleGroup, DateTime>{};
     for (final session in all) {
       if (session.status != TrainingSessionStatus.completed) continue;
       final day = statsDay(session.startedAt.toLocal());
-      for (final unit in _trainedUnits(session).keys) {
+      _trainedUnits(session).forEach((unit, sets) {
         final seen = last[unit];
         if (seen == null || day.isAfter(seen)) last[unit] = day;
-      }
+        if (sets.target > 0) {
+          final seenTarget = lastAsTarget[unit];
+          if (seenTarget == null || day.isAfter(seenTarget)) {
+            lastAsTarget[unit] = day;
+          }
+        }
+      });
     }
     // Stare sesje mają grupy zbiorcze („Plecy”), nowe konkretne mięśnie
-    // („Najszersze”). Gdy któryś mięsień grupy był trenowany nie wcześniej niż
-    // ona sama, wiersz zbiorczy tylko by straszył „dawno bez treningu”.
+    // („Najszersze”). Gdy któryś mięsień grupy był celem ćwiczenia nie
+    // wcześniej niż ona sama, wiersz zbiorczy tylko by straszył „dawno bez
+    // treningu”. Samo wspomaganie (tylne barki przy wiosłowaniu) nie wystarcza:
+    // reszta grupy mogła być nietknięta.
     for (final group in [...last.keys]) {
       final groupDay = last[group]!;
       final covered = group.expanded.any((m) {
         if (m == group) return false;
-        final day = last[m];
+        final day = lastAsTarget[m];
         return day != null && !day.isBefore(groupDay);
       });
       if (covered) last.remove(group);
@@ -43,7 +53,11 @@ abstract final class MuscleRecoveryCalculator {
     for (final session in inWindow) {
       if (session.status != TrainingSessionStatus.completed) continue;
       _trainedUnits(session).forEach((unit, sets) {
-        windowSets.update(unit, (v) => v + sets, ifAbsent: () => sets);
+        windowSets.update(
+          unit,
+          (v) => v + sets.total,
+          ifAbsent: () => sets.total,
+        );
       });
     }
 
@@ -71,18 +85,21 @@ abstract final class MuscleRecoveryCalculator {
   }
 
   /// Serie sesji na pozycję rankingu; wspomagające po pół, jak w rozkładzie.
-  static Map<MuscleGroup, double> _trainedUnits(TrainingSession session) {
-    final result = <MuscleGroup, double>{};
+  /// [target] to część serii, w której mięsień był celem.
+  static Map<MuscleGroup, ({double total, double target})> _trainedUnits(
+    TrainingSession session,
+  ) {
+    final result = <MuscleGroup, ({double total, double target})>{};
     for (final exercise in session.exercises) {
       final sets = completedSetsOf(exercise).length;
       if (sets == 0) continue;
       final muscles = taggedMuscles(exercise);
       for (var i = 0; i < muscles.length; i++) {
         final share = i == 0 ? 1.0 : 0.5;
-        result.update(
-          muscles[i],
-          (v) => v + sets * share,
-          ifAbsent: () => sets * share,
+        final previous = result[muscles[i]];
+        result[muscles[i]] = (
+          total: (previous?.total ?? 0) + sets * share,
+          target: (previous?.target ?? 0) + (i == 0 ? sets : 0),
         );
       }
     }

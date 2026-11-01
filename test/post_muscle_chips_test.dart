@@ -28,4 +28,19 @@ void main() {
     expect(find.text(MuscleGroup.frontDelts.shortLabel), findsNothing);
     expect(find.textContaining('+'), findsNothing);
   });
+
+  testWidgets('forearms are not shown as biceps', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PostMuscleChips(
+            muscles: [MuscleGroup.forearms, MuscleGroup.biceps],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text(MuscleGroup.forearms.shortLabel), findsOneWidget);
+    expect(find.text(MuscleGroup.biceps.shortLabel), findsOneWidget);
+  });
 }
