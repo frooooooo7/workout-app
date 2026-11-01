@@ -163,7 +163,8 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
       for (final row in rows) {
         final serverId = row['server_id'] as String?;
         if (serverId != null) {
-          ids.add(serverId);
+          // Stare bazy mogą mieć dwa wiersze z tym samym server_id.
+          if (!ids.contains(serverId)) ids.add(serverId);
         } else if (row['sync_error'] == null) {
           complete = false;
         }
