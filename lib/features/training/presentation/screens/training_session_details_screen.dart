@@ -31,6 +31,10 @@ typedef SessionDetailsNavigate =
       Object? extra,
     });
 
+/// `extra` trasy szczegółów: po wczytaniu od razu otwórz arkusz edycji posta
+/// (wejście z menu „⋯” posta na profilu).
+const kOpenPostEditorExtra = 'open-post-editor';
+
 /// Szczegóły zakończonej sesji, ułożone od ogółu do szczegółu:
 /// nagłówek z metrykami → mapa mięśni → oś czasu → karty ćwiczeń.
 ///
@@ -39,10 +43,6 @@ typedef SessionDetailsNavigate =
 ///
 /// Menu: edycja (`/app/training/history/:id/edit`), „Powtórz trening” (nowa
 /// aktywna sesja) i usunięcie (offline-first, z potwierdzeniem).
-/// `extra` trasy szczegółów: po wczytaniu od razu otwórz arkusz edycji posta
-/// (wejście z menu „⋯” posta na profilu).
-const kOpenPostEditorExtra = 'open-post-editor';
-
 class TrainingSessionDetailsScreen extends StatefulWidget {
   const TrainingSessionDetailsScreen({
     super.key,
