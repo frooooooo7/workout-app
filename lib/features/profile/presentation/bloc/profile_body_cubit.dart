@@ -12,6 +12,7 @@ import '../../domain/repositories/body_weight_repository.dart';
 class ProfileBodySummary {
   const ProfileBodySummary({
     this.weightKg,
+    this.weightOn,
     this.weightDeltaKg,
     this.lastMeasurementOn,
   });
@@ -19,8 +20,12 @@ class ProfileBodySummary {
   /// `null`, gdy nie ma jeszcze żadnego pomiaru wagi.
   final double? weightKg;
 
-  /// Różnica względem najstarszego pomiaru z ostatnich 30 dni; `null`, gdy
-  /// nie ma z czym porównać.
+  /// Dzień ostatniego pomiaru wagi.
+  final DateTime? weightOn;
+
+  /// Zmiana wagi w ostatnich 30 dniach (liczonych od dziś): różnica między
+  /// ostatnim pomiarem a najstarszym z tego okna. `null`, gdy ostatni pomiar
+  /// jest starszy niż 30 dni albo nie ma z czym porównać.
   final double? weightDeltaKg;
 
   /// Dzień ostatniego wpisu pomiarów ciała; `null`, gdy nie ma żadnego.
@@ -30,11 +35,13 @@ class ProfileBodySummary {
   bool operator ==(Object other) =>
       other is ProfileBodySummary &&
       other.weightKg == weightKg &&
+      other.weightOn == weightOn &&
       other.weightDeltaKg == weightDeltaKg &&
       other.lastMeasurementOn == lastMeasurementOn;
 
   @override
-  int get hashCode => Object.hash(weightKg, weightDeltaKg, lastMeasurementOn);
+  int get hashCode =>
+      Object.hash(weightKg, weightOn, weightDeltaKg, lastMeasurementOn);
 }
 
 /// Stan kafelków „Masa ciała” i „Pomiary” na profilu, liczony z lokalnych
@@ -61,40 +68,52 @@ class ProfileBodyCubit extends Cubit<ProfileBodySummary?> {
   final DateTime Function() _clock;
 
   Future<void> load() async {
-    double? weight;
-    double? delta;
-    DateTime? lastMeasurement;
+    // Oba odczyty idą równolegle — każdy może czekać na pierwsze pobranie.
+    final results = await Future.wait([_readWeight(), _readLastMeasurement()]);
+    if (isClosed) return;
+    final weight = results[0] as _WeightReading?;
+    emit(
+      ProfileBodySummary(
+        weightKg: weight?.kg,
+        weightOn: weight?.on,
+        weightDeltaKg: weight?.delta,
+        lastMeasurementOn: results[1] as DateTime?,
+      ),
+    );
+  }
+
+  Future<_WeightReading?> _readWeight() async {
     try {
       final entries = await weightRepository?.list(limit: 400);
-      if (entries != null && entries.isNotEmpty) {
-        final latest = entries.last;
-        weight = latest.weightKg;
-        final since = latest.date.subtract(const Duration(days: 30));
+      if (entries == null || entries.isEmpty) return null;
+      final latest = entries.last;
+      final windowStart = today.subtract(const Duration(days: 30));
+      double? delta;
+      // Ostatni pomiar sprzed okna: zmiana „w 30 dni” byłaby nieprawdziwa.
+      if (!latest.date.isBefore(windowStart)) {
         for (final entry in entries) {
-          if (entry.date.isBefore(since) || entry == latest) continue;
+          if (entry.date.isBefore(windowStart) || entry == latest) continue;
           delta = latest.weightKg - entry.weightKg;
           break;
         }
       }
+      return _WeightReading(latest.weightKg, latest.date, delta);
     } catch (_) {
       // Skrót jest dodatkiem — bez danych kafelek zaprasza do dodania.
+      return null;
     }
+  }
+
+  Future<DateTime?> _readLastMeasurement() async {
     try {
-      final entries = await measurementsRepository?.list(limit: 400);
-      if (entries != null && entries.isNotEmpty) {
-        lastMeasurement = entries.last.date;
-      }
+      // Lista to najnowsze N wpisów od najstarszego, więc ostatni jest
+      // najnowszy; wystarczy jeden.
+      final entries = await measurementsRepository?.list(limit: 1);
+      if (entries == null || entries.isEmpty) return null;
+      return entries.last.date;
     } catch (_) {
-      // j.w.
+      return null;
     }
-    if (isClosed) return;
-    emit(
-      ProfileBodySummary(
-        weightKg: weight,
-        weightDeltaKg: delta,
-        lastMeasurementOn: lastMeasurement,
-      ),
-    );
   }
 
   void _onChanged() {
@@ -114,4 +133,12 @@ class ProfileBodyCubit extends Cubit<ProfileBodySummary?> {
     _measurementsChanges?.removeListener(_onChanged);
     return super.close();
   }
+}
+
+class _WeightReading {
+  const _WeightReading(this.kg, this.on, this.delta);
+
+  final double kg;
+  final DateTime on;
+  final double? delta;
 }

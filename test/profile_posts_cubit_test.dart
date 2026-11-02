@@ -174,4 +174,20 @@ void main() {
     expect(cubit.state.items.map((p) => p.id), ['b']);
     await cubit.close();
   });
+
+  test('a silent refresh keeps quiet when it fails offline', () async {
+    final repo = _Repo()
+      ..pages[null] = FeedPage(items: [_post('a'), _post('b')]);
+    final cubit = ProfilePostsCubit(repository: repo, userId: 'anna');
+    await cubit.load();
+
+    repo.offline = true;
+    await cubit.refresh(silent: true);
+    expect(cubit.state.notice, isNull);
+    expect(cubit.state.items, hasLength(2));
+
+    await cubit.refresh();
+    expect(cubit.state.notice, isNotNull);
+    await cubit.close();
+  });
 }

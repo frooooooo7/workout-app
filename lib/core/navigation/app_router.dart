@@ -311,6 +311,8 @@ GoRouter buildRouter({
                       final sessionId = state.pathParameters['sessionId']!;
                       return TrainingSessionDetailsScreen(
                         sessionId: sessionId,
+                        openPostEditorOnStart:
+                            state.extra == kOpenPostEditorExtra,
                         repository: ServiceLocator.trainingHistoryRepository,
                         sessionRepository:
                             ServiceLocator.trainingSessionRepository,
@@ -347,7 +349,7 @@ GoRouter buildRouter({
                         refreshSignal: ServiceLocator.feedRefreshSignal,
                         events: ServiceLocator.feedPostEvents,
                         currentUser: _currentFeedAuthor(),
-                        hiddenPostIds: ServiceLocator.pendingDeletedSessionIds,
+                        hiddenPostIds: ServiceLocator.pendingHiddenPostIds,
                         seenStore: ServiceLocator.feedSeenStore,
                       ),
                       child: ActivityFeedScreen(
@@ -381,8 +383,7 @@ GoRouter buildRouter({
                           userId: user.id,
                           events: ServiceLocator.feedPostEvents,
                           currentUser: _currentFeedAuthor(),
-                          hiddenPostIds:
-                              ServiceLocator.pendingDeletedSessionIds,
+                          hiddenPostIds: ServiceLocator.pendingHiddenPostIds,
                         ),
                       ),
                       BlocProvider(

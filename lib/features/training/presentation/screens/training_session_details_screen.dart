@@ -39,11 +39,16 @@ typedef SessionDetailsNavigate =
 ///
 /// Menu: edycja (`/app/training/history/:id/edit`), „Powtórz trening” (nowa
 /// aktywna sesja) i usunięcie (offline-first, z potwierdzeniem).
+/// `extra` trasy szczegółów: po wczytaniu od razu otwórz arkusz edycji posta
+/// (wejście z menu „⋯” posta na profilu).
+const kOpenPostEditorExtra = 'open-post-editor';
+
 class TrainingSessionDetailsScreen extends StatefulWidget {
   const TrainingSessionDetailsScreen({
     super.key,
     required this.sessionId,
     required this.repository,
+    this.openPostEditorOnStart = false,
     this.sessionRepository,
     this.dataChanges,
     this.navigate,
@@ -53,6 +58,9 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
 
   final String sessionId;
   final TrainingHistoryRepository repository;
+
+  /// Po wczytaniu szczegółów od razu otwiera arkusz edycji posta.
+  final bool openPostEditorOnStart;
 
   /// Test seam; domyślnie [ServiceLocator.trainingSessionRepository].
   final TrainingSessionRepository? sessionRepository;
@@ -113,7 +121,16 @@ class _TrainingSessionDetailsScreenState
     _dataChanges =
         widget.dataChanges ?? ServiceLocator.trainingSessionDataChanges;
     _dataChanges.addListener(_onDataChanged);
-    _load();
+    unawaited(
+      _load().then((_) {
+        if (widget.openPostEditorOnStart &&
+            mounted &&
+            _detail != null &&
+            _sharedToProfile) {
+          return _onSharePressed();
+        }
+      }),
+    );
   }
 
   @override

@@ -104,4 +104,26 @@ class TrainingSessionLocalHistory {
       };
     });
   }
+
+  /// Id (lokalne i serwerowe) sesji schowanych z profilu na tym urządzeniu
+  /// (`sharedToProfile == false`), których zmiana nie dotarła jeszcze na
+  /// serwer — serwer nadal zwraca je jako posty, więc oś czasu musi je
+  /// ukrywać do czasu wysyłki.
+  Future<Set<String>> pendingUnshareIds() {
+    return _localDb.run((db) async {
+      final rows = await db.query(
+        ExerciseDatabase.tableTrainingSessions,
+        columns: ['local_id', 'server_id'],
+        where:
+            "shared_to_profile = 0 AND pending_op IS NOT NULL "
+            "AND pending_op <> 'delete'",
+      );
+      return <String>{
+        for (final row in rows) ...[
+          row['local_id'] as String,
+          if (row['server_id'] != null) row['server_id'] as String,
+        ],
+      };
+    });
+  }
 }

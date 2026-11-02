@@ -44,7 +44,7 @@ class ProfileBodyShortcuts extends StatelessWidget {
                 valueIsPlaceholder: weight == null,
                 caption: weight == null
                     ? 'pierwszy pomiar'
-                    : _deltaCaption(delta),
+                    : _deltaCaption(delta, summary.weightOn),
                 onTap: onWeightTap,
               ),
             ),
@@ -66,8 +66,14 @@ class ProfileBodyShortcuts extends StatelessWidget {
     );
   }
 
-  String _deltaCaption(double? delta) {
-    if (delta == null) return 'ostatni pomiar';
+  String _deltaCaption(double? delta, DateTime? on) {
+    if (delta == null) {
+      // Brak zmiany do pokazania (stary albo jedyny pomiar) — podajemy datę,
+      // żeby nikt nie wziął starej wagi za bieżącą.
+      return on == null
+          ? 'ostatni pomiar'
+          : 'pomiar: ${_lastLabel(on).toLowerCase()}';
+    }
     final value = formatWeightNumber(delta.abs());
     if (value == '0') return 'bez zmian w 30 dni';
     final arrow = delta < 0 ? '↓' : '↑';

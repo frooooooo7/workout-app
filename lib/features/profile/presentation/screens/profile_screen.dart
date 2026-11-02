@@ -9,6 +9,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
+import '../../../training/domain/repositories/training_session_repository.dart';
+import '../../../training/presentation/screens/training_session_details_screen.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/services/profile_week_calculator.dart';
 import 'body_measurements_screen.dart';
@@ -126,7 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _editPost(String postId) {
-    context.push('/app/training/history/$postId');
+    context.push('/app/training/history/$postId', extra: kOpenPostEditorExtra);
   }
 
   Future<void> _unsharePost(String postId) async {
@@ -169,18 +171,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
         postId,
         false,
       );
+    } on TrainingSessionDeletedException {
+      // Trening usunięty na innym urządzeniu (albo czeka na usunięcie):
+      // ponowna próba nic nie da, więc po prostu znika z listy.
       if (!mounted) return;
       postsCubit.removePost(postId);
-      _showSnack(context, 'Usunięto trening z profilu');
-      // Najpierw wysyłka zmiany, dopiero potem odświeżenie — inaczej serwer
-      // jeszcze oddałby post, który właśnie schowaliśmy.
-      await ServiceLocator.flushTrainingSessionSync();
-      ServiceLocator.requestFeedRefresh();
-      await postsCubit.refresh();
+      _showSnack(context, 'Ten trening został usunięty.');
+      return;
     } catch (_) {
       if (!mounted) return;
       _showSnack(context, 'Nie udało się zapisać zmiany. Spróbuj ponownie.');
+      return;
     }
+    if (!mounted) return;
+    postsCubit.removePost(postId);
+    _showSnack(context, 'Usunięto trening z profilu');
+    // Najpierw wysyłka zmiany, dopiero potem odświeżenie — inaczej serwer
+    // jeszcze oddałby post, który właśnie schowaliśmy. Odświeżenie jest ciche:
+    // bez sieci nie przykrywa komunikatu sukcesu błędem, a schowany post
+    // pilnuje `hiddenPostIds` (zmiana czeka na wysyłkę).
+    await ServiceLocator.flushTrainingSessionSync();
+    ServiceLocator.requestFeedRefresh();
+    await postsCubit.refresh(silent: true);
   }
 
   void _showSnack(BuildContext context, String message) {
