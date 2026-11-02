@@ -549,6 +549,21 @@ class ServiceLocator {
     }
   }
 
+  /// Id postów do ukrycia na profilu i w feedzie: sesje usunięte oraz
+  /// schowane z profilu na tym urządzeniu, zanim zmiana dotarła na serwer.
+  static Future<Set<String>> pendingHiddenPostIds() async {
+    final history = _localSessionHistory;
+    if (history == null) return const {};
+    try {
+      return {
+        ...await history.pendingDeletionIds(),
+        ...await history.pendingUnshareIds(),
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
+
   static void requestProfileRefresh() {
     profileRefreshTick.value++;
   }

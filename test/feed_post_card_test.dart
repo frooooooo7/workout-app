@@ -215,6 +215,68 @@ void main() {
       expect(find.byKey(const ValueKey('feed-kudos-summary-p1')), findsNothing);
     });
 
+    testWidgets('compact own post drops muscles, best set and comment button', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FeedPostCard(
+                post: _post(isOwn: true, kudos: 2, comments: 0),
+                showAuthor: false,
+                compact: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Klatka'), findsNothing);
+      expect(find.text('Wyciskanie sztangi na ławce'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('feed-comment-button-p1')),
+        findsNothing,
+      );
+      // Licznik kudosów zostaje.
+      expect(
+        find.byKey(const ValueKey('feed-kudos-summary-p1')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('own post menu calls edit and unshare', (tester) async {
+      var edited = 0;
+      var unshared = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FeedPostCard(
+                post: _post(isOwn: true),
+                showAuthor: false,
+                compact: true,
+                onEditTap: () => edited++,
+                onUnshareTap: () => unshared++,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('profile-post-menu-p1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edytuj post'));
+      await tester.pumpAndSettle();
+      expect(edited, 1);
+
+      await tester.tap(find.byKey(const ValueKey('profile-post-menu-p1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Przestań udostępniać'));
+      await tester.pumpAndSettle();
+      expect(unshared, 1);
+    });
+
     testWidgets('new records replace the best set and collapse past two', (
       tester,
     ) async {

@@ -86,7 +86,7 @@ class _FindPeopleScreenState extends State<FindPeopleScreen> {
                 controller: _controller,
                 style: const TextStyle(color: AppColors.textPrimary),
                 decoration: InputDecoration(
-                  hintText: 'Szukaj po imieniu lub nazwie użytkownika',
+                  hintText: 'Szukaj po imieniu lub nicku',
                   hintStyle: const TextStyle(color: AppColors.textMuted),
                   prefixIcon:
                       const Icon(Icons.search, color: AppColors.textMuted),

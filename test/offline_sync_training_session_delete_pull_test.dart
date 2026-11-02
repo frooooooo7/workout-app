@@ -253,6 +253,16 @@ void main() {
     });
   });
 
+  test('unsharing offline hides the post until the change is sent', () async {
+    final localId = await finishedLocalSession(synced: true);
+    expect(await localHistory.pendingUnshareIds(), isEmpty);
+
+    await repo.setSharedToProfile(localId, false);
+
+    expect(await localHistory.pendingUnshareIds(), contains(localId));
+    expect(await localHistory.pendingDeletionIds(), isEmpty);
+  });
+
   group('pull', () {
     test('first pull downloads full history and stores the high-water mark', () async {
       remote.historyPages = [

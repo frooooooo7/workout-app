@@ -12,6 +12,7 @@ import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/domain/services/profile_week_calculator.dart';
+import 'package:gym/features/profile/presentation/bloc/profile_body_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_posts_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
@@ -56,6 +57,7 @@ Future<void> _pumpProfile(
   required ProfileState state,
   List<FeedPost> posts = const [],
   ProfileWeekSummary? week,
+  ProfileBodySummary? body,
 }) async {
   final feed = _FeedRepo(posts);
   await tester.binding.setSurfaceSize(const Size(430, 2400));
@@ -69,6 +71,7 @@ Future<void> _pumpProfile(
             create: (_) => ProfilePostsCubit(repository: feed, userId: 'me'),
           ),
           BlocProvider<ProfileWeekCubit>(create: (_) => _FakeWeekCubit(week)),
+          BlocProvider<ProfileBodyCubit>(create: (_) => _FakeBodyCubit(body)),
         ],
         child: ProfileScreen(feedRepository: feed),
       ),
@@ -113,7 +116,7 @@ void main() {
     expect(find.text('@jan.kowalski'), findsOneWidget);
     expect(find.text('12,3 tys.'), findsOneWidget);
     expect(find.text('Dodaj opis profilu'), findsOneWidget);
-    expect(find.text('Edytuj profil'), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-edit-button')), findsOneWidget);
     expect(find.text('Ten tydzień'), findsOneWidget);
     expect(find.text('3 tygodnie'), findsOneWidget);
     expect(find.text('Anna'), findsOneWidget);
@@ -142,7 +145,7 @@ void main() {
       ),
     );
 
-    expect(find.text('2/4'), findsOneWidget);
+    expect(find.text('Cel 2/4'), findsOneWidget);
     expect(
       tester.widget<ProfileWeekCard>(find.byType(ProfileWeekCard)).weeklyGoal,
       4,
@@ -164,6 +167,90 @@ void main() {
 
     expect(find.byType(ProfileWeekCard), findsOneWidget);
     expect(find.byKey(const ValueKey('profile-week-goal')), findsNothing);
+  });
+
+  testWidgets('without a weekly goal the card invites to set one', (
+    tester,
+  ) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+      week: const ProfileWeekSummary(
+        trainedWeekdays: {1},
+        stats: TrainingPeriodStats(workouts: 1),
+        streakWeeks: 0,
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('profile-week-set-goal')), findsOneWidget);
+    expect(find.text('Ustaw cel'), findsOneWidget);
+  });
+
+  testWidgets('body shortcuts show the latest weight and its change', (
+    tester,
+  ) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+      body: ProfileBodySummary(
+        weightKg: 84.5,
+        weightDeltaKg: -2.5,
+        lastMeasurementOn: DateTime(2026, 10, 12),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('profile-shortcut-weight')),
+      findsOneWidget,
+    );
+    expect(find.text('84,5 kg'), findsOneWidget);
+    expect(find.text('↓ 2,5 kg w 30 dni'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('profile-shortcut-measurements')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('body shortcuts without data invite to add the first entry', (
+    tester,
+  ) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+      body: const ProfileBodySummary(),
+    );
+
+    expect(find.text('Dodaj'), findsNWidgets(2));
+    // Dane o ciele są prywatne: kłódka w obu kafelkach i podpis pod nimi.
+    expect(
+      find.byKey(const ValueKey('profile-shortcut-lock')),
+      findsNWidgets(2),
+    );
+    expect(find.text('Dane o ciele widzisz tylko Ty.'), findsOneWidget);
+  });
+
+  testWidgets('timeline section is called "Moje treningi"', (tester) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+    );
+
+    expect(find.text('Moje treningi'), findsOneWidget);
+    expect(find.text('Aktywność'), findsNothing);
+  });
+
+  testWidgets('own post has a menu with edit and unshare', (tester) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile, loading: false),
+      posts: [_post('p1', 'Push — klatka i triceps')],
+    );
+
+    await tester.tap(find.byKey(const ValueKey('profile-post-menu-p1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edytuj post'), findsOneWidget);
+    expect(find.text('Przestań udostępniać'), findsOneWidget);
   });
 
   testWidgets('empty timeline invites to start a workout', (tester) async {
@@ -275,7 +362,7 @@ void _weekCardTests() {
       final semantics = tester.ensureSemantics();
       await pumpCard(tester, workouts: 3, goal: 4);
 
-      expect(find.text('3/4'), findsOneWidget);
+      expect(find.text('Cel 3/4'), findsOneWidget);
       expect(
         find.bySemanticsLabel('Cel tygodnia: 3 z 4 treningów'),
         findsOneWidget,
@@ -300,7 +387,7 @@ void _weekCardTests() {
       final semantics = tester.ensureSemantics();
       await pumpCard(tester, workouts: 4, goal: 4);
 
-      expect(find.text('4/4'), findsOneWidget);
+      expect(find.text('Cel 4/4'), findsOneWidget);
       expect(
         find.bySemanticsLabel('Cel tygodnia: 4 z 4 treningów, osiągnięty'),
         findsOneWidget,
@@ -312,7 +399,7 @@ void _weekCardTests() {
         ),
         findsOneWidget,
       );
-      final text = tester.widget<Text>(find.text('4/4'));
+      final text = tester.widget<Text>(find.text('Cel 4/4'));
       expect(text.style?.color, AppColors.success);
       semantics.dispose();
     });
@@ -320,7 +407,7 @@ void _weekCardTests() {
     testWidgets('exceeding the goal keeps the honest count', (tester) async {
       await pumpCard(tester, workouts: 5, goal: 4);
 
-      expect(find.text('5/4'), findsOneWidget);
+      expect(find.text('Cel 5/4'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
     });
 
@@ -328,7 +415,7 @@ void _weekCardTests() {
       final semantics = tester.ensureSemantics();
       await pumpCard(tester, workouts: 0, goal: 1, streakWeeks: 0);
 
-      expect(find.text('0/1'), findsOneWidget);
+      expect(find.text('Cel 0/1'), findsOneWidget);
       expect(
         find.bySemanticsLabel('Cel tygodnia: 0 z 1 treningu'),
         findsOneWidget,
@@ -345,7 +432,7 @@ void _weekCardTests() {
         onTap: () {},
       );
 
-      expect(find.text('10/14'), findsOneWidget);
+      expect(find.text('Cel 10/14'), findsOneWidget);
       expect(find.text('5 tygodni'), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -384,6 +471,15 @@ class _FakeProfileCubit extends ProfileCubit {
 
 class _FakeWeekCubit extends ProfileWeekCubit {
   _FakeWeekCubit(ProfileWeekSummary? initial) : super(_NoOpStats()) {
+    if (initial != null) emit(initial);
+  }
+
+  @override
+  Future<void> load() async {}
+}
+
+class _FakeBodyCubit extends ProfileBodyCubit {
+  _FakeBodyCubit(ProfileBodySummary? initial) {
     if (initial != null) emit(initial);
   }
 

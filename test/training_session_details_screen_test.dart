@@ -19,10 +19,12 @@ void main() {
     required _FakeSessionRepository sessions,
     SessionDetailsNavigate? navigate,
     VoidCallback? onSessionsChanged,
+    bool openPostEditorOnStart = false,
   }) {
     return MaterialApp(
       home: TrainingSessionDetailsScreen(
         sessionId: sessionId,
+        openPostEditorOnStart: openPostEditorOnStart,
         repository: history,
         sessionRepository: sessions,
         navigate: navigate,
@@ -110,6 +112,30 @@ void main() {
     expect(sessions.session.sharedToProfile, isTrue);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(find.text('Trening pojawił się na Twoim profilu'), findsOneWidget);
+  });
+
+  testWidgets('opening from the profile post menu shows the post editor', (
+    tester,
+  ) async {
+    final history = _FakeHistoryRepository(_detail(sharedToProfile: true));
+    final sessions = _FakeSessionRepository(_completed(sharedToProfile: true));
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        openPostEditorOnStart: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(ShareWorkoutSheet),
+        matching: find.text('Edytuj post'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('already shared session can be removed from profile', (
