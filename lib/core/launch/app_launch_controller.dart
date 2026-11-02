@@ -74,6 +74,7 @@ class AppLaunchController extends ChangeNotifier {
   bool _ready = false;
   bool _assetsReady = false;
   bool _attached = false;
+  bool _forced = false;
 
   bool _showProgress = false;
   bool get showProgress => _showProgress;
@@ -158,10 +159,17 @@ class AppLaunchController extends ChangeNotifier {
     });
   }
 
-  /// Docelowy ekran ma wszystko, co trzeba, żeby go pokazać.
-  void markReady(LaunchTarget target) {
+  /// Docelowy ekran ma wszystko, co trzeba, żeby go pokazać. [force] —
+  /// zgłoszenie z routera, którego późniejsze zgłoszenie ekranu (np. karty
+  /// powitalnej pod formularzem logowania) nie zmienia.
+  void markReady(LaunchTarget target, {bool force = false}) {
     if (_phase != LaunchPhase.intro) return;
-    _target = target;
+    if (force) {
+      _forced = true;
+      _target = target;
+    } else if (!_forced) {
+      _target = target;
+    }
     _ready = true;
     _maybeExit();
   }

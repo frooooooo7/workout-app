@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'core/launch/app_launch_controller.dart';
 import 'core/launch/launch_overlay.dart';
+import 'core/launch/launch_route_watcher.dart';
 import 'core/launch/native_splash_gate.dart';
 import 'core/navigation/app_router.dart';
 import 'core/services/service_locator.dart';
@@ -41,6 +42,7 @@ class _GymAppState extends State<GymApp> {
   late final AppUserBootstrap _bootstrap;
   late final GoRouter _router;
   final AppLaunchController _launch = AppLaunchController();
+  late final LaunchRouteWatcher _routeWatcher;
 
   @override
   void initState() {
@@ -52,23 +54,12 @@ class _GymAppState extends State<GymApp> {
     _router = buildRouter(resolveUser: _bootstrap.resolveInitialUser);
     // Wymuszone wylogowanie (unieważniony token) i usunięcie konta.
     ServiceLocator.sessionManager.onSessionEnded = () => _router.go('/login');
-    _router.routerDelegate.addListener(_onRouteChanged);
-  }
-
-  /// Ekrany bez własnego sygnału gotowości (onboarding świeżego konta)
-  /// zgłaszają się nakładce ładowania po zbudowaniu.
-  void _onRouteChanged() {
-    final path = _router.routerDelegate.currentConfiguration.uri.path;
-    if (!path.startsWith('/onboarding')) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _launch.attach(LaunchTarget.other);
-      _launch.markReady(LaunchTarget.other);
-    });
+    _routeWatcher = LaunchRouteWatcher(router: _router, launch: _launch);
   }
 
   @override
   void dispose() {
-    _router.routerDelegate.removeListener(_onRouteChanged);
+    _routeWatcher.dispose();
     _launch.dispose();
     super.dispose();
   }

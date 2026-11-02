@@ -95,11 +95,13 @@ class _LaunchOverlayState extends State<LaunchOverlay>
   /// a w tle zdjęcie — bez niego logowanie nie wyjdzie z ekranu ładowania.
   Future<void> _prepare() async {
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    // Bezpieczniki startu nie mogą zależeć od logo: gdy się nie zdekoduje,
+    // po limicie i tak ruszamy.
     await precacheImage(
       const AssetImage(_logoAsset),
       context,
       onError: (_, _) {},
-    );
+    ).timeout(NativeSplashGate.limit, onTimeout: () {});
     if (!mounted) return;
     NativeSplashGate.release();
     _c.start(reduceMotion: reduceMotion);

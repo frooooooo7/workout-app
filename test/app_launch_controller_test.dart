@@ -162,4 +162,18 @@ void main() {
       c.dispose();
     });
   });
+
+  test('zgłoszenie z routera (force) ma pierwszeństwo przed ekranem', () {
+    fakeAsync((async) {
+      final c = AppLaunchController();
+      c.start();
+      c.markReady(LaunchTarget.other, force: true);
+      c.markReady(LaunchTarget.login);
+      expect(c.target, LaunchTarget.other);
+      async.elapse(const Duration(milliseconds: 850));
+      // Logowanie nie czeka na obrazki, bo cel to zwykłe wyjście.
+      expect(c.phase, LaunchPhase.exiting);
+      c.dispose();
+    });
+  });
 }
