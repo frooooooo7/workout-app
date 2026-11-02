@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/launch/app_launch_scope.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../auth/domain/models/auth_models.dart';
 import '../../data/pro_trial_seen_store.dart';
@@ -34,6 +35,12 @@ class _ProTrialHostState extends State<ProTrialHost> {
   }
 
   Future<void> _maybeShowScreen() async {
+    // Przy starcie aplikacji ekran PRO czeka, aż ekran ładowania zniknie.
+    final launch = AppLaunchScope.maybeOf(context);
+    if (launch != null) {
+      await launch.whenDone;
+      if (!mounted) return;
+    }
     final user = ServiceLocator.currentUser.value;
     final createdAt = user?.createdAt;
     if (user == null || createdAt == null || !user.onboardingCompleted) return;

@@ -53,6 +53,16 @@ class _Repo implements TrainingStatsRepository {
       sessions;
 }
 
+class _FailingRepo implements TrainingStatsRepository {
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async =>
+      throw StateError('baza zamknięta');
+
+  @override
+  Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
+      throw StateError('baza zamknięta');
+}
+
 void main() {
   group('TrainingHomeCalculator', () {
     test('marks this week\'s completed days with their plan', () {
@@ -183,6 +193,24 @@ void main() {
 
       await cubit.close();
       changes.dispose();
+    });
+
+    test('is not loaded until the first read finishes', () async {
+      final cubit = TrainingHomeCubit(_Repo(const []), clock: () => _today);
+      expect(cubit.state.loaded, isFalse);
+      await cubit.refresh();
+
+      expect(cubit.state.loaded, isTrue);
+      await cubit.close();
+    });
+
+    test('a failed first read still ends the loading state', () async {
+      final cubit = TrainingHomeCubit(_FailingRepo(), clock: () => _today);
+      await cubit.refresh();
+
+      expect(cubit.state.loaded, isTrue);
+      expect(cubit.state.weekDonePlans, isEmpty);
+      await cubit.close();
     });
 
     test('keeps working without a goal source', () async {

@@ -73,6 +73,10 @@ class TrainingHomeCubit extends Cubit<TrainingHomeInsights> {
       await _emitInsights();
     } catch (_) {
       // Bez historii karta planu i tak działa — zostaje ostatni stan.
+      // Ekran startu nie ma czekać na dane, których nie będzie.
+      if (!isClosed && !state.loaded) {
+        emit(const TrainingHomeInsights(loaded: true));
+      }
     }
   }
 

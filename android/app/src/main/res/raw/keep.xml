@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ikonka powiadomień jest wskazywana tylko nazwą z Darta, więc bez tej
+     reguły skracanie zasobów w buildzie release by ją usunęło. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_stronger" />
