@@ -221,6 +221,12 @@ void main() {
     );
 
     expect(find.text('Dodaj'), findsNWidgets(2));
+    // Dane o ciele są prywatne: kłódka w obu kafelkach i podpis pod nimi.
+    expect(
+      find.byKey(const ValueKey('profile-shortcut-lock')),
+      findsNWidgets(2),
+    );
+    expect(find.text('Dane o ciele widzisz tylko Ty.'), findsOneWidget);
   });
 
   testWidgets('timeline section is called "Moje treningi"', (tester) async {

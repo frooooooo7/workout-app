@@ -257,22 +257,27 @@ class ProfileFieldLabel extends StatelessWidget {
 
 /// „Widzisz to tylko Ty” — przy danych o sobie i celu.
 class ProfileDetailsPrivacyNote extends StatelessWidget {
-  const ProfileDetailsPrivacyNote({super.key});
+  const ProfileDetailsPrivacyNote({
+    super.key,
+    this.text = 'Widzisz to tylko Ty — nie pokazujemy tego innym.',
+  });
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Icon(
+        const Icon(
           Icons.lock_outline_rounded,
           color: AppColors.textSecondary,
           size: 15,
         ),
-        SizedBox(width: 6),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'Widzisz to tylko Ty — nie pokazujemy tego innym.',
-            style: TextStyle(
+            text,
+            style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 13,
               height: 1.4,

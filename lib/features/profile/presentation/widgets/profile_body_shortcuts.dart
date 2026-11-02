@@ -5,6 +5,7 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/units/weight_unit.dart';
 import '../../../training/presentation/widgets/stats/stats_format.dart';
 import '../bloc/profile_body_cubit.dart';
+import 'profile_details_fields.dart';
 
 /// Dwa kafelki pod kartą tygodnia: „Masa ciała” (ostatnia waga i zmiana)
 /// i „Pomiary ciała” (data ostatniego wpisu). Dzięki nim dane o ciele nie
@@ -31,37 +32,48 @@ class ProfileBodyShortcuts extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageGutter),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _ShortcutTile(
-                key: const ValueKey('profile-shortcut-weight'),
-                icon: Icons.monitor_weight_outlined,
-                title: 'Masa ciała',
-                value: weight == null ? 'Dodaj' : formatWeightWithUnit(weight),
-                valueIsPlaceholder: weight == null,
-                caption: weight == null
-                    ? 'pierwszy pomiar'
-                    : _deltaCaption(delta, summary.weightOn),
-                onTap: onWeightTap,
-              ),
+      child: Column(
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _ShortcutTile(
+                    key: const ValueKey('profile-shortcut-weight'),
+                    icon: Icons.monitor_weight_outlined,
+                    title: 'Masa ciała',
+                    value: weight == null
+                        ? 'Dodaj'
+                        : formatWeightWithUnit(weight),
+                    valueIsPlaceholder: weight == null,
+                    caption: weight == null
+                        ? 'pierwszy pomiar'
+                        : _deltaCaption(delta, summary.weightOn),
+                    onTap: onWeightTap,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _ShortcutTile(
+                    key: const ValueKey('profile-shortcut-measurements'),
+                    icon: Icons.straighten_rounded,
+                    title: 'Pomiary',
+                    value: last == null ? 'Dodaj' : _lastLabel(last),
+                    valueIsPlaceholder: last == null,
+                    caption: last == null ? 'obwody i tkanka' : 'ostatni wpis',
+                    onTap: onMeasurementsTap,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _ShortcutTile(
-                key: const ValueKey('profile-shortcut-measurements'),
-                icon: Icons.straighten_rounded,
-                title: 'Pomiary',
-                value: last == null ? 'Dodaj' : _lastLabel(last),
-                valueIsPlaceholder: last == null,
-                caption: last == null ? 'obwody i tkanka' : 'ostatni wpis',
-                onTap: onMeasurementsTap,
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          const ProfileDetailsPrivacyNote(
+            key: ValueKey('profile-shortcuts-privacy'),
+            text: 'Dane o ciele widzisz tylko Ty.',
+          ),
+        ],
       ),
     );
   }
@@ -113,7 +125,7 @@ class _ShortcutTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '$title: $value, $caption',
+      label: '$title: $value, $caption. Widzisz to tylko Ty',
       excludeSemantics: true,
       child: Material(
         color: AppColors.surface,
@@ -143,6 +155,17 @@ class _ShortcutTile extends StatelessWidget {
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
+                      ),
+                    ),
+                    // Dane o ciele są prywatne — kłódka przypomina, że widzi je
+                    // tylko właściciel profilu.
+                    const Padding(
+                      padding: EdgeInsets.only(right: 2),
+                      child: Icon(
+                        Icons.lock_outline_rounded,
+                        key: ValueKey('profile-shortcut-lock'),
+                        size: 14,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     const Icon(
