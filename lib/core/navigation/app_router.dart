@@ -42,6 +42,7 @@ import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/body_measurements_cubit.dart';
 import '../../features/profile/presentation/bloc/body_weight_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_body_cubit.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
@@ -382,6 +383,16 @@ GoRouter buildRouter({
                           currentUser: _currentFeedAuthor(),
                           hiddenPostIds:
                               ServiceLocator.pendingDeletedSessionIds,
+                        ),
+                      ),
+                      BlocProvider(
+                        create: (_) => ProfileBodyCubit(
+                          weightRepository: ServiceLocator.bodyWeightRepository,
+                          measurementsRepository:
+                              ServiceLocator.bodyMeasurementsRepository,
+                          weightChanges: ServiceLocator.bodyWeightDataChanges,
+                          measurementsChanges:
+                              ServiceLocator.bodyMeasurementsDataChanges,
                         ),
                       ),
                       BlocProvider(

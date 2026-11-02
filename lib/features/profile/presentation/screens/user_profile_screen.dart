@@ -264,7 +264,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           const SliverToBoxAdapter(
-            child: ProfileSectionHeader(title: 'Aktywność'),
+            child: ProfileSectionHeader(title: 'Treningi'),
           ),
           ProfilePostsSliver(
             feedRepository: widget.feedRepository,

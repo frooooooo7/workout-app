@@ -162,4 +162,16 @@ void main() {
     expect(cubit.state.items.single.commentCount, 1);
     await cubit.close();
   });
+
+  test('removePost drops the post at once', () async {
+    final repo = _Repo()
+      ..pages[null] = FeedPage(items: [_post('a'), _post('b')]);
+    final cubit = ProfilePostsCubit(repository: repo, userId: 'anna');
+    await cubit.load();
+
+    cubit.removePost('a');
+
+    expect(cubit.state.items.map((p) => p.id), ['b']);
+    await cubit.close();
+  });
 }

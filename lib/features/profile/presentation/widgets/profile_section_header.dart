@@ -21,7 +21,7 @@ class ProfileSectionHeader extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.pageGutter,
-        AppSpacing.xl,
+        AppSpacing.lg,
         hasAction ? AppSpacing.xxs : AppSpacing.pageGutter,
         hasAction ? AppSpacing.xxs : AppSpacing.sm,
       ),

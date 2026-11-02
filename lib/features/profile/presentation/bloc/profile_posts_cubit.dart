@@ -132,6 +132,20 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
     }
   }
 
+  /// Zdejmuje post z osi czasu od razu (np. po „Przestań udostępniać”), bez
+  /// czekania na serwer; następne odświeżenie i tak pokaże prawdziwy stan.
+  void removePost(String postId) {
+    if (isClosed || _postById(postId) == null) return;
+    emit(
+      state.copyWith(
+        items: List.unmodifiable([
+          for (final post in state.items)
+            if (post.id != postId) post,
+        ]),
+      ),
+    );
+  }
+
   /// Optymistyczny kudos z cofnięciem przy błędzie. Własne posty i posty
   /// z żądaniem w toku są ignorowane.
   Future<void> toggleKudos(String postId) async {
@@ -207,7 +221,9 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
 
   void _notice(String message) {
     emit(
-      state.copyWith(notice: FeedNotice(id: ++_noticeSeq, message: message)),
+      state.copyWith(
+        notice: FeedNotice(id: ++_noticeSeq, message: message),
+      ),
     );
   }
 

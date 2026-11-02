@@ -18,6 +18,7 @@ class ProfileWeekCard extends StatelessWidget {
     required this.summary,
     this.weeklyGoal,
     this.onTap,
+    this.onSetGoalTap,
     this.now,
   });
 
@@ -27,6 +28,10 @@ class ProfileWeekCard extends StatelessWidget {
   /// karta wygląda jak bez celu.
   final int? weeklyGoal;
   final VoidCallback? onTap;
+
+  /// „Ustaw cel” — pokazywane, gdy nie ma celu tygodniowego (prowadzi do
+  /// wyboru liczby treningów w tygodniu).
+  final VoidCallback? onSetGoalTap;
 
   /// Test seam dla podświetlenia dzisiejszego dnia.
   final DateTime? now;
@@ -83,6 +88,10 @@ class ProfileWeekCard extends StatelessWidget {
                           children: [
                             if (hasGoal) ...[
                               _GoalPill(done: stats.workouts, goal: goal),
+                              if (summary.streakWeeks > 0)
+                                const SizedBox(width: AppSpacing.xs),
+                            ] else if (onSetGoalTap != null) ...[
+                              _SetGoalPill(onTap: onSetGoalTap!),
                               if (summary.streakWeeks > 0)
                                 const SizedBox(width: AppSpacing.xs),
                             ],
@@ -215,7 +224,7 @@ class _GoalPill extends StatelessWidget {
               ),
             const SizedBox(width: AppSpacing.xxs + 2),
             Text(
-              '$done/$goal',
+              'Cel $done/$goal',
               maxLines: 1,
               style: TextStyle(
                 color: accent,
@@ -225,6 +234,59 @@ class _GoalPill extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Zaproszenie „Ustaw cel” — pigułka tej samej wielkości co [_GoalPill].
+class _SetGoalPill extends StatelessWidget {
+  const _SetGoalPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Ustaw cel tygodniowy',
+      excludeSemantics: true,
+      child: InkWell(
+        key: const ValueKey('profile-week-set-goal'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xs + 2,
+            vertical: AppSpacing.xs,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: AppColors.primaryVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.flag_outlined,
+                size: 14,
+                color: AppColors.primaryVariant,
+              ),
+              SizedBox(width: AppSpacing.xxs),
+              Text(
+                'Ustaw cel',
+                maxLines: 1,
+                style: TextStyle(
+                  color: AppColors.primaryVariant,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -314,7 +376,7 @@ class _DayDot extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: isToday ? AppColors.textPrimary : AppColors.textMuted,
+            color: isToday ? AppColors.textPrimary : AppColors.textSecondary,
             fontSize: 11,
             fontWeight: isToday ? FontWeight.w700 : FontWeight.w600,
           ),
@@ -353,7 +415,7 @@ class _Metric extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            color: AppColors.textMuted,
+            color: AppColors.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w500,
           ),

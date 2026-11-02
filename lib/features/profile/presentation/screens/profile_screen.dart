@@ -11,12 +11,17 @@ import '../../../../core/widgets/app_tab_header.dart';
 import '../../../feed/domain/repositories/feed_repository.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/services/profile_week_calculator.dart';
+import 'body_measurements_screen.dart';
+import 'body_weight_screen.dart';
+import 'profile_details_screen.dart';
+import '../bloc/profile_body_cubit.dart';
 import '../bloc/profile_cubit.dart';
 import '../bloc/profile_posts_cubit.dart';
 import '../bloc/profile_posts_state.dart';
 import '../bloc/profile_state.dart';
 import '../bloc/profile_week_cubit.dart';
 import '../widgets/following_avatar_strip.dart';
+import '../widgets/profile_body_shortcuts.dart';
 import '../widgets/profile_hero_header.dart';
 import '../widgets/profile_posts_sliver.dart';
 import '../widgets/profile_section_header.dart';
@@ -48,6 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfileCubit>().load();
     context.read<ProfilePostsCubit>().load();
     context.read<ProfileWeekCubit>().load();
+    context.read<ProfileBodyCubit>().load();
   }
 
   @override
@@ -92,6 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfileCubit>().refresh(),
     context.read<ProfilePostsCubit>().refresh(),
     context.read<ProfileWeekCubit>().load(),
+    context.read<ProfileBodyCubit>().load(),
   ]);
 
   @override
@@ -116,6 +123,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Po powrocie na /app/profile i tak ruszy odświeżenie (liczniki itd.);
     // nowe dane z edycji pokazujemy od razu.
     cubit.applyProfile(updated);
+  }
+
+  void _editPost(String postId) {
+    context.push('/app/training/history/$postId');
+  }
+
+  Future<void> _unsharePost(String postId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Przestać udostępniać?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Trening zniknie z Twojego profilu i z feedu znajomych. '
+          'Zostanie w historii, a udostępnisz go ponownie w szczegółach treningu.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text(
+              'Anuluj',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            key: const ValueKey('profile-unshare-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Przestań',
+              style: TextStyle(color: AppColors.strengthWeak),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final postsCubit = context.read<ProfilePostsCubit>();
+    try {
+      await ServiceLocator.trainingSessionRepository.setSharedToProfile(
+        postId,
+        false,
+      );
+      if (!mounted) return;
+      postsCubit.removePost(postId);
+      _showSnack(context, 'Usunięto trening z profilu');
+      // Najpierw wysyłka zmiany, dopiero potem odświeżenie — inaczej serwer
+      // jeszcze oddałby post, który właśnie schowaliśmy.
+      await ServiceLocator.flushTrainingSessionSync();
+      ServiceLocator.requestFeedRefresh();
+      await postsCubit.refresh();
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack(context, 'Nie udało się zapisać zmiany. Spróbuj ponownie.');
+    }
   }
 
   void _showSnack(BuildContext context, String message) {
@@ -185,6 +250,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         state: state,
                         feedRepository: widget.feedRepository,
                         onRefresh: _refreshAll,
+                        onEditPost: _editPost,
+                        onUnsharePost: _unsharePost,
                         onEditProfile: () => _openEditProfile(context, profile),
                       );
                     },
@@ -206,6 +273,8 @@ class _ProfileContent extends StatelessWidget {
     required this.feedRepository,
     required this.onRefresh,
     required this.onEditProfile,
+    required this.onEditPost,
+    required this.onUnsharePost,
   });
 
   final UserProfile profile;
@@ -213,6 +282,8 @@ class _ProfileContent extends StatelessWidget {
   final FeedRepository feedRepository;
   final Future<void> Function() onRefresh;
   final VoidCallback onEditProfile;
+  final void Function(String postId) onEditPost;
+  final void Function(String postId) onUnsharePost;
 
   @override
   Widget build(BuildContext context) {
@@ -227,7 +298,7 @@ class _ProfileContent extends StatelessWidget {
             child: ProfileHeroHeader(
               profile: profile,
               onAddBioTap: onEditProfile,
-              primaryAction: ProfileEditButton(onPressed: onEditProfile),
+              trailingAction: ProfileEditButton(onPressed: onEditProfile),
               stats: ProfileStatsRow(
                 followingCount: profile.stats.followingCount,
                 followersCount: profile.stats.followersCount,
@@ -248,6 +319,24 @@ class _ProfileContent extends StatelessWidget {
                     summary: summary,
                     weeklyGoal: profile.details?.weeklyTrainingDays,
                     onTap: () => context.push('/app/training/stats'),
+                    onSetGoalTap: () => context.push(kProfileDetailsRoute),
+                  ),
+                );
+              },
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: BlocBuilder<ProfileBodyCubit, ProfileBodySummary?>(
+              builder: (context, summary) {
+                if (summary == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: ProfileBodyShortcuts(
+                    summary: summary,
+                    today: context.read<ProfileBodyCubit>().today,
+                    onWeightTap: () => context.push(kBodyWeightRoute),
+                    onMeasurementsTap: () =>
+                        context.push(kBodyMeasurementsRoute),
                   ),
                 );
               },
@@ -264,7 +353,7 @@ class _ProfileContent extends StatelessWidget {
             child: FollowingAvatarStrip(following: state.following),
           ),
           const SliverToBoxAdapter(
-            child: ProfileSectionHeader(title: 'Aktywność'),
+            child: ProfileSectionHeader(title: 'Moje treningi'),
           ),
           ProfilePostsSliver(
             feedRepository: feedRepository,
@@ -273,6 +362,8 @@ class _ProfileContent extends StatelessWidget {
                 'Ukończ trening i udostępnij go na profilu — pojawi się tutaj.',
             emptyActionLabel: 'Rozpocznij trening',
             onEmptyActionTap: () => context.go('/app/training'),
+            onEditPost: onEditPost,
+            onUnsharePost: onUnsharePost,
           ),
           SliverToBoxAdapter(
             child: SizedBox(

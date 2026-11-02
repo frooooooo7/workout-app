@@ -26,7 +26,7 @@ class FollowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final handler = busy ? null : onPressed;
-    final minimumSize = expanded ? const Size.fromHeight(44) : const Size(112, 36);
+    final minimumSize = expanded ? const Size.fromHeight(44) : const Size(112, 44);
     const padding = EdgeInsets.symmetric(horizontal: 14);
     const textStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600);
 

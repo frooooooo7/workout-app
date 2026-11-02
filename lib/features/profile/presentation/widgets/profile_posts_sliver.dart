@@ -24,6 +24,8 @@ class ProfilePostsSliver extends StatelessWidget {
         'Ukończone treningi udostępnione na profilu pojawią się tutaj.',
     this.emptyActionLabel,
     this.onEmptyActionTap,
+    this.onEditPost,
+    this.onUnsharePost,
   });
 
   final FeedRepository feedRepository;
@@ -32,6 +34,10 @@ class ProfilePostsSliver extends StatelessWidget {
   final String emptyMessage;
   final String? emptyActionLabel;
   final VoidCallback? onEmptyActionTap;
+
+  /// Menu „⋯” własnych postów (id posta = id sesji); `null` — bez menu.
+  final void Function(String postId)? onEditPost;
+  final void Function(String postId)? onUnsharePost;
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +99,13 @@ class ProfilePostsSliver extends StatelessWidget {
                   key: ValueKey('profile-post-${post.id}'),
                   post: post,
                   showAuthor: false,
+                  compact: true,
+                  onEditTap: post.isOwn && onEditPost != null
+                      ? () => onEditPost!(post.id)
+                      : null,
+                  onUnshareTap: post.isOwn && onUnsharePost != null
+                      ? () => onUnsharePost!(post.id)
+                      : null,
                   onTap: () => openPostDetails(context, post.id),
                   onKudosTap: () =>
                       context.read<ProfilePostsCubit>().toggleKudos(post.id),

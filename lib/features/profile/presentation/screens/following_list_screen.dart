@@ -28,7 +28,7 @@ class FollowingListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _UserConnectionsScreen(
-      title: 'OBSERWOWANI',
+      title: 'Obserwowani',
       emptyMessage: userId == null
           ? 'Nie obserwujesz jeszcze nikogo.'
           : 'Ten użytkownik nikogo jeszcze nie obserwuje.',
@@ -61,7 +61,7 @@ class FollowersListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _UserConnectionsScreen(
-      title: 'OBSERWUJĄCY',
+      title: 'Obserwujący',
       emptyMessage: userId == null
           ? 'Brak obserwujących.'
           : 'Tego użytkownika nikt jeszcze nie obserwuje.',
