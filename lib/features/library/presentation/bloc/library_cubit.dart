@@ -6,8 +6,36 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/exercise_search.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
+import '../../domain/models/library_part.dart';
 import '../../domain/models/library_sort.dart';
 import '../../domain/repositories/exercise_repository.dart';
+
+/// Dane ekranu startowego biblioteki: ile ćwiczeń ma każda partia i co ostatnio
+/// robiłeś. Liczone z całej bazy, niezależnie od filtrów listy.
+class LibraryOverview {
+  const LibraryOverview({
+    this.total = 0,
+    this.partCounts = const {},
+    this.recent = const [],
+  });
+
+  final int total;
+  final Map<LibraryPart, int> partCounts;
+
+  /// Ostatnio zrobione ćwiczenia, od najnowszego.
+  final List<Exercise> recent;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LibraryOverview &&
+      other.total == total &&
+      mapEquals(other.partCounts, partCounts) &&
+      listEquals(other.recent, recent);
+
+  @override
+  int get hashCode =>
+      Object.hash(total, Object.hashAll(partCounts.entries.map((e) => (e.key, e.value))), Object.hashAll(recent));
+}
 
 class LibraryState {
   const LibraryState({
@@ -19,6 +47,7 @@ class LibraryState {
     this.exercises = const [],
     this.loading = true,
     this.error,
+    this.overview = const LibraryOverview(),
   });
 
   final LibraryFilter filter;
@@ -32,6 +61,7 @@ class LibraryState {
   final List<Exercise> exercises;
   final bool loading;
   final String? error;
+  final LibraryOverview overview;
 
   LibraryState copyWith({
     LibraryFilter? filter,
@@ -42,6 +72,7 @@ class LibraryState {
     List<Exercise>? exercises,
     bool? loading,
     String? error,
+    LibraryOverview? overview,
     bool clearError = false,
   }) {
     return LibraryState(
@@ -53,6 +84,7 @@ class LibraryState {
       exercises: exercises ?? this.exercises,
       loading: loading ?? this.loading,
       error: clearError ? null : (error ?? this.error),
+      overview: overview ?? this.overview,
     );
   }
 
@@ -67,7 +99,8 @@ class LibraryState {
         setEquals(other.types, types) &&
         listEquals(other.exercises, exercises) &&
         other.loading == loading &&
-        other.error == error;
+        other.error == error &&
+        other.overview == overview;
   }
 
   @override
@@ -80,6 +113,7 @@ class LibraryState {
     Object.hashAll(exercises),
     loading,
     error,
+    overview,
   );
 }
 
@@ -158,6 +192,7 @@ class LibraryCubit extends Cubit<LibraryState> {
           clearError: true,
         ),
       );
+      unawaited(_refreshOverview(seq));
     } catch (_) {
       if (isClosed || seq != _refreshSeq) return;
       emit(
@@ -166,6 +201,38 @@ class LibraryCubit extends Cubit<LibraryState> {
           error: 'Nie można załadować ćwiczeń z pamięci telefonu.',
         ),
       );
+    }
+  }
+
+  /// Przelicza dane ekranu startowego (liczby przy partiach, „Ostatnio robione”).
+  /// Błąd tu nie psuje listy — ekran startowy po prostu zostaje bez zmian.
+  Future<void> _refreshOverview(int seq) async {
+    try {
+      final all = await _repository.getAll(
+        filter: LibraryFilter.all,
+        muscleGroup: MuscleGroup.all,
+        query: '',
+      );
+      await _ensureUsage();
+      if (isClosed || seq != _refreshSeq) return;
+      final usage = _usage ?? ExerciseUsage.empty;
+      final dated = [
+        for (final e in all)
+          if (usage.lastDoneFor(e) case final date?) (date, e),
+      ]..sort((a, b) => b.$1.compareTo(a.$1));
+      emit(
+        state.copyWith(
+          overview: LibraryOverview(
+            total: all.length,
+            partCounts: {
+              for (final part in LibraryPart.values) part: part.countIn(all),
+            },
+            recent: [for (final item in dated.take(8)) item.$2],
+          ),
+        ),
+      );
+    } catch (_) {
+      // Zostaje poprzedni stan ekranu startowego.
     }
   }
 

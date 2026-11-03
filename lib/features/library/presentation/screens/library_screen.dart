@@ -15,7 +15,8 @@ import '../widgets/library_add_exercise_sheet.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
 import '../widgets/library_error_state.dart';
-import '../widgets/library_exercise_grid.dart';
+import '../widgets/library_exercise_list.dart';
+import '../widgets/library_start_view.dart';
 import '../widgets/library_filter_chips.dart';
 import '../widgets/library_header.dart';
 import '../widgets/library_loading_state.dart';
@@ -34,10 +35,28 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   final _searchController = TextEditingController();
 
+  /// `true` po wybraniu partii albo „Wszystkie” — pokazujemy listę zamiast
+  /// ekranu startowego (wpisanie tekstu też ją pokazuje).
+  bool _browsing = false;
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Czy widać ekran startowy: nic nie wybrano i nic nie wpisano.
+  bool get _atStartScreen => !_browsing && _searchController.text.trim().isEmpty;
+
+  /// Z listy albo wyników szukania wracamy krok wstecz do ekranu startowego
+  /// i czyścimy filtry, żeby liczby przy partiach zgadzały się z listą.
+  void _backToStart(LibraryCubit cubit) {
+    _searchController.clear();
+    cubit.setQuery('');
+    cubit.setCategory(MuscleGroup.all);
+    cubit.setFilter(LibraryFilter.all);
+    cubit.setTypes(const {});
+    setState(() => _browsing = false);
   }
 
   void _showMessage(BuildContext context, String message) {
@@ -155,7 +174,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
         builder: (context) {
           final cubit = context.read<LibraryCubit>();
 
-          return Scaffold(
+          return PopScope(
+            // Systemowy „wstecz” z listy lub wyników szukania wraca na ekran
+            // startowy, dopiero stamtąd zamyka bibliotekę.
+            canPop: _atStartScreen,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _backToStart(cubit);
+            },
+            child: Scaffold(
             backgroundColor: AppColors.background,
             body: AppTabBackground(
               child: SafeArea(
@@ -172,15 +198,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 previous.types != current.types,
                             builder: (context, state) => LibraryHeader(
                               searchController: _searchController,
-                              onSearchChanged: cubit.setQuery,
+                              onSearchChanged: (query) {
+                                cubit.setQuery(query);
+                                // Odświeża `PopScope` i wybór ekranu: z
+                                // tekstem „wstecz” czyści wyniki.
+                                setState(() {});
+                              },
                               activeFilterCount: state.types.length,
                               onFilterTap: () => _pickTypes(context),
                               onBackTap: () {
-                                if (context.canPop()) {
-                                  context.pop();
+                                if (_atStartScreen) {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                    return;
+                                  }
+                                  context.go('/app/training');
                                   return;
                                 }
-                                context.go('/app/training');
+                                _backToStart(cubit);
                               },
                               onAddTap: () async {
                                 final created =
@@ -223,7 +258,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               },
                             ),
                           ),
-                          const SizedBox(height: 14),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: BlocBuilder<LibraryCubit, LibraryState>(
+                        buildWhen: (previous, current) =>
+                            previous.query.trim().isEmpty !=
+                                current.query.trim().isEmpty ||
+                            previous.overview != current.overview ||
+                            previous.loading != current.loading,
+                        builder: (context, state) {
+                          if (!_browsing && state.query.trim().isEmpty) {
+                            return LibraryStartView(
+                              overview: state.overview,
+                              onPartTap: (part) {
+                                setState(() => _browsing = true);
+                                cubit.setCategory(part.group);
+                              },
+                              onShowAll: () {
+                                setState(() => _browsing = true);
+                                cubit.setCategory(MuscleGroup.all);
+                              },
+                              onExerciseTap: (exercise) =>
+                                  _openDetails(context, exercise),
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
                           BlocBuilder<LibraryCubit, LibraryState>(
                             buildWhen: (previous, current) =>
                                 previous.filter != current.filter ||
@@ -260,12 +332,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               );
                             },
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const AppTabScrollEdge(),
-                    Expanded(
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const AppTabScrollEdge(),
+                              Expanded(
                       child: BlocBuilder<LibraryCubit, LibraryState>(
                         buildWhen: (previous, current) =>
                             previous.exercises != current.exercises ||
@@ -285,7 +357,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                   : null,
                             );
                           }
-                          return LibraryExerciseGrid(
+                          return LibraryExerciseList(
                             exercises: state.exercises,
                             onFavouriteTap: (exercise) =>
                                 _toggleFavourite(context, exercise),
@@ -297,9 +369,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         },
                       ),
                     ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
+            ),
             ),
           );
         },
