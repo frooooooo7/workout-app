@@ -37,6 +37,13 @@ class ExerciseRemoteDataSource {
     clientId: j['clientId'] as String?,
     tracking: ExerciseTracking.fromApi(j['trackingType'] as String?),
     distanceUnit: DistanceUnit.fromApi(j['distanceUnit'] as String?),
+    equipment: ExerciseEquipment.tryParse(j['equipment'] as String?),
+    aliases: [
+      for (final a in (j['aliases'] as List?) ?? const [])
+        if (a is String && a.isNotEmpty) a,
+    ],
+    instructions: ExerciseInstructions.tryParse(j['instructions']),
+    pattern: j['pattern'] as String?,
   );
 
   String _buildPath({

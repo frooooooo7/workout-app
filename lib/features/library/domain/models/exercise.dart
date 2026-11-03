@@ -1,5 +1,7 @@
+import 'exercise_details.dart';
 import 'exercise_tracking.dart';
 
+export 'exercise_details.dart';
 export 'exercise_tracking.dart';
 
 // ──────────────────────────────────────────────
@@ -269,6 +271,10 @@ class Exercise {
     this.serverId,
     this.tracking = ExerciseTracking.weightReps,
     this.distanceUnit = DistanceUnit.km,
+    this.equipment,
+    this.aliases = const [],
+    this.instructions,
+    this.pattern,
   });
 
   final String id;
@@ -301,6 +307,18 @@ class Exercise {
   /// Jednostka dystansu przy [ExerciseTracking.durationDistance].
   final DistanceUnit distanceUnit;
 
+  /// Sprzęt (`null` — nieznany).
+  final ExerciseEquipment? equipment;
+
+  /// Inne nazwy do szukania (np. „OHP”, „RDL”).
+  final List<String> aliases;
+
+  /// „Jak wykonać”: kroki i częste błędy; `null` — brak opisu.
+  final ExerciseInstructions? instructions;
+
+  /// Rodzaj ruchu (np. `push_horizontal`) — łączy podobne ćwiczenia.
+  final String? pattern;
+
   /// Mięśnie bez sentinela [MuscleGroup.all] — to, co faktycznie pracuje.
   /// Pierwszy na liście to mięsień główny, kolejne są wspomagające.
   List<MuscleGroup> get workingMuscles =>
@@ -318,6 +336,9 @@ class Exercise {
     bool? isPendingSync,
     ExerciseTracking? tracking,
     DistanceUnit? distanceUnit,
+    ExerciseEquipment? equipment,
+    List<String>? aliases,
+    ExerciseInstructions? instructions,
   }) {
     return Exercise(
       id: id,
@@ -334,6 +355,10 @@ class Exercise {
       serverId: serverId,
       tracking: tracking ?? this.tracking,
       distanceUnit: distanceUnit ?? this.distanceUnit,
+      equipment: equipment ?? this.equipment,
+      aliases: aliases ?? this.aliases,
+      instructions: instructions ?? this.instructions,
+      pattern: pattern,
     );
   }
 }
