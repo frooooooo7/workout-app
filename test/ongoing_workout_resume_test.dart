@@ -68,6 +68,37 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('the undo snackbar goes away when the screen is left', (
+    tester,
+  ) async {
+    final repository = _FakeRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    final router = _router(repository, cubit, _FakeScheduler(), tester);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await _open(tester);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('collapse-workout-button')));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(find.byType(OngoingWorkoutScreen), findsNothing);
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsNothing,
+    );
+
+    await cubit.close();
+  });
+
   testWidgets('without a saved position it opens on the last worked exercise', (
     tester,
   ) async {
@@ -179,7 +210,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Zmień kolejność ćwiczeń'));
     await tester.pumpAndSettle();
-    expect(find.text('Kolejność ćwiczeń'), findsOneWidget);
+    expect(find.text('Lista ćwiczeń'), findsOneWidget);
 
     final handle = find.descendant(
       of: find.byKey(const ValueKey('order-block-2')),

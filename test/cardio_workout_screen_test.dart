@@ -177,4 +177,48 @@ void main() {
     final set = repository.session.exercises.single.sets.first;
     expect(set.actualDurationSeconds, isNotNull);
   });
+
+  testWidgets('stopwatch time is kept when an exercise before it is removed', (
+    tester,
+  ) async {
+    final base = _session();
+    final session = base.copyWith(
+      exercises: [
+        TrainingSessionExercise(
+          exerciseId: 'bench',
+          exerciseName: 'Bench press',
+          exerciseMuscles: const ['chest'],
+          exerciseCategory: 'compound',
+          sets: [TrainingSessionSet(plannedWeight: '60', plannedReps: '8')],
+        ),
+        ...base.exercises,
+      ],
+    );
+    final repository = await _pump(tester, session: session);
+
+    // Stoper chodzi na bieżni (drugie ćwiczenie)…
+    await tester.tap(find.byKey(const Key('next-exercise-card')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cardio-stopwatch-start')));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // …a usuwamy ćwiczenie stojące przed nią.
+    await tester.tap(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pumpAndSettle();
+    expect(repository.session.exercises.single.exerciseName, 'Bieżnia');
+
+    await tester.tap(find.byKey(const Key('cardio-stopwatch-save')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await _flushDraftSave(tester);
+
+    expect(find.byKey(const Key('cardio-stopwatch-pill')), findsNothing);
+    expect(
+      repository.session.exercises.single.sets.first.actualDurationSeconds,
+      isNotNull,
+    );
+  });
 }

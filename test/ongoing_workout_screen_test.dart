@@ -77,7 +77,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('exercise-list-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Bench press'));
+    await tester.tap(find.byKey(const ValueKey('order-block-0')));
     await tester.pumpAndSettle();
 
     expect(find.text('Ćwiczenie 1 z 2'), findsOneWidget);
@@ -218,6 +218,99 @@ void main() {
       await cubit.close();
     },
   );
+
+  testWidgets('⋯ menu has one „Lista ćwiczeń” entry that opens and jumps', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    // Lista i kolejność to jedna pozycja, nie dwie.
+    expect(find.text('Zmień kolejność ćwiczeń'), findsNothing);
+    await tester.tap(find.text('Lista ćwiczeń'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.drag_handle_rounded), findsNWidgets(2));
+    await tester.tap(find.byKey(const ValueKey('order-block-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ćwiczenie 2 z 2'), findsOneWidget);
+    expect(repository.session.exercises.first.exerciseName, 'Bench press');
+
+    await cubit.close();
+  });
+
+  testWidgets('undo after reordering does not split a superset', (
+    tester,
+  ) async {
+    TrainingSessionExercise exercise(String name, {String? group}) =>
+        TrainingSessionExercise(
+          exerciseId: name,
+          exerciseName: name,
+          exerciseMuscles: const ['chest'],
+          exerciseCategory: 'compound',
+          supersetGroup: group,
+          sets: [TrainingSessionSet(plannedReps: '8')],
+        );
+    final repository = _FakeTrainingSessionRepository(
+      TrainingSession(
+        planName: 'Mix',
+        startedAt: DateTime.now().toUtc(),
+        exercises: [
+          exercise('S1'),
+          exercise('X'),
+          exercise('S2'),
+          exercise('M1', group: 'A'),
+          exercise('M2', group: 'A'),
+        ],
+      ),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    Future<void> longPressSegment(int index, String action) async {
+      await tester.longPress(find.byKey(ValueKey('progress-segment-$index')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text(action));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    await longPressSegment(1, 'Usuń ćwiczenie z treningu');
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'S1',
+      'S2',
+      'M1',
+      'M2',
+    ]);
+
+    // W ciągu kilku sekund superseria ląduje na początku listy.
+    await longPressSegment(2, 'Przesuń wcześniej');
+    await longPressSegment(1, 'Przesuń wcześniej');
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'M1',
+      'M2',
+      'S1',
+      'S2',
+    ]);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+
+    // X wraca przed S2 (swojego dawnego następnego), a nie w środek M1 + M2.
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'M1',
+      'M2',
+      'S1',
+      'X',
+      'S2',
+    ]);
+
+    await cubit.close();
+  });
 
   testWidgets('removing an exercise with checked sets asks for confirmation', (
     tester,
@@ -529,7 +622,13 @@ void main() {
     await tester.tap(find.byKey(const Key('exercise-list-button')));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Barbell row'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('order-block-2')),
+        matching: find.text('Barbell row'),
+      ),
+      findsOneWidget,
+    );
 
     await cubit.close();
   });

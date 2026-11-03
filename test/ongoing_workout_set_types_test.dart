@@ -267,7 +267,7 @@ void main() {
       // (z rozgrzewką w liczniku byłoby „1 / 2 serii”).
       expect(
         find.descendant(
-          of: find.widgetWithText(ListTile, 'Bench press'),
+          of: find.byKey(const ValueKey('order-block-0')),
           matching: find.text('0 / 1 serii'),
         ),
         findsOneWidget,
