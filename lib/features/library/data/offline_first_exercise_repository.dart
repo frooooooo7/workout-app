@@ -124,6 +124,13 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
   }
 
   @override
+  Future<Exercise?> getById(String id) async {
+    final row = await _localDb.run((db) => _findRow(db, id));
+    if (row == null || row['pending_op'] == 'delete') return null;
+    return ExerciseDto.fromMap(row).toDomain();
+  }
+
+  @override
   Future<void> setFavourite(String id, {required bool isFavourite}) async {
     await _localDb.run((db) async {
       final row = await _findRow(db, id);

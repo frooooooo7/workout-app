@@ -12,6 +12,9 @@ abstract interface class ExerciseRepository {
     String? query,
   });
 
+  /// Ćwiczenie po lokalnym id albo id z serwera; `null`, gdy go nie ma.
+  Future<Exercise?> getById(String id);
+
   /// Toggles favourite state for the given [id].
   /// Implementations should optimistically update the local cache and
   /// sync with the backend when possible.

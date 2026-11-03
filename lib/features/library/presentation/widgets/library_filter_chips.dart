@@ -48,7 +48,7 @@ class _FilterChip extends StatelessWidget {
         LibraryFilter.all => 'Wszystkie',
         LibraryFilter.mine => 'Moje ćwiczenia',
         LibraryFilter.favourite => 'Ulubione',
-        LibraryFilter.recent => 'Ostatnio używane',
+        LibraryFilter.recent => 'Ostatnio robione',
       };
 
   IconData get _icon => switch (filter) {

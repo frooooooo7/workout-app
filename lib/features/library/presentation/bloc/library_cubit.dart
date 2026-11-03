@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../domain/exercise_search.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
 import '../../domain/models/library_sort.dart';
@@ -128,12 +129,19 @@ class LibraryCubit extends Cubit<LibraryState> {
       emit(state.copyWith(loading: true, clearError: true));
     }
     try {
+      // „Ostatnio robione” liczymy z historii treningów, a nie z bazy, więc
+      // repozytorium dostaje wtedy pełną listę.
+      final recent = state.filter == LibraryFilter.recent;
       final result = await _repository.getAll(
-        filter: state.filter,
+        filter: recent ? LibraryFilter.all : state.filter,
         muscleGroup: state.category,
         query: state.query,
       );
-      if (state.sort == LibrarySort.popular) await _ensureUsage();
+      if (recent ||
+          state.sort == LibrarySort.popular ||
+          state.query.trim().isNotEmpty) {
+        await _ensureUsage();
+      }
       if (isClosed) return;
       _source = result;
       emit(
@@ -171,9 +179,36 @@ class LibraryCubit extends Cubit<LibraryState> {
     LibrarySort? sort,
   }) {
     final activeTypes = types ?? state.types;
-    final filtered = activeTypes.isEmpty
+    var filtered = activeTypes.isEmpty
         ? source
         : source.where((e) => activeTypes.contains(e.category)).toList();
+    final usage = _usage ?? ExerciseUsage.empty;
+    if (state.filter == LibraryFilter.recent) {
+      // Tylko to, co było w ukończonym treningu, od ostatnio zrobionego.
+      final dated = [
+        for (final e in filtered)
+          if (usage.lastDoneFor(e) case final date?) (date, e),
+      ]..sort((a, b) => b.$1.compareTo(a.$1));
+      return [for (final item in dated) item.$2];
+    }
+    if (state.query.trim().isNotEmpty) {
+      // Wynik szukania: najpierw trafność, przy remisie to, co robisz częściej.
+      final scored =
+          [
+            for (final (i, e) in filtered.indexed)
+              (
+                ExerciseSearch.score(e, state.query) ?? 0,
+                usage.countFor(e),
+                i,
+                e,
+              ),
+          ]..sort((a, b) {
+            if (a.$1 != b.$1) return b.$1.compareTo(a.$1);
+            if (a.$2 != b.$2) return b.$2.compareTo(a.$2);
+            return a.$3.compareTo(b.$3);
+          });
+      return [for (final item in scored) item.$4];
+    }
     return sortExercises(filtered, sort ?? state.sort, usage: _usage);
   }
 
@@ -187,7 +222,12 @@ class LibraryCubit extends Cubit<LibraryState> {
 
   void setTypes(Set<ExerciseCategory> types) {
     final next = Set<ExerciseCategory>.unmodifiable(types);
-    emit(state.copyWith(types: next, exercises: _arrange(_source, types: next)));
+    emit(
+      state.copyWith(
+        types: next,
+        exercises: _arrange(_source, types: next),
+      ),
+    );
   }
 
   void setFilter(LibraryFilter filter) {

@@ -280,8 +280,11 @@ class ExerciseStats {
   static ExerciseUsage usage(Iterable<TrainingSession> sessions) {
     final byId = <String, int>{};
     final byName = <String, int>{};
+    final lastById = <String, DateTime>{};
+    final lastByName = <String, DateTime>{};
     for (final session in sessions) {
       if (session.status != TrainingSessionStatus.completed) continue;
+      final when = session.finishedAt ?? session.startedAt;
       final seenIds = <String>{};
       final seenNames = <String>{};
       for (final entry in session.exercises) {
@@ -290,25 +293,51 @@ class ExerciseStats {
         }
         if (entry.exerciseId.isNotEmpty && seenIds.add(entry.exerciseId)) {
           byId.update(entry.exerciseId, (v) => v + 1, ifAbsent: () => 1);
+          lastById.update(
+            entry.exerciseId,
+            (v) => when.isAfter(v) ? when : v,
+            ifAbsent: () => when,
+          );
         }
         final name = _normalize(entry.exerciseName);
         if (seenNames.add(name)) {
           byName.update(name, (v) => v + 1, ifAbsent: () => 1);
+          lastByName.update(
+            name,
+            (v) => when.isAfter(v) ? when : v,
+            ifAbsent: () => when,
+          );
         }
       }
     }
-    return ExerciseUsage._(byId, byName);
+    return ExerciseUsage._(byId, byName, lastById, lastByName);
   }
 }
 
 /// Licznik wykonań ćwiczeń — napędza sortowanie „Popularne”.
 class ExerciseUsage {
-  const ExerciseUsage._(this._byId, this._byName);
+  const ExerciseUsage._(
+    this._byId,
+    this._byName,
+    this._lastById,
+    this._lastByName,
+  );
 
-  static const empty = ExerciseUsage._({}, {});
+  static const empty = ExerciseUsage._({}, {}, {}, {});
 
   final Map<String, int> _byId;
   final Map<String, int> _byName;
+  final Map<String, DateTime> _lastById;
+  final Map<String, DateTime> _lastByName;
+
+  /// Kiedy ćwiczenie było ostatnio w ukończonym treningu; `null` — nigdy.
+  DateTime? lastDoneFor(Exercise exercise) {
+    final byId = _lastById[exercise.id];
+    final byName = _lastByName[ExerciseStats._normalize(exercise.name)];
+    if (byId == null) return byName;
+    if (byName == null) return byId;
+    return byId.isAfter(byName) ? byId : byName;
+  }
 
   int countFor(Exercise exercise) {
     final byId = _byId[exercise.id] ?? 0;

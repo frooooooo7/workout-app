@@ -92,18 +92,20 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
 
   Future<void> _reloadExercise() async {
     try {
-      final all = await _repository.getAll();
+      // Z treningu przychodzi czasem id serwera (trening pobrany na nowym
+      // telefonie) — repozytorium szuka po lokalnym id i po id z serwera.
+      // Ćwiczenie spoza biblioteki szukamy jeszcze po nazwie ze snapshotu.
+      var found = await _repository.getById(exerciseId);
+      if (found == null) {
+        final name = state.exercise?.name.trim().toLowerCase();
+        if (name != null && name.isNotEmpty) {
+          final all = await _repository.getAll();
+          found = all
+              .where((e) => e.name.trim().toLowerCase() == name)
+              .firstOrNull;
+        }
+      }
       if (isClosed) return;
-      // Z treningu przychodzi czasem id serwera albo ćwiczenie spoza
-      // biblioteki — wtedy szukamy po nazwie ze snapshotu sesji.
-      final name = state.exercise?.name.trim().toLowerCase();
-      final found =
-          all.where((e) => e.id == exerciseId).firstOrNull ??
-          (name == null || name.isEmpty
-              ? null
-              : all
-                    .where((e) => e.name.trim().toLowerCase() == name)
-                    .firstOrNull);
       if (found == null) {
         emit(state.copyWith(loading: false, notFound: state.exercise == null));
         return;
