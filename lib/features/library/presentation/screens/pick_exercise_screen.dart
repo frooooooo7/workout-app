@@ -5,6 +5,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/keyboard.dart';
 import '../../data/exercise_image_uri.dart';
+import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/library_category_tabs.dart';
@@ -150,7 +151,11 @@ class _PickExerciseScreenState extends State<PickExerciseScreen> {
                           return LibraryErrorState(message: state.error!);
                         }
                         if (state.exercises.isEmpty) {
-                          return const LibraryEmptyState();
+                          return LibraryEmptyState(
+                            message: state.filter == LibraryFilter.recent && state.query.isEmpty
+                                ? 'Ta lista zapełni się po Twoim pierwszym treningu.'
+                                : null,
+                          );
                         }
                         return ListView.builder(
                           padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),

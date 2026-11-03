@@ -22,6 +22,10 @@ class _FakeRepository implements ExerciseRepository {
   final favourites = <String, bool>{};
 
   @override
+  Future<Exercise?> getById(String id) async =>
+      id == _exercise.id ? _exercise : null;
+
+  @override
   Future<void> setFavourite(String id, {required bool isFavourite}) async {
     favourites[id] = isFavourite;
   }

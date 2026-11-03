@@ -162,6 +162,7 @@ class ExerciseDto {
         isMine: isMine,
         createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true),
         isPendingSync: isPendingSync,
+        serverId: serverId,
         tracking: ExerciseTracking.fromApi(trackingType),
         distanceUnit: DistanceUnit.fromApi(distanceUnit),
       );

@@ -15,6 +15,10 @@ class _FakeExerciseRepository implements ExerciseRepository {
   List<Exercise> data;
 
   @override
+  Future<Exercise?> getById(String id) async =>
+      data.where((e) => e.id == id).firstOrNull;
+
+  @override
   Future<Exercise> create({
     required String name,
     required List<MuscleGroup> muscles,
@@ -159,6 +163,51 @@ void main() {
           ],
         );
 
+    test('„Ostatnio robione” bierze ćwiczenia z treningów, najnowsze pierwsze', () async {
+      TrainingSession at(String id, String name, DateTime day) => TrainingSession(
+        planName: 'Plan',
+        status: TrainingSessionStatus.completed,
+        startedAt: day,
+        finishedAt: day,
+        exercises: [
+          TrainingSessionExercise(
+            exerciseId: id,
+            exerciseName: name,
+            exerciseMuscles: const [],
+            exerciseCategory: 'compound',
+            sets: [TrainingSessionSet(actualReps: '10', completed: true)],
+          ),
+        ],
+      );
+      final cubit = LibraryCubit(
+        _FakeExerciseRepository(sample),
+        loadUsage: () async => ExerciseStats.usage([
+          at('a', 'Arnoldki', DateTime.utc(2026, 5, 1)),
+          at('b', 'Bicepsy', DateTime.utc(2026, 6, 1)),
+        ]),
+      );
+      cubit.setFilter(LibraryFilter.recent);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      // „c” nie było w żadnym treningu, więc nie ma go na liście.
+      expect(ids(cubit), ['b', 'a']);
+      await cubit.close();
+    });
+
+    test('historia dopasowana po id z serwera, gdy nazwa się zmieniła', () {
+      final exercise = Exercise(
+        id: 'local-1',
+        serverId: 'srv-1',
+        name: 'Nowa nazwa',
+        muscles: const [MuscleGroup.chest],
+        category: ExerciseCategory.compound,
+      );
+      final usage = ExerciseStats.usage([session('srv-1', 'Stara nazwa')]);
+      expect(usage.countFor(exercise), 1);
+      expect(usage.lastDoneFor(exercise), isNotNull);
+      expect(ExerciseStats.matches(session('srv-1', 'Stara nazwa').exercises.first, exercise), isTrue);
+    });
+
     test('„Popularne” układa według liczby treningów, remisy stabilnie',
         () async {
       final cubit = LibraryCubit(
@@ -225,6 +274,9 @@ void main() {
 }
 
 class _ThrowingExerciseRepository implements ExerciseRepository {
+  @override
+  Future<Exercise?> getById(String id) async => throw UnimplementedError();
+
   @override
   Future<Exercise> create({
     required String name,

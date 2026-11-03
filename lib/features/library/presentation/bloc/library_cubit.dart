@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../domain/exercise_search.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
 import '../../domain/models/library_sort.dart';
@@ -122,19 +123,33 @@ class LibraryCubit extends Cubit<LibraryState> {
     unawaited(refresh(showLoadingIndicator: false));
   }
 
+  /// Numer ostatniego zapytania — spóźniona odpowiedź na poprzedni filtr nie
+  /// może nadpisać listy.
+  int _refreshSeq = 0;
+
   Future<void> refresh({bool showLoadingIndicator = true}) async {
     if (isClosed) return;
+    final seq = ++_refreshSeq;
+    final filter = state.filter;
+    final query = state.query;
     if (showLoadingIndicator) {
       emit(state.copyWith(loading: true, clearError: true));
     }
     try {
+      // „Ostatnio robione” liczymy z historii treningów, a nie z bazy, więc
+      // repozytorium dostaje wtedy pełną listę.
+      final recent = filter == LibraryFilter.recent;
       final result = await _repository.getAll(
-        filter: state.filter,
+        filter: recent ? LibraryFilter.all : filter,
         muscleGroup: state.category,
-        query: state.query,
+        query: query,
       );
-      if (state.sort == LibrarySort.popular) await _ensureUsage();
-      if (isClosed) return;
+      if (recent ||
+          state.sort == LibrarySort.popular ||
+          query.trim().isNotEmpty) {
+        await _ensureUsage();
+      }
+      if (isClosed || seq != _refreshSeq) return;
       _source = result;
       emit(
         state.copyWith(
@@ -144,7 +159,7 @@ class LibraryCubit extends Cubit<LibraryState> {
         ),
       );
     } catch (_) {
-      if (isClosed) return;
+      if (isClosed || seq != _refreshSeq) return;
       emit(
         state.copyWith(
           loading: false,
@@ -154,10 +169,15 @@ class LibraryCubit extends Cubit<LibraryState> {
     }
   }
 
+  Future<ExerciseUsage>? _usageLoad;
+
   Future<void> _ensureUsage() async {
-    if (_usage != null || _loadUsage == null) return;
+    final load = _loadUsage;
+    if (_usage != null || load == null) return;
+    // Jedno wczytanie historii, nawet gdy kilka odświeżeń startuje naraz.
+    _usageLoad ??= load();
     try {
-      _usage = await _loadUsage();
+      _usage = await _usageLoad;
     } catch (_) {
       // Bez historii „Popularne” zostawia kolejność bazy — to nie jest błąd
       // biblioteki.
@@ -174,7 +194,37 @@ class LibraryCubit extends Cubit<LibraryState> {
     final filtered = activeTypes.isEmpty
         ? source
         : source.where((e) => activeTypes.contains(e.category)).toList();
-    return sortExercises(filtered, sort ?? state.sort, usage: _usage);
+    final usage = _usage ?? ExerciseUsage.empty;
+    final activeSort = sort ?? state.sort;
+    if (state.filter == LibraryFilter.recent) {
+      // Tylko to, co było w ukończonym treningu, od ostatnio zrobionego.
+      final dated = [
+        for (final e in filtered)
+          if (usage.lastDoneFor(e) case final date?) (date, e),
+      ]..sort((a, b) => b.$1.compareTo(a.$1));
+      return [for (final item in dated) item.$2];
+    }
+    // Przy wpisanym tekście domyślne „Popularne” zamienia się w trafność
+    // (przy remisie to, co robisz częściej); wybrane przez Ciebie inne
+    // sortowanie zostaje.
+    if (state.query.trim().isNotEmpty && activeSort == LibrarySort.popular) {
+      final scored =
+          [
+            for (final (i, e) in filtered.indexed)
+              (
+                ExerciseSearch.score(e, state.query) ?? 0,
+                usage.countFor(e),
+                i,
+                e,
+              ),
+          ]..sort((a, b) {
+            if (a.$1 != b.$1) return b.$1.compareTo(a.$1);
+            if (a.$2 != b.$2) return b.$2.compareTo(a.$2);
+            return a.$3.compareTo(b.$3);
+          });
+      return [for (final item in scored) item.$4];
+    }
+    return sortExercises(filtered, activeSort, usage: _usage);
   }
 
   Future<void> setSort(LibrarySort sort) async {
@@ -187,7 +237,12 @@ class LibraryCubit extends Cubit<LibraryState> {
 
   void setTypes(Set<ExerciseCategory> types) {
     final next = Set<ExerciseCategory>.unmodifiable(types);
-    emit(state.copyWith(types: next, exercises: _arrange(_source, types: next)));
+    emit(
+      state.copyWith(
+        types: next,
+        exercises: _arrange(_source, types: next),
+      ),
+    );
   }
 
   void setFilter(LibraryFilter filter) {

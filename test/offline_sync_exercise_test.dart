@@ -213,6 +213,35 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('getById finds an exercise by local id and by server id', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_by_id');
+    final edb = ExerciseDatabase('by_id.db', directoryOverride: dir.path);
+    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)
+      ..stop();
+    final repo = OfflineFirstExerciseRepository(localDb: edb, syncEngine: sync);
+
+    final created = await repo.create(
+      name: 'Mostek biodrowy',
+      muscles: const [MuscleGroup.glutes],
+      category: ExerciseCategory.isolation,
+      description: '',
+    );
+    await edb.run(
+      (db) => db.update(ExerciseDatabase.tableExercises, {
+        'server_id': 'srv-1',
+      }, where: 'local_id = ?', whereArgs: [created.id]),
+    );
+
+    expect((await repo.getById(created.id))?.name, 'Mostek biodrowy');
+    final byServer = await repo.getById('srv-1');
+    expect(byServer?.id, created.id);
+    expect(byServer?.serverId, 'srv-1');
+    expect(await repo.getById('nope'), isNull);
+
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
+
   test('flush after a failed offline pull still sends every pending row', () async {
     final dir = await Directory.systemTemp.createTemp('gym_stale_net');
     final edb = ExerciseDatabase('stale.db', directoryOverride: dir.path);
