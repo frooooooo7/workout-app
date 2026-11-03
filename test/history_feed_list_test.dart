@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/services/history_feed_builder.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_feed_list.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_formatters.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_session_card.dart';
 
 HistoryFeedEntry _entry(String id, DateTime local, {int records = 0}) =>
@@ -130,5 +131,55 @@ void main() {
     );
 
     expect(find.textContaining(' z '), findsNothing);
+  });
+
+  testWidgets('only the current month header stays pinned at the top', (
+    tester,
+  ) async {
+    final entries = [
+      for (var month = 11; month >= 8; month--)
+        for (var d = 20; d >= 2; d -= 3)
+          _entry('$month-$d', DateTime(2026, month, d, 18)),
+    ];
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CustomScrollView(
+            controller: controller,
+            slivers: [
+              HistoryFeedSliver(
+                sections: groupHistoryFeed(entries),
+                today: DateTime(2026, 11, 28),
+                dayKeyFor: (day) => GlobalKey(),
+                weekCounts: workoutsPerWeek(entries),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final headerTexts = {
+      for (final month in [8, 9, 10, 11])
+        formatMonthYear(DateTime(2026, month)).toUpperCase(),
+    };
+    final headers = find.byWidgetPredicate(
+      (w) => w is Text && headerTexts.contains(w.data),
+    );
+
+    // Przewijamy w głąb trzeciego miesiąca (październik): nagłówki wcześniejszych
+    // miesięcy muszą już zniknąć, a nie piętrzyć się u góry.
+    controller.jumpTo(controller.position.maxScrollExtent * 0.55);
+    await tester.pump();
+    await tester.pump();
+
+    final pinned = [
+      for (final element in headers.evaluate())
+        tester.getTopLeft(find.byWidget(element.widget)).dy,
+    ].where((top) => top < 90).toList();
+    // Nagłówek miesiąca ma 40 px: drugi pod pierwszym znaczyłby stos.
+    expect(pinned, hasLength(1));
   });
 }

@@ -65,8 +65,8 @@ const historyFeedMaxLines = 3;
 
 /// Buduje listę Historii z ukończonych sesji z lokalnej bazy, od najnowszej.
 ///
-/// Na karcie ląduje [maxLines] ćwiczeń o największej objętości (a bez ciężaru
-/// — o największej liczbie serii), w kolejności z treningu. Każde pokazuje
+/// Na karcie ląduje [maxLines] ćwiczeń: najpierw te z rekordem, potem o największej
+/// objętości (a bez ciężaru — o największej liczbie serii), w kolejności z treningu. Każde pokazuje
 /// swoją najlepszą serię. Ćwiczenie jest „rekordowe”, gdy [records] mają dla
 /// niego wpis z tej sesji.
 List<HistoryFeedEntry> buildHistoryFeed(
@@ -133,6 +133,9 @@ List<HistoryFeedLine> _linesOf(
 
   final ranked = [...candidates]
     ..sort((a, b) {
+      // Rekord ma pierwszeństwo — inaczej złota seria ćwiczenia bez ciężaru
+      // (masa własna ma tonaż 0) albo z czwartego miejsca nie byłaby widoczna.
+      if (a.line.isRecord != b.line.isRecord) return a.line.isRecord ? -1 : 1;
       final byVolume = b.volumeKg.compareTo(a.volumeKg);
       if (byVolume != 0) return byVolume;
       final bySets = b.sets.compareTo(a.sets);

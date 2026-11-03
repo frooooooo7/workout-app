@@ -24,17 +24,8 @@ class HistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        // Treningi z ćwiczeniami i rekordami — z lokalnej bazy, więc od razu
-        // i offline.
-        BlocProvider(
-          create: (_) => HistoryFeedCubit(
-            ServiceLocator.trainingStatsRepository,
-            ServiceLocator.trainingHistoryRepository,
-            dataChanges: ServiceLocator.trainingSessionDataChanges,
-          )..load(),
-        ),
-        // Liczone od razu: lista sesji bierze z nich cel tygodniowy, a kalendarz
-        // serię tygodni.
+        // Sesje i rekordy z lokalnej bazy: licznik celu, seria tygodni i lista
+        // Historii biorą je stąd, a Statystyki z tych samych danych liczą swoje.
         BlocProvider(
           create: (_) => TrainingStatsCubit(
             ServiceLocator.trainingStatsRepository,
@@ -46,6 +37,13 @@ class HistoryScreen extends StatelessWidget {
             ]),
             weeklyGoalLoader: loadOwnWeeklyGoal,
           )..load(),
+        ),
+        // Lista treningów z ćwiczeniami — działa offline.
+        BlocProvider(
+          create: (context) => HistoryFeedCubit(
+            context.read<TrainingStatsCubit>(),
+            ServiceLocator.trainingHistoryRepository,
+          ),
         ),
       ],
       child: const _WorkoutHistoryView(),

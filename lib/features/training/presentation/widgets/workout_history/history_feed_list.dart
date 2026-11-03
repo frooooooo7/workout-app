@@ -176,61 +176,67 @@ class HistoryFeedSliver extends StatelessWidget {
 
     return SliverMainAxisGroup(
       slivers: [
-        for (var s = 0; s < sections.length; s++) ...[
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _MonthHeaderDelegate(
-              month: sections[s].month,
-              stats: MonthlyTrainingStats.fromSessions([
-                for (final e in sections[s].entries) e.item,
-              ]),
-            ),
+        // Każdy miesiąc we własnej grupie: przyklejony nagłówek zostaje na górze
+        // tylko do końca swojego miesiąca, a następny go wypycha. W jednej
+        // wspólnej grupie nagłówki wszystkich miesięcy układałyby się w stos.
+        for (var s = 0; s < sections.length; s++)
+          SliverMainAxisGroup(
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _MonthHeaderDelegate(
+                  month: sections[s].month,
+                  stats: MonthlyTrainingStats.fromSessions([
+                    for (final e in sections[s].entries) e.item,
+                  ]),
+                ),
+              ),
+              SliverList.builder(
+                itemCount: sections[s].rows.length,
+                itemBuilder: (context, i) {
+                  final row = sections[s].rows[i];
+                  final child = switch (row) {
+                    HistoryWeekRow() => _WeekHeader(
+                      weekStart: row.weekStart,
+                      title: row.weekStart == thisWeek
+                          ? 'Ten tydzień'
+                          : row.weekStart == lastWeek
+                          ? 'Poprzedni tydzień'
+                          : null,
+                      goal:
+                          row.showGoal &&
+                              !row.weekStart.isBefore(goalSince) &&
+                              weeklyGoal != null
+                          ? (
+                              done: weekCounts[row.weekStart] ?? 0,
+                              goal: weeklyGoal!,
+                            )
+                          : null,
+                    ),
+                    HistoryDayRow() => KeyedSubtree(
+                      key: dayKeyFor(row.day),
+                      child: HistoryDayBlock(
+                        day: row.day,
+                        entries: row.entries,
+                        highlighted: row.day == highlightedDay,
+                      ),
+                    ),
+                  };
+                  return _RowProbe(
+                    index: bases[s] + i,
+                    onMounted: onRowMounted,
+                    onUnmounted: onRowUnmounted,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.pageGutter,
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-          SliverList.builder(
-            itemCount: sections[s].rows.length,
-            itemBuilder: (context, i) {
-              final row = sections[s].rows[i];
-              final child = switch (row) {
-                HistoryWeekRow() => _WeekHeader(
-                  weekStart: row.weekStart,
-                  title: row.weekStart == thisWeek
-                      ? 'Ten tydzień'
-                      : row.weekStart == lastWeek
-                      ? 'Poprzedni tydzień'
-                      : null,
-                  goal:
-                      row.showGoal &&
-                          !row.weekStart.isBefore(goalSince) &&
-                          weeklyGoal != null
-                      ? (
-                          done: weekCounts[row.weekStart] ?? 0,
-                          goal: weeklyGoal!,
-                        )
-                      : null,
-                ),
-                HistoryDayRow() => KeyedSubtree(
-                  key: dayKeyFor(row.day),
-                  child: HistoryDayBlock(
-                    day: row.day,
-                    entries: row.entries,
-                    highlighted: row.day == highlightedDay,
-                  ),
-                ),
-              };
-              return _RowProbe(
-                index: bases[s] + i,
-                onMounted: onRowMounted,
-                onUnmounted: onRowUnmounted,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pageGutter,
-                  ),
-                  child: child,
-                ),
-              );
-            },
-          ),
-        ],
       ],
     );
   }

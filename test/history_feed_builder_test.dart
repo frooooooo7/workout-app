@@ -158,6 +158,26 @@ void main() {
     expect(entries.last.recordsCount, 0);
   });
 
+  test('a record exercise is shown even when it is not among the biggest', () {
+    TrainingSession build(String id, DateTime at, String dipsReps) =>
+        _session(id, at, [
+          _exercise('Wyciskanie', [_set('100', '5')]), // 500
+          _exercise('Przysiad', [_set('120', '5')]), // 600
+          _exercise('Martwy ciąg', [_set('140', '3')]), // 420
+          // Masa własna: tonaż 0, a to właśnie tu padł rekord.
+          _exercise('Dipy', [_set('0', dipsReps)]),
+        ]);
+    final older = build('old', day.subtract(const Duration(days: 7)), '8');
+    final newer = build('new', day, '12');
+    final records = PersonalRecordsCalculator.compute([older, newer]);
+
+    final entry = buildHistoryFeed([older, newer], records).first;
+
+    expect(entry.lines.map((l) => l.name), contains('Dipy'));
+    expect(entry.lines.length, 3);
+    expect(entry.lines.firstWhere((l) => l.name == 'Dipy').isRecord, isTrue);
+  });
+
   test('keeps the trimmed session note and drops a blank one', () {
     final withNote = _session('a', day, [
       _exercise('Wyciskanie', [_set('90', '5')]),

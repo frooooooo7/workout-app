@@ -6,6 +6,7 @@ import 'package:gym/features/training/domain/models/training_session.dart'
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/bloc/history_feed_cubit.dart';
+import 'package:gym/features/training/presentation/bloc/training_stats_cubit.dart';
 
 session.TrainingSession _local(String id, DateTime at) =>
     session.TrainingSession(
@@ -93,10 +94,25 @@ void main() {
   final at = DateTime(2026, 10, 12, 18);
   late _Stats stats;
   late _History history;
+  late ValueNotifier<int> changes;
+  late TrainingStatsCubit statsCubit;
+  late HistoryFeedCubit cubit;
 
   setUp(() {
     stats = _Stats();
     history = _History();
+    changes = ValueNotifier<int>(0);
+    statsCubit = TrainingStatsCubit(
+      stats,
+      dataChanges: changes,
+      clock: () => DateTime(2026, 11, 1),
+    );
+    cubit = HistoryFeedCubit(statsCubit, history);
+  });
+
+  tearDown(() async {
+    await cubit.close();
+    await statsCubit.close();
   });
 
   test('builds the list from local sessions, newest first', () async {
@@ -104,20 +120,27 @@ void main() {
       _local('old', at),
       _local('new', at.add(const Duration(days: 3))),
     ];
-    final cubit = HistoryFeedCubit(
-      stats,
-      history,
-      clock: () => DateTime(2026, 11, 1),
-    );
     await cubit.load();
+    await pumpEventQueue();
 
     expect(cubit.state.loading, isFalse);
     expect(cubit.state.fromServer, isFalse);
     expect(cubit.state.entries.map((e) => e.item.id), ['new', 'old']);
-    expect(cubit.state.entries.first.recordsCount, 0);
     expect(cubit.state.entries.first.lines.single.name, 'Wyciskanie');
-    await cubit.close();
   });
+
+  test(
+    'uses the sessions and records the stats cubit already loaded',
+    () async {
+      stats.sessions = [_local('a', at)];
+      await statsCubit.load();
+      await pumpEventQueue();
+
+      // Nikt nie wołał load() na liście — dane przyszły ze statystyk.
+      expect(cubit.state.loading, isFalse);
+      expect(cubit.state.entries.map((e) => e.item.id), ['a']);
+    },
+  );
 
   test(
     'falls back to the server list when the phone has no sessions',
@@ -126,43 +149,39 @@ void main() {
         _server('a', at),
         _server('b', at.add(const Duration(days: 1))),
       ];
-      final cubit = HistoryFeedCubit(stats, history);
       await cubit.load();
+      await pumpEventQueue();
 
       expect(cubit.state.fromServer, isTrue);
       expect(cubit.state.entries.map((e) => e.item.id), ['b', 'a']);
       expect(cubit.state.entries.first.lines, isEmpty);
-      await cubit.close();
     },
   );
 
   test('reports a failure only when nothing can be shown', () async {
     stats.fails = true;
     history.fails = true;
-    final cubit = HistoryFeedCubit(stats, history);
     await cubit.load();
+    await pumpEventQueue();
 
     expect(cubit.state.failed, isTrue);
     expect(cubit.state.loading, isFalse);
-    await cubit.close();
   });
 
   test('a local read error still shows the server list', () async {
     stats.fails = true;
     history.items = [_server('a', at)];
-    final cubit = HistoryFeedCubit(stats, history);
     await cubit.load();
+    await pumpEventQueue();
 
     expect(cubit.state.failed, isFalse);
     expect(cubit.state.entries, hasLength(1));
-    await cubit.close();
   });
 
   test('a data change reloads the list', () async {
-    final changes = ValueNotifier<int>(0);
     stats.sessions = [_local('a', at)];
-    final cubit = HistoryFeedCubit(stats, history, dataChanges: changes);
     await cubit.load();
+    await pumpEventQueue();
     expect(cubit.state.entries, hasLength(1));
 
     stats.sessions = [
@@ -170,9 +189,29 @@ void main() {
       _local('b', at.add(const Duration(days: 1))),
     ];
     changes.value++;
-    await cubit.load();
+    await pumpEventQueue();
+    await statsCubit.load();
+    await pumpEventQueue();
 
     expect(cubit.state.entries, hasLength(2));
-    await cubit.close();
+  });
+
+  test('deleting the last workout empties the list instead of asking the '
+      'server for it back', () async {
+    stats.sessions = [_local('a', at)];
+    await cubit.load();
+    await pumpEventQueue();
+    expect(cubit.state.entries, hasLength(1));
+
+    // Serwer o usunięciu jeszcze nie wie i dalej zwraca trening.
+    stats.sessions = [];
+    history.items = [_server('a', at)];
+    await cubit.load();
+    await pumpEventQueue();
+
+    expect(cubit.state.entries, isEmpty);
+    expect(cubit.state.fromServer, isFalse);
+    expect(cubit.state.failed, isFalse);
+    expect(cubit.state.loading, isFalse);
   });
 }
