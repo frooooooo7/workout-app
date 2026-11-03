@@ -165,6 +165,182 @@ void main() {
     },
   );
 
+  Future<TrainingSessionCubit> pumpRemovalScreen(
+    WidgetTester tester,
+    _FakeTrainingSessionRepository repository,
+  ) async {
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+            restTimerScheduler: _FakeRestTimerScheduler(),
+          ),
+        ),
+      ),
+    );
+    return cubit;
+  }
+
+  testWidgets(
+    'removes an untouched exercise from the ⋯ menu without asking, with undo',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_session());
+      final cubit = await pumpRemovalScreen(tester, repository);
+
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      // Bez odhaczonych serii nie ma pytania — od razu „Cofnij”.
+      expect(find.text('Usunąć ćwiczenie?'), findsNothing);
+      expect(find.byKey(const ValueKey('exercise-removed-snackbar')), findsOne);
+      expect(repository.session.exercises.map((e) => e.exerciseName), [
+        'Shoulder press',
+      ]);
+      expect(find.text('Shoulder press'), findsOneWidget);
+      expect(find.text('Bench press'), findsNothing);
+
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(repository.session.exercises.map((e) => e.exerciseName), [
+        'Bench press',
+        'Shoulder press',
+      ]);
+      expect(find.text('Ćwiczenie 1 z 2'), findsOneWidget);
+
+      await cubit.close();
+    },
+  );
+
+  testWidgets('removing an exercise with checked sets asks for confirmation', (
+    tester,
+  ) async {
+    // Ekran startuje na ćwiczeniu z odhaczoną serią (tu: drugie).
+    final base = _session();
+    final session = base.copyWith(
+      exercises: [
+        base.exercises.first,
+        base.exercises.last.copyWith(
+          sets: [
+            TrainingSessionSet(
+              plannedReps: '10',
+              actualWeight: '35',
+              actualReps: '10',
+              completed: true,
+            ),
+          ],
+        ),
+      ],
+    );
+    final repository = _FakeTrainingSessionRepository(session);
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    Future<void> startRemoval() async {
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.pumpAndSettle();
+    }
+
+    await startRemoval();
+    expect(find.text('Usunąć ćwiczenie?'), findsOneWidget);
+    await tester.tap(find.text('Anuluj'));
+    await tester.pumpAndSettle();
+    expect(repository.session.exercises, hasLength(2));
+
+    await startRemoval();
+    await tester.tap(find.text('Usuń'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Bench press',
+    ]);
+    // Zapisane serie wracają razem z ćwiczeniem.
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.last.exerciseName, 'Shoulder press');
+    expect(repository.session.exercises.last.sets.single.completed, isTrue);
+
+    await cubit.close();
+  });
+
+  testWidgets('long press on the last exercise offers removal; empty session '
+      'shows the add prompt', (tester) async {
+    final session = _session();
+    final repository = _FakeTrainingSessionRepository(
+      session.copyWith(exercises: [session.exercises.first]),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.longPress(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pumpAndSettle();
+    // Jedno ćwiczenie — nie ma co przesuwać, jest tylko usuwanie.
+    expect(find.text('Przesuń wcześniej'), findsNothing);
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises, isEmpty);
+    expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+    expect(repository.session.exercises, hasLength(1));
+    expect(find.text('Dodaj pierwsze ćwiczenie'), findsNothing);
+
+    await cubit.close();
+  });
+
+  testWidgets('removing one half of a superset unlinks it; undo relinks', (
+    tester,
+  ) async {
+    TrainingSessionExercise member(String id, String name) =>
+        TrainingSessionExercise(
+          exerciseId: id,
+          exerciseName: name,
+          exerciseMuscles: const ['shoulders'],
+          exerciseCategory: 'compound',
+          supersetGroup: 'A',
+          sets: [TrainingSessionSet(plannedWeight: '24', plannedReps: '10')],
+        );
+    final repository = _FakeTrainingSessionRepository(
+      TrainingSession(
+        planName: 'Góra A',
+        startedAt: DateTime.now().toUtc(),
+        exercises: [member('press', 'Wyciskanie'), member('raise', 'Wznosy')],
+      ),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises, hasLength(1));
+    expect(repository.session.exercises.single.supersetGroup, isNull);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.supersetGroup), [
+      'A',
+      'A',
+    ]);
+
+    await cubit.close();
+  });
+
   testWidgets('checking a set counts working sets only and turns it green', (
     tester,
   ) async {
