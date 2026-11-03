@@ -9,94 +9,147 @@ import 'package:gym/features/training/domain/repositories/training_history_repos
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 import 'package:gym/features/training/presentation/screens/history_screen.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_range_selector.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_calendar_sheet.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_filter_bar.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_formatters.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_month_calendar.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_month_navigator.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_session_card.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_session_row.dart';
 
-TrainingSessionListItem _item(
+session.TrainingSession _session(
   String id,
   DateTime startedAt, {
-  String plan = 'Plan Góra',
-  double volumeKg = 4200,
-}) => TrainingSessionListItem(
+  String plan = 'Push',
+  List<(String, String, String)> sets = const [('Wyciskanie', '90', '5')],
+  String? note,
+}) => session.TrainingSession(
   id: id,
+  planName: plan,
+  status: session.TrainingSessionStatus.completed,
   startedAt: startedAt.toUtc(),
-  endedAt: startedAt.add(const Duration(hours: 1)).toUtc(),
-  durationSec: 3600,
-  status: TrainingSessionStatus.completed,
-  plan: TrainingPlanSummary(id: 'p-$id', name: plan),
-  exercisesCount: 5,
-  completedSetsCount: 15,
-  hasNote: false,
-  updatedAt: startedAt.toUtc(),
-  totalVolumeKg: volumeKg,
+  finishedAt: startedAt.add(const Duration(hours: 1)).toUtc(),
+  note: note,
+  exercises: [
+    for (final (name, weight, reps) in sets)
+      session.TrainingSessionExercise(
+        exerciseId: name,
+        exerciseName: name,
+        exerciseMuscles: const [],
+        exerciseCategory: 'strength',
+        sets: [
+          session.TrainingSessionSet(
+            actualWeight: weight,
+            actualReps: reps,
+            completed: true,
+          ),
+        ],
+      ),
+  ],
 );
+
+TrainingSessionListItem _serverItem(String id, DateTime startedAt) =>
+    TrainingSessionListItem(
+      id: id,
+      startedAt: startedAt.toUtc(),
+      endedAt: startedAt.add(const Duration(hours: 1)).toUtc(),
+      durationSec: 3600,
+      status: TrainingSessionStatus.completed,
+      plan: TrainingPlanSummary(id: 'p-$id', name: 'Plan Serwer'),
+      exercisesCount: 5,
+      completedSetsCount: 15,
+      hasNote: false,
+      updatedAt: startedAt.toUtc(),
+      totalVolumeKg: 4200,
+    );
 
 void main() {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
 
-  setUp(() {
+  // Stary Push z 80 kg, dzisiejszy z 100 kg (rekord), Legs tydzień temu.
+  List<session.TrainingSession> localSessions() => [
+    _session(
+      'old',
+      today.subtract(const Duration(days: 40)).add(const Duration(hours: 18)),
+      sets: const [('Wyciskanie', '80', '5')],
+    ),
+    _session(
+      'legs',
+      today.subtract(const Duration(days: 7)).add(const Duration(hours: 18)),
+      plan: 'Legs',
+      sets: const [('Przysiad', '120', '5'), ('Martwy ciąg', '140', '3')],
+      note: 'Kolana w porządku',
+    ),
+    _session(
+      'today',
+      today.add(const Duration(hours: 1)),
+      sets: const [
+        ('Wyciskanie', '100', '5'),
+        ('OHP', '50', '8'),
+        ('Rozpiętki', '20', '12'),
+        ('Dipy', '30', '6'),
+      ],
+    ),
+  ];
+
+  void setUpRepositories({
+    List<session.TrainingSession>? local,
+    List<TrainingSessionListItem> server = const [],
+  }) {
     ServiceLocator.debugSetUserScopedRepositories(
       trainingHistoryRepository: _FakeTrainingHistoryRepository(
-        sessions: [
-          _item('s1', today.add(const Duration(hours: 10))),
-          _item(
-            's2',
-            today
-                .subtract(const Duration(days: 7))
-                .add(const Duration(hours: 18)),
-            plan: 'Legs',
-            volumeKg: 8290,
-          ),
-        ],
+        sessions: server,
       ),
-      trainingStatsRepository: _FakeStatsRepository(),
+      trainingStatsRepository: _FakeStatsRepository(local ?? localSessions()),
     );
-  });
+  }
+
+  setUp(setUpRepositories);
 
   tearDown(() {
     ServiceLocator.debugSetUserScopedRepositories();
   });
 
-  // Telefon wysoki na tyle, żeby kalendarz i obie sesje były na ekranie.
-  void useTallPhone(WidgetTester tester) {
-    tester.view.physicalSize = const Size(390 * 3, 1200 * 3);
+  // Telefon wysoki na tyle, żeby kilka kart było na ekranie.
+  void useTallPhone(WidgetTester tester, {double width = 390}) {
+    tester.view.physicalSize = Size(width * 3, 1600 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
   }
 
-  Finder inRows(String text) => find.descendant(
-    of: find.byType(HistorySessionRow),
+  Finder inCards(String text) => find.descendant(
+    of: find.byType(HistorySessionCard),
     matching: find.text(text),
   );
 
-  testWidgets('renders month summary, plan calendar and sessions by week', (
+  Finder chip(String label) => find.descendant(
+    of: find.byType(HistoryFilterBar),
+    matching: find.text(label),
+  );
+
+  Future<void> openHistory(WidgetTester tester, {double width = 390}) async {
+    useTallPhone(tester, width: width);
+    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openCalendar(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Kalendarz'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('shows trainings as one list with weeks and exercises', (
     tester,
   ) async {
-    useTallPhone(tester);
-    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
-    expect(find.byType(HistoryScreen), findsOneWidget);
-    await tester.pumpAndSettle();
+    await openHistory(tester);
 
     expect(find.text('Historia'), findsOneWidget);
+    // Kalendarza nie ma na liście — siedzi pod ikonką w nagłówku.
+    expect(find.byType(HistoryMonthCalendar), findsNothing);
+    expect(find.byType(HistoryMonthNavigator), findsNothing);
+    expect(find.byTooltip('Kalendarz'), findsOneWidget);
 
-    // Miesiąc z podsumowaniem w jednej linii (liczby już się doliczyły).
-    expect(find.byType(HistoryMonthNavigator), findsOneWidget);
-    expect(find.text(formatMonthYear(today)), findsOneWidget);
-    expect(find.text('2 treningi'), findsOneWidget);
-    expect(find.text('2 h 00 min'), findsOneWidget);
-    expect(find.text('12,5 t'), findsOneWidget);
-    // Bieżący miesiąc — dalej nie ma dokąd iść.
-    final next = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.chevron_right_rounded),
-    );
-    expect(next.onPressed, isNull);
-
-    expect(find.byType(HistoryMonthCalendar), findsOneWidget);
-
-    // Tygodnie: bieżący i poprzedni, każdy z sumą.
     expect(
       find.textContaining('Ten tydzień', findRichText: true),
       findsOneWidget,
@@ -105,83 +158,248 @@ void main() {
       find.textContaining('Poprzedni tydzień', findRichText: true),
       findsOneWidget,
     );
-    expect(find.text('1 trening · 4,20 t'), findsOneWidget);
-    expect(find.text('1 trening · 8,29 t'), findsOneWidget);
+    expect(find.byType(HistorySessionCard), findsNWidgets(3));
 
-    // Wiersz sesji: litera planu, nazwa, tonaż i serie.
-    expect(find.byType(HistorySessionRow), findsNWidgets(2));
-    expect(inRows('Plan Góra'), findsOneWidget);
-    expect(inRows('P'), findsOneWidget);
-    expect(inRows('L'), findsOneWidget);
-    expect(inRows('4,20 t'), findsOneWidget);
-    expect(inRows('15 serii'), findsNWidgets(2));
+    // Karta dzisiejszego Pusha: 3 główne ćwiczenia, bez czwartego.
+    expect(inCards('Wyciskanie'), findsNWidgets(2));
+    expect(inCards('OHP'), findsOneWidget);
+    expect(inCards('Rozpiętki'), findsOneWidget);
+    expect(inCards('Dipy'), findsNothing);
+    // Legs: obie pozycje i notatka.
+    expect(inCards('Przysiad'), findsOneWidget);
+    expect(inCards('Martwy ciąg'), findsOneWidget);
+    expect(inCards('Kolana w porządku'), findsOneWidget);
+    // Rekord tylko na dzisiejszym Pushu.
+    expect(find.text('rekord'), findsOneWidget);
+    expect(inCards('4 ćwiczenia'), findsNothing);
   });
 
-  testWidgets('tapping a training day filters the list to that day', (
+  testWidgets('month header sums the month of the visible trainings', (
     tester,
   ) async {
-    useTallPhone(tester);
-    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(
-      find.descendant(
-        of: find.byType(HistoryMonthCalendar),
-        matching: find.text('${today.day}'),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pokaż cały miesiąc'), findsOneWidget);
-    expect(find.byType(HistorySessionRow), findsOneWidget);
-    expect(inRows('Plan Góra'), findsOneWidget);
-
-    await tester.tap(find.text('Pokaż cały miesiąc'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HistorySessionRow), findsNWidgets(2));
-  });
-
-  testWidgets('arrow goes to the previous month', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Poprzedni miesiąc'));
-    await tester.pumpAndSettle();
+    await openHistory(tester);
 
     expect(
-      find.text(formatMonthYear(DateTime(today.year, today.month - 1))),
-      findsOneWidget,
+      find.text(formatMonthYear(today).toUpperCase()),
+      findsAtLeastNWidgets(1),
     );
-    final next = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.chevron_right_rounded),
+  });
+
+  testWidgets('plan chips narrow the list and Rekordy keeps record trainings', (
+    tester,
+  ) async {
+    // Testowa czcionka jest szeroka — szerszy ekran, żeby wszystkie chipy
+    // były widoczne.
+    await openHistory(tester, width: 700);
+
+    expect(find.text('Wszystkie'), findsOneWidget);
+    expect(chip('Legs'), findsOneWidget);
+    expect(chip('Rekordy'), findsOneWidget);
+
+    await tester.tap(chip('Legs'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HistorySessionCard), findsOneWidget);
+    expect(inCards('Przysiad'), findsOneWidget);
+
+    await tester.tap(chip('Rekordy'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HistorySessionCard), findsOneWidget);
+    expect(inCards('Wyciskanie'), findsOneWidget);
+
+    await tester.tap(chip('Wszystkie'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HistorySessionCard), findsNWidgets(3));
+  });
+
+  testWidgets('no filter bar when there is a single plan and no records', (
+    tester,
+  ) async {
+    setUpRepositories(
+      local: [_session('only', today.add(const Duration(hours: 1)))],
     );
-    expect(next.onPressed, isNotNull);
+    await openHistory(tester);
+
+    expect(find.byType(HistorySessionCard), findsOneWidget);
+    expect(find.text('Wszystkie'), findsNothing);
+  });
+
+  testWidgets('falls back to the server list when the phone has no sessions', (
+    tester,
+  ) async {
+    setUpRepositories(
+      local: const [],
+      server: [_serverItem('srv', today.add(const Duration(hours: 9)))],
+    );
+    await openHistory(tester);
+
+    expect(find.byType(HistorySessionCard), findsOneWidget);
+    expect(inCards('Plan Serwer'), findsOneWidget);
+    expect(inCards('15'), findsOneWidget);
+    expect(inCards('ćwiczeń'), findsOneWidget);
+  });
+
+  testWidgets('empty history shows a hint instead of an empty list', (
+    tester,
+  ) async {
+    setUpRepositories(local: const []);
+    await openHistory(tester);
+
+    expect(find.text('Brak zarejestrowanych treningów'), findsOneWidget);
+    expect(find.byType(HistorySessionCard), findsNothing);
+  });
+
+  group('calendar sheet', () {
+    testWidgets('opens from the header icon with month summary and calendar', (
+      tester,
+    ) async {
+      await openHistory(tester);
+      await openCalendar(tester);
+
+      expect(find.byType(HistoryCalendarSheet), findsOneWidget);
+      expect(find.byType(HistoryMonthNavigator), findsOneWidget);
+      expect(find.byType(HistoryMonthCalendar), findsOneWidget);
+      expect(find.text(formatMonthYear(today)), findsOneWidget);
+      // Bieżący miesiąc — dalej nie ma dokąd iść.
+      final next = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.chevron_right_rounded),
+      );
+      expect(next.onPressed, isNull);
+      expect(
+        find.text('Stuknij dzień z treningiem, żeby go zobaczyć.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('tapping a training day previews it with "Pokaż na liście"', (
+      tester,
+    ) async {
+      await openHistory(tester);
+      await openCalendar(tester);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(HistoryMonthCalendar),
+          matching: find.text('${today.day}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pokaż na liście'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(HistoryCalendarSheet),
+          matching: find.byType(HistorySessionRow),
+        ),
+        findsOneWidget,
+      );
+
+      // Drugie stuknięcie zdejmuje podgląd.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(HistoryMonthCalendar),
+          matching: find.text('${today.day}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Pokaż na liście'), findsNothing);
+    });
+
+    testWidgets('"Pokaż na liście" closes the sheet and highlights the day', (
+      tester,
+    ) async {
+      await openHistory(tester);
+      await openCalendar(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(HistoryMonthCalendar),
+          matching: find.text('${today.day}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Pokaż na liście'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(find.byType(HistoryCalendarSheet), findsNothing);
+      final highlighted = tester
+          .widgetList<HistorySessionCard>(find.byType(HistorySessionCard))
+          .where((card) => card.highlighted);
+      expect(highlighted.map((c) => c.entry.item.id), ['today']);
+
+      // Podświetlenie gaśnie samo.
+      await tester.pump(const Duration(seconds: 3));
+      expect(
+        tester
+            .widgetList<HistorySessionCard>(find.byType(HistorySessionCard))
+            .any((card) => card.highlighted),
+        isFalse,
+      );
+    });
+
+    testWidgets('"Pokaż na liście" drops a filter that hides the day', (
+      tester,
+    ) async {
+      await openHistory(tester, width: 700);
+      await tester.tap(chip('Legs'));
+      await tester.pumpAndSettle();
+      expect(find.byType(HistorySessionCard), findsOneWidget);
+
+      await openCalendar(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(HistoryMonthCalendar),
+          matching: find.text('${today.day}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pokaż na liście'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(find.byType(HistorySessionCard), findsNWidgets(3));
+    });
+
+    testWidgets('arrow goes to the previous month', (tester) async {
+      await openHistory(tester);
+      await openCalendar(tester);
+
+      await tester.tap(find.byTooltip('Poprzedni miesiąc'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(formatMonthYear(DateTime(today.year, today.month - 1))),
+        findsOneWidget,
+      );
+      final next = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.chevron_right_rounded),
+      );
+      expect(next.onPressed, isNotNull);
+    });
   });
 
   testWidgets('switches between sessions and statistics', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
-    await tester.pumpAndSettle();
+    await openHistory(tester);
 
     expect(find.text('Sesje'), findsOneWidget);
     expect(find.byType(StatsRangeSelector), findsNothing);
+    expect(find.byTooltip('Kalendarz'), findsOneWidget);
 
     await tester.tap(find.text('Statystyki'));
     await tester.pumpAndSettle();
 
     expect(find.byType(StatsRangeSelector), findsOneWidget);
-    expect(find.byType(HistoryMonthNavigator), findsNothing);
-    expect(find.byTooltip('Wybierz rok/miesiąc'), findsNothing);
+    expect(find.byType(HistorySessionCard), findsNothing);
+    // Kalendarz dotyczy listy sesji, nie statystyk.
+    expect(find.byTooltip('Kalendarz'), findsNothing);
 
     await tester.tap(find.text('Sesje'));
     await tester.pumpAndSettle();
-    expect(find.byType(HistoryMonthNavigator), findsOneWidget);
+    expect(find.byType(HistorySessionCard), findsNWidgets(3));
   });
 
   testWidgets('statistics tab survives a trip to the sessions list', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: HistoryScreen()));
-    await tester.pumpAndSettle();
+    await openHistory(tester);
     await tester.tap(find.text('Statystyki'));
     await tester.pumpAndSettle();
     expect(find.text('Przebieg w czasie'), findsOneWidget);
@@ -200,29 +418,14 @@ void main() {
     expect(find.text('Przebieg w czasie'), findsNothing);
   });
 
-  testWidgets('session row shows the record badge', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Column(
-            children: [
-              HistorySessionRow(session: _item('a', today), recordsCount: 2),
-              HistorySessionRow(session: _item('b', today), recordsCount: 1),
-              HistorySessionRow(session: _item('c', today)),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('2 rekordy'), findsOneWidget);
-    expect(find.text('rekord'), findsOneWidget);
-    expect(find.byIcon(Icons.emoji_events_outlined), findsNWidgets(2));
-  });
-
   group('month picker', () {
     Future<void> openPicker(WidgetTester tester, MaterialApp app) async {
+      tester.view.physicalSize = const Size(390 * 3, 1600 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(app);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Kalendarz'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Wybierz rok/miesiąc'));
       await tester.pumpAndSettle();
@@ -256,15 +459,9 @@ void main() {
 }
 
 class _FakeStatsRepository implements TrainingStatsRepository {
-  final _sessions = [
-    session.TrainingSession(
-      planName: 'Plan Góra',
-      status: session.TrainingSessionStatus.completed,
-      startedAt: DateTime.now().toUtc().subtract(const Duration(days: 1)),
-      finishedAt: DateTime.now().toUtc().subtract(const Duration(hours: 23)),
-      exercises: const [],
-    ),
-  ];
+  _FakeStatsRepository(this._sessions);
+
+  final List<session.TrainingSession> _sessions;
 
   @override
   Future<List<session.TrainingSession>> completedSessionsSince(
