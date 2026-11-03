@@ -279,7 +279,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             return LibraryErrorState(message: state.error!);
                           }
                           if (state.exercises.isEmpty) {
-                            return const LibraryEmptyState();
+                            return LibraryEmptyState(
+                              message: state.filter == LibraryFilter.recent && state.query.isEmpty
+                                  ? 'Ta lista zapełni się po Twoim pierwszym treningu.'
+                                  : null,
+                            );
                           }
                           return LibraryExerciseGrid(
                             exercises: state.exercises,

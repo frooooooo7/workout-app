@@ -123,26 +123,33 @@ class LibraryCubit extends Cubit<LibraryState> {
     unawaited(refresh(showLoadingIndicator: false));
   }
 
+  /// Numer ostatniego zapytania — spóźniona odpowiedź na poprzedni filtr nie
+  /// może nadpisać listy.
+  int _refreshSeq = 0;
+
   Future<void> refresh({bool showLoadingIndicator = true}) async {
     if (isClosed) return;
+    final seq = ++_refreshSeq;
+    final filter = state.filter;
+    final query = state.query;
     if (showLoadingIndicator) {
       emit(state.copyWith(loading: true, clearError: true));
     }
     try {
       // „Ostatnio robione” liczymy z historii treningów, a nie z bazy, więc
       // repozytorium dostaje wtedy pełną listę.
-      final recent = state.filter == LibraryFilter.recent;
+      final recent = filter == LibraryFilter.recent;
       final result = await _repository.getAll(
-        filter: recent ? LibraryFilter.all : state.filter,
+        filter: recent ? LibraryFilter.all : filter,
         muscleGroup: state.category,
-        query: state.query,
+        query: query,
       );
       if (recent ||
           state.sort == LibrarySort.popular ||
-          state.query.trim().isNotEmpty) {
+          query.trim().isNotEmpty) {
         await _ensureUsage();
       }
-      if (isClosed) return;
+      if (isClosed || seq != _refreshSeq) return;
       _source = result;
       emit(
         state.copyWith(
@@ -152,7 +159,7 @@ class LibraryCubit extends Cubit<LibraryState> {
         ),
       );
     } catch (_) {
-      if (isClosed) return;
+      if (isClosed || seq != _refreshSeq) return;
       emit(
         state.copyWith(
           loading: false,
@@ -162,10 +169,15 @@ class LibraryCubit extends Cubit<LibraryState> {
     }
   }
 
+  Future<ExerciseUsage>? _usageLoad;
+
   Future<void> _ensureUsage() async {
-    if (_usage != null || _loadUsage == null) return;
+    final load = _loadUsage;
+    if (_usage != null || load == null) return;
+    // Jedno wczytanie historii, nawet gdy kilka odświeżeń startuje naraz.
+    _usageLoad ??= load();
     try {
-      _usage = await _loadUsage();
+      _usage = await _usageLoad;
     } catch (_) {
       // Bez historii „Popularne” zostawia kolejność bazy — to nie jest błąd
       // biblioteki.
@@ -179,10 +191,11 @@ class LibraryCubit extends Cubit<LibraryState> {
     LibrarySort? sort,
   }) {
     final activeTypes = types ?? state.types;
-    var filtered = activeTypes.isEmpty
+    final filtered = activeTypes.isEmpty
         ? source
         : source.where((e) => activeTypes.contains(e.category)).toList();
     final usage = _usage ?? ExerciseUsage.empty;
+    final activeSort = sort ?? state.sort;
     if (state.filter == LibraryFilter.recent) {
       // Tylko to, co było w ukończonym treningu, od ostatnio zrobionego.
       final dated = [
@@ -191,8 +204,10 @@ class LibraryCubit extends Cubit<LibraryState> {
       ]..sort((a, b) => b.$1.compareTo(a.$1));
       return [for (final item in dated) item.$2];
     }
-    if (state.query.trim().isNotEmpty) {
-      // Wynik szukania: najpierw trafność, przy remisie to, co robisz częściej.
+    // Przy wpisanym tekście domyślne „Popularne” zamienia się w trafność
+    // (przy remisie to, co robisz częściej); wybrane przez Ciebie inne
+    // sortowanie zostaje.
+    if (state.query.trim().isNotEmpty && activeSort == LibrarySort.popular) {
       final scored =
           [
             for (final (i, e) in filtered.indexed)
@@ -209,7 +224,7 @@ class LibraryCubit extends Cubit<LibraryState> {
           });
       return [for (final item in scored) item.$4];
     }
-    return sortExercises(filtered, sort ?? state.sort, usage: _usage);
+    return sortExercises(filtered, activeSort, usage: _usage);
   }
 
   Future<void> setSort(LibrarySort sort) async {

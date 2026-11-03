@@ -332,15 +332,24 @@ class ExerciseUsage {
 
   /// Kiedy ćwiczenie było ostatnio w ukończonym treningu; `null` — nigdy.
   DateTime? lastDoneFor(Exercise exercise) {
-    final byId = _lastById[exercise.id];
+    final byId = _latest(_lastById[exercise.id], _lastById[exercise.serverId]);
     final byName = _lastByName[ExerciseStats._normalize(exercise.name)];
     if (byId == null) return byName;
     if (byName == null) return byId;
     return byId.isAfter(byName) ? byId : byName;
   }
 
+  static DateTime? _latest(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
+  }
+
   int countFor(Exercise exercise) {
-    final byId = _byId[exercise.id] ?? 0;
+    final byId = [
+      _byId[exercise.id] ?? 0,
+      _byId[exercise.serverId] ?? 0,
+    ].reduce((a, b) => a > b ? a : b);
     final byName = _byName[ExerciseStats._normalize(exercise.name)] ?? 0;
     return byId > byName ? byId : byName;
   }

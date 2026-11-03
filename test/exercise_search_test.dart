@@ -57,4 +57,23 @@ void main() {
       press.name,
     );
   });
+
+  test('short words are not cut to 3 letters', () {
+    final front = _e('Unoszenie hantli przodem', [MuscleGroup.frontDelts]);
+    final adductor = _e('Przywodzenie nóg', [MuscleGroup.adductors]);
+    final squat = _e('Przysiad ze sztangą', [MuscleGroup.quads]);
+    final names = [
+      for (final e in ExerciseSearch.rank([front, adductor, squat], 'przys'))
+        e.name,
+    ];
+    expect(names, [squat.name]);
+  });
+
+  test('biceps does not find exercises that only use forearms', () {
+    final deadlift = _e('Spacer farmera', [
+      MuscleGroup.traps,
+      MuscleGroup.forearms,
+    ]);
+    expect(ExerciseSearch.rank([deadlift, curl], 'biceps'), [curl]);
+  });
 }

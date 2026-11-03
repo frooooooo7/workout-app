@@ -20,20 +20,18 @@ void main() {
     databaseFactory = databaseFactoryFfi;
   });
 
-  test(
-    'ExerciseDatabase migrates v2→v3: local_id and server_id backfilled',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('gym_v3_mig');
-      final dbFileName = 'migrated.db';
-      final absoluteDbPath = p.join(dir.path, dbFileName);
+  test('ExerciseDatabase migrates v2→v3: local_id and server_id backfilled', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_v3_mig');
+    final dbFileName = 'migrated.db';
+    final absoluteDbPath = p.join(dir.path, dbFileName);
 
-      await databaseFactory.deleteDatabase(absoluteDbPath);
+    await databaseFactory.deleteDatabase(absoluteDbPath);
 
-      var legacyDb = await openDatabase(
-        absoluteDbPath,
-        version: 2,
-        onCreate: (db, _) async {
-          await db.execute('''
+    var legacyDb = await openDatabase(
+      absoluteDbPath,
+      version: 2,
+      onCreate: (db, _) async {
+        await db.execute('''
           CREATE TABLE exercises (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -46,115 +44,105 @@ void main() {
             created_at INTEGER NOT NULL
           )
         ''');
-        },
-      );
-      await legacyDb.insert('exercises', {
-        'id': 'legacy-row-id',
-        'name': 'X',
-        'muscles': '["biceps"]',
-        'category': 'isolation',
-        'description': '',
-        'image_url': null,
-        'is_favourite': 0,
-        'is_mine': 1,
-        'created_at': 1700000000000,
-      });
-      await legacyDb.close();
+      },
+    );
+    await legacyDb.insert('exercises', {
+      'id': 'legacy-row-id',
+      'name': 'X',
+      'muscles': '["biceps"]',
+      'category': 'isolation',
+      'description': '',
+      'image_url': null,
+      'is_favourite': 0,
+      'is_mine': 1,
+      'created_at': 1700000000000,
+    });
+    await legacyDb.close();
 
-      final edb = ExerciseDatabase(dbFileName, directoryOverride: dir.path);
-      await edb.run((db) async {
-        final rows = await db.query('exercises');
-        expect(rows, hasLength(1));
-        expect(rows.single['local_id'], 'legacy-row-id');
-        expect(rows.single['server_id'], 'legacy-row-id');
-        expect(rows.single['pending_op'], isNull);
-      });
-      await edb.close();
-      await dir.delete(recursive: true);
-    },
-  );
+    final edb = ExerciseDatabase(dbFileName, directoryOverride: dir.path);
+    await edb.run((db) async {
+      final rows = await db.query('exercises');
+      expect(rows, hasLength(1));
+      expect(rows.single['local_id'], 'legacy-row-id');
+      expect(rows.single['server_id'], 'legacy-row-id');
+      expect(rows.single['pending_op'], isNull);
+    });
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
 
-  test(
-    'OfflineFirstExerciseRepository.create writes pending_op offline',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('gym_off');
-      final dbName = 'off.db';
-      final edb = ExerciseDatabase(dbName, directoryOverride: dir.path);
-      final api = ApiClient(
-        baseUrl: 'http://127.0.0.1:9',
-        getToken: () async => null,
-      );
-      final remote = ExerciseRemoteDataSource(api);
-      final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
-      sync.stop();
+  test('OfflineFirstExerciseRepository.create writes pending_op offline', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_off');
+    final dbName = 'off.db';
+    final edb = ExerciseDatabase(dbName, directoryOverride: dir.path);
+    final api = ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => null);
+    final remote = ExerciseRemoteDataSource(api);
+    final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
+    sync.stop();
 
-      final repo = OfflineFirstExerciseRepository(
-        localDb: edb,
-        syncEngine: sync,
-      );
+    final repo = OfflineFirstExerciseRepository(
+      localDb: edb,
+      syncEngine: sync,
+    );
 
-      final created = await repo.create(
-        name: 'Push-up',
-        muscles: const [MuscleGroup.chest],
-        category: ExerciseCategory.calisthenics,
-        description: '',
-      );
+    final created = await repo.create(
+      name: 'Push-up',
+      muscles: const [MuscleGroup.chest],
+      category: ExerciseCategory.calisthenics,
+      description: '',
+    );
 
-      expect(created.isPendingSync, true);
+    expect(created.isPendingSync, true);
 
-      await edb.run((db) async {
-        final rows = await db.query(ExerciseDatabase.tableExercises);
-        expect(rows, hasLength(1));
-        expect(rows.single['pending_op'], 'create');
-        expect(rows.single['local_id'], created.id);
-      });
+    await edb.run((db) async {
+      final rows = await db.query(ExerciseDatabase.tableExercises);
+      expect(rows, hasLength(1));
+      expect(rows.single['pending_op'], 'create');
+      expect(rows.single['local_id'], created.id);
+    });
 
-      await edb.close();
-      await dir.delete(recursive: true);
-    },
-  );
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
 
-  test(
-    'delete pending create removes row without calling remote delete',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('gym_del');
-      final dbName = 'del.db';
+  test('delete pending create removes row without calling remote delete', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_del');
+    final dbName = 'del.db';
 
-      final recorded = <String>[];
+    final recorded = <String>[];
 
-      final remote = _SpyExerciseRemote(recorded);
+    final remote = _SpyExerciseRemote(recorded);
 
-      final edb = ExerciseDatabase(dbName, directoryOverride: dir.path);
-      final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
-      sync.stop();
+    final edb = ExerciseDatabase(dbName, directoryOverride: dir.path);
+    final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
+    sync.stop();
 
-      final repo = OfflineFirstExerciseRepository(
-        localDb: edb,
-        syncEngine: sync,
-      );
+    final repo = OfflineFirstExerciseRepository(
+      localDb: edb,
+      syncEngine: sync,
+    );
 
-      final created = await repo.create(
-        name: 'Tmp',
-        muscles: const [MuscleGroup.abs],
-        category: ExerciseCategory.calisthenics,
-        description: '',
-      );
+    final created = await repo.create(
+      name: 'Tmp',
+      muscles: const [MuscleGroup.abs],
+      category: ExerciseCategory.calisthenics,
+      description: '',
+    );
 
-      await repo.delete(created.id);
+    await repo.delete(created.id);
 
-      await edb.run((db) async {
-        final rows = await db.query(ExerciseDatabase.tableExercises);
-        expect(rows, isEmpty);
-        final logs = await db.query(ExerciseDatabase.tableOutboxLog);
-        expect(logs.single['op'], 'skipped_pending_create');
-      });
+    await edb.run((db) async {
+      final rows = await db.query(ExerciseDatabase.tableExercises);
+      expect(rows, isEmpty);
+      final logs = await db.query(ExerciseDatabase.tableOutboxLog);
+      expect(logs.single['op'], 'skipped_pending_create');
+    });
 
-      expect(recorded.where((e) => e.startsWith('delete')), isEmpty);
+    expect(recorded.where((e) => e.startsWith('delete')), isEmpty);
 
-      await edb.close();
-      await dir.delete(recursive: true);
-    },
-  );
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
 
   test('ExerciseSyncEngine.flush runs create before image upload', () async {
     final dir = await Directory.systemTemp.createTemp('gym_sync');
@@ -198,7 +186,8 @@ void main() {
   test('library search matches Polish letters regardless of case', () async {
     final dir = await Directory.systemTemp.createTemp('gym_search');
     final edb = ExerciseDatabase('search.db', directoryOverride: dir.path);
-    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)..stop();
+    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)
+      ..stop();
     final repo = OfflineFirstExerciseRepository(localDb: edb, syncEngine: sync);
 
     await repo.create(
@@ -227,7 +216,8 @@ void main() {
   test('getById finds an exercise by local id and by server id', () async {
     final dir = await Directory.systemTemp.createTemp('gym_by_id');
     final edb = ExerciseDatabase('by_id.db', directoryOverride: dir.path);
-    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)..stop();
+    final sync = ExerciseSyncEngine(remote: _SeqRemote(), localDb: edb)
+      ..stop();
     final repo = OfflineFirstExerciseRepository(localDb: edb, syncEngine: sync);
 
     final created = await repo.create(
@@ -237,63 +227,59 @@ void main() {
       description: '',
     );
     await edb.run(
-      (db) => db.update(
-        ExerciseDatabase.tableExercises,
-        {'server_id': 'srv-1'},
-        where: 'local_id = ?',
-        whereArgs: [created.id],
-      ),
+      (db) => db.update(ExerciseDatabase.tableExercises, {
+        'server_id': 'srv-1',
+      }, where: 'local_id = ?', whereArgs: [created.id]),
     );
 
     expect((await repo.getById(created.id))?.name, 'Mostek biodrowy');
-    expect((await repo.getById('srv-1'))?.id, created.id);
+    final byServer = await repo.getById('srv-1');
+    expect(byServer?.id, created.id);
+    expect(byServer?.serverId, 'srv-1');
     expect(await repo.getById('nope'), isNull);
 
     await edb.close();
     await dir.delete(recursive: true);
   });
 
-  test(
-    'flush after a failed offline pull still sends every pending row',
-    () async {
-      final dir = await Directory.systemTemp.createTemp('gym_stale_net');
-      final edb = ExerciseDatabase('stale.db', directoryOverride: dir.path);
+  test('flush after a failed offline pull still sends every pending row', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_stale_net');
+    final edb = ExerciseDatabase('stale.db', directoryOverride: dir.path);
 
-      await edb.run((db) async {
-        for (final localId in [
-          '11111111-1111-4111-8111-000000000001',
-          '11111111-1111-4111-8111-000000000002',
-        ]) {
-          final dto = ExerciseDto.fromDomain(
-            Exercise(
-              id: localId,
-              name: 'Offline $localId',
-              muscles: const [MuscleGroup.biceps],
-              category: ExerciseCategory.isolation,
-              description: '',
-              isMine: true,
-              createdAt: DateTime.utc(2024),
-            ),
-            pendingOp: 'create',
-          );
-          await db.insert(ExerciseDatabase.tableExercises, dto.toMap());
-        }
-      });
+    await edb.run((db) async {
+      for (final localId in [
+        '11111111-1111-4111-8111-000000000001',
+        '11111111-1111-4111-8111-000000000002',
+      ]) {
+        final dto = ExerciseDto.fromDomain(
+          Exercise(
+            id: localId,
+            name: 'Offline $localId',
+            muscles: const [MuscleGroup.biceps],
+            category: ExerciseCategory.isolation,
+            description: '',
+            isMine: true,
+            createdAt: DateTime.utc(2024),
+          ),
+          pendingOp: 'create',
+        );
+        await db.insert(ExerciseDatabase.tableExercises, dto.toMap());
+      }
+    });
 
-      final remote = _OfflinePullRemote();
-      final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
+    final remote = _OfflinePullRemote();
+    final sync = ExerciseSyncEngine(remote: remote, localDb: edb);
 
-      // Pull bez sieci zapamiętuje błąd — nie może on przerwać późniejszej
-      // wysyłki, która już przechodzi.
-      await sync.pull();
-      await sync.flush();
+    // Pull bez sieci zapamiętuje błąd — nie może on przerwać późniejszej
+    // wysyłki, która już przechodzi.
+    await sync.pull();
+    await sync.flush();
 
-      expect(remote.log.where((entry) => entry == 'create'), hasLength(2));
+    expect(remote.log.where((entry) => entry == 'create'), hasLength(2));
 
-      await edb.close();
-      await dir.delete(recursive: true);
-    },
-  );
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
 }
 
 class _OfflinePullRemote extends _SeqRemote {
@@ -335,9 +321,7 @@ class _OfflinePullRemote extends _SeqRemote {
 
 class _SpyExerciseRemote extends ExerciseRemoteDataSource {
   _SpyExerciseRemote(this.recorded)
-    : super(
-        ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => null),
-      );
+      : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => null));
 
   final List<String> recorded;
 
@@ -348,8 +332,7 @@ class _SpyExerciseRemote extends ExerciseRemoteDataSource {
 }
 
 class _SeqRemote extends ExerciseRemoteDataSource {
-  _SeqRemote()
-    : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => ''));
+  _SeqRemote() : super(ApiClient(baseUrl: 'http://127.0.0.1:9', getToken: () async => ''));
 
   final List<String> log = [];
 
@@ -415,7 +398,8 @@ class _SeqRemote extends ExerciseRemoteDataSource {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) async => throw UnimplementedError();
+  }) async =>
+      throw UnimplementedError();
 
   @override
   Future<void> delete(String id) async {

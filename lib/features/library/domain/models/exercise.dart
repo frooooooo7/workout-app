@@ -266,6 +266,7 @@ class Exercise {
     this.createdAt,
     this.isPendingSync = false,
     this.clientId,
+    this.serverId,
     this.tracking = ExerciseTracking.weightReps,
     this.distanceUnit = DistanceUnit.km,
   });
@@ -288,6 +289,10 @@ class Exercise {
   /// Identyfikator nadany offline przez klienta (API zwraca go tylko dla
   /// własnych ćwiczeń) — pozwala sparować rekord z serwera z lokalnym wierszem.
   final String? clientId;
+
+  /// Identyfikator z serwera, gdy ćwiczenie już tam jest. Treningi pobrane na
+  /// nowym telefonie wskazują ćwiczenie właśnie nim, a nie lokalnym [id].
+  final String? serverId;
 
   /// Co zapisuje seria: ciężar × powt., same powtórzenia, czas albo czas
   /// + dystans.
@@ -326,6 +331,7 @@ class Exercise {
       createdAt: createdAt ?? this.createdAt,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       clientId: clientId,
+      serverId: serverId,
       tracking: tracking ?? this.tracking,
       distanceUnit: distanceUnit ?? this.distanceUnit,
     );

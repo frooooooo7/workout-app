@@ -5,8 +5,8 @@ import 'models/exercise.dart';
 /// Zasady:
 /// - małe litery i bez polskich znaków, w zapytaniu i w danych,
 /// - każde wpisane słowo musi pasować do początku któregoś słowa ćwiczenia,
-///   w dowolnej kolejności; od 5 liter porównujemy rdzeń bez dwóch ostatnich
-///   liter („sztanga” łapie „sztangi” i „sztangą”),
+///   w dowolnej kolejności; od 6 liter porównujemy rdzeń bez dwóch ostatnich
+///   liter, min. 4 litery („sztanga” łapie „sztangi” i „sztangą”),
 /// - przeszukuje nazwę, dodatkowe nazwy, mięśnie (z partią) i dodatkowe hasła
 ///   (np. sprzęt), a wynik dostaje ocenę do sortowania.
 abstract final class ExerciseSearch {
@@ -34,13 +34,16 @@ abstract final class ExerciseSearch {
   }
 
   /// Słowa tekstu po normalizacji (litery i cyfry).
-  static List<String> tokens(String input) => RegExp(r'[a-z0-9]+')
+  static final _wordPattern = RegExp(r'[a-z0-9]+');
+
+  static List<String> tokens(String input) => _wordPattern
       .allMatches(normalize(input))
       .map((m) => m.group(0)!)
       .toList(growable: false);
 
   static bool _wordMatches(String word, String token) {
-    if (token.length >= 5) {
+    // Od 6 liter ucinamy końcówkę, ale zostaje co najmniej 4 litery rdzenia.
+    if (token.length >= 6) {
       return word.startsWith(token.substring(0, token.length - 2));
     }
     return word.startsWith(token);
@@ -65,7 +68,9 @@ abstract final class ExerciseSearch {
     List<String> muscleWords(MuscleGroup m) => [
       ...tokens(m.label),
       ...tokens(m.shortLabel),
-      ...tokens(m.broadGroup.label),
+      // Zbiorcza etykieta tylko dla grup zbiorczych (plecy, nogi, barki);
+      // przedramiona nie mają być „bicepsem”.
+      if (m.broadGroup.isCoarse) ...tokens(m.broadGroup.label),
       if (m.region != null) ...tokens(m.region!.label),
     ];
     final primaryWords = muscles.isEmpty ? <String>[] : muscleWords(muscles[0]);

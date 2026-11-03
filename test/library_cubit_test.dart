@@ -49,7 +49,8 @@ class _FakeExerciseRepository implements ExerciseRepository {
     MuscleGroup? muscleGroup,
     LibraryFilter? filter,
     String? query,
-  }) async => List<Exercise>.from(data);
+  }) async =>
+      List<Exercise>.from(data);
 
   @override
   Future<void> setFavourite(String id, {required bool isFavourite}) async {}
@@ -63,7 +64,8 @@ class _FakeExerciseRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 }
 
 void main() {
@@ -148,72 +150,79 @@ void main() {
         cubit.state.exercises.map((e) => e.id).toList();
 
     TrainingSession session(String exerciseId, String name) => TrainingSession(
-      planName: 'Plan',
-      status: TrainingSessionStatus.completed,
-      exercises: [
-        TrainingSessionExercise(
-          exerciseId: exerciseId,
-          exerciseName: name,
-          exerciseMuscles: const [],
-          exerciseCategory: 'compound',
-          sets: [TrainingSessionSet(actualReps: '10', completed: true)],
-        ),
-      ],
-    );
-
-    test(
-      '„Ostatnio robione” bierze ćwiczenia z treningów, najnowsze pierwsze',
-      () async {
-        TrainingSession at(String id, String name, DateTime day) =>
-            TrainingSession(
-              planName: 'Plan',
-              status: TrainingSessionStatus.completed,
-              startedAt: day,
-              finishedAt: day,
-              exercises: [
-                TrainingSessionExercise(
-                  exerciseId: id,
-                  exerciseName: name,
-                  exerciseMuscles: const [],
-                  exerciseCategory: 'compound',
-                  sets: [TrainingSessionSet(actualReps: '10', completed: true)],
-                ),
-              ],
-            );
-        final cubit = LibraryCubit(
-          _FakeExerciseRepository(sample),
-          loadUsage: () async => ExerciseStats.usage([
-            at('a', 'Arnoldki', DateTime.utc(2026, 5, 1)),
-            at('b', 'Bicepsy', DateTime.utc(2026, 6, 1)),
-          ]),
+          planName: 'Plan',
+          status: TrainingSessionStatus.completed,
+          exercises: [
+            TrainingSessionExercise(
+              exerciseId: exerciseId,
+              exerciseName: name,
+              exerciseMuscles: const [],
+              exerciseCategory: 'compound',
+              sets: [TrainingSessionSet(actualReps: '10', completed: true)],
+            ),
+          ],
         );
-        cubit.setFilter(LibraryFilter.recent);
-        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-        // „c” nie było w żadnym treningu, więc nie ma go na liście.
-        expect(ids(cubit), ['b', 'a']);
-        await cubit.close();
-      },
-    );
+    test('„Ostatnio robione” bierze ćwiczenia z treningów, najnowsze pierwsze', () async {
+      TrainingSession at(String id, String name, DateTime day) => TrainingSession(
+        planName: 'Plan',
+        status: TrainingSessionStatus.completed,
+        startedAt: day,
+        finishedAt: day,
+        exercises: [
+          TrainingSessionExercise(
+            exerciseId: id,
+            exerciseName: name,
+            exerciseMuscles: const [],
+            exerciseCategory: 'compound',
+            sets: [TrainingSessionSet(actualReps: '10', completed: true)],
+          ),
+        ],
+      );
+      final cubit = LibraryCubit(
+        _FakeExerciseRepository(sample),
+        loadUsage: () async => ExerciseStats.usage([
+          at('a', 'Arnoldki', DateTime.utc(2026, 5, 1)),
+          at('b', 'Bicepsy', DateTime.utc(2026, 6, 1)),
+        ]),
+      );
+      cubit.setFilter(LibraryFilter.recent);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    test(
-      '„Popularne” układa według liczby treningów, remisy stabilnie',
-      () async {
-        final cubit = LibraryCubit(
-          _FakeExerciseRepository(sample),
-          loadUsage: () async => ExerciseStats.usage([
-            session('b', 'Bicepsy'),
-            session('b', 'Bicepsy'),
-            session('a', 'Arnoldki'),
-          ]),
-        );
-        await cubit.refresh();
+      // „c” nie było w żadnym treningu, więc nie ma go na liście.
+      expect(ids(cubit), ['b', 'a']);
+      await cubit.close();
+    });
 
-        expect(cubit.state.sort, LibrarySort.popular);
-        expect(ids(cubit), ['b', 'a', 'c']);
-        await cubit.close();
-      },
-    );
+    test('historia dopasowana po id z serwera, gdy nazwa się zmieniła', () {
+      final exercise = Exercise(
+        id: 'local-1',
+        serverId: 'srv-1',
+        name: 'Nowa nazwa',
+        muscles: const [MuscleGroup.chest],
+        category: ExerciseCategory.compound,
+      );
+      final usage = ExerciseStats.usage([session('srv-1', 'Stara nazwa')]);
+      expect(usage.countFor(exercise), 1);
+      expect(usage.lastDoneFor(exercise), isNotNull);
+    });
+
+    test('„Popularne” układa według liczby treningów, remisy stabilnie',
+        () async {
+      final cubit = LibraryCubit(
+        _FakeExerciseRepository(sample),
+        loadUsage: () async => ExerciseStats.usage([
+          session('b', 'Bicepsy'),
+          session('b', 'Bicepsy'),
+          session('a', 'Arnoldki'),
+        ]),
+      );
+      await cubit.refresh();
+
+      expect(cubit.state.sort, LibrarySort.popular);
+      expect(ids(cubit), ['b', 'a', 'c']);
+      await cubit.close();
+    });
 
     test('bez historii „Popularne” zostawia kolejność repozytorium', () async {
       final cubit = LibraryCubit(_FakeExerciseRepository(sample));
@@ -238,20 +247,18 @@ void main() {
       await cubit.close();
     });
 
-    test(
-      'filtr typu zawęża listę i wraca do pełnej po wyczyszczeniu',
-      () async {
-        final cubit = LibraryCubit(_FakeExerciseRepository(sample));
-        await cubit.refresh();
+    test('filtr typu zawęża listę i wraca do pełnej po wyczyszczeniu',
+        () async {
+      final cubit = LibraryCubit(_FakeExerciseRepository(sample));
+      await cubit.refresh();
 
-        cubit.setTypes({ExerciseCategory.isolation, ExerciseCategory.compound});
-        expect(ids(cubit), ['a', 'b']);
+      cubit.setTypes({ExerciseCategory.isolation, ExerciseCategory.compound});
+      expect(ids(cubit), ['a', 'b']);
 
-        cubit.setTypes({});
-        expect(ids(cubit), ['c', 'a', 'b']);
-        await cubit.close();
-      },
-    );
+      cubit.setTypes({});
+      expect(ids(cubit), ['c', 'a', 'b']);
+      await cubit.close();
+    });
   });
 
   test('LibraryCubit sets error state when repository throws', () async {
@@ -279,7 +286,8 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 
   @override
   Future<void> delete(String id) => throw UnimplementedError();
@@ -305,5 +313,6 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 }

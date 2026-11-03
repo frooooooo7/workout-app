@@ -35,7 +35,8 @@ class _FakeRepository implements ExerciseRepository {
     MuscleGroup? muscleGroup,
     LibraryFilter? filter,
     String? query,
-  }) async => [_exercise];
+  }) async =>
+      [_exercise];
 
   @override
   Future<Exercise> create({
@@ -47,7 +48,8 @@ class _FakeRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 
   @override
   Future<Exercise> update({
@@ -58,7 +60,8 @@ class _FakeRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 
   @override
   Future<void> delete(String id) => throw UnimplementedError();
