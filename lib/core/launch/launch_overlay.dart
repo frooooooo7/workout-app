@@ -54,7 +54,7 @@ class LaunchOverlay extends StatefulWidget {
 class _LaunchOverlayState extends State<LaunchOverlay>
     with TickerProviderStateMixin {
   static const _logoWidth = 150.0;
-  static const _logoRatio = 286 / 468;
+  static const _logoRatio = 1179 / 1937;
   static const _lift = 40.0;
   static const _introMs = 1250.0;
 
