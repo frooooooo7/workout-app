@@ -198,7 +198,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 previous.types != current.types,
                             builder: (context, state) => LibraryHeader(
                               searchController: _searchController,
-                              onSearchChanged: cubit.setQuery,
+                              onSearchChanged: (query) {
+                                cubit.setQuery(query);
+                                // Odświeża `PopScope` i wybór ekranu: z
+                                // tekstem „wstecz” czyści wyniki.
+                                setState(() {});
+                              },
                               activeFilterCount: state.types.length,
                               onFilterTap: () => _pickTypes(context),
                               onBackTap: () {
