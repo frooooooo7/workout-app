@@ -42,6 +42,10 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     'created_at',
     'pending_op',
     'is_favourite_dirty',
+    'equipment',
+    'aliases',
+    'instructions',
+    'pattern',
   ];
 
   Future<Map<String, dynamic>?> _findRow(Database db, String id) async {

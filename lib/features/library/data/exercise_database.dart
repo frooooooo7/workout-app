@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 21;
+  static const _dbVersion = 22;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -331,6 +331,7 @@ class ExerciseDatabase {
     await _addPostColumns(db);
     await _addPlanProgressionColumn(db);
     await _addPlanCoverColumns(db);
+    await _addExerciseDetailColumns(db);
   }
 
   /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
@@ -825,6 +826,27 @@ class ExerciseDatabase {
     }
     if (oldVersion < 21) {
       await _addPlanCoverColumns(db);
+    }
+    if (oldVersion < 22) {
+      await _addExerciseDetailColumns(db);
+    }
+  }
+
+  /// v22: sprzęt, inne nazwy (JSON), opis techniki (JSON) i rodzaj ruchu.
+  Future<void> _addExerciseDetailColumns(Database db) async {
+    const columns = {
+      'equipment': 'TEXT',
+      'aliases': 'TEXT',
+      'instructions': 'TEXT',
+      'pattern': 'TEXT',
+    };
+    for (final column in columns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableExercises,
+        column: column.key,
+        definition: column.value,
+      );
     }
   }
 

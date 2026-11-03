@@ -561,6 +561,10 @@ class ExerciseSyncEngine extends SyncEngineBase {
             'image_url': ex.imageUrl,
             'tracking_type': ex.tracking.apiName,
             'distance_unit': ex.distanceUnit.apiName,
+            'equipment': ex.equipment?.apiName,
+            'aliases': ExerciseDto.encodeAliases(ex.aliases),
+            'instructions': ex.instructions?.encode(),
+            'pattern': ex.pattern,
             if (!favDirty) 'is_favourite': ex.isFavourite ? 1 : 0,
             'is_mine': ex.isMine ? 1 : 0,
             if (ex.createdAt != null)

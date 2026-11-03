@@ -7,8 +7,8 @@ import 'models/exercise.dart';
 /// - każde wpisane słowo musi pasować do początku któregoś słowa ćwiczenia,
 ///   w dowolnej kolejności; od 6 liter porównujemy rdzeń bez dwóch ostatnich
 ///   liter, min. 4 litery („sztanga” łapie „sztangi” i „sztangą”),
-/// - przeszukuje nazwę, dodatkowe nazwy, mięśnie (z partią) i dodatkowe hasła
-///   (np. sprzęt), a wynik dostaje ocenę do sortowania.
+/// - przeszukuje nazwę, inne nazwy (np. „OHP”), mięśnie (z partią) i sprzęt,
+///   a wynik dostaje ocenę do sortowania.
 abstract final class ExerciseSearch {
   static const _diacritics = {
     'ą': 'a',
@@ -52,18 +52,13 @@ abstract final class ExerciseSearch {
   /// Ocena dopasowania najsłabszego słowa zapytania; `null` — brak dopasowania.
   ///
   /// Skala: początek nazwy 100, słowo w nazwie 80, inna nazwa 60,
-  /// mięsień główny 40, mięsień wspomagający lub hasło dodatkowe 30.
-  static int? score(
-    Exercise exercise,
-    String query, {
-    Iterable<String> aliases = const [],
-    Iterable<String> extraTerms = const [],
-  }) {
+  /// mięsień główny 40, mięsień wspomagający lub sprzęt 30.
+  static int? score(Exercise exercise, String query) {
     final queryTokens = tokens(query);
     if (queryTokens.isEmpty) return null;
 
     final nameWords = tokens(exercise.name);
-    final aliasWords = [for (final a in aliases) ...tokens(a)];
+    final aliasWords = [for (final a in exercise.aliases) ...tokens(a)];
     final muscles = exercise.workingMuscles;
     List<String> muscleWords(MuscleGroup m) => [
       ...tokens(m.label),
@@ -75,7 +70,9 @@ abstract final class ExerciseSearch {
     ];
     final primaryWords = muscles.isEmpty ? <String>[] : muscleWords(muscles[0]);
     final secondaryWords = [for (final m in muscles.skip(1)) ...muscleWords(m)];
-    final extraWords = [for (final t in extraTerms) ...tokens(t)];
+    final extraWords = [
+      if (exercise.equipment case final equipment?) ...tokens(equipment.label),
+    ];
 
     var weakest = 100;
     var total = 0;
