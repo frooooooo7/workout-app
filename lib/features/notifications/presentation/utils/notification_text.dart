@@ -17,7 +17,7 @@ NotificationTextPart _bold(String text, [Color? color]) =>
     (text: text, bold: true, color: color);
 
 /// Opis wpisu w czasie teraźniejszym — bez zgadywania rodzaju
-/// gramatycznego: „Anna daje kudosa…”, „Kuba Nowak obserwuje Cię”.
+/// gramatycznego: „Anna daje żółwika…”, „Kuba Nowak obserwuje Cię”.
 List<NotificationTextPart> notificationTextParts(AppNotification n) {
   final actor = n.actor;
   final name = _nameOf(actor);
@@ -37,7 +37,9 @@ List<NotificationTextPart> notificationTextParts(AppNotification n) {
           ),
         ],
         _plain(
-          others == 0 ? ' daje kudosa za trening ' : ' dają kudosy za trening ',
+          others == 0
+              ? ' daje żółwika za trening '
+              : ' dają żółwiki za trening ',
         ),
         _bold(title, PlanColors.of(title)),
       ];

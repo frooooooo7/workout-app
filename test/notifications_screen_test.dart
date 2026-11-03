@@ -81,7 +81,7 @@ void main() {
     expect(find.text('WCZEŚNIEJ'), findsOneWidget);
     expect(
       find.text(
-        'Anna i 2 inne osoby dają kudosy za trening Push',
+        'Anna i 2 inne osoby dają żółwiki za trening Push',
         findRichText: true,
       ),
       findsOneWidget,

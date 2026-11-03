@@ -263,7 +263,7 @@ void main() {
     expect(find.text('Usunąć trening?'), findsOneWidget);
     expect(
       find.text(
-        'Tej operacji nie można cofnąć. Znikną też kudosy i komentarze.',
+        'Tej operacji nie można cofnąć. Znikną też żółwiki i komentarze.',
       ),
       findsOneWidget,
     );

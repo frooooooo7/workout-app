@@ -236,7 +236,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ? 'Nic nowego'
                     : 'Brak powiadomień tego rodzaju',
                 message:
-                    'Tu zobaczysz kudosy, nowych obserwujących, kopie '
+                    'Tu zobaczysz żółwiki, nowych obserwujących, kopie '
                     'Twoich planów i rekordy osób, które obserwujesz.',
               ),
             ),
