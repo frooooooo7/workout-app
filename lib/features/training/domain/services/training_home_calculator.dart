@@ -81,6 +81,7 @@ abstract final class TrainingHomeCalculator {
         today: today,
         goal: weeklyGoal,
       ),
+      loaded: true,
     );
   }
 

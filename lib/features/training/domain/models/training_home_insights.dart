@@ -22,6 +22,7 @@ class TrainingHomeInsights {
     this.planDurationsSec = const {},
     this.recordsBySession = const {},
     this.weeklyGoal,
+    this.loaded = false,
   });
 
   /// Dzień tygodnia (1–7) → nazwa planu ukończonego tego dnia treningu.
@@ -45,6 +46,11 @@ class TrainingHomeInsights {
 
   /// `null`, gdy cel w profilu nie jest ustawiony albo brak sieci.
   final WeeklyGoalProgress? weeklyGoal;
+
+  /// Czy pierwsze wczytanie z lokalnej historii się zakończyło (także
+  /// błędem). Do chwili, gdy `false`, tydzień pokazuje „0 treningów” tylko
+  /// dlatego, że danych jeszcze nie ma; ekran ładowania czeka na `true`.
+  final bool loaded;
 
   static const empty = TrainingHomeInsights();
 

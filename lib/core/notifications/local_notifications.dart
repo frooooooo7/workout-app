@@ -30,7 +30,7 @@ class LocalNotifications {
 
     await plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_stat_stronger'),
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,

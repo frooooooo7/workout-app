@@ -13,7 +13,7 @@
          treningów i pomiary ciała, a zaszyfrowany token i tak nie da się
          odtworzyć na innym urządzeniu (klucz zostaje w Keystore). -->
     <application
-        android:label="gym"
+        android:label="Stronger"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

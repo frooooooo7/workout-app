@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/launch/app_launch_controller.dart';
+import '../../../../core/launch/launch_ready_signal.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_home_insights.dart';
@@ -45,20 +47,32 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
     final historyState = context.watch<TrainingHistoryCubit>().state;
     final insights = context.watch<TrainingHomeCubit>().state;
 
-    return _TrainingSessionBody(
-      selectedDay: _selectedDay,
-      plansState: plansState,
-      historyState: historyState,
-      insights: insights,
-      activeSession: sessionState.activeSession,
-      onDaySelected: (day) => setState(() => _selectedDay = day),
-      onResumeSession: (session) => _resumeSession(context, session),
-      onOpenPlan: (plan) => _openPlan(context, plan),
-      onStartPlan: (plan) => _startPlan(context, plan),
-      onStartCustom: () => _startCustom(context),
-      onCreatePlanForDay: (day) => _createPlan(context, day),
-      onOpenHistoryItem: (item) =>
-          context.push('/app/training/history/${item.id}'),
+    // Ekran startu czeka, aż wszystkie źródła skończą pierwsze wczytanie
+    // (lokalna baza), żeby Trening pokazał się od razu z danymi.
+    final firstLoadDone =
+        !plansState.isLoading &&
+        !sessionState.isLoading &&
+        !historyState.loading &&
+        insights.loaded;
+
+    return LaunchReadySignal(
+      target: LaunchTarget.training,
+      ready: firstLoadDone,
+      child: _TrainingSessionBody(
+        selectedDay: _selectedDay,
+        plansState: plansState,
+        historyState: historyState,
+        insights: insights,
+        activeSession: sessionState.activeSession,
+        onDaySelected: (day) => setState(() => _selectedDay = day),
+        onResumeSession: (session) => _resumeSession(context, session),
+        onOpenPlan: (plan) => _openPlan(context, plan),
+        onStartPlan: (plan) => _startPlan(context, plan),
+        onStartCustom: () => _startCustom(context),
+        onCreatePlanForDay: (day) => _createPlan(context, day),
+        onOpenHistoryItem: (item) =>
+            context.push('/app/training/history/${item.id}'),
+      ),
     );
   }
 

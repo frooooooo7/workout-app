@@ -1,0 +1,20 @@
+# Natywny splash (Android, iOS, web): granat aplikacji i logo S na środku.
+# Wygląda tak samo jak pierwsza klatka ekranu ładowania z lib/core/launch/,
+# więc przejście z systemu do Fluttera jest niewidoczne.
+# Pliki natywne generuje: dart run flutter_native_splash:create
+# Źródła obrazów (poza paczką aplikacji): assets/splash/.
+flutter_native_splash:
+  color: "#0A0D13"
+  color_dark: "#0A0D13"
+  # Logo 150 dp szerokości, zapisane w skali 4x (xxxhdpi).
+  image: assets/splash/logo.png
+  image_dark: assets/splash/logo.png
+  android_gravity: center
+  ios_content_mode: center
+  web_image_mode: center
+  android_12:
+    color: "#0A0D13"
+    color_dark: "#0A0D13"
+    # Obszar ikony 288 dp (1152 px): logo mieści się w widocznym kole 192 dp.
+    image: assets/splash/logo_android12.png
+    image_dark: assets/splash/logo_android12.png
