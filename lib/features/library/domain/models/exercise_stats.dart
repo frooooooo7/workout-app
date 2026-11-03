@@ -139,7 +139,9 @@ class ExerciseStats {
   /// nieść identyfikator serwera zamiast lokalnego — wtedy ratuje nas nazwa
   /// (zapisana w sesji jako snapshot).
   static bool matches(TrainingSessionExercise entry, Exercise exercise) {
-    if (entry.exerciseId.isNotEmpty && entry.exerciseId == exercise.id) {
+    if (entry.exerciseId.isNotEmpty &&
+        (entry.exerciseId == exercise.id ||
+            entry.exerciseId == exercise.serverId)) {
       return true;
     }
     return _normalize(entry.exerciseName) == _normalize(exercise.name);

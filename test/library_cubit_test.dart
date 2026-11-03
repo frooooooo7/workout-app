@@ -205,6 +205,7 @@ void main() {
       final usage = ExerciseStats.usage([session('srv-1', 'Stara nazwa')]);
       expect(usage.countFor(exercise), 1);
       expect(usage.lastDoneFor(exercise), isNotNull);
+      expect(ExerciseStats.matches(session('srv-1', 'Stara nazwa').exercises.first, exercise), isTrue);
     });
 
     test('„Popularne” układa według liczby treningów, remisy stabilnie',
