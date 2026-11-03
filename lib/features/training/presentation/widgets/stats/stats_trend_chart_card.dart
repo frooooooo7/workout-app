@@ -15,9 +15,9 @@ import 'stats_format.dart';
 
 /// Miara pokazywana na wykresie w czasie.
 enum _TrendMetric {
-  volume('Objętość', AppColors.statIndigo),
-  sets('Serie', AppColors.statTeal),
-  duration('Czas', AppColors.statOrange),
+  volume('Objętość', AppColors.primaryVariant),
+  sets('Serie', AppColors.primaryVariant),
+  duration('Czas', AppColors.primaryVariant),
   workouts('Treningi', AppColors.primaryVariant);
 
   const _TrendMetric(this.label, this.color);
@@ -187,8 +187,7 @@ class _StatsTrendChartCardState extends State<StatsTrendChartCard> {
         total > 0 && averages.whereType<double>().length >= 2;
 
     return SessionSectionCard(
-      icon: Icons.bar_chart_rounded,
-      title: 'Przebieg w czasie',
+      title: null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -594,7 +593,7 @@ class _TrendChart extends StatelessWidget {
                                 if (i < averages.length && averages[i] != null)
                                   FlSpot(i.toDouble(), averages[i]!),
                             ],
-                            color: AppColors.statAmber,
+                            color: AppColors.textSubtle,
                             barWidth: 2,
                             isCurved: true,
                             curveSmoothness: 0.2,
@@ -685,7 +684,7 @@ class _Legend extends StatelessWidget {
             children: [
               const CustomPaint(
                 size: Size(16, 9),
-                painter: _DashPainter(AppColors.statAmber),
+                painter: _DashPainter(AppColors.textSubtle),
               ),
               const SizedBox(width: 6),
               Flexible(child: Text(averageLabel!, style: _style)),

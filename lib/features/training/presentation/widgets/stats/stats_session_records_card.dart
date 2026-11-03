@@ -26,8 +26,7 @@ class StatsSessionRecordsCard extends StatelessWidget {
     ];
 
     return SessionSectionCard(
-      icon: Icons.workspace_premium_outlined,
-      title: 'Rekordy sesji',
+      title: 'Najlepsze treningi',
       child: records.isEmpty
           ? const Text(
               'Ukończ trening z ciężarami, aby zobaczyć rekordy sesji.',
@@ -136,7 +135,7 @@ class _BestWeekRow extends StatelessWidget {
           'Najlepszy tydzień, ${value.value} ${value.unit}, $workouts, '
           '$since',
       child: _RecordTile(
-        icon: Icons.emoji_events_rounded,
+        icon: Icons.date_range_rounded,
         label: 'Najlepszy tydzień',
         value: value,
         detail: '$workouts · $since',
@@ -174,10 +173,10 @@ class _RecordTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.statAmber.withValues(alpha: 0.14),
+              color: AppColors.primary.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(AppRadius.md - 2),
             ),
-            child: Icon(icon, size: 18, color: AppColors.statAmber),
+            child: Icon(icon, size: 18, color: AppColors.primaryVariant),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(

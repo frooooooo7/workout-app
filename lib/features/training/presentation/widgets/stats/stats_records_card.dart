@@ -31,8 +31,7 @@ class StatsRecordsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final visible = records.take(_maxRows).toList(growable: false);
     return SessionSectionCard(
-      icon: Icons.emoji_events_outlined,
-      title: 'Rekordy',
+      title: 'Rekordy w tym okresie',
       trailing: bests.isEmpty
           ? null
           : TextButton(
@@ -51,7 +50,7 @@ class StatsRecordsCard extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: const Text('Wszystkie'),
+              child: const Text('Wszystkie ćwiczenia'),
             ),
       child: visible.isEmpty
           ? _Empty(tracked: bests.length)
@@ -112,13 +111,13 @@ class _RecordRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.statAmber.withValues(alpha: 0.14),
+              color: AppColors.record.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(AppRadius.md - 2),
             ),
             child: const Icon(
               Icons.emoji_events_rounded,
               size: 18,
-              color: AppColors.statAmber,
+              color: AppColors.record,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),

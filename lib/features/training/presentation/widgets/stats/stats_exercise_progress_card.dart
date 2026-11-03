@@ -6,13 +6,14 @@ import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../../../core/utils/polish_plural.dart';
 import '../../../domain/models/training_stats.dart';
 import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
 
 enum _Metric {
-  oneRepMax('1RM'),
-  weight('Ciężar'),
+  oneRepMax('Szac. 1RM'),
+  weight('Najcięższa seria'),
   volume('Objętość'),
   reps('Powtórzenia');
 
@@ -113,8 +114,7 @@ class _StatsExerciseProgressCardState extends State<StatsExerciseProgressCard> {
   Widget build(BuildContext context) {
     final selected = _selected;
     return SessionSectionCard(
-      icon: Icons.show_chart_rounded,
-      title: 'Progres ćwiczeń',
+      title: null,
       child: selected == null
           ? const Text(
               'Brak ćwiczeń w tym okresie — progres pojawi się po treningu.',
@@ -181,6 +181,8 @@ class _StatsExerciseProgressCardState extends State<StatsExerciseProgressCard> {
   }
 }
 
+/// Pole wyboru ćwiczenia: pełna nazwa i wyszukiwarka w arkuszu zamiast rzędu
+/// ucinanych chipów.
 class _ExercisePicker extends StatelessWidget {
   const _ExercisePicker({
     required this.exercises,
@@ -192,59 +194,185 @@ class _ExercisePicker extends StatelessWidget {
   final String selectedKey;
   final ValueChanged<ExerciseProgress> onSelect;
 
+  Future<void> _open(BuildContext context) async {
+    final picked = await showModalBottomSheet<ExerciseProgress>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) =>
+          _ExerciseSheet(exercises: exercises, selectedKey: selectedKey),
+    );
+    if (picked != null) onSelect(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: exercises.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 6),
-        itemBuilder: (context, i) {
-          final e = exercises[i];
-          final isSelected = e.exerciseKey == selectedKey;
-          return Semantics(
-            button: true,
-            selected: isSelected,
-            child: InkWell(
-              onTap: () => onSelect(e),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                constraints: const BoxConstraints(maxWidth: 170),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.primary.withValues(alpha: 0.18)
-                      : AppColors.surfaceVariant.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(
-                    color: isSelected
-                        ? AppColors.primaryVariant.withValues(alpha: 0.7)
-                        : AppColors.border.withValues(alpha: 0.7),
-                  ),
-                ),
-                child: Center(
-                  widthFactor: 1,
-                  child: Text(
-                    e.exerciseName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isSelected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                      fontSize: 12.5,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+    final selected = exercises.firstWhere(
+      (e) => e.exerciseKey == selectedKey,
+      orElse: () => exercises.first,
+    );
+    return Semantics(
+      button: true,
+      label: 'Ćwiczenie: ${selected.exerciseName}. Zmień',
+      excludeSemantics: true,
+      onTap: () => _open(context),
+      child: InkWell(
+        key: const ValueKey('stats-exercise-picker'),
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.search_rounded,
+                size: 20,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Ćwiczenie',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
+                    Text(
+                      selected.exerciseName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lista ćwiczeń z okresu (od najczęściej robionych) z polem szukania.
+class _ExerciseSheet extends StatefulWidget {
+  const _ExerciseSheet({required this.exercises, required this.selectedKey});
+
+  final List<ExerciseProgress> exercises;
+  final String selectedKey;
+
+  @override
+  State<_ExerciseSheet> createState() => _ExerciseSheetState();
+}
+
+class _ExerciseSheetState extends State<_ExerciseSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _query.trim().toLowerCase();
+    final visible = [
+      for (final e in widget.exercises)
+        if (q.isEmpty || e.exerciseName.toLowerCase().contains(q)) e,
+    ];
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.7,
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderStrong,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              child: TextField(
+                key: const ValueKey('stats-exercise-search'),
+                onChanged: (v) => setState(() => _query = v),
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'Szukaj ćwiczenia',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  fillColor: AppColors.surfaceVariant,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
             ),
-          );
-        },
+            Expanded(
+              child: visible.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Brak takiego ćwiczenia w tym okresie',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) {
+                        final e = visible[i];
+                        final selected = e.exerciseKey == widget.selectedKey;
+                        return ListTile(
+                          title: Text(
+                            e.exerciseName,
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontWeight: selected
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${e.sessions} ${polishPlural(e.sessions, 'trening', 'treningi', 'treningów')}',
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: selected
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  color: AppColors.primaryVariant,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(e),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

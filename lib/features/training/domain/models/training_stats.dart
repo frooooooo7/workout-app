@@ -815,4 +815,8 @@ class TrainingStatsSnapshot {
   final int? daysSinceLastWorkout;
 
   bool get isEmpty => current.workouts == 0;
+
+  /// Jedna passa w całej aplikacji: z celem w profilu — kolejne tygodnie z
+  /// wykonanym celem, bez celu — kolejne tygodnie z jakimkolwiek treningiem.
+  int get streakWeeks => goal?.streakWeeks ?? currentStreakWeeks;
 }

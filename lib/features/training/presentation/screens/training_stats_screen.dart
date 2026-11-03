@@ -12,8 +12,8 @@ import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
 import '../widgets/stats/training_stats_view.dart';
 
-/// Statystyki jako osobny ekran — wejście z Profilu. W Historii te same
-/// statystyki są podzakładką.
+/// Statystyki jako osobny ekran: pulpit z kartami. Wejście z ikony wykresu w
+/// nagłówku Historii i z Profilu.
 class TrainingStatsScreen extends StatelessWidget {
   const TrainingStatsScreen({
     super.key,

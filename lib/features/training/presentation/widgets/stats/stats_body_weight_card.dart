@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../core/theme/app_colors.dart';
-import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/services/service_locator.dart';
 import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../../profile/domain/services/body_weight_trend.dart';
@@ -12,7 +11,7 @@ import '../../../../profile/presentation/screens/body_weight_screen.dart';
 import '../../../../profile/presentation/utils/profile_details_labels.dart';
 import '../../../../profile/presentation/widgets/body_weight_chart.dart';
 import '../../../domain/models/training_stats.dart';
-import '../session_details/session_section_card.dart';
+import 'overview/stats_overview_card.dart';
 import 'stats_format.dart';
 
 const statsBodyWeightOpenKey = Key('stats-body-weight-open');
@@ -61,29 +60,22 @@ class _StatsBodyWeightCardState extends State<StatsBodyWeightCard> {
         if (entries == null || (state.loadError != null && entries.isEmpty)) {
           return const SizedBox.shrink();
         }
-        return InkWell(
+        return StatsOverviewCard(
           key: statsBodyWeightOpenKey,
+          title: 'Masa ciała',
+          icon: Icons.scale_outlined,
           onTap: _open,
-          borderRadius: BorderRadius.circular(18),
-          child: SessionSectionCard(
-            icon: Icons.monitor_weight_outlined,
-            title: 'Masa ciała',
-            trailing: const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textMuted,
-            ),
-            child: entries.isEmpty
-                ? const Text(
-                    'Zapisuj wagę, żeby widzieć jej zmiany obok treningów. '
-                    'Stuknij, aby dodać pierwszy pomiar.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  )
-                : _Summary(state: state, window: widget.window),
-          ),
+          child: entries.isEmpty
+              ? const Text(
+                  'Zapisuj wagę, żeby widzieć jej zmiany obok treningów. '
+                  'Stuknij, aby dodać pierwszy pomiar.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                )
+              : _Summary(state: state, window: widget.window),
         );
       },
     );
@@ -107,15 +99,19 @@ class _Summary extends StatelessWidget {
       end: end,
     );
     final trend = bodyWeightTrend(inRange);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final value = formatWeightKg(latest.weightKg);
+    final caption = trend == null
+        ? 'pomiar ${formatStatsDayMonth(latest.date)}'
+        : '${formatWeightChange(trend.changeKg)} w tym okresie';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Text(
-                formatWeightKg(latest.weightKg),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 26,
@@ -123,26 +119,24 @@ class _Summary extends StatelessWidget {
                   letterSpacing: -0.4,
                 ),
               ),
-            ),
-            Text(
-              trend == null
-                  ? 'pomiar ${formatStatsDayMonth(latest.date)}'
-                  : '${formatWeightChange(trend.changeKg)} w tym okresie',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
+              const SizedBox(height: 2),
+              Text(
+                caption,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        if (inRange.length >= 2) ...[
-          const SizedBox(height: AppSpacing.sm),
+        if (inRange.length >= 2)
           SizedBox(
-            height: 64,
+            width: 120,
+            height: 56,
             child: BodyWeightChart(entries: inRange, compact: true),
           ),
-        ],
       ],
     );
   }
