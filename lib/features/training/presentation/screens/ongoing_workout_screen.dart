@@ -97,7 +97,7 @@ class OngoingWorkoutScreen extends StatefulWidget {
 class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Timer? _saveDebounce;
   ScaffoldMessengerState? _messenger;
-  bool _undoSnackBarOpen = false;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _undoSnackBar;
   late final PageController _exercisePageController;
   final ValueNotifier<TrainingSession?> _draftSession =
       ValueNotifier<TrainingSession?>(null);
@@ -266,7 +266,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     // Ekran zamknięty w inny sposób (np. po zakończeniu) — „Cofnij” nic by
     // już nie zmieniło. Po klatce, bo drzewo jest właśnie rozbierane.
     final messenger = _messenger;
-    if (_undoSnackBarOpen && messenger != null) {
+    if (_undoSnackBar != null && messenger != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (messenger.mounted) messenger.removeCurrentSnackBar();
       });
@@ -1363,13 +1363,19 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         ),
       ),
     );
-    _undoSnackBarOpen = true;
-    unawaited(controller.closed.then((_) => _undoSnackBarOpen = false));
+    _undoSnackBar = controller;
+    // Poprzedni snackbar kończy się już po pokazaniu tego — zerujemy tylko
+    // własny wpis.
+    unawaited(
+      controller.closed.then((_) {
+        if (identical(_undoSnackBar, controller)) _undoSnackBar = null;
+      }),
+    );
   }
 
   void _dismissUndoSnackBar() {
-    if (!_undoSnackBarOpen) return;
-    _undoSnackBarOpen = false;
+    if (_undoSnackBar == null) return;
+    _undoSnackBar = null;
     _messenger?.removeCurrentSnackBar();
   }
 

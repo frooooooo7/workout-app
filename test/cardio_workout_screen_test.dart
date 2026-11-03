@@ -221,4 +221,55 @@ void main() {
       isNotNull,
     );
   });
+
+  testWidgets('stopwatch time shows up in a card rebuilt after a removal', (
+    tester,
+  ) async {
+    final base = _session();
+    // Superseria: pierwsze ćwiczenie usuwamy, więc strona (i karta bieżni)
+    // buduje się od nowa.
+    final session = base.copyWith(
+      exercises: [
+        TrainingSessionExercise(
+          exerciseId: 'bench',
+          exerciseName: 'Bench press',
+          exerciseMuscles: const ['chest'],
+          exerciseCategory: 'compound',
+          supersetGroup: 'A',
+          sets: [TrainingSessionSet(plannedWeight: '60', plannedReps: '8')],
+        ),
+        base.exercises.single.copyWith(supersetGroup: 'A'),
+      ],
+    );
+    final repository = await _pump(tester, session: session);
+
+    // Po serii na ćwiczeniu A1 kolej na bieżnię (A2) — jej stoper jest aktywny.
+    await tester.tap(find.byKey(const ValueKey('session-set-check-0-0')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('cardio-stopwatch-start')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1500)),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+
+    await tester.longPress(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Usuń „Bench press”'));
+    await tester.pumpAndSettle();
+    // Bench ma odhaczoną serię — pytanie o potwierdzenie.
+    await tester.tap(find.text('Usuń'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('cardio-stopwatch-save')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await _flushDraftSave(tester);
+    expect(repository.session.exercises.single.exerciseName, 'Bieżnia');
+
+    final saved = repository.session.exercises.single.sets.first;
+    expect(saved.actualDurationSeconds, greaterThanOrEqualTo(1));
+    // Pole czasu pokazuje zapisany czas, więc nic go potem nie nadpisze.
+    final field = _field(tester, 'cardio-time-0-0');
+    expect(field.controller?.text, isNotEmpty);
+  });
 }

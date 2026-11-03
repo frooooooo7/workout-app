@@ -26,8 +26,11 @@ Future<ExerciseListResult?> showExerciseOrderSheet(
   BuildContext context, {
   required List<TrainingSessionExercise> exercises,
   int? highlightBlock,
-}) {
-  return showModalBottomSheet<ExerciseListResult>(
+}) async {
+  // Zamknięcie gestem albo dotknięciem tła nie zwraca wyniku, ale przestawiona
+  // kolejność nie ma przepaść — arkusz zgłasza ją osobno.
+  List<int>? dismissedOrder;
+  final result = await showModalBottomSheet<ExerciseListResult>(
     context: context,
     backgroundColor: AppColors.surface,
     showDragHandle: true,
@@ -35,15 +38,24 @@ Future<ExerciseListResult?> showExerciseOrderSheet(
     builder: (_) => _ExerciseOrderSheet(
       exercises: exercises,
       highlightBlock: highlightBlock,
+      onDismissedWithOrder: (order) => dismissedOrder = order,
     ),
   );
+  if (result != null) return result;
+  final order = dismissedOrder;
+  return order == null ? null : ExerciseListResult(order: order);
 }
 
 class _ExerciseOrderSheet extends StatefulWidget {
-  const _ExerciseOrderSheet({required this.exercises, this.highlightBlock});
+  const _ExerciseOrderSheet({
+    required this.exercises,
+    required this.onDismissedWithOrder,
+    this.highlightBlock,
+  });
 
   final List<TrainingSessionExercise> exercises;
   final int? highlightBlock;
+  final ValueChanged<List<int>> onDismissedWithOrder;
 
   @override
   State<_ExerciseOrderSheet> createState() => _ExerciseOrderSheetState();
@@ -65,109 +77,117 @@ class _ExerciseOrderSheetState extends State<_ExerciseOrderSheet> {
   @override
   Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.75;
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
-              child: Text(
-                'Lista ćwiczeń',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: Text(
-                'Dotknij, żeby przejść do ćwiczenia. Przeciągnij za uchwyt, '
-                'żeby zmienić kolejność — zrobione serie zostają przy swoim '
-                'ćwiczeniu.',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  height: 1.35,
-                ),
-              ),
-            ),
-            Flexible(
-              child: Theme(
-                data: Theme.of(
-                  context,
-                ).copyWith(canvasColor: Colors.transparent),
-                child: ReorderableListView.builder(
-                  shrinkWrap: true,
-                  buildDefaultDragHandles: false,
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  itemCount: _order.length,
-                  proxyDecorator: (child, _, _) => Material(
-                    color: Colors.transparent,
-                    elevation: 8,
-                    shadowColor: Colors.black54,
-                    borderRadius: BorderRadius.circular(16),
-                    child: child,
-                  ),
-                  onReorderItem: (oldIndex, newIndex) => setState(() {
-                    final item = _order.removeAt(oldIndex);
-                    _order.insert(newIndex, item);
-                  }),
-                  itemBuilder: (context, position) {
-                    final blockIndex = _order[position];
-                    return ReorderableDelayedDragStartListener(
-                      key: ValueKey('order-block-$blockIndex'),
-                      index: position,
-                      child: _OrderRow(
-                        position: position,
-                        exercises: [
-                          for (final i in _blocks[blockIndex])
-                            widget.exercises[i],
-                        ],
-                        highlighted: blockIndex == widget.highlightBlock,
-                        onTap: () => Navigator.of(context).pop(
-                          ExerciseListResult(
-                            order: _result,
-                            goToExerciseId: widget
-                                .exercises[SupersetRounds.focusOf(
-                                  widget.exercises,
-                                  _blocks[blockIndex],
-                                )]
-                                .id,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: FilledButton(
-                key: const ValueKey('exercise-order-save'),
-                onPressed: () => Navigator.of(
-                  context,
-                ).pop(_changed ? ExerciseListResult(order: _result) : null),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        final order = _result;
+        if (didPop && result == null && order != null) {
+          widget.onDismissedWithOrder(order);
+        }
+      },
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Text(
+                  'Lista ćwiczeń',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                child: const Text('Gotowe'),
               ),
-            ),
-          ],
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+                child: Text(
+                  'Dotknij, żeby przejść do ćwiczenia. Przeciągnij za uchwyt, '
+                  'żeby zmienić kolejność — zrobione serie zostają przy swoim '
+                  'ćwiczeniu.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(canvasColor: Colors.transparent),
+                  child: ReorderableListView.builder(
+                    shrinkWrap: true,
+                    buildDefaultDragHandles: false,
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    itemCount: _order.length,
+                    proxyDecorator: (child, _, _) => Material(
+                      color: Colors.transparent,
+                      elevation: 8,
+                      shadowColor: Colors.black54,
+                      borderRadius: BorderRadius.circular(16),
+                      child: child,
+                    ),
+                    onReorderItem: (oldIndex, newIndex) => setState(() {
+                      final item = _order.removeAt(oldIndex);
+                      _order.insert(newIndex, item);
+                    }),
+                    itemBuilder: (context, position) {
+                      final blockIndex = _order[position];
+                      return ReorderableDelayedDragStartListener(
+                        key: ValueKey('order-block-$blockIndex'),
+                        index: position,
+                        child: _OrderRow(
+                          position: position,
+                          exercises: [
+                            for (final i in _blocks[blockIndex])
+                              widget.exercises[i],
+                          ],
+                          highlighted: blockIndex == widget.highlightBlock,
+                          onTap: () => Navigator.of(context).pop(
+                            ExerciseListResult(
+                              order: _result,
+                              goToExerciseId: widget
+                                  .exercises[SupersetRounds.focusOf(
+                                    widget.exercises,
+                                    _blocks[blockIndex],
+                                  )]
+                                  .id,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: FilledButton(
+                  key: const ValueKey('exercise-order-save'),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(_changed ? ExerciseListResult(order: _result) : null),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  child: const Text('Gotowe'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
