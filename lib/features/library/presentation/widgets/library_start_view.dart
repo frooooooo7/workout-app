@@ -66,13 +66,16 @@ class LibraryStartView extends StatelessWidget {
           children: [
             const Flexible(child: _SectionLabel('Wybierz partię')),
             const SizedBox(width: 12),
-            GestureDetector(
+            Flexible(
+              child: GestureDetector(
               onTap: onShowAll,
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(
                   'Wszystkie (${overview.total})',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.primaryVariant,
                     fontSize: 13,
@@ -80,6 +83,7 @@ class LibraryStartView extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
             ),
           ],
         ),

@@ -45,6 +45,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.dispose();
   }
 
+  /// Czy widać ekran startowy: nic nie wybrano i nic nie wpisano.
+  bool get _atStartScreen => !_browsing && _searchController.text.trim().isEmpty;
+
+  /// Z listy albo wyników szukania wracamy krok wstecz do ekranu startowego
+  /// i czyścimy filtry, żeby liczby przy partiach zgadzały się z listą.
+  void _backToStart(LibraryCubit cubit) {
+    _searchController.clear();
+    cubit.setQuery('');
+    cubit.setCategory(MuscleGroup.all);
+    cubit.setFilter(LibraryFilter.all);
+    cubit.setTypes(const {});
+    setState(() => _browsing = false);
+  }
+
   void _showMessage(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
@@ -160,7 +174,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
         builder: (context) {
           final cubit = context.read<LibraryCubit>();
 
-          return Scaffold(
+          return PopScope(
+            // Systemowy „wstecz” z listy lub wyników szukania wraca na ekran
+            // startowy, dopiero stamtąd zamyka bibliotekę.
+            canPop: _atStartScreen,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _backToStart(cubit);
+            },
+            child: Scaffold(
             backgroundColor: AppColors.background,
             body: AppTabBackground(
               child: SafeArea(
@@ -181,22 +202,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               activeFilterCount: state.types.length,
                               onFilterTap: () => _pickTypes(context),
                               onBackTap: () {
-                                // Z listy albo wyników szukania wracamy
-                                // krok wstecz do ekranu startowego.
-                                if (_browsing ||
-                                    _searchController.text.isNotEmpty) {
-                                  _searchController.clear();
-                                  cubit.setQuery('');
-                                  cubit.setCategory(MuscleGroup.all);
-                                  cubit.setFilter(LibraryFilter.all);
-                                  setState(() => _browsing = false);
+                                if (_atStartScreen) {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                    return;
+                                  }
+                                  context.go('/app/training');
                                   return;
                                 }
-                                if (context.canPop()) {
-                                  context.pop();
-                                  return;
-                                }
-                                context.go('/app/training');
+                                _backToStart(cubit);
                               },
                               onAddTap: () async {
                                 final created =
@@ -358,6 +372,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           );
         },

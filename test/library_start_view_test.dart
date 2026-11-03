@@ -48,7 +48,7 @@ void main() {
     });
   });
 
-  for (final (width, scale) in [(320.0, 1.0), (375.0, 1.3), (768.0, 1.0)]) {
+  for (final (width, scale) in [(320.0, 1.0), (320.0, 2.0), (375.0, 1.3), (768.0, 1.0)]) {
     testWidgets('ekran startowy mieści się: ${width.toInt()} px, tekst ×$scale',
         (tester) async {
       tester.view.physicalSize = Size(width, 900);
@@ -87,6 +87,8 @@ void main() {
         200,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('Przedramiona'));
+      await tester.pump();
       await tester.tap(find.text('Przedramiona'));
       expect(tapped, LibraryPart.forearms);
     });
@@ -124,4 +126,26 @@ void main() {
     expect(favourite, 1);
     expect(tester.takeException(), isNull);
   });
+
+  for (final scale in [1.5, 2.0]) {
+    testWidgets('wiersz listy rośnie z tekstem ×$scale bez przepełnienia', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          SizedBox(
+            width: 320,
+            child: ExerciseRow(exercise: _recent),
+          ),
+          width: 320,
+          scale: scale,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(ExerciseRow)).height,
+        greaterThanOrEqualTo(ExerciseRow.height),
+      );
+    });
+  }
 }

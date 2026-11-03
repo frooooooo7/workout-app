@@ -45,9 +45,11 @@ class ExerciseRow extends StatelessWidget {
         child: Semantics(
           button: true,
           label: exercise.name,
-          child: SizedBox(
-            height: height,
-            child: Row(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: height),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -112,6 +114,7 @@ class ExerciseRow extends StatelessWidget {
                   ),
                 ),
               ],
+              ),
             ),
           ),
         ),
