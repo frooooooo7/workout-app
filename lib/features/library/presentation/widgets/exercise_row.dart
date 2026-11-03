@@ -14,9 +14,13 @@ class ExerciseRow extends StatelessWidget {
     this.onTap,
     this.onFavouriteTap,
     this.onMoreTap,
+    this.lastResult,
   });
 
   final Exercise exercise;
+
+  /// Ostatni wynik w treningu („80 kg × 5”); `null` — nie robiono.
+  final String? lastResult;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -91,6 +95,24 @@ class ExerciseRow extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (lastResult != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 96),
+                      child: Text(
+                        lastResult!,
+                        textAlign: TextAlign.end,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSubtle,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
                 Tooltip(
                   message: exercise.isFavourite
                       ? 'Usuń z ulubionych'

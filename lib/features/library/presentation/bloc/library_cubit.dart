@@ -44,10 +44,13 @@ class LibraryState {
     this.query = '',
     this.sort = LibrarySort.popular,
     this.types = const {},
+    this.equipment = const {},
+    this.muscles = const {},
     this.exercises = const [],
     this.loading = true,
     this.error,
     this.overview = const LibraryOverview(),
+    this.usage = ExerciseUsage.empty,
   });
 
   final LibraryFilter filter;
@@ -58,10 +61,23 @@ class LibraryState {
   /// Filtr typu ćwiczenia (wielostaw, izolacja…); pusty zbiór — wszystkie.
   final Set<ExerciseCategory> types;
 
+  /// Filtr sprzętu; pusty zbiór — każdy. Ćwiczenia bez znanego sprzętu znikają,
+  /// gdy filtr jest włączony.
+  final Set<ExerciseEquipment> equipment;
+
+  /// Filtr mięśni z arkusza „Filtry” (dowolny z wybranych); pusty — wszystkie.
+  final Set<MuscleGroup> muscles;
+
+  /// Ile filtrów z arkusza jest włączonych (plakietka przy „Filtry”).
+  int get activeFilterCount => types.length + equipment.length + muscles.length;
+
   final List<Exercise> exercises;
   final bool loading;
   final String? error;
   final LibraryOverview overview;
+
+  /// Historia treningów — z niej wiersze listy biorą „ostatni wynik”.
+  final ExerciseUsage usage;
 
   LibraryState copyWith({
     LibraryFilter? filter,
@@ -69,6 +85,9 @@ class LibraryState {
     String? query,
     LibrarySort? sort,
     Set<ExerciseCategory>? types,
+    Set<ExerciseEquipment>? equipment,
+    Set<MuscleGroup>? muscles,
+    ExerciseUsage? usage,
     List<Exercise>? exercises,
     bool? loading,
     String? error,
@@ -81,6 +100,9 @@ class LibraryState {
       query: query ?? this.query,
       sort: sort ?? this.sort,
       types: types ?? this.types,
+      equipment: equipment ?? this.equipment,
+      muscles: muscles ?? this.muscles,
+      usage: usage ?? this.usage,
       exercises: exercises ?? this.exercises,
       loading: loading ?? this.loading,
       error: clearError ? null : (error ?? this.error),
@@ -97,6 +119,9 @@ class LibraryState {
         other.query == query &&
         other.sort == sort &&
         setEquals(other.types, types) &&
+        setEquals(other.equipment, equipment) &&
+        setEquals(other.muscles, muscles) &&
+        identical(other.usage, usage) &&
         listEquals(other.exercises, exercises) &&
         other.loading == loading &&
         other.error == error &&
@@ -110,6 +135,9 @@ class LibraryState {
     query,
     sort,
     Object.hashAllUnordered(types),
+    Object.hashAllUnordered(equipment),
+    Object.hashAllUnordered(muscles),
+    usage,
     Object.hashAll(exercises),
     loading,
     error,
@@ -178,15 +206,13 @@ class LibraryCubit extends Cubit<LibraryState> {
         muscleGroup: state.category,
         query: query,
       );
-      if (recent ||
-          state.sort == LibrarySort.popular ||
-          query.trim().isNotEmpty) {
-        await _ensureUsage();
-      }
+      // Historia jest potrzebna też do „ostatniego wyniku” w wierszach.
+      await _ensureUsage();
       if (isClosed || seq != _refreshSeq) return;
       _source = result;
       emit(
         state.copyWith(
+          usage: _usage,
           exercises: _arrange(result),
           loading: false,
           clearError: true,
@@ -255,12 +281,30 @@ class LibraryCubit extends Cubit<LibraryState> {
   List<Exercise> _arrange(
     List<Exercise> source, {
     Set<ExerciseCategory>? types,
+    Set<ExerciseEquipment>? equipment,
+    Set<MuscleGroup>? muscles,
     LibrarySort? sort,
   }) {
     final activeTypes = types ?? state.types;
-    final filtered = activeTypes.isEmpty
-        ? source
-        : source.where((e) => activeTypes.contains(e.category)).toList();
+    final activeEquipment = equipment ?? state.equipment;
+    final activeMuscles = muscles ?? state.muscles;
+    final muscleMatches = {
+      for (final m in activeMuscles) ...m.filterMatches,
+    };
+    final filtered = source.where((e) {
+      if (activeTypes.isNotEmpty && !activeTypes.contains(e.category)) {
+        return false;
+      }
+      if (activeEquipment.isNotEmpty &&
+          !activeEquipment.contains(e.equipment)) {
+        return false;
+      }
+      if (muscleMatches.isNotEmpty &&
+          !e.muscles.any(muscleMatches.contains)) {
+        return false;
+      }
+      return true;
+    }).toList();
     final usage = _usage ?? ExerciseUsage.empty;
     final activeSort = sort ?? state.sort;
     if (state.filter == LibraryFilter.recent) {
@@ -303,11 +347,33 @@ class LibraryCubit extends Cubit<LibraryState> {
   }
 
   void setTypes(Set<ExerciseCategory> types) {
-    final next = Set<ExerciseCategory>.unmodifiable(types);
+    setFilters(types: types);
+  }
+
+  /// Ustawia filtry z arkusza „Filtry”; pominięty argument zostaje bez zmian.
+  void setFilters({
+    Set<ExerciseCategory>? types,
+    Set<ExerciseEquipment>? equipment,
+    Set<MuscleGroup>? muscles,
+  }) {
+    final nextTypes = Set<ExerciseCategory>.unmodifiable(types ?? state.types);
+    final nextEquipment = Set<ExerciseEquipment>.unmodifiable(
+      equipment ?? state.equipment,
+    );
+    final nextMuscles = Set<MuscleGroup>.unmodifiable(
+      muscles ?? state.muscles,
+    );
     emit(
       state.copyWith(
-        types: next,
-        exercises: _arrange(_source, types: next),
+        types: nextTypes,
+        equipment: nextEquipment,
+        muscles: nextMuscles,
+        exercises: _arrange(
+          _source,
+          types: nextTypes,
+          equipment: nextEquipment,
+          muscles: nextMuscles,
+        ),
       ),
     );
   }
