@@ -17,7 +17,7 @@ const kHelpEntries = [
     answer:
         'Tak. Treningi, plany i własne ćwiczenia zapisują się najpierw na '
         'telefonie, więc możesz trenować offline. Gdy wróci połączenie, '
-        'zmiany wyślą się na serwer automatycznie. Feed, kudosy, komentarze '
+        'zmiany wyślą się na serwer automatycznie. Feed, piony, komentarze '
         'i profile innych osób wymagają internetu — bez sieci feed pokazuje '
         'ostatnio zapisaną stronę.',
   ),
@@ -40,10 +40,10 @@ const kHelpEntries = [
         'Aktywność osoby, które Cię obserwują.',
   ),
   HelpEntry(
-    question: 'Jak działają kudosy i komentarze?',
+    question: 'Jak działają piony i komentarze?',
     answer:
-        'Pod treningiem innej osoby stuknij kudosa, aby docenić jej pracę '
-        '(własnym treningom nie można dawać kudosów). W szczegółach treningu '
+        'Pod treningiem innej osoby stuknij „Daj piona”, aby docenić jej pracę '
+        '(własnym treningom nie można dawać pionów). W szczegółach treningu '
         'możesz dodać komentarz do 500 znaków. Aby usunąć komentarz, '
         'przytrzymaj go — opcja jest dostępna, gdy masz do tego uprawnienia.',
   ),
@@ -53,7 +53,7 @@ const kHelpEntries = [
         'Tak. Otwórz trening w historii i wybierz menu (trzy kropki): '
         '„Edytuj trening”, „Powtórz trening” albo „Usuń trening”. '
         'Działa to także bez internetu — zmiany wyślą się po powrocie sieci. '
-        'Usunięcie jest nieodwracalne i usuwa też kudosy oraz komentarze. '
+        'Usunięcie jest nieodwracalne i usuwa też piony oraz komentarze. '
         'Jeśli chcesz tylko ukryć trening przed innymi, schowaj go z profilu.',
   ),
   HelpEntry(

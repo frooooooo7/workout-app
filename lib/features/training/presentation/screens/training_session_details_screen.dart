@@ -401,7 +401,7 @@ class _TrainingSessionDetailsScreenState
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Tej operacji nie można cofnąć. Znikną też kudosy i komentarze.',
+          'Tej operacji nie można cofnąć. Znikną też piony i komentarze.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [

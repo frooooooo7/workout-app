@@ -40,7 +40,7 @@ TopExercise? pickBestSetExercise(List<TopExercise> exercises) {
 }
 
 String formatKudosCount(int count) =>
-    '$count ${polishPlural(count, 'kudos', 'kudosy', 'kudosów')}';
+    '$count ${polishPlural(count, 'pion', 'piony', 'pionów')}';
 
 String formatCommentsCount(int count) =>
     '$count ${polishPlural(count, 'komentarz', 'komentarze', 'komentarzy')}';

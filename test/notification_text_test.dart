@@ -13,19 +13,19 @@ void main() {
     test('kudos are grouped and gender-neutral', () {
       expect(
         textOf(kudosNotification(count: 1)),
-        'Anna daje kudosa za trening Push',
+        'Anna daje piona za trening Push',
       );
       expect(
         textOf(kudosNotification(count: 2)),
-        'Anna i Ola dają kudosy za trening Push',
+        'Anna i Ola dają piony za trening Push',
       );
       expect(
         textOf(kudosNotification(count: 3)),
-        'Anna i 2 inne osoby dają kudosy za trening Push',
+        'Anna i 2 inne osoby dają piony za trening Push',
       );
       expect(
         textOf(kudosNotification(count: 6)),
-        'Anna i 5 innych osób dają kudosy za trening Push',
+        'Anna i 5 innych osób dają piony za trening Push',
       );
     });
 

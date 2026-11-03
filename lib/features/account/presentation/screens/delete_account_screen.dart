@@ -124,7 +124,7 @@ class _ConsequencesCard extends StatelessWidget {
   static const _items = [
     'wszystkie treningi i ich historia,',
     'plany treningowe i własne ćwiczenia,',
-    'posty w feedzie, kudosy i komentarze,',
+    'posty w feedzie, piony i komentarze,',
     'obserwowani i obserwujący.',
   ];
 

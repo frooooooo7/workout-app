@@ -127,7 +127,7 @@ class _KudosSheetState extends State<KudosSheet> {
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
               child: Text(
-                'Kudosy',
+                'Piony',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 17,
@@ -157,7 +157,7 @@ class _KudosSheetState extends State<KudosSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
-                            'Nie udało się wczytać listy kudosów.',
+                            'Nie udało się wczytać listy pionów.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
@@ -175,7 +175,7 @@ class _KudosSheetState extends State<KudosSheet> {
                     return const Padding(
                       padding: EdgeInsets.fromLTRB(24, 8, 24, 28),
                       child: Text(
-                        'Nikt jeszcze nie dał kudosa.',
+                        'Nikt jeszcze nie dał piona.',
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                     );

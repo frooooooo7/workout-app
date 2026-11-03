@@ -54,7 +54,7 @@ String postLoadErrorMessage(Object error) {
 }
 
 String kudosErrorMessage(Object error, {required bool removing}) {
-  final action = removing ? 'cofnąć kudosa' : 'dać kudosa';
+  final action = removing ? 'cofnąć piona' : 'dać piona';
   if (error is ApiException) {
     if (error.statusCode == null) {
       return 'Nie udało się $action — brak połączenia z internetem.';
@@ -64,7 +64,7 @@ String kudosErrorMessage(Object error, {required bool removing}) {
     }
     switch (error.message) {
       case 'cannot_kudo_own_post':
-        return 'Nie możesz dać kudosa własnemu treningowi.';
+        return 'Nie możesz dać piona własnemu treningowi.';
       case 'post_not_found':
         return 'Ten trening nie jest już dostępny.';
     }

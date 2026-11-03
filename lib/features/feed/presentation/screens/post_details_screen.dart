@@ -28,7 +28,7 @@ import '../widgets/post_photo.dart';
 import '../widgets/post_social_bar.dart';
 
 /// Szczegóły posta: autor, metryki, mapa mięśni, ćwiczenia z seriami,
-/// kudosy i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
+/// piony i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
 /// i `FollowCubit` w kontekście (dostarcza je router).
 class PostDetailsScreen extends StatefulWidget {
   const PostDetailsScreen({
@@ -59,6 +59,7 @@ class PostDetailsScreen extends StatefulWidget {
 class _PostDetailsScreenState extends State<PostDetailsScreen> {
   final _commentFocus = FocusNode();
   final _commentsKey = GlobalKey();
+  final _scrollController = ScrollController();
   bool _didAutoFocus = false;
   bool _copying = false;
 
@@ -72,24 +73,51 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   @override
   void dispose() {
     _commentFocus.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _maybeAutoFocus() {
     if (!widget.focusComment || _didAutoFocus) return;
     _didAutoFocus = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _scrollToComments();
       if (!mounted) return;
       _commentFocus.requestFocus();
+    });
+  }
+
+  /// Przewija do sekcji komentarzy. Lista buduje elementy leniwie, więc
+  /// sekcja na końcu może jeszcze nie istnieć — wtedy zjeżdżamy w dół, aż
+  /// się zbuduje, i dopiero wtedy ustawiamy ją u góry ekranu.
+  Future<void> _scrollToComments() async {
+    for (var attempt = 0; attempt < 12; attempt++) {
+      if (!mounted) return;
       final commentsContext = _commentsKey.currentContext;
-      if (commentsContext != null) {
-        Scrollable.ensureVisible(
+      if (commentsContext != null && commentsContext.mounted) {
+        await Scrollable.ensureVisible(
           commentsContext,
           duration: const Duration(milliseconds: 380),
           curve: Curves.easeOutCubic,
         );
+        return;
       }
-    });
+      if (!_scrollController.hasClients) {
+        await WidgetsBinding.instance.endOfFrame;
+        continue;
+      }
+      final position = _scrollController.position;
+      if (position.pixels >= position.maxScrollExtent) {
+        await WidgetsBinding.instance.endOfFrame;
+        continue;
+      }
+      await _scrollController.animateTo(
+        position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _showSnackBar(String message) {
@@ -327,6 +355,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
           post: state.post!,
           sessionDetail: state.sessionDetail!,
           commentsKey: _commentsKey,
+          scrollController: _scrollController,
           repository: widget.repository,
           currentUserId: widget.currentUserId,
           onDeleteComment: _confirmDelete,
@@ -340,6 +369,7 @@ class _PostDetailsBody extends StatelessWidget {
     required this.post,
     required this.sessionDetail,
     required this.commentsKey,
+    required this.scrollController,
     required this.repository,
     required this.currentUserId,
     required this.onDeleteComment,
@@ -348,6 +378,7 @@ class _PostDetailsBody extends StatelessWidget {
   final FeedPost post;
   final TrainingSessionDetail sessionDetail;
   final GlobalKey commentsKey;
+  final ScrollController scrollController;
   final FeedRepository repository;
   final String? currentUserId;
   final ValueChanged<PostComment> onDeleteComment;
@@ -357,6 +388,7 @@ class _PostDetailsBody extends StatelessWidget {
     final exercises = sessionDetail.exercises;
 
     return ListView(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         Padding(
@@ -499,8 +531,8 @@ class _KudosPanel extends StatelessWidget {
                 ? PostSocialSummary(post: post, onKudosListTap: onKudosListTap)
                 : Text(
                     post.isOwn
-                        ? 'Nikt jeszcze nie dał kudosa'
-                        : 'Bądź pierwszą osobą z kudosem',
+                        ? 'Nikt jeszcze nie dał piona'
+                        : 'Bądź pierwszą osobą z pionem',
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12.5,
