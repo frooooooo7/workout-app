@@ -192,7 +192,7 @@ class PostKudosButton extends StatelessWidget {
         icon: hasKudoed
             ? Icons.thumb_up_alt_rounded
             : Icons.thumb_up_alt_outlined,
-        label: hasKudoed ? 'Dano piona' : 'Daj piona',
+        label: hasKudoed ? 'Dano żółwika' : 'Daj żółwika',
         active: hasKudoed,
         onTap: onTap == null
             ? null

@@ -64,7 +64,8 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                       value: state.confirmed,
                       onChanged: state.deleting
                           ? null
-                          : (value) => cubit.confirmationChanged(value ?? false),
+                          : (value) =>
+                                cubit.confirmationChanged(value ?? false),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                       activeColor: AppColors.strengthWeak,
@@ -105,7 +106,9 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                           )
                         : const Icon(Icons.delete_forever_rounded, size: 20),
                     label: Text(
-                      state.deleting ? 'Usuwanie konta…' : 'Usuń konto na zawsze',
+                      state.deleting
+                          ? 'Usuwanie konta…'
+                          : 'Usuń konto na zawsze',
                     ),
                   ),
                 ],
@@ -124,7 +127,7 @@ class _ConsequencesCard extends StatelessWidget {
   static const _items = [
     'wszystkie treningi i ich historia,',
     'plany treningowe i własne ćwiczenia,',
-    'posty w feedzie, piony i komentarze,',
+    'posty w feedzie, żółwiki i komentarze,',
     'obserwowani i obserwujący.',
   ];
 

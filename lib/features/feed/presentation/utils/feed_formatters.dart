@@ -9,9 +9,11 @@ String formatFeedTimestamp(DateTime at, {DateTime? now}) {
   final current = (now ?? DateTime.now()).toLocal();
   // Różnica dni kalendarzowych w UTC — lokalna północ przy zmianie czasu
   // dawałaby dobę 23- albo 25-godzinną.
-  final days = DateTime.utc(current.year, current.month, current.day)
-      .difference(DateTime.utc(local.year, local.month, local.day))
-      .inDays;
+  final days = DateTime.utc(
+    current.year,
+    current.month,
+    current.day,
+  ).difference(DateTime.utc(local.year, local.month, local.day)).inDays;
   final clock = formatClock(local);
   if (days <= 0) return 'Dziś, $clock';
   if (days == 1) return 'Wczoraj, $clock';
@@ -40,7 +42,7 @@ TopExercise? pickBestSetExercise(List<TopExercise> exercises) {
 }
 
 String formatKudosCount(int count) =>
-    '$count ${polishPlural(count, 'pion', 'piony', 'pionów')}';
+    '$count ${polishPlural(count, 'żółwik', 'żółwiki', 'żółwików')}';
 
 String formatCommentsCount(int count) =>
     '$count ${polishPlural(count, 'komentarz', 'komentarze', 'komentarzy')}';

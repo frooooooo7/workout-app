@@ -54,7 +54,7 @@ class SocialNotificationsSection extends StatelessWidget {
               children: [
                 _SwitchRow(
                   key: socialKudosSwitchKey,
-                  title: 'Piony',
+                  title: 'Żółwiki',
                   subtitle: 'grupowane, jedno na trening',
                   value: settings.kudos,
                   onChanged: enabled ? cubit.setKudos : null,

@@ -45,7 +45,7 @@ void main() {
 
     expect(find.text('Tej operacji nie można cofnąć'), findsOneWidget);
     expect(find.textContaining('wszystkie treningi'), findsOneWidget);
-    expect(find.textContaining('piony i komentarze'), findsOneWidget);
+    expect(find.textContaining('żółwiki i komentarze'), findsOneWidget);
     expect(find.textContaining('obserwujący'), findsOneWidget);
     expect(find.byKey(deleteAccountUnsyncedWarningKey), findsNothing);
     expect(submitButton(tester).onPressed, isNull);

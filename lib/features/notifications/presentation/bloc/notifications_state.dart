@@ -7,7 +7,7 @@ enum NotificationsStatus { loading, ready, failure }
 /// Filtry nad listą: „Wszystkie” i po jednym na rodzaj.
 enum NotificationFilter {
   all('Wszystkie'),
-  kudos('Piony'),
+  kudos('Żółwiki'),
   follows('Obserwujący'),
   plans('Plany'),
   records('Rekordy');

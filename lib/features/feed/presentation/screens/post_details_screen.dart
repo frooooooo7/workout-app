@@ -28,7 +28,7 @@ import '../widgets/post_photo.dart';
 import '../widgets/post_social_bar.dart';
 
 /// Szczegóły posta: autor, metryki, mapa mięśni, ćwiczenia z seriami,
-/// piony i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
+/// żółwiki i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
 /// i `FollowCubit` w kontekście (dostarcza je router).
 class PostDetailsScreen extends StatefulWidget {
   const PostDetailsScreen({
@@ -531,8 +531,8 @@ class _KudosPanel extends StatelessWidget {
                 ? PostSocialSummary(post: post, onKudosListTap: onKudosListTap)
                 : Text(
                     post.isOwn
-                        ? 'Nikt jeszcze nie dał piona'
-                        : 'Bądź pierwszą osobą z pionem',
+                        ? 'Nikt jeszcze nie dał żółwika'
+                        : 'Bądź pierwszą osobą z żółwikiem',
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12.5,

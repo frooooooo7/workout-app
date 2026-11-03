@@ -148,9 +148,9 @@ void main() {
       expect(pickBestSetExercise(const [bench, squat, pushUps]), squat);
       expect(pickBestSetExercise(const [pushUps]), isNull);
       expect(pickBestSetExercise(const []), isNull);
-      expect(formatKudosCount(1), '1 pion');
-      expect(formatKudosCount(3), '3 piony');
-      expect(formatKudosCount(12), '12 pionów');
+      expect(formatKudosCount(1), '1 żółwik');
+      expect(formatKudosCount(3), '3 żółwiki');
+      expect(formatKudosCount(12), '12 żółwików');
     });
   });
 
@@ -179,12 +179,12 @@ void main() {
       expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
       expect(find.text('82,5 kg × 8'), findsOneWidget);
       expect(find.text('Klatka'), findsOneWidget);
-      expect(find.text('3 piony'), findsOneWidget);
+      expect(find.text('3 żółwiki'), findsOneWidget);
       expect(find.text('1 komentarz'), findsOneWidget);
 
       final kudosButton = find.byKey(const ValueKey('feed-kudos-button-p1'));
       expect(kudosButton, findsOneWidget);
-      expect(find.text('Daj piona'), findsOneWidget);
+      expect(find.text('Daj żółwika'), findsOneWidget);
       expect(find.byIcon(Icons.thumb_up_alt_outlined), findsOneWidget);
 
       await tester.tap(kudosButton);
@@ -199,7 +199,7 @@ void main() {
     testWidgets('shows filled kudos state when already kudoed', (tester) async {
       await _pumpCard(tester, _post(hasKudoed: true));
 
-      expect(find.text('Dano piona'), findsOneWidget);
+      expect(find.text('Dano żółwika'), findsOneWidget);
       expect(find.byIcon(Icons.thumb_up_alt_rounded), findsOneWidget);
     });
 
@@ -238,7 +238,7 @@ void main() {
         find.byKey(const ValueKey('feed-comment-button-p1')),
         findsNothing,
       );
-      // Licznik pionów zostaje.
+      // Licznik żółwików zostaje.
       expect(
         find.byKey(const ValueKey('feed-kudos-summary-p1')),
         findsOneWidget,

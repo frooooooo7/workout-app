@@ -127,7 +127,7 @@ class _KudosSheetState extends State<KudosSheet> {
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
               child: Text(
-                'Piony',
+                'Żółwiki',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 17,
@@ -157,7 +157,7 @@ class _KudosSheetState extends State<KudosSheet> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
-                            'Nie udało się wczytać listy pionów.',
+                            'Nie udało się wczytać listy żółwików.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
@@ -175,7 +175,7 @@ class _KudosSheetState extends State<KudosSheet> {
                     return const Padding(
                       padding: EdgeInsets.fromLTRB(24, 8, 24, 28),
                       child: Text(
-                        'Nikt jeszcze nie dał piona.',
+                        'Nikt jeszcze nie dał żółwika.',
                         style: TextStyle(color: AppColors.textSecondary),
                       ),
                     );
@@ -191,7 +191,8 @@ class _KudosSheetState extends State<KudosSheet> {
                         return PagedListFooter(pager: pager);
                       }
                       final user = users[index];
-                      final showFollow = widget.followCubit != null &&
+                      final showFollow =
+                          widget.followCubit != null &&
                           user.id != widget.currentUserId;
                       return UserListTile(
                         user: user,
