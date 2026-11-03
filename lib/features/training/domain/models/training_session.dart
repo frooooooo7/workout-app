@@ -155,6 +155,7 @@ class TrainingSessionExercise {
     bool clearNote = false,
     int? restSeconds,
     String? supersetGroup,
+    bool clearSupersetGroup = false,
   }) {
     return TrainingSessionExercise(
       id: id ?? this.id,
@@ -166,7 +167,9 @@ class TrainingSessionExercise {
       note: clearNote ? null : (note ?? this.note),
       sets: sets ?? this.sets,
       restSeconds: restSeconds ?? this.restSeconds,
-      supersetGroup: supersetGroup ?? this.supersetGroup,
+      supersetGroup: clearSupersetGroup
+          ? null
+          : (supersetGroup ?? this.supersetGroup),
       tracking: tracking,
       distanceUnit: distanceUnit,
     );

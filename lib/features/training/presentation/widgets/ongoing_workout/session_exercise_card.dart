@@ -106,7 +106,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   void didUpdateWidget(covariant SessionExerciseCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.exercise.id != widget.exercise.id ||
-        widget.exercise.sets.length != _sets.length) {
+        !_sameSets(widget.exercise.sets, _sets)) {
       _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
     }
     if (oldWidget.exercise.id != widget.exercise.id) {
@@ -118,6 +118,19 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
         if (mounted) _noteFocus.requestFocus();
       });
     }
+  }
+
+  /// Te same serie (obiekty), nie tylko ta sama liczba — ekran mógł zmienić
+  /// serię poza kartą (np. czas ze stopera po przebudowie karty).
+  static bool _sameSets(
+    List<TrainingSessionSet> a,
+    List<TrainingSessionSet> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   @override

@@ -68,6 +68,109 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('the undo snackbar goes away when the screen is left', (
+    tester,
+  ) async {
+    final repository = _FakeRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    final router = _router(repository, cubit, _FakeScheduler(), tester);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await _open(tester);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('collapse-workout-button')));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(find.byType(OngoingWorkoutScreen), findsNothing);
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsNothing,
+    );
+
+    await cubit.close();
+  });
+
+  testWidgets('two removals in a row: no undo snackbar outlives the screen', (
+    tester,
+  ) async {
+    final repository = _FakeRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    final router = _router(repository, cubit, _FakeScheduler(), tester);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await _open(tester);
+
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.pumpAndSettle();
+    }
+    // Pierwszy snackbar kończy się dopiero po pokazaniu drugiego.
+    expect(find.text('Ćwiczenie 1 z 1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('collapse-workout-button')));
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(
+      find.byKey(const ValueKey('exercise-removed-snackbar')),
+      findsNothing,
+    );
+
+    await cubit.close();
+  });
+
+  testWidgets('closing the list sheet with a gesture keeps the new order', (
+    tester,
+  ) async {
+    final repository = _FakeRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    final router = _router(repository, cubit, _FakeScheduler(), tester);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await _open(tester);
+
+    await tester.tap(find.byKey(const Key('exercise-list-button')));
+    await tester.pumpAndSettle();
+    final handle = find.descendant(
+      of: find.byKey(const ValueKey('order-block-2')),
+      matching: find.byIcon(Icons.drag_handle_rounded),
+    );
+    final top = tester.getCenter(find.byKey(const ValueKey('order-block-0')));
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveTo(Offset(tester.getCenter(handle).dx, top.dy - 120));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    // Zamknięcie dotknięciem tła, bez „Gotowe”.
+    await tester.tapAt(const Offset(400, 20));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Squat',
+      'Bench press',
+      'Shoulder press',
+    ]);
+
+    await cubit.close();
+  });
+
   testWidgets('without a saved position it opens on the last worked exercise', (
     tester,
   ) async {
@@ -179,7 +282,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Zmień kolejność ćwiczeń'));
     await tester.pumpAndSettle();
-    expect(find.text('Kolejność ćwiczeń'), findsOneWidget);
+    expect(find.text('Lista ćwiczeń'), findsOneWidget);
 
     final handle = find.descendant(
       of: find.byKey(const ValueKey('order-block-2')),
