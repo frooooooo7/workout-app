@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/library/domain/models/exercise_stats.dart';
+import 'package:gym/features/library/domain/models/library_part.dart';
 import 'package:gym/features/library/domain/models/library_sort.dart';
 import 'package:gym/features/library/domain/repositories/exercise_repository.dart';
 import 'package:gym/features/library/presentation/bloc/library_cubit.dart';
@@ -191,6 +192,41 @@ void main() {
 
       // „c” nie było w żadnym treningu, więc nie ma go na liście.
       expect(ids(cubit), ['b', 'a']);
+      await cubit.close();
+    });
+
+    test('ekran startowy: liczby przy partiach i ostatnio robione', () async {
+      TrainingSession at(String id, String name, DateTime day) => TrainingSession(
+        planName: 'Plan',
+        status: TrainingSessionStatus.completed,
+        startedAt: day,
+        finishedAt: day,
+        exercises: [
+          TrainingSessionExercise(
+            exerciseId: id,
+            exerciseName: name,
+            exerciseMuscles: const [],
+            exerciseCategory: 'compound',
+            sets: [TrainingSessionSet(actualReps: '10', completed: true)],
+          ),
+        ],
+      );
+      final cubit = LibraryCubit(
+        _FakeExerciseRepository(sample),
+        loadUsage: () async => ExerciseStats.usage([
+          at('a', 'Arnoldki', DateTime.utc(2026, 5, 1)),
+          at('b', 'Bicepsy', DateTime.utc(2026, 6, 1)),
+        ]),
+      );
+      await cubit.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final overview = cubit.state.overview;
+      expect(overview.total, sample.length);
+      expect(overview.partCounts[LibraryPart.shoulders], 1);
+      expect(overview.partCounts[LibraryPart.biceps], 1);
+      expect(overview.partCounts[LibraryPart.chest], 0);
+      expect([for (final e in overview.recent) e.id], ['b', 'a']);
       await cubit.close();
     });
 

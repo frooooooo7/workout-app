@@ -15,7 +15,8 @@ import '../widgets/library_add_exercise_sheet.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
 import '../widgets/library_error_state.dart';
-import '../widgets/library_exercise_grid.dart';
+import '../widgets/library_exercise_list.dart';
+import '../widgets/library_start_view.dart';
 import '../widgets/library_filter_chips.dart';
 import '../widgets/library_header.dart';
 import '../widgets/library_loading_state.dart';
@@ -33,6 +34,10 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   final _searchController = TextEditingController();
+
+  /// `true` po wybraniu partii albo „Wszystkie” — pokazujemy listę zamiast
+  /// ekranu startowego (wpisanie tekstu też ją pokazuje).
+  bool _browsing = false;
 
   @override
   void dispose() {
@@ -176,6 +181,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               activeFilterCount: state.types.length,
                               onFilterTap: () => _pickTypes(context),
                               onBackTap: () {
+                                // Z listy albo wyników szukania wracamy
+                                // krok wstecz do ekranu startowego.
+                                if (_browsing ||
+                                    _searchController.text.isNotEmpty) {
+                                  _searchController.clear();
+                                  cubit.setQuery('');
+                                  cubit.setCategory(MuscleGroup.all);
+                                  cubit.setFilter(LibraryFilter.all);
+                                  setState(() => _browsing = false);
+                                  return;
+                                }
                                 if (context.canPop()) {
                                   context.pop();
                                   return;
@@ -223,7 +239,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               },
                             ),
                           ),
-                          const SizedBox(height: 14),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: BlocBuilder<LibraryCubit, LibraryState>(
+                        buildWhen: (previous, current) =>
+                            previous.query.trim().isEmpty !=
+                                current.query.trim().isEmpty ||
+                            previous.overview != current.overview ||
+                            previous.loading != current.loading,
+                        builder: (context, state) {
+                          if (!_browsing && state.query.trim().isEmpty) {
+                            return LibraryStartView(
+                              overview: state.overview,
+                              onPartTap: (part) {
+                                setState(() => _browsing = true);
+                                cubit.setCategory(part.group);
+                              },
+                              onShowAll: () {
+                                setState(() => _browsing = true);
+                                cubit.setCategory(MuscleGroup.all);
+                              },
+                              onExerciseTap: (exercise) =>
+                                  _openDetails(context, exercise),
+                            );
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
                           BlocBuilder<LibraryCubit, LibraryState>(
                             buildWhen: (previous, current) =>
                                 previous.filter != current.filter ||
@@ -260,12 +313,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               );
                             },
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const AppTabScrollEdge(),
-                    Expanded(
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const AppTabScrollEdge(),
+                              Expanded(
                       child: BlocBuilder<LibraryCubit, LibraryState>(
                         buildWhen: (previous, current) =>
                             previous.exercises != current.exercises ||
@@ -285,7 +338,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                   : null,
                             );
                           }
-                          return LibraryExerciseGrid(
+                          return LibraryExerciseList(
                             exercises: state.exercises,
                             onFavouriteTap: (exercise) =>
                                 _toggleFavourite(context, exercise),
@@ -293,6 +346,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 _openDetails(context, exercise),
                             onMoreTap: (exercise) =>
                                 _showActions(context, exercise),
+                          );
+                        },
+                      ),
+                    ),
+                            ],
                           );
                         },
                       ),
