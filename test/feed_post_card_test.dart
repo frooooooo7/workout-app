@@ -185,7 +185,7 @@ void main() {
       final kudosButton = find.byKey(const ValueKey('feed-kudos-button-p1'));
       expect(kudosButton, findsOneWidget);
       expect(find.text('Daj żółwika'), findsOneWidget);
-      expect(find.byIcon(Icons.thumb_up_alt_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.sports_mma_outlined), findsOneWidget);
 
       await tester.tap(kudosButton);
       await tester.tap(find.byKey(const ValueKey('feed-kudos-summary-p1')));
@@ -200,7 +200,7 @@ void main() {
       await _pumpCard(tester, _post(hasKudoed: true));
 
       expect(find.text('Dano żółwika'), findsOneWidget);
-      expect(find.byIcon(Icons.thumb_up_alt_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.sports_mma_rounded), findsOneWidget);
     });
 
     testWidgets('own post has no kudos button but keeps comments',

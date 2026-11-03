@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,9 +24,17 @@ class _NoOpProfileRepository extends Fake implements ProfileRepository {}
 const _anna = FeedAuthor(id: 'anna', firstName: 'Anna', lastName: 'Nowak');
 
 class _FakeFeedRepository implements FeedRepository {
-  _FakeFeedRepository({required this.exercises});
+  _FakeFeedRepository({
+    required this.exercises,
+    this.kudos = 0,
+    this.commentsGate,
+  });
 
   final int exercises;
+  final int kudos;
+
+  /// Wstrzymuje odpowiedź z komentarzami do czasu ukończenia.
+  final Completer<void>? commentsGate;
 
   @override
   Future<PostDetail> getPost(String postId) async => PostDetail(
@@ -40,7 +50,7 @@ class _FakeFeedRepository implements FeedRepository {
       muscles: const [MuscleGroup.chest],
       topExercises: const [],
       personalRecords: const [],
-      kudosCount: 0,
+      kudosCount: kudos,
       commentCount: 2,
       hasKudoed: false,
       isOwn: false,
@@ -69,17 +79,20 @@ class _FakeFeedRepository implements FeedRepository {
     String postId, {
     String? cursor,
     int limit = 30,
-  }) async => CommentsPage(
-    items: [
-      for (var i = 0; i < 2; i++)
-        PostComment(
-          id: 'c$i',
-          author: _anna,
-          body: 'Komentarz $i',
-          createdAt: DateTime.utc(2026, 9, 14, 18),
-        ),
-    ],
-  );
+  }) async {
+    await commentsGate?.future;
+    return CommentsPage(
+      items: [
+        for (var i = 0; i < 2; i++)
+          PostComment(
+            id: 'c$i',
+            author: _anna,
+            body: 'Komentarz $i',
+            createdAt: DateTime.utc(2026, 9, 14, 18),
+          ),
+      ],
+    );
+  }
 
   @override
   Future<FeedPage> getFeed({String? cursor, int limit = 20}) =>
@@ -122,11 +135,18 @@ Future<void> _pump(
   WidgetTester tester, {
   required bool focusComment,
   int exercises = 14,
+  int kudos = 0,
+  double width = 412,
+  Completer<void>? commentsGate,
 }) async {
-  tester.view.physicalSize = const Size(412, 892);
+  tester.view.physicalSize = Size(width, _screenHeight);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final repo = _FakeFeedRepository(exercises: exercises);
+  final repo = _FakeFeedRepository(
+    exercises: exercises,
+    kudos: kudos,
+    commentsGate: commentsGate,
+  );
   await tester.pumpWidget(
     MaterialApp(
       home: MultiBlocProvider(
@@ -147,8 +167,18 @@ Future<void> _pump(
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (commentsGate == null) {
+    await tester.pumpAndSettle();
+  } else {
+    // Spinner komentarzy animuje się w nieskończoność — pumpAndSettle by nie
+    // skończył.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
 }
+
+const _screenHeight = 892.0;
 
 void main() {
   testWidgets('focusComment scrolls a long post down to the comments', (
@@ -172,5 +202,65 @@ void main() {
 
     expect(find.text('Komentarze (2)'), findsNothing);
     expect(find.text('Push A'), findsWidgets);
+  });
+
+  testWidgets('keyboard does not cover the comments', (tester) async {
+    await _pump(tester, focusComment: true);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+
+    final visibleBottom = _screenHeight - 320;
+    for (final text in ['Komentarze (2)', 'Komentarz 0', 'Komentarz 1']) {
+      final rect = tester.getRect(find.text(text));
+      expect(rect.top, greaterThanOrEqualTo(0), reason: text);
+      expect(rect.bottom, lessThanOrEqualTo(visibleBottom), reason: text);
+    }
+  });
+
+  testWidgets('comments that load later are scrolled into view', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    await _pump(tester, focusComment: true, commentsGate: gate);
+    expect(find.text('Komentarz 1'), findsNothing);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    final rect = tester.getRect(find.text('Komentarz 1'));
+    expect(rect.bottom, lessThanOrEqualTo(_screenHeight));
+    expect(rect.top, greaterThanOrEqualTo(0));
+  });
+
+  testWidgets('scrolling by hand stops the automatic scroll', (tester) async {
+    final gate = Completer<void>();
+    await _pump(tester, focusComment: true, commentsGate: gate);
+    final list = find.byType(ListView);
+    await tester.drag(list, const Offset(0, 500));
+    await tester.pump(const Duration(seconds: 1));
+    final controller = tester.widget<ListView>(list).controller!;
+    final offset = controller.offset;
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(controller.offset, offset);
+  });
+
+  testWidgets('tapping the comment count scrolls without the keyboard', (
+    tester,
+  ) async {
+    // Szerszy ekran: testowa czcionka (Ahem) jest dużo szersza od prawdziwej.
+    await _pump(tester, focusComment: false, kudos: 2, width: 700);
+    expect(find.text('Komentarze (2)'), findsNothing);
+
+    await tester.tap(find.text('2 komentarze'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Komentarze (2)'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Komentarze (2)')).dy, lessThan(892));
+    final input = tester.widget<CommentInputBar>(find.byType(CommentInputBar));
+    expect(input.focusNode!.hasFocus, isFalse);
   });
 }

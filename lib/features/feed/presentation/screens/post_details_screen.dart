@@ -56,25 +56,47 @@ class PostDetailsScreen extends StatefulWidget {
   State<PostDetailsScreen> createState() => _PostDetailsScreenState();
 }
 
-class _PostDetailsScreenState extends State<PostDetailsScreen> {
+class _PostDetailsScreenState extends State<PostDetailsScreen>
+    with WidgetsBindingObserver {
   final _commentFocus = FocusNode();
   final _commentsKey = GlobalKey();
   final _scrollController = ScrollController();
   bool _didAutoFocus = false;
   bool _copying = false;
 
+  /// Ekran trzyma przewinięcie przy komentarzach (po wczytaniu komentarzy
+  /// i po otwarciu klawiatury), dopóki użytkownik sam nie zacznie przewijać.
+  bool _followComments = false;
+
+  /// Numer ostatniego przewijania — nowsze przerywa starsze.
+  int _scrollRun = 0;
+  double _lastKeyboardInset = 0;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     context.read<PostDetailsCubit>().load();
     context.read<PostCommentsCubit>().load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _commentFocus.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final inset = View.of(context).viewInsets.bottom;
+    final opened = inset > _lastKeyboardInset;
+    _lastKeyboardInset = inset;
+    // Klawiatura skraca listę, a pozycja przewinięcia zostaje — bez tego
+    // sekcja komentarzy chowa się pod klawiaturą.
+    if (opened && _followComments) _followCommentsAfterLayout();
   }
 
   void _maybeAutoFocus() {
@@ -88,17 +110,30 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     });
   }
 
+  /// Przewija po zbudowaniu układu, bez animacji — nadąża za klawiaturą
+  /// i za dopisywanymi komentarzami.
+  void _followCommentsAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_followComments) return;
+      _scrollToComments(animate: false);
+    });
+  }
+
   /// Przewija do sekcji komentarzy. Lista buduje elementy leniwie, więc
   /// sekcja na końcu może jeszcze nie istnieć — wtedy zjeżdżamy w dół, aż
-  /// się zbuduje, i dopiero wtedy ustawiamy ją u góry ekranu.
-  Future<void> _scrollToComments() async {
+  /// się zbuduje, i dopiero wtedy ustawiamy ją u góry ekranu. Przerywa się,
+  /// gdy użytkownik sam przewinie albo zacznie nowe przewijanie.
+  Future<void> _scrollToComments({bool animate = true}) async {
+    final run = ++_scrollRun;
+    _followComments = true;
+    bool cancelled() => !mounted || run != _scrollRun;
     for (var attempt = 0; attempt < 12; attempt++) {
-      if (!mounted) return;
+      if (cancelled()) return;
       final commentsContext = _commentsKey.currentContext;
       if (commentsContext != null && commentsContext.mounted) {
         await Scrollable.ensureVisible(
           commentsContext,
-          duration: const Duration(milliseconds: 380),
+          duration: animate ? const Duration(milliseconds: 380) : Duration.zero,
           curve: Curves.easeOutCubic,
         );
         return;
@@ -112,12 +147,31 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         await WidgetsBinding.instance.endOfFrame;
         continue;
       }
-      await _scrollController.animateTo(
-        position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      if (animate) {
+        await _scrollController.animateTo(
+          position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(position.maxScrollExtent);
+        await WidgetsBinding.instance.endOfFrame;
+      }
     }
+  }
+
+  /// Palec na liście kończy automatyczne przewijanie.
+  bool _onScrollNotification(ScrollNotification notification) {
+    final userDriven =
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null) ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null);
+    if (userDriven && _followComments) {
+      _followComments = false;
+      _scrollRun++;
+    }
+    return false;
   }
 
   void _showSnackBar(String message) {
@@ -251,6 +305,15 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         ),
         BlocListener<PostCommentsCubit, PostCommentsState>(
           listenWhen: (previous, current) =>
+              previous.status == PostCommentsStatus.loading &&
+              current.status != PostCommentsStatus.loading,
+          listener: (_, _) {
+            // Komentarze dorysowują się pod nagłówkiem — dociągamy widok.
+            if (_followComments) _followCommentsAfterLayout();
+          },
+        ),
+        BlocListener<PostCommentsCubit, PostCommentsState>(
+          listenWhen: (previous, current) =>
               current.notice != null &&
               previous.notice?.id != current.notice!.id,
           listener: (_, state) => _showSnackBar(state.notice!.message),
@@ -356,6 +419,8 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
           sessionDetail: state.sessionDetail!,
           commentsKey: _commentsKey,
           scrollController: _scrollController,
+          onScrollNotification: _onScrollNotification,
+          onCommentsTap: _scrollToComments,
           repository: widget.repository,
           currentUserId: widget.currentUserId,
           onDeleteComment: _confirmDelete,
@@ -370,6 +435,8 @@ class _PostDetailsBody extends StatelessWidget {
     required this.sessionDetail,
     required this.commentsKey,
     required this.scrollController,
+    required this.onScrollNotification,
+    required this.onCommentsTap,
     required this.repository,
     required this.currentUserId,
     required this.onDeleteComment,
@@ -379,6 +446,8 @@ class _PostDetailsBody extends StatelessWidget {
   final TrainingSessionDetail sessionDetail;
   final GlobalKey commentsKey;
   final ScrollController scrollController;
+  final NotificationListenerCallback<ScrollNotification> onScrollNotification;
+  final VoidCallback onCommentsTap;
   final FeedRepository repository;
   final String? currentUserId;
   final ValueChanged<PostComment> onDeleteComment;
@@ -387,62 +456,66 @@ class _PostDetailsBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final exercises = sessionDetail.exercises;
 
-    return ListView(
-      controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: PostAuthorRow(
-            author: post.author,
-            timestamp: post.postTitle == null
-                ? formatFeedTimestamp(post.startedAt)
-                : '${formatFeedTimestamp(post.startedAt)} · ${post.title}',
-            onTap: () =>
-                openAuthorProfile(context, post.author.id, isOwn: post.isOwn),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (post.photoUrl != null ||
-            post.postTitle != null ||
-            post.note != null) ...[
-          _PostContent(post: post),
-          const SizedBox(height: 14),
-        ],
-        SessionSummaryHeader(detail: sessionDetail, showNote: false),
-        const SizedBox(height: 12),
-        if (post.personalRecords.isNotEmpty) ...[
-          NewRecordsBanner(records: post.personalRecords),
-          const SizedBox(height: 12),
-        ],
-        _KudosPanel(
-          post: post,
-          onKudosTap: context.read<PostDetailsCubit>().toggleKudos,
-          onKudosListTap: () => showKudosSheet(
-            context: context,
-            postId: post.id,
-            repository: repository,
-            currentUserId: currentUserId,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SessionMuscleMap(detail: sessionDetail),
-        if (exercises.isNotEmpty) ...[
-          const SizedBox(height: 22),
-          const _SectionTitle('Ćwiczenia'),
-          for (var i = 0; i < exercises.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: SessionExerciseCard(exercise: exercises[i], index: i),
+    return NotificationListener<ScrollNotification>(
+      onNotification: onScrollNotification,
+      child: ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: PostAuthorRow(
+              author: post.author,
+              timestamp: post.postTitle == null
+                  ? formatFeedTimestamp(post.startedAt)
+                  : '${formatFeedTimestamp(post.startedAt)} · ${post.title}',
+              onTap: () =>
+                  openAuthorProfile(context, post.author.id, isOwn: post.isOwn),
             ),
+          ),
+          const SizedBox(height: 12),
+          if (post.photoUrl != null ||
+              post.postTitle != null ||
+              post.note != null) ...[
+            _PostContent(post: post),
+            const SizedBox(height: 14),
+          ],
+          SessionSummaryHeader(detail: sessionDetail, showNote: false),
+          const SizedBox(height: 12),
+          if (post.personalRecords.isNotEmpty) ...[
+            NewRecordsBanner(records: post.personalRecords),
+            const SizedBox(height: 12),
+          ],
+          _KudosPanel(
+            post: post,
+            onKudosTap: context.read<PostDetailsCubit>().toggleKudos,
+            onCommentsTap: onCommentsTap,
+            onKudosListTap: () => showKudosSheet(
+              context: context,
+              postId: post.id,
+              repository: repository,
+              currentUserId: currentUserId,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SessionMuscleMap(detail: sessionDetail),
+          if (exercises.isNotEmpty) ...[
+            const SizedBox(height: 22),
+            const _SectionTitle('Ćwiczenia'),
+            for (var i = 0; i < exercises.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SessionExerciseCard(exercise: exercises[i], index: i),
+              ),
+          ],
+          const SizedBox(height: 18),
+          _CommentsSection(
+            key: commentsKey,
+            commentCount: post.commentCount,
+            onDeleteComment: onDeleteComment,
+          ),
         ],
-        const SizedBox(height: 18),
-        _CommentsSection(
-          key: commentsKey,
-          commentCount: post.commentCount,
-          onDeleteComment: onDeleteComment,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -509,11 +582,13 @@ class _KudosPanel extends StatelessWidget {
     required this.post,
     required this.onKudosTap,
     required this.onKudosListTap,
+    required this.onCommentsTap,
   });
 
   final FeedPost post;
   final VoidCallback onKudosTap;
   final VoidCallback onKudosListTap;
+  final VoidCallback onCommentsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -528,11 +603,15 @@ class _KudosPanel extends StatelessWidget {
         children: [
           Expanded(
             child: post.kudosCount > 0
-                ? PostSocialSummary(post: post, onKudosListTap: onKudosListTap)
+                ? PostSocialSummary(
+                    post: post,
+                    onKudosListTap: onKudosListTap,
+                    onCommentsTap: onCommentsTap,
+                  )
                 : Text(
                     post.isOwn
                         ? 'Nikt jeszcze nie dał żółwika'
-                        : 'Bądź pierwszą osobą z żółwikiem',
+                        : 'Daj pierwszego żółwika',
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12.5,

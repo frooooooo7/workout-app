@@ -168,7 +168,11 @@ class _KudosGlyph extends StatelessWidget {
           colors: [AppColors.primaryVariant, AppColors.primary],
         ),
       ),
-      child: const Icon(Icons.thumb_up_rounded, size: 11, color: Colors.white),
+      child: const Icon(
+        Icons.sports_mma_rounded,
+        size: 11,
+        color: Colors.white,
+      ),
     );
   }
 }
@@ -189,9 +193,7 @@ class PostKudosButton extends StatelessWidget {
     return Semantics(
       toggled: hasKudoed,
       child: _PillButton(
-        icon: hasKudoed
-            ? Icons.thumb_up_alt_rounded
-            : Icons.thumb_up_alt_outlined,
+        icon: hasKudoed ? Icons.sports_mma_rounded : Icons.sports_mma_outlined,
         label: hasKudoed ? 'Dano żółwika' : 'Daj żółwika',
         active: hasKudoed,
         onTap: onTap == null
