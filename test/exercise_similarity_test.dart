@@ -88,4 +88,40 @@ void main() {
     ];
     expect(ExerciseSimilarity.substitutes(bench, many, limit: 5), hasLength(5));
   });
+
+  test('same powtórzenia i ciężar × powt. to jedna rodzina', () {
+    final pushups = _e(
+      'pushups',
+      [MuscleGroup.chest],
+      pattern: 'push_horizontal',
+      tracking: ExerciseTracking.reps,
+    );
+    expect(
+      ExerciseSimilarity.substitutes(bench, [bench, pushups]).map((e) => e.id),
+      ['pushups'],
+    );
+    expect(
+      ExerciseSimilarity.substitutes(pushups, [bench, pushups]).map((e) => e.id),
+      ['bench'],
+    );
+  });
+
+  test('grupa zbiorcza pasuje do konkretnego mięśnia, ale słabiej', () {
+    final oldBack = _e('oldBack', [MuscleGroup.back]);
+    final row = _e('row', [MuscleGroup.lats]);
+    final pulldown = _e('pulldown', [MuscleGroup.lats]);
+    final traps = _e('traps', [MuscleGroup.traps]);
+    expect(
+      ExerciseSimilarity.substitutes(oldBack, [row, traps]).map((e) => e.id),
+      ['row', 'traps'],
+    );
+    // Z konkretnym mięśniem własne ćwiczenie z grupą zbiorczą jest zamiennikiem,
+    // ale ten sam mięsień wygrywa z grupą.
+    expect(
+      ExerciseSimilarity.substitutes(row, [oldBack, pulldown]).map((e) => e.id),
+      ['pulldown', 'oldBack'],
+    );
+    // Dwa różne konkretne mięśnie tej samej grupy nie są zamiennikami.
+    expect(ExerciseSimilarity.substitutes(row, [traps]), isEmpty);
+  });
 }

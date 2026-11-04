@@ -15,7 +15,7 @@ abstract final class ExerciseSimilarity {
     final scored = <(Exercise, int)>[];
     for (final candidate in all) {
       if (_sameExercise(candidate, exercise)) continue;
-      if (candidate.tracking != exercise.tracking) continue;
+      if (!_sameTrackingFamily(candidate.tracking, exercise.tracking)) continue;
       final score = _score(exercise, candidate);
       if (score > 0) scored.add((candidate, score));
     }
@@ -25,6 +25,25 @@ abstract final class ExerciseSimilarity {
       return a.$1.name.toLowerCase().compareTo(b.$1.name.toLowerCase());
     });
     return [for (final (candidate, _) in scored.take(limit)) candidate];
+  }
+
+  /// Ciężar × powtórzenia i same powtórzenia to jedna rodzina (pompki mogą
+  /// zastąpić wyciskanie); czas i czas z dystansem zostają osobno.
+  static bool _sameTrackingFamily(ExerciseTracking a, ExerciseTracking b) {
+    bool reps(ExerciseTracking t) =>
+        t == ExerciseTracking.weightReps || t == ExerciseTracking.reps;
+    return a == b || (reps(a) && reps(b));
+  }
+
+  /// Ten sam mięsień główny: 3. Grupa zbiorcza (plecy, nogi, barki) przeciw
+  /// konkretnemu mięśniowi z tej grupy (starsze własne ćwiczenia): 1.
+  static int _muscleScore(MuscleGroup? a, MuscleGroup? b) {
+    if (a == null || b == null) return 0;
+    if (a == b) return 3;
+    if ((a.isCoarse && b.broadGroup == a) || (b.isCoarse && a.broadGroup == b)) {
+      return 1;
+    }
+    return 0;
   }
 
   static bool _sameExercise(Exercise a, Exercise b) =>
@@ -44,9 +63,10 @@ abstract final class ExerciseSimilarity {
     if (exercise.pattern != null && exercise.pattern == candidate.pattern) {
       score += 4;
     }
-    final primary = exercise.workingMuscles.firstOrNull;
-    final candidatePrimary = candidate.workingMuscles.firstOrNull;
-    if (primary != null && primary == candidatePrimary) score += 3;
+    score += _muscleScore(
+      exercise.workingMuscles.firstOrNull,
+      candidate.workingMuscles.firstOrNull,
+    );
     if (score == 0) return 0;
     if (exercise.equipment != null && candidate.equipment != exercise.equipment) {
       score += 1;
