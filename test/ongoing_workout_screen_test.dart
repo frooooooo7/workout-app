@@ -184,6 +184,58 @@ void main() {
     return cubit;
   }
 
+  testWidgets('swaps an exercise from the long-press menu, with undo', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+            restTimerScheduler: _FakeRestTimerScheduler(),
+            swapExercise: (context, replacing) async {
+              expect(replacing.exerciseName, 'Bench press');
+              return const Exercise(
+                id: 'db',
+                name: 'Dumbbell press',
+                muscles: [MuscleGroup.chest],
+                category: ExerciseCategory.compound,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Zamień ćwiczenie'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Dumbbell press',
+      'Shoulder press',
+    ]);
+    expect(
+      find.byKey(const ValueKey('exercise-swapped-snackbar')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Bench press',
+      'Shoulder press',
+    ]);
+
+    await cubit.close();
+  });
+
   testWidgets(
     'removes an untouched exercise from the ⋯ menu without asking, with undo',
     (tester) async {
