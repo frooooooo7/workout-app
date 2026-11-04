@@ -60,4 +60,31 @@ void main() {
   test('nieznane ćwiczenie zwraca null', () {
     expect(ExerciseSwap.apply([_ex('a', [false])], 'zzz', _dumbbell), isNull);
   });
+
+  test('zamiana ciężaru na same powtórzenia: nowe serie są puste, bez wagi', () {
+    final weighted = TrainingSessionExercise(
+      id: 'a',
+      exerciseId: 'ex-a',
+      exerciseName: 'Wyciskanie',
+      exerciseMuscles: const ['chest'],
+      exerciseCategory: 'compound',
+      sets: [
+        TrainingSessionSet(plannedWeight: '80', plannedReps: '5'),
+        TrainingSessionSet(plannedWeight: '80', plannedReps: '5'),
+      ],
+    );
+    const pushups = Exercise(
+      id: 'pu',
+      name: 'Pompki',
+      muscles: [MuscleGroup.chest],
+      category: ExerciseCategory.compound,
+      tracking: ExerciseTracking.reps,
+    );
+    final result = ExerciseSwap.apply([weighted], 'a', pushups)!;
+    final swapped = result.exercises.single;
+    expect(swapped.tracking, ExerciseTracking.reps);
+    expect(swapped.sets, hasLength(2));
+    expect(swapped.sets.every((s) => s.plannedWeight == null), isTrue);
+    expect(swapped.sets.every((s) => s.plannedReps.isEmpty), isTrue);
+  });
 }
