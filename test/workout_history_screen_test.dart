@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/core/theme/app_localization.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
@@ -16,6 +17,7 @@ import 'package:gym/features/training/presentation/widgets/workout_history/histo
 import 'package:gym/features/training/presentation/widgets/workout_history/history_month_navigator.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_session_card.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_session_row.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 session.TrainingSession _session(
   String id,
@@ -66,6 +68,11 @@ TrainingSessionListItem _serverItem(String id, DateTime startedAt) =>
 void main() {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
+  // Dzisiejszy trening o 01:00 albo teraz, jeśli jest wcześniej — inaczej
+  // tuż po północy wypadałby w przyszłości i znikał z historii.
+  final todayWorkout = today.add(const Duration(hours: 1)).isAfter(now)
+      ? now.subtract(const Duration(minutes: 1))
+      : today.add(const Duration(hours: 1));
 
   // Stary Push z 80 kg, dzisiejszy z 100 kg (rekord), Legs tydzień temu.
   List<session.TrainingSession> localSessions() => [
@@ -83,7 +90,7 @@ void main() {
     ),
     _session(
       'today',
-      today.add(const Duration(hours: 1)),
+      todayWorkout,
       sets: const [
         ('Wyciskanie', '100', '5'),
         ('OHP', '50', '8'),
@@ -214,9 +221,7 @@ void main() {
   testWidgets('no filter bar when there is a single plan and no records', (
     tester,
   ) async {
-    setUpRepositories(
-      local: [_session('only', today.add(const Duration(hours: 1)))],
-    );
+    setUpRepositories(local: [_session('only', todayWorkout)]);
     await openHistory(tester);
 
     expect(find.byType(HistorySessionCard), findsOneWidget);
@@ -376,46 +381,71 @@ void main() {
     });
   });
 
-  testWidgets('switches between sessions and statistics', (tester) async {
-    await openHistory(tester);
+  group('statistics entry', () {
+    Future<GoRouter> openWithRouter(WidgetTester tester) async {
+      useTallPhone(tester);
+      final router = GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const HistoryScreen()),
+          GoRoute(
+            path: '/app/training/stats',
+            builder: (_, _) => const Scaffold(body: Text('ekran statystyk')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+      return router;
+    }
 
-    expect(find.text('Sesje'), findsOneWidget);
-    expect(find.byType(StatsRangeSelector), findsNothing);
-    expect(find.byTooltip('Kalendarz'), findsOneWidget);
+    testWidgets('there is no sessions/statistics tab any more', (tester) async {
+      await openHistory(tester);
 
-    await tester.tap(find.text('Statystyki'));
-    await tester.pumpAndSettle();
+      expect(find.text('Sesje'), findsNothing);
+      expect(find.text('Statystyki'), findsNothing);
+      expect(find.byType(StatsRangeSelector), findsNothing);
+      expect(find.byType(HistorySessionCard), findsNWidgets(3));
+      // Obie ikony stoją w nagłówku listy.
+      expect(find.byTooltip('Statystyki'), findsOneWidget);
+      expect(find.byTooltip('Kalendarz'), findsOneWidget);
+    });
 
-    expect(find.byType(StatsRangeSelector), findsOneWidget);
-    expect(find.byType(HistorySessionCard), findsNothing);
-    // Kalendarz dotyczy listy sesji, nie statystyk.
-    expect(find.byTooltip('Kalendarz'), findsNothing);
+    testWidgets('the chart icon opens the statistics screen', (tester) async {
+      await openWithRouter(tester);
 
-    await tester.tap(find.text('Sesje'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HistorySessionCard), findsNWidgets(3));
-  });
+      await tester.tap(find.byTooltip('Statystyki'));
+      await tester.pumpAndSettle();
 
-  testWidgets('statistics tab survives a trip to the sessions list', (
-    tester,
-  ) async {
-    await openHistory(tester);
-    await tester.tap(find.text('Statystyki'));
-    await tester.pumpAndSettle();
-    expect(find.text('Przebieg w czasie'), findsOneWidget);
+      expect(find.text('ekran statystyk'), findsOneWidget);
+    });
 
-    await tester.tap(find.text('Regularność'));
-    await tester.pumpAndSettle();
-    expect(find.text('Przebieg w czasie'), findsNothing);
-    expect(find.text('Nawyki treningowe'), findsOneWidget);
+    testWidgets('a one-time bubble points to the new icon', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await openHistory(tester);
+      await tester.pump();
 
-    await tester.tap(find.text('Sesje'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Statystyki'));
-    await tester.pumpAndSettle();
+      expect(find.text('Statystyki są teraz tutaj'), findsOneWidget);
 
-    expect(find.text('Nawyki treningowe'), findsOneWidget);
-    expect(find.text('Przebieg w czasie'), findsNothing);
+      await tester.tap(find.text('Statystyki są teraz tutaj'));
+      await tester.pumpAndSettle();
+      expect(find.text('Statystyki są teraz tutaj'), findsNothing);
+
+      // Pokazana raz — po ponownym otwarciu Historii jej nie ma.
+      await openHistory(tester);
+      await tester.pump();
+      expect(find.text('Statystyki są teraz tutaj'), findsNothing);
+    });
+
+    testWidgets('the bubble goes away after a few seconds', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await openHistory(tester);
+      await tester.pump();
+      expect(find.text('Statystyki są teraz tutaj'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 8));
+      expect(find.text('Statystyki są teraz tutaj'), findsNothing);
+    });
   });
 
   group('month picker', () {

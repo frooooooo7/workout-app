@@ -19,7 +19,6 @@ class StatsGoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SessionSectionCard(
-      icon: Icons.track_changes_rounded,
       title: 'Cel tygodnia',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -578,9 +577,11 @@ class _StreakRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            Icons.flag_rounded,
+            Icons.local_fire_department_rounded,
             size: 18,
-            color: g.streakWeeks > 0 ? AppColors.trendUp : AppColors.textMuted,
+            color: g.streakWeeks > 0
+                ? AppColors.statOrange
+                : AppColors.textMuted,
           ),
           const SizedBox(width: AppSpacing.xs),
           Expanded(
@@ -594,7 +595,7 @@ class _StreakRow extends StatelessWidget {
                   TextSpan(
                     children: [
                       const TextSpan(
-                        text: 'Seria celu: ',
+                        text: 'Passa: ',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w500,
@@ -641,4 +642,72 @@ String? _weeksSummary(WeeklyGoalProgress g) {
   if (counted.isEmpty) return null;
   final met = counted.where((w) => w.workouts >= g.goal).length;
   return 'Wykonany w $met z ${counted.length} ostatnich tygodni';
+}
+
+/// Passa bez celu w profilu: kolejne tygodnie z treningiem i zachęta do
+/// ustawienia celu.
+class StatsStreakCard extends StatelessWidget {
+  const StatsStreakCard({
+    super.key,
+    required this.streakWeeks,
+    required this.bestStreakWeeks,
+  });
+
+  final int streakWeeks;
+  final int bestStreakWeeks;
+
+  @override
+  Widget build(BuildContext context) {
+    return SessionSectionCard(
+      title: 'Passa',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.local_fire_department_rounded,
+                size: 26,
+                color: streakWeeks > 0
+                    ? AppColors.statOrange
+                    : AppColors.textMuted,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '$streakWeeks',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Text(
+                  '${polishPlural(streakWeeks, 'tydzień', 'tygodnie', 'tygodni')} '
+                  'z rzędu z treningiem',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'najdłuższa: $bestStreakWeeks tyg. · Ustaw cel tygodniowy w '
+            'profilu, a passa będzie liczyć tygodnie z wykonanym celem.',
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -126,41 +126,22 @@ class StatsSeriesPoint {
   final double volumeKg;
 }
 
-/// Dzień na heatmapie aktywności.
+/// Dzień z treningiem w oknie aktywności.
 class ActivityDay {
   const ActivityDay({
     required this.day,
     this.workouts = 0,
     this.sets = 0,
     this.volumeKg = 0,
-    this.sessions = const [],
   });
 
   final DateTime day;
   final int workouts;
   final int sets;
   final double volumeKg;
-
-  /// Sesje tego dnia, od najwcześniejszej — do otwarcia ze szczegółami.
-  final List<ActivitySession> sessions;
 }
 
-/// Sesja w podsumowaniu dnia na heatmapie.
-class ActivitySession {
-  const ActivitySession({
-    required this.id,
-    required this.name,
-    required this.startedAt,
-  });
-
-  final String id;
-
-  /// Nazwa planu.
-  final String name;
-  final DateTime startedAt;
-}
-
-/// Heatmapa: pełne tygodnie (od poniedziałku) kończące się bieżącym
+/// Okno aktywności: pełne tygodnie (od poniedziałku) kończące się bieżącym
 /// tygodniem. Dni bez treningu nie mają wpisu w [days].
 class StatsActivity {
   const StatsActivity({
@@ -337,11 +318,16 @@ class RegionStat {
     required this.region,
     required this.sets,
     required this.share,
+    this.muscleCount = 1,
   });
 
   final MuscleRegion region;
   final double sets;
   final double share;
+
+  /// Ile trenowanych partii (grup mięśniowych) składa się na [sets] — pasmo
+  /// 10–20 serii tygodniowo dotyczy jednej partii, nie sumy regionu.
+  final int muscleCount;
 }
 
 class MuscleDistribution {
@@ -542,13 +528,20 @@ class WeeklyGoalProgress {
     required this.streakWeeks,
     required this.bestStreakWeeks,
     required this.daysLeft,
-  });
+    List<GoalWeek>? allWeeks,
+  }) : _allWeeks = allWeeks;
 
   final int goal;
   final int workoutsThisWeek;
 
   /// Ostatnie tygodnie (najstarszy pierwszy, bieżący ostatni).
   final List<GoalWeek> weeks;
+
+  final List<GoalWeek>? _allWeeks;
+
+  /// Wszystkie tygodnie od pierwszego treningu do bieżącego (najstarszy
+  /// pierwszy) — dla zakresów dłuższych niż karta celu. Bez nich: [weeks].
+  List<GoalWeek> get allWeeks => _allWeeks ?? weeks;
 
   /// Kolejne tygodnie z wykonanym celem — od bieżącego, a gdy ten jeszcze
   /// nie jest wykonany, od poprzedniego.
@@ -815,4 +808,8 @@ class TrainingStatsSnapshot {
   final int? daysSinceLastWorkout;
 
   bool get isEmpty => current.workouts == 0;
+
+  /// Jedna passa w całej aplikacji: z celem w profilu — kolejne tygodnie z
+  /// wykonanym celem, bez celu — kolejne tygodnie z jakimkolwiek treningiem.
+  int get streakWeeks => goal?.streakWeeks ?? currentStreakWeeks;
 }

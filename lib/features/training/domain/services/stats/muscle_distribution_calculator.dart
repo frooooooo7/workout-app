@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../../../library/domain/models/exercise.dart';
 import '../../models/training_session.dart';
 import '../../models/training_stats.dart';
@@ -186,6 +188,10 @@ abstract final class MuscleDistributionCalculator {
           region: entry.key,
           sets: entry.value,
           share: regionTotal > 0 ? entry.value / regionTotal : 0,
+          muscleCount: math.max(
+            1,
+            setsByUnit.keys.where((u) => u.region == entry.key).length,
+          ),
         ),
     ]..sort((a, b) => b.sets.compareTo(a.sets));
 

@@ -8,9 +8,7 @@ import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/session_records_calculator.dart';
 import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
 import 'package:gym/features/training/domain/services/stats/weekly_goal_calculator.dart';
-import 'package:gym/features/training/presentation/widgets/session_details/session_section_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_goal_card.dart';
-import 'package:gym/features/training/presentation/widgets/stats/stats_insights_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_rep_ranges_card.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_session_records_card.dart';
 
@@ -19,8 +17,6 @@ final _now = DateTime(2026, 9, 16, 12);
 
 const _longPlan =
     'Trening siłowy całego ciała z akcentem na górę pleców i barki — wersja B';
-const _longExercise =
-    'Wyciskanie hantli na ławce skośnej głową w górę z pauzą na dole ruchu';
 
 /// Środa 16 września: poniedziałek bieżącego tygodnia to 14 września.
 WeeklyGoalProgress _goal({
@@ -209,7 +205,7 @@ void main() {
 
       expect(find.text('cel: 4 / tydz.'), findsOneWidget);
       expect(find.text('Wykonany w 4 z 7 ostatnich tygodni'), findsOneWidget);
-      expect(_rich('Seria celu: 2 tyg.'), findsOneWidget);
+      expect(_rich('Passa: 2 tyg.'), findsOneWidget);
       expect(find.text('najdłuższa: 5 tyg.'), findsOneWidget);
 
       // Czytnik ekranu dostaje liczby zamiast dekoracji.
@@ -344,7 +340,7 @@ void main() {
       expect(find.text('Ostatnie tygodnie'), findsNothing);
       expect(_rich('0 / 3'), findsOneWidget);
       expect(find.text('Brakuje 3 treningów'), findsOneWidget);
-      expect(_rich('Seria celu: 0 tyg.'), findsOneWidget);
+      expect(_rich('Passa: 0 tyg.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -368,7 +364,7 @@ void main() {
 
       expect(_rich('12 / 14'), findsOneWidget);
       expect(find.text('Brakuje 2 treningów'), findsOneWidget);
-      expect(_rich('Seria celu: 12 tyg.'), findsOneWidget);
+      expect(_rich('Passa: 12 tyg.'), findsOneWidget);
       expect(find.text('najdłuższa: 24 tyg.'), findsOneWidget);
       expect(find.text('14 wrz'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -407,7 +403,7 @@ void main() {
     ) async {
       await _pump(tester, StatsSessionRecordsCard(records: _fullRecords()));
 
-      expect(find.text('Rekordy sesji'), findsOneWidget);
+      expect(find.text('Najlepsze treningi'), findsOneWidget);
 
       expect(find.text('Najcięższy trening'), findsOneWidget);
       expect(_rich('8 450 kg'), findsOneWidget);
@@ -506,7 +502,7 @@ void main() {
         const StatsSessionRecordsCard(records: SessionRecords.empty),
       );
 
-      expect(find.text('Rekordy sesji'), findsOneWidget);
+      expect(find.text('Najlepsze treningi'), findsOneWidget);
       expect(
         find.text('Ukończ trening z ciężarami, aby zobaczyć rekordy sesji.'),
         findsOneWidget,
@@ -678,7 +674,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Zakresy powtórzeń'), findsOneWidget);
+      expect(find.text('Jak trenujesz'), findsOneWidget);
       expect(_rich('Siła · 1–5'), findsOneWidget);
       expect(_rich('Masa · 6–12'), findsOneWidget);
       expect(_rich('Wytrzymałość · 13+'), findsOneWidget);
@@ -796,7 +792,7 @@ void main() {
       expect(find.text('0 serii'), findsOneWidget);
       // Nawet ułamek procenta dostaje widoczny odcinek.
       final strength = find.byWidgetPredicate(
-        (w) => w is ColoredBox && w.color == AppColors.statPink,
+        (w) => w is ColoredBox && w.color == const Color(0xFF1E40AF),
       );
       expect(tester.getSize(strength).width, greaterThanOrEqualTo(3));
       expect(tester.takeException(), isNull);
@@ -814,17 +810,17 @@ void main() {
           ranges: RepRangeDistribution(strength: 10, hypertrophy: 30),
         ),
       );
-      expect(segment(AppColors.statTeal), findsNothing);
-      expect(segment(AppColors.statPink), findsOneWidget);
-      expect(segment(AppColors.primaryVariant), findsOneWidget);
+      expect(segment(const Color(0xFF9DBBFB)), findsNothing);
+      expect(segment(const Color(0xFF1E40AF)), findsOneWidget);
+      expect(segment(AppColors.primary), findsOneWidget);
 
-      final pink = tester.getSize(segment(AppColors.statPink)).width;
-      final blue = tester.getSize(segment(AppColors.primaryVariant)).width;
+      final pink = tester.getSize(segment(const Color(0xFF1E40AF))).width;
+      final blue = tester.getSize(segment(AppColors.primary)).width;
       expect(blue / pink, closeTo(3, 0.01));
 
       // Przerwa 2 px między odcinkami; razem wypełniają całą szerokość.
-      final pinkRect = tester.getRect(segment(AppColors.statPink));
-      final blueRect = tester.getRect(segment(AppColors.primaryVariant));
+      final pinkRect = tester.getRect(segment(const Color(0xFF1E40AF)));
+      final blueRect = tester.getRect(segment(AppColors.primary));
       expect(blueRect.left - pinkRect.right, closeTo(2, 0.01));
     });
 
@@ -834,7 +830,7 @@ void main() {
         const StatsRepRangesCard(ranges: RepRangeDistribution.empty),
       );
 
-      expect(find.text('Zakresy powtórzeń'), findsOneWidget);
+      expect(find.text('Jak trenujesz'), findsOneWidget);
       expect(
         find.text('Brak serii z podaną liczbą powtórzeń w tym okresie.'),
         findsOneWidget,
@@ -881,258 +877,6 @@ void main() {
     });
   });
 
-  group('StatsInsightsCard', () {
-    const insights = [
-      StatsInsight(
-        kind: StatsInsightKind.inactivity,
-        tone: StatsInsightTone.attention,
-        text: 'Ostatni trening był 9 dni temu. Wróć do rytmu.',
-      ),
-      StatsInsight(
-        kind: StatsInsightKind.records,
-        tone: StatsInsightTone.positive,
-        text: 'Nowy rekord: Martwy ciąg.',
-        exerciseId: 'deadlift',
-      ),
-      StatsInsight(
-        kind: StatsInsightKind.volumeUp,
-        tone: StatsInsightTone.positive,
-        text: 'Objętość wzrosła o 25% względem poprzedniego okresu.',
-      ),
-    ];
-
-    testWidgets('renders one row per insight under a titled card', (
-      tester,
-    ) async {
-      await _pump(tester, const StatsInsightsCard(insights: insights));
-
-      expect(find.text('Wnioski'), findsOneWidget);
-      expect(find.byIcon(Icons.lightbulb_outline_rounded), findsOneWidget);
-      for (final insight in insights) {
-        expect(find.text(insight.text), findsOneWidget);
-      }
-      expect(find.byType(Divider), findsNWidgets(2));
-      // Chevron tylko przy wniosku z ćwiczeniem.
-      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('an empty list renders nothing', (tester) async {
-      await _pump(tester, const StatsInsightsCard(insights: []));
-
-      expect(find.byType(SessionSectionCard), findsNothing);
-      expect(find.text('Wnioski'), findsNothing);
-      expect(tester.getSize(find.byType(StatsInsightsCard)), Size.zero);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('every kind has its icon and every tone its tint', (
-      tester,
-    ) async {
-      const icons = {
-        StatsInsightKind.inactivity: Icons.hourglass_bottom_rounded,
-        StatsInsightKind.goalMet: Icons.flag_rounded,
-        StatsInsightKind.goalBehind: Icons.flag_outlined,
-        StatsInsightKind.volumeUp: Icons.trending_up_rounded,
-        StatsInsightKind.volumeDown: Icons.trending_down_rounded,
-        StatsInsightKind.records: Icons.emoji_events_outlined,
-        StatsInsightKind.plateau: Icons.horizontal_rule_rounded,
-        StatsInsightKind.progress: Icons.show_chart_rounded,
-        StatsInsightKind.neglected: Icons.warning_amber_rounded,
-        StatsInsightKind.streak: Icons.local_fire_department_outlined,
-      };
-      expect(icons.keys.toSet(), StatsInsightKind.values.toSet());
-
-      await _pump(
-        tester,
-        StatsInsightsCard(
-          insights: [
-            for (final kind in StatsInsightKind.values)
-              StatsInsight(
-                kind: kind,
-                tone: StatsInsightTone.neutral,
-                text: 'Wniosek ${kind.name}',
-              ),
-          ],
-        ),
-      );
-      for (final entry in icons.entries) {
-        expect(
-          find.byIcon(entry.value),
-          findsOneWidget,
-          reason: '${entry.key}',
-        );
-      }
-
-      Future<Color> tintFor(StatsInsightTone tone) async {
-        await _pump(
-          tester,
-          StatsInsightsCard(
-            insights: [
-              StatsInsight(
-                kind: StatsInsightKind.volumeUp,
-                tone: tone,
-                text: 'Wniosek',
-              ),
-            ],
-          ),
-        );
-        return tester
-            .widget<Icon>(find.byIcon(Icons.trending_up_rounded))
-            .color!;
-      }
-
-      expect(await tintFor(StatsInsightTone.positive), AppColors.trendUp);
-      expect(await tintFor(StatsInsightTone.attention), AppColors.statAmber);
-      expect(await tintFor(StatsInsightTone.neutral), AppColors.primaryVariant);
-    });
-
-    testWidgets('only rows with a usable exercise id are tappable', (
-      tester,
-    ) async {
-      final handle = tester.ensureSemantics();
-      await _pump(
-        tester,
-        const StatsInsightsCard(
-          insights: [
-            StatsInsight(
-              kind: StatsInsightKind.plateau,
-              tone: StatsInsightTone.attention,
-              text: 'Wyciskanie: bez progresu od 5 treningów.',
-              exerciseId: 'bench',
-            ),
-            StatsInsight(
-              kind: StatsInsightKind.records,
-              tone: StatsInsightTone.positive,
-              text: 'Nowy rekord: Przysiad.',
-              exerciseId: '  ',
-            ),
-            StatsInsight(
-              kind: StatsInsightKind.streak,
-              tone: StatsInsightTone.positive,
-              text: 'Seria 5 tygodni z rzędu z treningiem.',
-              exerciseId: '',
-            ),
-            StatsInsight(
-              kind: StatsInsightKind.volumeDown,
-              tone: StatsInsightTone.attention,
-              text: 'Objętość spadła o 33% względem poprzedniego okresu.',
-            ),
-          ],
-        ),
-      );
-
-      final tappable = _semanticsOf('Wyciskanie: bez progresu od 5 treningów.');
-      expect(tappable.hasAction(SemanticsAction.tap), isTrue);
-      expect(tappable.flagsCollection.isButton, isTrue);
-
-      for (final label in [
-        'Nowy rekord: Przysiad.',
-        'Seria 5 tygodni z rzędu z treningiem.',
-        'Objętość spadła o 33% względem poprzedniego okresu.',
-      ]) {
-        expect(_canTap(label), isFalse, reason: label);
-        expect(_semanticsOf(label).flagsCollection.isButton, isFalse);
-      }
-      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
-      handle.dispose();
-    });
-
-    testWidgets('tap and semantic tap open the exercise', (tester) async {
-      final handle = tester.ensureSemantics();
-      await _pumpRouted(
-        tester,
-        const StatsInsightsCard(
-          insights: [
-            StatsInsight(
-              kind: StatsInsightKind.plateau,
-              tone: StatsInsightTone.attention,
-              text: 'Wyciskanie: bez progresu od 5 treningów.',
-              exerciseId: 'bench/1',
-            ),
-            StatsInsight(
-              kind: StatsInsightKind.progress,
-              tone: StatsInsightTone.positive,
-              text: 'Przysiad: szacowane 1RM wzrosło o 12 kg.',
-              exerciseId: 'squat',
-            ),
-          ],
-        ),
-      );
-
-      // Ukośnik w id idzie w ścieżce zakodowany i wraca nienaruszony.
-      await tester.tap(find.text('Wyciskanie: bez progresu od 5 treningów.'));
-      await tester.pumpAndSettle();
-      expect(find.text('exercise bench/1'), findsOneWidget);
-
-      tester.state<NavigatorState>(find.byType(Navigator)).pop();
-      await tester.pumpAndSettle();
-
-      tester.semantics.performAction(
-        find.semantics.byLabel('Przysiad: szacowane 1RM wzrosło o 12 kg.'),
-        SemanticsAction.tap,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('exercise squat'), findsOneWidget);
-      handle.dispose();
-    });
-
-    testWidgets('a non-tappable row does nothing on tap', (tester) async {
-      await _pumpRouted(
-        tester,
-        const StatsInsightsCard(
-          insights: [
-            StatsInsight(
-              kind: StatsInsightKind.streak,
-              tone: StatsInsightTone.positive,
-              text: 'Seria 5 tygodni z rzędu z treningiem.',
-            ),
-          ],
-        ),
-      );
-      await tester.tap(find.text('Seria 5 tygodni z rzędu z treningiem.'));
-      await tester.pumpAndSettle();
-      expect(find.text('Wnioski'), findsOneWidget);
-      expect(find.textContaining('exercise'), findsNothing);
-    });
-
-    testWidgets('long texts stop at three lines with an ellipsis', (
-      tester,
-    ) async {
-      final long = List.filled(
-        14,
-        'Ćwiczenie $_longExercise wymaga uwagi.',
-      ).join(' ');
-      for (final scale in [1.0, 1.3]) {
-        await _pump(
-          tester,
-          StatsInsightsCard(
-            insights: [
-              StatsInsight(
-                kind: StatsInsightKind.plateau,
-                tone: StatsInsightTone.attention,
-                text: long,
-                exerciseId: 'bench',
-              ),
-              StatsInsight(
-                kind: StatsInsightKind.records,
-                tone: StatsInsightTone.positive,
-                text: 'Nowy rekord: $_longExercise.',
-                exerciseId: 'incline',
-              ),
-            ],
-          ),
-          textScale: scale,
-        );
-
-        final paragraph = tester.renderObject<RenderParagraph>(find.text(long));
-        expect(paragraph.didExceedMaxLines, isTrue, reason: 'scale $scale');
-        expect(find.text('Nowy rekord: $_longExercise.'), findsOneWidget);
-        expect(tester.takeException(), isNull, reason: 'scale $scale');
-      }
-    });
-  });
-
   testWidgets('cards built from a real snapshot render together', (
     tester,
   ) async {
@@ -1170,17 +914,14 @@ void main() {
           StatsSessionRecordsCard(records: snapshot.sessionRecords),
           const SizedBox(height: 12),
           StatsRepRangesCard(ranges: snapshot.repRanges),
-          const SizedBox(height: 12),
-          StatsInsightsCard(insights: snapshot.insights),
         ],
       ),
       textScale: 1.3,
     );
 
     expect(find.text('Cel tygodnia'), findsOneWidget);
-    expect(find.text('Rekordy sesji'), findsOneWidget);
-    expect(find.text('Zakresy powtórzeń'), findsOneWidget);
-    expect(find.text('Wnioski'), findsOneWidget);
+    expect(find.text('Najlepsze treningi'), findsOneWidget);
+    expect(find.text('Jak trenujesz'), findsOneWidget);
     expect(_rich('1 / 3'), findsOneWidget);
     expect(
       find.text('Najwięcej serii robisz w zakresie siły (1–5 powt.).'),
