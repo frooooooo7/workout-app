@@ -153,6 +153,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (!context.mounted) return;
     if (result == ExerciseDetailsResult.deleted) {
       _refreshSelectedFrom(null, removedId: exercise.id);
+    } else if (widget.pickMode && _selected.containsKey(exercise.id)) {
+      // Karta mogła zmienić nazwę — bierzemy aktualną wersję z bazy.
+      try {
+        final all = await ServiceLocator.exerciseRepository.getAll();
+        final fresh = all.where((e) => e.id == exercise.id);
+        if (fresh.isNotEmpty) _refreshSelectedFrom(fresh.first);
+      } catch (_) {}
+      if (!context.mounted) return;
+    }
+    if (result == ExerciseDetailsResult.deleted) {
       _showMessage(context, 'Usunięto ćwiczenie.');
     }
   }
