@@ -119,7 +119,7 @@ void main() {
       ) async {
         await _pump(
           tester,
-          const StatsMusclesCard(muscles: _distribution),
+          const StatsMuscleRankingCard(muscles: _distribution),
           width: width,
           textScale: scale,
         );
@@ -152,7 +152,7 @@ void main() {
     final handle = tester.ensureSemantics();
     await _pump(
       tester,
-      const StatsMusclesCard(muscles: _distribution),
+      const StatsMuscleRankingCard(muscles: _distribution),
       width: 360,
       textScale: 1,
     );

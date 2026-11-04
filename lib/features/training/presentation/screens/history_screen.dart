@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -11,10 +13,8 @@ import '../../../../core/widgets/app_tab_header.dart';
 import '../bloc/training_stats_cubit.dart';
 import '../bloc/weekly_goal_source.dart';
 import '../bloc/history_feed_cubit.dart';
-import '../widgets/stats/stats_tab_bar.dart';
-import '../widgets/stats/training_stats_view.dart';
 import '../widgets/workout_history/history_calendar_sheet.dart';
-import '../widgets/workout_history/history_segment_switch.dart';
+import '../widgets/workout_history/history_stats_hint.dart';
 import '../widgets/workout_history/history_sessions_panel.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -59,16 +59,42 @@ class _WorkoutHistoryView extends StatefulWidget {
 }
 
 class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
-  HistorySegment _segment = HistorySegment.sessions;
-
-  /// Zakładka statystyk przeżywa przejście na listę sesji i z powrotem.
-  StatsTab _statsTab = StatsTab.overview;
-
   final _panelKey = GlobalKey<HistorySessionsPanelState>();
 
-  void _selectSegment(HistorySegment segment) {
-    if (segment == _segment) return;
-    setState(() => _segment = segment);
+  /// Jednorazowy dymek przy ikonie statystyk (przeniosły się tu z zakładki).
+  bool _showHint = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_maybeShowHint());
+  }
+
+  Future<void> _maybeShowHint() async {
+    if (await historyStatsHintSeen()) return;
+    if (!mounted) return;
+    // Dymek jest dla osób, które znały zakładkę Statystyki — nowemu
+    // użytkownikowi, bez żadnego treningu, nie ma co wskazywać.
+    final stats = context.read<TrainingStatsCubit>();
+    var state = stats.state;
+    if (state.snapshot == null && !state.failed) {
+      try {
+        state = await stats.stream
+            .firstWhere((s) => s.snapshot != null || s.failed)
+            .timeout(const Duration(seconds: 10), onTimeout: () => stats.state);
+      } on StateError {
+        // Historia zamknięta, zanim statystyki się wczytały — nie ma co
+        // pokazywać.
+        return;
+      }
+    }
+    if (!mounted || state.sessions.isEmpty) return;
+    setState(() => _showHint = true);
+    await markHistoryStatsHintSeen();
+  }
+
+  void _dismissHint() {
+    if (_showHint && mounted) setState(() => _showHint = false);
   }
 
   /// Przeciągnięcie listy: pełna synchronizacja (treningi z innych urządzeń),
@@ -85,10 +111,10 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   }
 
   void _openCalendar(BuildContext context) {
+    _dismissHint();
     final entries = context.read<HistoryFeedCubit>().state.entries;
     final streak =
-        context.read<TrainingStatsCubit>().state.snapshot?.currentStreakWeeks ??
-        0;
+        context.read<TrainingStatsCubit>().state.snapshot?.streakWeeks ?? 0;
     showHistoryCalendarSheet(
       context,
       entries: entries,
@@ -97,62 +123,57 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     );
   }
 
+  void _openStats(BuildContext context) {
+    _dismissHint();
+    context.push(
+      '/app/training/stats',
+      extra: context.read<TrainingStatsCubit>(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final showStats = _segment == HistorySegment.stats;
     return Scaffold(
       backgroundColor: AppColors.background,
       // Bottom inset (incl. the shell's bottom nav) is left to the scroll view.
       body: AppTabBackground(
         child: SafeArea(
           bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Stack(
             children: [
-              // 1. Nagłówek — tytuł, kalendarz (tylko przy sesjach) i wskaźnik
-              //    synchronizacji.
-              AppTabHeader(
-                title: 'Historia',
-                actions: [
-                  if (!showStats)
-                    AppTabHeaderButton(
-                      icon: Icons.calendar_month_outlined,
-                      tooltip: 'Kalendarz',
-                      onPressed: () => _openCalendar(context),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Nagłówek — tytuł, statystyki, kalendarz i wskaźnik
+                  // synchronizacji.
+                  AppTabHeader(
+                    title: 'Historia',
+                    actions: [
+                      AppTabHeaderButton(
+                        icon: Icons.bar_chart_rounded,
+                        tooltip: 'Statystyki',
+                        onPressed: () => _openStats(context),
+                      ),
+                      AppTabHeaderButton(
+                        icon: Icons.calendar_month_outlined,
+                        tooltip: 'Kalendarz',
+                        onPressed: () => _openCalendar(context),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: HistorySessionsPanel(
+                      key: _panelKey,
+                      onRefresh: () => _onRefresh(context),
                     ),
+                  ),
                 ],
               ),
-
-              // 2. Podzakładki: sesje / statystyki
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.xs,
-                  AppSpacing.md,
-                  0,
-                ),
-                child: HistorySegmentSwitch(
-                  selected: _segment,
-                  onChanged: _selectSegment,
-                ),
-              ),
-
-              if (showStats) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Expanded(
-                  child: TrainingStatsView(
-                    onStartWorkout: () => context.go('/app/training'),
-                    bodyWeightRepository: ServiceLocator.bodyWeightRepository,
-                    initialTab: _statsTab,
-                    onTabChanged: (tab) => _statsTab = tab,
-                  ),
-                ),
-              ] else
-                Expanded(
-                  child: HistorySessionsPanel(
-                    key: _panelKey,
-                    onRefresh: () => _onRefresh(context),
-                  ),
+              if (_showHint)
+                Positioned(
+                  top: AppSpacing.sm + AppTabHeader.height + AppSpacing.xxs,
+                  right: AppSpacing.pageGutter,
+                  child: HistoryStatsHint(onDismiss: _dismissHint),
                 ),
             ],
           ),

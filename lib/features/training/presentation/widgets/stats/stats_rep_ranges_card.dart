@@ -19,8 +19,15 @@ class StatsRepRangesCard extends StatelessWidget {
     final dominant = ranges.dominant;
     final percents = _percents(ranges);
     return SessionSectionCard(
-      icon: Icons.repeat_rounded,
-      title: 'Zakresy powtórzeń',
+      title: 'Jak trenujesz',
+      trailing: const Text(
+        'serie wg powtórzeń',
+        style: TextStyle(
+          color: AppColors.textMuted,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
       child: dominant == null
           ? const Text(
               'Brak serii z podaną liczbą powtórzeń w tym okresie.',
@@ -57,9 +64,9 @@ class StatsRepRangesCard extends StatelessWidget {
 }
 
 Color _rangeColor(RepRange range) => switch (range) {
-  RepRange.strength => AppColors.statPink,
-  RepRange.hypertrophy => AppColors.primaryVariant,
-  RepRange.endurance => AppColors.statTeal,
+  RepRange.strength => const Color(0xFF1E40AF),
+  RepRange.hypertrophy => AppColors.primary,
+  RepRange.endurance => const Color(0xFF9DBBFB),
 };
 
 String _caption(RepRange dominant) {

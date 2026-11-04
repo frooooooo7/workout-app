@@ -49,6 +49,8 @@ import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
+import '../../features/training/presentation/bloc/training_stats_cubit.dart';
+import '../../features/training/presentation/bloc/weekly_goal_source.dart';
 import '../../features/profile/presentation/screens/body_measurements_screen.dart';
 import '../../features/profile/presentation/screens/body_weight_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
@@ -301,6 +303,10 @@ GoRouter buildRouter({
                     path: 'stats',
                     builder: (_, s) => TrainingStatsScreen(
                       bodyWeightRepository: ServiceLocator.bodyWeightRepository,
+                      // Historia podaje swój cubit, żeby nie liczyć drugi raz.
+                      sharedCubit: s.extra is TrainingStatsCubit
+                          ? s.extra as TrainingStatsCubit
+                          : null,
                     ),
                   ),
                   GoRoute(
@@ -399,6 +405,7 @@ GoRouter buildRouter({
                       BlocProvider(
                         create: (_) => ProfileWeekCubit(
                           ServiceLocator.trainingStatsRepository,
+                          weeklyGoalLoader: loadOwnWeeklyGoal,
                           dataChanges:
                               ServiceLocator.trainingSessionDataChanges,
                         ),

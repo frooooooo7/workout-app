@@ -96,7 +96,10 @@ class ProfileWeekCard extends StatelessWidget {
                                 const SizedBox(width: AppSpacing.xs),
                             ],
                             if (summary.streakWeeks > 0)
-                              _StreakPill(weeks: summary.streakWeeks),
+                              _StreakPill(
+                                weeks: summary.streakWeeks,
+                                byGoal: summary.streakByGoal,
+                              ),
                           ],
                         ),
                       ),
@@ -294,9 +297,10 @@ class _SetGoalPill extends StatelessWidget {
 }
 
 class _StreakPill extends StatelessWidget {
-  const _StreakPill({required this.weeks});
+  const _StreakPill({required this.weeks, required this.byGoal});
 
   final int weeks;
+  final bool byGoal;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +308,9 @@ class _StreakPill extends StatelessWidget {
     final count = capped ? '$weeks+' : '$weeks';
     final unit = polishPlural(weeks, 'tydzień', 'tygodnie', 'tygodni');
     return Semantics(
-      label: 'Seria: $count $unit z rzędu z treningiem',
+      label:
+          'Passa: $count $unit z rzędu '
+          '${byGoal ? 'z wykonanym celem' : 'z treningiem'}',
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(
