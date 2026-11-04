@@ -391,8 +391,10 @@ class ExerciseLastResult {
 
   /// Kiedy to było: dzień tygodnia w ostatnich 6 dniach, dalej „28 paź”.
   String dateLabel(DateTime now) {
-    final day = DateTime(date.year, date.month, date.day);
-    final today = DateTime(now.year, now.month, now.day);
+    // Dni liczymy jako daty UTC, żeby zmiana czasu (doba 23 h / 25 h) nie
+    // przesuwała wyniku o jeden.
+    final day = DateTime.utc(date.year, date.month, date.day);
+    final today = DateTime.utc(now.year, now.month, now.day);
     final days = today.difference(day).inDays;
     if (days == 0) return 'dziś';
     if (days == 1) return 'wczoraj';

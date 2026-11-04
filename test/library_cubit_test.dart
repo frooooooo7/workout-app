@@ -296,6 +296,43 @@ void main() {
       await cubit.close();
     });
 
+    test('podgląd liczby wyników uwzględnia tekst i „Ulubione”', () async {
+      final data = [
+        Exercise(
+          id: 'a',
+          name: 'Wyciskanie sztangi',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+          isFavourite: true,
+        ),
+        Exercise(
+          id: 'b',
+          name: 'Wyciskanie hantli',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+        ),
+        Exercise(
+          id: 'c',
+          name: 'Przysiad',
+          muscles: const [MuscleGroup.quads],
+          category: ExerciseCategory.compound,
+        ),
+      ];
+      final cubit = LibraryCubit(_FakeExerciseRepository(data));
+      await cubit.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cubit.previewCount(muscles: {MuscleGroup.chest}), 2);
+
+      cubit.setQuery('wyciskanie');
+      expect(cubit.previewCount(), 2);
+      expect(cubit.previewCount(muscles: {MuscleGroup.quads}), 0);
+
+      cubit.setQuery('');
+      cubit.setFilter(LibraryFilter.favourite);
+      expect(cubit.previewCount(muscles: {MuscleGroup.chest}), 1);
+      await cubit.close();
+    });
+
     test('data ostatniego wyniku: dziś, wczoraj, dzień tygodnia, data', () {
       final now = DateTime(2026, 11, 3, 12);
       String label(DateTime d) => ExerciseLastResult(date: d).dateLabel(now);
@@ -303,6 +340,13 @@ void main() {
       expect(label(DateTime(2026, 11, 2, 20)), 'wczoraj');
       expect(label(DateTime(2026, 10, 30)), 'pt.');
       expect(label(DateTime(2026, 10, 12)), '12 paź');
+      // Zmiana czasu w nocy nie przesuwa „wczoraj”.
+      expect(
+        ExerciseLastResult(date: DateTime(2026, 10, 25, 23)).dateLabel(
+          DateTime(2026, 10, 26, 1),
+        ),
+        'wczoraj',
+      );
     });
 
     test('ostatni wynik: najcięższa seria z najnowszego treningu', () {

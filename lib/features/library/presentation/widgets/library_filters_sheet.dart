@@ -44,7 +44,7 @@ const _musclesByRegion = <(String, IconData, List<MuscleGroup>)>[
   ),
   (
     'Ramiona',
-    Icons.sports_martial_arts_rounded,
+    Icons.fitness_center_rounded,
     [MuscleGroup.biceps, MuscleGroup.triceps, MuscleGroup.forearms],
   ),
   ('Core', Icons.self_improvement_rounded, [MuscleGroup.abs, MuscleGroup.obliques]),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/exercise_filter_utils.dart';
 import '../../domain/exercise_search.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
@@ -310,18 +311,35 @@ class LibraryCubit extends Cubit<LibraryState> {
     }).toList();
   }
 
-  /// Ile ćwiczeń z całej bazy zostanie po takich filtrach — liczba na przycisku
-  /// arkusza „Filtry”.
+  /// Ile ćwiczeń zostanie po takich filtrach — liczba na przycisku arkusza
+  /// „Filtry”. Liczy z całej bazy (kafelek partii zostanie wyzerowany), ale
+  /// z wpisanym tekstem i wybranym „Ulubione / Moje / Ostatnio robione”,
+  /// bo te zostają.
   int previewCount({
     Set<ExerciseCategory> types = const {},
     Set<ExerciseEquipment> equipment = const {},
     Set<MuscleGroup> muscles = const {},
-  }) => _applyFilters(
-    _all,
-    types: types,
-    equipment: equipment,
-    muscles: muscles,
-  ).length;
+  }) {
+    final usage = _usage ?? ExerciseUsage.empty;
+    final recent = state.filter == LibraryFilter.recent;
+    var base = ExerciseFilterUtils.apply(
+      _all,
+      filter: recent ? LibraryFilter.all : state.filter,
+      query: state.query,
+    );
+    if (recent) {
+      base = [
+        for (final e in base)
+          if (usage.lastDoneFor(e) != null) e,
+      ];
+    }
+    return _applyFilters(
+      base,
+      types: types,
+      equipment: equipment,
+      muscles: muscles,
+    ).length;
+  }
 
   List<Exercise> _arrange(
     List<Exercise> source, {
