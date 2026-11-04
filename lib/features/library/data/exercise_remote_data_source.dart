@@ -130,6 +130,7 @@ class ExerciseRemoteDataSource {
     String? clientId,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -141,6 +142,13 @@ class ExerciseRemoteDataSource {
     };
     if (clientId != null) {
       body['clientId'] = clientId;
+    }
+    if (extras != null) {
+      if (extras.equipment != null) body['equipment'] = extras.equipment!.apiName;
+      if (extras.aliases.isNotEmpty) body['aliases'] = extras.aliases;
+      if (extras.instructions != null) {
+        body['instructions'] = extras.instructions!.toJson();
+      }
     }
     final data = await _api.post('/exercises', body, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
@@ -176,6 +184,7 @@ class ExerciseRemoteDataSource {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final data = await _api.put('/exercises/$id', {
       'name': name,
@@ -184,6 +193,12 @@ class ExerciseRemoteDataSource {
       'description': description,
       'trackingType': tracking.apiName,
       'distanceUnit': distanceUnit.apiName,
+      // Brak pola = bez zmian; `null` czyści sprzęt i opis.
+      if (extras != null) ...{
+        'equipment': extras.equipment?.apiName,
+        'aliases': extras.aliases,
+        'instructions': extras.instructions?.toJson(),
+      },
     }, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }

@@ -185,9 +185,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _editExercise(BuildContext context, Exercise exercise) async {
     final cubit = context.read<LibraryCubit>();
+    final existing = await cubit.allExercises();
+    if (!context.mounted) return;
     final updated = await showLibraryEditExerciseSheet(
       context,
       exercise: exercise,
+      existing: existing,
       onSubmit:
           ({
             required String name,
@@ -196,6 +199,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             required String description,
             required ExerciseTracking tracking,
             required DistanceUnit distanceUnit,
+            required ExerciseExtras extras,
           }) => cubit.updateExercise(
             id: exercise.id,
             name: name,
@@ -204,6 +208,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             description: description,
             tracking: tracking,
             distanceUnit: distanceUnit,
+            extras: extras,
           ),
     );
     if (updated != null) _refreshSelectedFrom(updated);
@@ -391,9 +396,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 _backToStart(cubit);
                               },
                               onAddTap: () async {
+                                final existing = await cubit.allExercises();
+                                if (!context.mounted) return;
                                 final created =
                                     await showLibraryAddExerciseSheet(
                                       context,
+                                      existing: existing,
+                                      // Podobne ćwiczenie już jest: w trybie
+                                      // wyboru zaznaczamy je, w bibliotece
+                                      // otwieramy jego kartę.
+                                      onUseSimilar: (exercise) {
+                                        if (widget.pickMode) {
+                                          setState(
+                                            () => _selected[exercise.id] =
+                                                exercise,
+                                          );
+                                        } else {
+                                          _openDetails(context, exercise);
+                                        }
+                                      },
                                       onSubmit:
                                           ({
                                             required String name,
@@ -402,6 +423,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             required String description,
                                             required ExerciseTracking tracking,
                                             required DistanceUnit distanceUnit,
+                                            required ExerciseExtras extras,
                                             Uint8List? imageBytes,
                                             String? imageFilename,
                                           }) => cubit.createExercise(
@@ -411,6 +433,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             description: description,
                                             tracking: tracking,
                                             distanceUnit: distanceUnit,
+                                            extras: extras,
                                             imageBytes: imageBytes,
                                             imageFilename: imageFilename,
                                           ),

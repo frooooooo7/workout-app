@@ -461,6 +461,7 @@ class LibraryCubit extends Cubit<LibraryState> {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final updated = await _repository.update(
       id: id,
@@ -470,10 +471,14 @@ class LibraryCubit extends Cubit<LibraryState> {
       description: description,
       tracking: tracking,
       distanceUnit: distanceUnit,
+      extras: extras,
     );
     await refresh(showLoadingIndicator: false);
     return updated;
   }
+
+  /// Cała baza (bez filtrów) — do ostrzeżenia o duplikacie w formularzu.
+  Future<List<Exercise>> allExercises() => _repository.getAll();
 
   Future<void> deleteExercise(Exercise exercise) async {
     await _repository.delete(exercise.id);
@@ -490,6 +495,7 @@ class LibraryCubit extends Cubit<LibraryState> {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final created = await _repository.create(
       name: name,
@@ -500,6 +506,7 @@ class LibraryCubit extends Cubit<LibraryState> {
       imageFilename: imageFilename,
       tracking: tracking,
       distanceUnit: distanceUnit,
+      extras: extras,
     );
     await refresh(showLoadingIndicator: false);
     return created;

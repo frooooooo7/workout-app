@@ -30,6 +30,7 @@ abstract interface class ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   });
 
   /// Updates an existing user-owned exercise via the backend and local cache.
@@ -41,6 +42,7 @@ abstract interface class ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   });
 
   /// Deletes a user-owned exercise from the backend and local cache.

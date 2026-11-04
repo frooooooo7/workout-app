@@ -29,6 +29,7 @@ class _FakeExerciseRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final e = Exercise(
       id: 'new-${data.length + 1}',
@@ -65,6 +66,7 @@ class _FakeExerciseRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) =>
       throw UnimplementedError();
 }
@@ -543,6 +545,7 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) =>
       throw UnimplementedError();
 
@@ -570,6 +573,7 @@ class _ThrowingExerciseRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) =>
       throw UnimplementedError();
 }

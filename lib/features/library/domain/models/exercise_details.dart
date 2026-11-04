@@ -79,3 +79,18 @@ class ExerciseInstructions {
     return true;
   }
 }
+
+/// Dodatkowe pola własnego ćwiczenia z formularza: sprzęt, inne nazwy
+/// i „Jak wykonać”. W `update` przekazane [ExerciseExtras] zastępują
+/// zapisane wartości w całości (`null` w repozytorium — bez zmian).
+class ExerciseExtras {
+  const ExerciseExtras({
+    this.equipment,
+    this.aliases = const [],
+    this.instructions,
+  });
+
+  final ExerciseEquipment? equipment;
+  final List<String> aliases;
+  final ExerciseInstructions? instructions;
+}

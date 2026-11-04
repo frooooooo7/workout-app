@@ -76,4 +76,42 @@ void main() {
     ]);
     expect(ExerciseSearch.rank([deadlift, curl], 'biceps'), [curl]);
   });
+
+  group('findSimilar', () {
+    test('wpisane słowa zawarte w nazwie trafiają w to ćwiczenie', () {
+      expect(
+        ExerciseSearch.findSimilar(all, 'Wyciskanie na ławce'),
+        bench,
+      );
+    });
+
+    test('ta sama nazwa w innej kolejności i wielkości liter', () {
+      expect(
+        ExerciseSearch.findSimilar(all, 'wiosłowanie SZTANGĄ'),
+        row,
+      );
+    });
+
+    test('inna nazwa (alias) też jest duplikatem', () {
+      final ohp = Exercise(
+        id: 'ohp',
+        name: 'Wyciskanie żołnierskie',
+        muscles: const [MuscleGroup.frontDelts],
+        category: ExerciseCategory.compound,
+        aliases: const ['OHP'],
+      );
+      expect(ExerciseSearch.findSimilar([ohp], 'ohp'), ohp);
+    });
+
+    test('jedno słowo bez dokładnego trafienia nie ostrzega', () {
+      expect(ExerciseSearch.findSimilar(all, 'Wyciskanie'), isNull);
+    });
+
+    test('pomija edytowane ćwiczenie', () {
+      expect(
+        ExerciseSearch.findSimilar(all, bench.name, excludeId: bench.id),
+        isNull,
+      );
+    });
+  });
 }

@@ -166,6 +166,7 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final localId = _uuid.v4();
     final createdAt = DateTime.now().toUtc();
@@ -182,6 +183,9 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
       isPendingSync: true,
       tracking: tracking,
       distanceUnit: distanceUnit,
+      equipment: extras?.equipment,
+      aliases: extras?.aliases ?? const [],
+      instructions: extras?.instructions,
     );
 
     final dto = ExerciseDto.fromDomain(
@@ -213,6 +217,7 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     await _localDb.run((db) async {
       final row = await _findRow(db, id);
@@ -233,6 +238,11 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
           'description': description,
           'tracking_type': tracking.apiName,
           'distance_unit': distanceUnit.apiName,
+          if (extras != null) ...{
+            'equipment': extras.equipment?.apiName,
+            'aliases': ExerciseDto.encodeAliases(extras.aliases),
+            'instructions': extras.instructions?.encode(),
+          },
           'pending_op': nextPending,
           'sync_error': null,
         },

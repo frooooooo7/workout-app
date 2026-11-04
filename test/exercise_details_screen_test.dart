@@ -48,6 +48,7 @@ class _FakeRepository implements ExerciseRepository {
     String? imageFilename,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) =>
       throw UnimplementedError();
 
@@ -60,6 +61,7 @@ class _FakeRepository implements ExerciseRepository {
     required String description,
     ExerciseTracking tracking = ExerciseTracking.weightReps,
     DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) =>
       throw UnimplementedError();
 
