@@ -115,24 +115,32 @@ class _EditWorkoutView extends StatelessWidget {
 
   Future<void> _addExercise(BuildContext context) async {
     final cubit = context.read<EditWorkoutCubit>();
-    final picked =
-        await (pickExercise?.call(context) ??
-            Navigator.of(context).push<Exercise>(
-              MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
-            ));
-    if (picked == null) return;
-    cubit.addExercise(
-      TrainingSessionExercise(
-        exerciseId: picked.id,
-        exerciseName: picked.name,
-        exerciseMuscles: picked.muscles.map((m) => m.name).toList(),
-        exerciseCategory: picked.category.name,
-        exerciseImageUrl: picked.imageUrl,
-        tracking: picked.tracking,
-        distanceUnit: picked.distanceUnit,
-        sets: [TrainingSessionSet()],
-      ),
-    );
+    final seam = pickExercise;
+    final List<Exercise> picked;
+    if (seam != null) {
+      final one = await seam(context);
+      picked = [?one];
+    } else {
+      picked =
+          await Navigator.of(context).push<List<Exercise>>(
+            MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+          ) ??
+          const [];
+    }
+    for (final exercise in picked) {
+      cubit.addExercise(
+        TrainingSessionExercise(
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          exerciseMuscles: exercise.muscles.map((m) => m.name).toList(),
+          exerciseCategory: exercise.category.name,
+          exerciseImageUrl: exercise.imageUrl,
+          tracking: exercise.tracking,
+          distanceUnit: exercise.distanceUnit,
+          sets: [TrainingSessionSet()],
+        ),
+      );
+    }
   }
 
   @override

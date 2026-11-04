@@ -16,6 +16,7 @@ class ExerciseRow extends StatelessWidget {
     this.onMoreTap,
     this.lastResult,
     this.lastDate,
+    this.selected,
   });
 
   final Exercise exercise;
@@ -25,6 +26,10 @@ class ExerciseRow extends StatelessWidget {
 
   /// Kiedy to było („pon.”, „28 paź”), pod wynikiem.
   final String? lastDate;
+
+  /// Tryb wyboru: `true` — zaznaczone, `false` — nie; `null` — zwykły wiersz
+  /// (z gwiazdką ulubionych).
+  final bool? selected;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -53,6 +58,7 @@ class ExerciseRow extends StatelessWidget {
         child: Semantics(
           button: true,
           label: exercise.name,
+          selected: selected ?? false,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: height),
             child: Padding(
@@ -132,7 +138,32 @@ class ExerciseRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                Tooltip(
+                if (selected != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 8),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selected! ? AppColors.primary : Colors.transparent,
+                        border: Border.all(
+                          color: selected! ? AppColors.primary : AppColors.textMuted,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: selected!
+                          ? const Icon(
+                              Icons.check_rounded,
+                              size: 18,
+                              color: AppColors.onPrimary,
+                            )
+                          : null,
+                    ),
+                  )
+                else
+                  Tooltip(
                   message: exercise.isFavourite
                       ? 'Usuń z ulubionych'
                       : 'Dodaj do ulubionych',

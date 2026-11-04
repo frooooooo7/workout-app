@@ -14,6 +14,7 @@ class LibraryExerciseList extends StatelessWidget {
     required this.onExerciseTap,
     required this.onMoreTap,
     this.usage = ExerciseUsage.empty,
+    this.selectedIds,
   });
 
   final List<Exercise> exercises;
@@ -23,6 +24,9 @@ class LibraryExerciseList extends StatelessWidget {
 
   /// Historia treningów — daje „ostatni wynik” w wierszach.
   final ExerciseUsage usage;
+
+  /// Zaznaczone ćwiczenia w trybie wyboru; `null` — zwykła lista.
+  final Set<String>? selectedIds;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,7 @@ class LibraryExerciseList extends StatelessWidget {
         final exercise = exercises[index];
         return ExerciseRow(
           exercise: exercise,
+          selected: selectedIds?.contains(exercise.id),
           lastResult: usage.lastResultFor(exercise)?.label,
           lastDate: usage.lastResultFor(exercise)?.dateLabel(DateTime.now()),
           onTap: () => onExerciseTap(exercise),

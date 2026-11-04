@@ -11,6 +11,7 @@ class LibraryHeader extends StatelessWidget {
     required this.onFilterTap,
     required this.onAddTap,
     required this.onBackTap,
+    this.title = 'Biblioteka',
     this.activeFilterCount = 0,
   });
 
@@ -19,6 +20,7 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback onFilterTap;
   final VoidCallback onAddTap;
   final VoidCallback onBackTap;
+  final String title;
 
   /// Liczba aktywnych filtrów typu — pokazywana jako plakietka na „tune”.
   final int activeFilterCount;
@@ -29,7 +31,7 @@ class LibraryHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppTabHeader(
-          title: 'Biblioteka',
+          title: title,
           gutter: 0,
           leading: AppTabHeaderButton.back(onPressed: onBackTap),
           actions: [

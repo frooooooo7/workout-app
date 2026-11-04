@@ -21,12 +21,16 @@ class LibraryStartView extends StatelessWidget {
     required this.onPartTap,
     required this.onShowAll,
     required this.onExerciseTap,
+    this.selectedIds = const {},
   });
 
   final LibraryOverview overview;
   final ValueChanged<LibraryPart> onPartTap;
   final VoidCallback onShowAll;
   final ValueChanged<Exercise> onExerciseTap;
+
+  /// Zaznaczone w trybie wyboru (obwódka na karcie „Ostatnio robione”).
+  final Set<String> selectedIds;
 
   static final _highlights = {
     for (final part in LibraryPart.values)
@@ -55,6 +59,7 @@ class LibraryStartView extends StatelessWidget {
               separatorBuilder: (context, index) => const SizedBox(width: 10),
               itemBuilder: (context, index) => _RecentCard(
                 exercise: overview.recent[index],
+                selected: selectedIds.contains(overview.recent[index].id),
                 onTap: () => onExerciseTap(overview.recent[index]),
               ),
             ),
@@ -153,9 +158,14 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.exercise, required this.onTap});
+  const _RecentCard({
+    required this.exercise,
+    required this.onTap,
+    this.selected = false,
+  });
 
   final Exercise exercise;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -169,7 +179,10 @@ class _RecentCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 2 : 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

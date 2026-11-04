@@ -4,6 +4,7 @@ import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/library/domain/repositories/exercise_repository.dart';
 import 'package:gym/features/library/presentation/screens/library_screen.dart';
+import 'package:gym/features/library/presentation/screens/pick_exercise_screen.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
 
@@ -122,5 +123,47 @@ void main() {
     expect(find.text('WYBIERZ PARTIĘ'), findsNothing);
     expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
     expect(find.text('Aktywne filtry: 1'), findsOneWidget);
+  });
+
+  testWidgets('tryb wyboru: stuknięcie zaznacza, „Dodaj” zwraca listę', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 1600 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        home: const Scaffold(body: Text('trening')),
+      ),
+    );
+    final result = navigatorKey.currentState!.push<List<Exercise>>(
+      MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Wybierz ćwiczenia'), findsOneWidget);
+
+    await tester.tap(find.textContaining('Wszystkie ('));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Dodaj '), findsNothing);
+
+    await tester.tap(find.text('Wyciskanie sztangi na ławce'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dodaj 1 ćwiczenie'), findsOneWidget);
+
+    // Drugie stuknięcie odznacza.
+    await tester.tap(find.text('Wyciskanie sztangi na ławce'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Dodaj '), findsNothing);
+
+    await tester.tap(find.text('Wyciskanie sztangi na ławce'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dodaj 1 ćwiczenie'));
+    await tester.pumpAndSettle();
+
+    expect((await result)!.map((e) => e.id), ['1']);
+    expect(find.text('trening'), findsOneWidget);
   });
 }

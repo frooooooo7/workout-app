@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
+import '../../domain/models/library_part.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/exercise_actions_sheet.dart';
 import '../widgets/library_add_exercise_sheet.dart';
@@ -26,7 +27,12 @@ import '../widgets/library_sort_sheet.dart';
 import 'exercise_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  /// [pickMode] — wybór ćwiczeń do planu albo treningu: stuknięcie zaznacza
+  /// (wielokrotny wybór), na dole pojawia się „Dodaj N ćwiczeń”, a ekran
+  /// zwraca `List<Exercise>`. Szczegóły ćwiczenia: przytrzymanie wiersza.
+  const LibraryScreen({super.key, this.pickMode = false});
+
+  final bool pickMode;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -38,6 +44,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// `true` po wybraniu partii albo „Wszystkie” — pokazujemy listę zamiast
   /// ekranu startowego (wpisanie tekstu też ją pokazuje).
   bool _browsing = false;
+
+  /// Zaznaczone ćwiczenia w kolejności wyboru; zostają przy zmianie filtrów.
+  final Map<String, Exercise> _selected = {};
+
+  void _toggleSelected(Exercise exercise) {
+    setState(() {
+      if (_selected.remove(exercise.id) == null) {
+        _selected[exercise.id] = exercise;
+      }
+    });
+  }
+
+  void _tapExercise(BuildContext context, Exercise exercise) {
+    if (widget.pickMode) {
+      _toggleSelected(exercise);
+    } else {
+      _openDetails(context, exercise);
+    }
+  }
 
   @override
   void dispose() {
@@ -213,6 +238,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
             },
             child: Scaffold(
             backgroundColor: AppColors.background,
+            bottomNavigationBar: widget.pickMode && _selected.isNotEmpty
+                ? SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: SizedBox(
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pop(_selected.values.toList()),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            'Dodaj ${exerciseCountLabel(_selected.length)}',
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
             body: AppTabBackground(
               child: SafeArea(
                 child: Column(
@@ -228,6 +278,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 previous.activeFilterCount !=
                                 current.activeFilterCount,
                             builder: (context, state) => LibraryHeader(
+                              title: widget.pickMode
+                                  ? 'Wybierz ćwiczenia'
+                                  : 'Biblioteka',
                               searchController: _searchController,
                               onSearchChanged: (query) {
                                 cubit.setQuery(query);
@@ -239,6 +292,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               onFilterTap: () => _pickFilters(context),
                               onBackTap: () {
                                 if (_atStartScreen) {
+                                  if (widget.pickMode) {
+                                    Navigator.of(context).maybePop();
+                                    return;
+                                  }
                                   if (context.canPop()) {
                                     context.pop();
                                     return;
@@ -312,8 +369,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 setState(() => _browsing = true);
                                 cubit.setCategory(MuscleGroup.all);
                               },
+                              selectedIds: _selected.keys.toSet(),
                               onExerciseTap: (exercise) =>
-                                  _openDetails(context, exercise),
+                                  _tapExercise(context, exercise),
                             );
                           }
                           return Column(
@@ -436,8 +494,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             usage: state.usage,
                             onFavouriteTap: (exercise) =>
                                 _toggleFavourite(context, exercise),
+                            selectedIds: widget.pickMode
+                                ? _selected.keys.toSet()
+                                : null,
                             onExerciseTap: (exercise) =>
-                                _openDetails(context, exercise),
+                                _tapExercise(context, exercise),
                             onMoreTap: (exercise) =>
                                 _showActions(context, exercise),
                           );

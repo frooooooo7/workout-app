@@ -413,17 +413,17 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           hideKeyboard();
-          final exercise = await context.push<Exercise>(
+          final picked = await context.push<List<Exercise>>(
             '/app/training/create-plan/pick-exercise',
           );
-          if (exercise != null) {
+          for (final exercise in picked ?? const <Exercise>[]) {
             _addExercise(exercise);
           }
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
-          'Dodaj ćwiczenie',
+          'Dodaj ćwiczenia',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),
