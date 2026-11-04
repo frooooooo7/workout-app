@@ -195,6 +195,226 @@ void main() {
       await cubit.close();
     });
 
+    test('filtry sprzętu i mięśni zawężają listę, „Wyczyść” przywraca', () async {
+      final data = [
+        Exercise(
+          id: 'a',
+          name: 'Wyciskanie',
+          muscles: const [MuscleGroup.chest, MuscleGroup.triceps],
+          category: ExerciseCategory.compound,
+          equipment: ExerciseEquipment.barbell,
+        ),
+        Exercise(
+          id: 'b',
+          name: 'Rozpiętki',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.isolation,
+          equipment: ExerciseEquipment.dumbbell,
+        ),
+        Exercise(
+          id: 'c',
+          name: 'Ściąganie',
+          muscles: const [MuscleGroup.lats],
+          category: ExerciseCategory.compound,
+        ),
+      ];
+      final cubit = LibraryCubit(_FakeExerciseRepository(data));
+      await cubit.refresh();
+      List<String> ids() => [for (final e in cubit.state.exercises) e.id];
+
+      cubit.setFilters(equipment: {ExerciseEquipment.barbell});
+      expect(ids(), ['a']);
+      expect(cubit.state.activeFilterCount, 1);
+
+      cubit.setFilters(equipment: const {}, muscles: {MuscleGroup.chest});
+      expect(ids().toSet(), {'a', 'b'});
+
+      // Grupa zbiorcza „plecy” obejmuje najszersze; dwa filtry łączą się I.
+      cubit.setFilters(
+        muscles: {MuscleGroup.back},
+        equipment: const {},
+        types: {ExerciseCategory.compound},
+      );
+      expect(ids(), ['c']);
+      expect(cubit.state.activeFilterCount, 2);
+
+      cubit.setFilters(
+        types: const {},
+        equipment: const {},
+        muscles: const {},
+      );
+      expect(ids().toSet(), {'a', 'b', 'c'});
+      await cubit.close();
+    });
+
+    test('starsze ćwiczenie z ogólnym tagiem pasuje do dokładnego mięśnia', () async {
+      const legacy = Exercise(
+        id: 'old',
+        name: 'Własne plecy',
+        muscles: [MuscleGroup.back],
+        category: ExerciseCategory.compound,
+      );
+      const legacyLegs = Exercise(
+        id: 'legs',
+        name: 'Własne nogi',
+        muscles: [MuscleGroup.legs],
+        category: ExerciseCategory.compound,
+      );
+      final cubit = LibraryCubit(_FakeExerciseRepository([legacy, legacyLegs]));
+      await cubit.refresh();
+      cubit.setFilters(muscles: {MuscleGroup.lats});
+      expect([for (final e in cubit.state.exercises) e.id], ['old']);
+      cubit.setFilters(muscles: {MuscleGroup.quads});
+      expect([for (final e in cubit.state.exercises) e.id], ['legs']);
+      await cubit.close();
+    });
+
+    test('brak sprzętu liczy się jako „Inne”, podgląd liczby wyników', () async {
+      final data = [
+        Exercise(
+          id: 'a',
+          name: 'Własne',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+        ),
+        Exercise(
+          id: 'b',
+          name: 'Ze sztangą',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+          equipment: ExerciseEquipment.barbell,
+        ),
+      ];
+      final cubit = LibraryCubit(_FakeExerciseRepository(data));
+      await cubit.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cubit.previewCount(equipment: {ExerciseEquipment.other}), 1);
+      expect(cubit.previewCount(equipment: {ExerciseEquipment.barbell}), 1);
+      expect(cubit.previewCount(), 2);
+      cubit.setFilters(equipment: {ExerciseEquipment.other});
+      expect([for (final e in cubit.state.exercises) e.id], ['a']);
+      await cubit.close();
+    });
+
+    test('podgląd liczby wyników uwzględnia tekst i „Ulubione”', () async {
+      final data = [
+        Exercise(
+          id: 'a',
+          name: 'Wyciskanie sztangi',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+          isFavourite: true,
+        ),
+        Exercise(
+          id: 'b',
+          name: 'Wyciskanie hantli',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+        ),
+        Exercise(
+          id: 'c',
+          name: 'Przysiad',
+          muscles: const [MuscleGroup.quads],
+          category: ExerciseCategory.compound,
+        ),
+      ];
+      final cubit = LibraryCubit(_FakeExerciseRepository(data));
+      await cubit.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cubit.previewCount(muscles: {MuscleGroup.chest}), 2);
+
+      cubit.setQuery('wyciskanie');
+      expect(cubit.previewCount(), 2);
+      expect(cubit.previewCount(muscles: {MuscleGroup.quads}), 0);
+
+      cubit.setQuery('');
+      cubit.setFilter(LibraryFilter.favourite);
+      expect(cubit.previewCount(muscles: {MuscleGroup.chest}), 1);
+      await cubit.close();
+    });
+
+    test('data ostatniego wyniku: dziś, wczoraj, dzień tygodnia, data', () {
+      final now = DateTime(2026, 11, 3, 12);
+      String label(DateTime d) => ExerciseLastResult(date: d).dateLabel(now);
+      expect(label(DateTime(2026, 11, 3, 8)), 'dziś');
+      expect(label(DateTime(2026, 11, 2, 20)), 'wczoraj');
+      expect(label(DateTime(2026, 10, 30)), 'pt.');
+      expect(label(DateTime(2026, 10, 12)), '12 paź');
+      // Zmiana czasu w nocy nie przesuwa „wczoraj”.
+      expect(
+        ExerciseLastResult(date: DateTime(2026, 10, 25, 23)).dateLabel(
+          DateTime(2026, 10, 26, 1),
+        ),
+        'wczoraj',
+      );
+    });
+
+    test('ostatni wynik: najcięższa seria z najnowszego treningu', () {
+      TrainingSession at(DateTime day, List<TrainingSessionSet> sets) =>
+          TrainingSession(
+            planName: 'Plan',
+            status: TrainingSessionStatus.completed,
+            startedAt: day,
+            finishedAt: day,
+            exercises: [
+              TrainingSessionExercise(
+                exerciseId: 'a',
+                exerciseName: 'Arnoldki',
+                exerciseMuscles: const [],
+                exerciseCategory: 'compound',
+                sets: sets,
+              ),
+            ],
+          );
+      final usage = ExerciseStats.usage([
+        at(DateTime.utc(2026, 5, 1), [
+          TrainingSessionSet(
+            actualWeight: '100',
+            actualReps: '3',
+            completed: true,
+          ),
+        ]),
+        at(DateTime.utc(2026, 6, 1), [
+          TrainingSessionSet(
+            actualWeight: '60',
+            actualReps: '10',
+            completed: true,
+          ),
+          TrainingSessionSet(
+            actualWeight: '80',
+            actualReps: '5',
+            completed: true,
+          ),
+          TrainingSessionSet(
+            actualWeight: '120',
+            actualReps: '1',
+            completed: false,
+          ),
+        ]),
+      ]);
+      const arnoldki = Exercise(
+        id: 'a',
+        name: 'Arnoldki',
+        muscles: [MuscleGroup.shoulders],
+        category: ExerciseCategory.compound,
+      );
+      final result = usage.lastResultFor(arnoldki)!;
+      expect(result.weightKg, 80);
+      expect(result.reps, 5);
+      expect(result.label, contains('× 5'));
+      expect(
+        usage.lastResultFor(
+          const Exercise(
+            id: 'zz',
+            name: 'Inne',
+            muscles: [MuscleGroup.abs],
+            category: ExerciseCategory.isolation,
+          ),
+        ),
+        isNull,
+      );
+    });
+
     test('ekran startowy: liczby przy partiach i ostatnio robione', () async {
       TrainingSession at(String id, String name, DateTime day) => TrainingSession(
         planName: 'Plan',

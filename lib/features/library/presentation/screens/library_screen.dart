@@ -18,11 +18,11 @@ import '../widgets/library_error_state.dart';
 import '../widgets/library_exercise_list.dart';
 import '../widgets/library_start_view.dart';
 import '../widgets/library_filter_chips.dart';
+import '../widgets/library_filters_sheet.dart';
 import '../widgets/library_header.dart';
 import '../widgets/library_loading_state.dart';
 import '../widgets/library_results_bar.dart';
 import '../widgets/library_sort_sheet.dart';
-import '../widgets/library_type_filter_sheet.dart';
 import 'exercise_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -55,7 +55,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     cubit.setQuery('');
     cubit.setCategory(MuscleGroup.all);
     cubit.setFilter(LibraryFilter.all);
-    cubit.setTypes(const {});
+    cubit.setFilters(
+      types: const {},
+      equipment: const {},
+      muscles: const {},
+    );
     setState(() => _browsing = false);
   }
 
@@ -149,13 +153,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (sort != null) await cubit.setSort(sort);
   }
 
-  Future<void> _pickTypes(BuildContext context) async {
+  Future<void> _pickFilters(BuildContext context) async {
     final cubit = context.read<LibraryCubit>();
-    final types = await showLibraryTypeFilterSheet(
+    final state = cubit.state;
+    final selection = await showLibraryFiltersSheet(
       context,
-      selected: cubit.state.types,
+      selected: LibraryFilterSelection(
+        muscles: state.muscles,
+        equipment: state.equipment,
+        types: state.types,
+        sort: state.sort,
+      ),
+      countFor: (selection) => cubit.previewCount(
+        types: selection.types,
+        equipment: selection.equipment,
+        muscles: selection.muscles,
+      ),
     );
-    if (types != null) cubit.setTypes(types);
+    if (selection == null) return;
+    cubit.setFilters(
+      types: selection.types,
+      equipment: selection.equipment,
+      muscles: selection.muscles,
+    );
+    await cubit.setSort(selection.sort);
+    final any = selection.types.isNotEmpty ||
+        selection.equipment.isNotEmpty ||
+        selection.muscles.isNotEmpty;
+    // Filtry z arkusza działają na całej bazie, więc kafelek partii nie może
+    // ich dodatkowo zawężać; z ekranu startowego idziemy od razu do wyników.
+    if (any) {
+      cubit.setCategory(MuscleGroup.all);
+      if (mounted) setState(() => _browsing = true);
+    }
   }
 
   @override
@@ -195,7 +225,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         children: [
                           BlocBuilder<LibraryCubit, LibraryState>(
                             buildWhen: (previous, current) =>
-                                previous.types != current.types,
+                                previous.activeFilterCount !=
+                                current.activeFilterCount,
                             builder: (context, state) => LibraryHeader(
                               searchController: _searchController,
                               onSearchChanged: (query) {
@@ -204,8 +235,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 // tekstem „wstecz” czyści wyniki.
                                 setState(() {});
                               },
-                              activeFilterCount: state.types.length,
-                              onFilterTap: () => _pickTypes(context),
+                              activeFilterCount: state.activeFilterCount,
+                              onFilterTap: () => _pickFilters(context),
                               onBackTap: () {
                                 if (_atStartScreen) {
                                   if (context.canPop()) {
@@ -320,6 +351,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           const SizedBox(height: 14),
                           BlocBuilder<LibraryCubit, LibraryState>(
                             buildWhen: (previous, current) =>
+                                previous.activeFilterCount != current.activeFilterCount,
+                            builder: (context, state) {
+                              if (state.activeFilterCount == 0) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Aktywne filtry: ${state.activeFilterCount}',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryVariant,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => cubit.setFilters(
+                                        types: const {},
+                                        equipment: const {},
+                                        muscles: const {},
+                                      ),
+                                      behavior: HitTestBehavior.opaque,
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 4),
+                                        child: Text(
+                                          'Wyczyść filtry',
+                                          style: TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          BlocBuilder<LibraryCubit, LibraryState>(
+                            buildWhen: (previous, current) =>
                                 previous.exercises != current.exercises ||
                                 previous.loading != current.loading ||
                                 previous.error != current.error ||
@@ -342,7 +415,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         buildWhen: (previous, current) =>
                             previous.exercises != current.exercises ||
                             previous.loading != current.loading ||
-                            previous.error != current.error,
+                            previous.error != current.error ||
+                            !identical(previous.usage, current.usage),
                         builder: (context, state) {
                           if (state.loading) {
                             return const LibraryLoadingState();
@@ -359,6 +433,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           }
                           return LibraryExerciseList(
                             exercises: state.exercises,
+                            usage: state.usage,
                             onFavouriteTap: (exercise) =>
                                 _toggleFavourite(context, exercise),
                             onExerciseTap: (exercise) =>

@@ -214,14 +214,6 @@ class _PartTile extends StatelessWidget {
   final int count;
   final VoidCallback onTap;
 
-  static String _countLabel(int n) {
-    if (n == 1) return '1 ćwiczenie';
-    final last = n % 10;
-    final teen = n % 100 >= 12 && n % 100 <= 14;
-    if (last >= 2 && last <= 4 && !teen) return '$n ćwiczenia';
-    return '$n ćwiczeń';
-  }
-
   @override
   Widget build(BuildContext context) {
     return AppPressable(
@@ -229,7 +221,7 @@ class _PartTile extends StatelessWidget {
       pressedScale: 0.97,
       child: Semantics(
         button: true,
-        label: '${part.label}, ${_countLabel(count)}',
+        label: '${part.label}, ${exerciseCountLabel(count)}',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
@@ -253,7 +245,7 @@ class _PartTile extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                _countLabel(count),
+                exerciseCountLabel(count),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

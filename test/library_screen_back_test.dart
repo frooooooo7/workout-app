@@ -99,4 +99,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('WYBIERZ PARTIĘ'), findsOneWidget);
   });
+
+  testWidgets('filtry z ekranu startowego prowadzą od razu do wyników', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 1600 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: LibraryScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('WYBIERZ PARTIĘ'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Filtry'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Klatka piersiowa'));
+    await tester.pump();
+    expect(find.text('Pokaż 1 ćwiczenie'), findsOneWidget);
+    await tester.tap(find.text('Pokaż 1 ćwiczenie'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('WYBIERZ PARTIĘ'), findsNothing);
+    expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
+    expect(find.text('Aktywne filtry: 1'), findsOneWidget);
+  });
 }

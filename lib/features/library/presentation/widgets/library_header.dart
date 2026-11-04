@@ -130,7 +130,7 @@ class _SearchBarState extends State<_SearchBar> {
             ),
           ),
           Tooltip(
-            message: 'Typ ćwiczenia',
+            message: 'Filtry',
             child: GestureDetector(
               onTap: widget.onFilterTap,
               behavior: HitTestBehavior.opaque,
