@@ -19,6 +19,9 @@ const _exercise = Exercise(
 );
 
 class _FakeRepository implements ExerciseRepository {
+  _FakeRepository({this.all = const [_exercise]});
+
+  final List<Exercise> all;
   final favourites = <String, bool>{};
 
   @override
@@ -35,8 +38,7 @@ class _FakeRepository implements ExerciseRepository {
     MuscleGroup? muscleGroup,
     LibraryFilter? filter,
     String? query,
-  }) async =>
-      [_exercise];
+  }) async => all;
 
   @override
   Future<Exercise> create({
@@ -111,12 +113,13 @@ Future<_FakeRepository> _pump(
   Exercise initialExercise = _exercise,
   String exerciseId = 'bench',
   bool initialIsSnapshot = false,
+  List<Exercise> all = const [_exercise],
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
-  final repository = _FakeRepository();
+  final repository = _FakeRepository(all: all);
   await tester.pumpWidget(
     MaterialApp(
       home: BlocProvider(
@@ -252,5 +255,54 @@ void main() {
     // Opis jest tylko w bibliotece — snapshot z treningu go nie ma.
     await tester.scrollUntilVisible(find.text(_exercise.description), 200);
     expect(find.text(_exercise.name), findsWidgets);
+  });
+
+  testWidgets('pokazuje „Jak wykonać”, sprzęt i zamienniki',
+      (tester) async {
+    const dumbbell = Exercise(
+      id: 'db',
+      name: 'Wyciskanie hantli na ławce',
+      muscles: [MuscleGroup.chest],
+      category: ExerciseCategory.compound,
+      equipment: ExerciseEquipment.dumbbell,
+    );
+    const withHowTo = Exercise(
+      id: 'bench',
+      name: 'Wyciskanie sztangi na ławce',
+      muscles: [MuscleGroup.chest, MuscleGroup.triceps],
+      category: ExerciseCategory.compound,
+      equipment: ExerciseEquipment.barbell,
+      instructions: ExerciseInstructions(
+        steps: ['Połóż się tak, żeby oczy były pod sztangą.', 'Wypchnij w górę.'],
+        mistakes: ['Odbijanie sztangi od klatki'],
+      ),
+    );
+    await _pump(
+      tester,
+      initialExercise: withHowTo,
+      all: const [withHowTo, dumbbell],
+    );
+
+    expect(find.text('Jak wykonać'), findsOneWidget);
+    expect(find.text('Połóż się tak, żeby oczy były pod sztangą.'),
+        findsOneWidget);
+    expect(find.text('Odbijanie sztangi od klatki'), findsOneWidget);
+    expect(find.text('Sztanga'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Zamienniki'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Zamienniki'), findsOneWidget);
+    expect(find.text('Wyciskanie hantli na ławce'), findsOneWidget);
+  });
+
+  testWidgets('bez instrukcji i bez zamienników nie ma tych sekcji', (
+    tester,
+  ) async {
+    await _pump(tester);
+    expect(find.text('Jak wykonać'), findsNothing);
+    expect(find.text('Zamienniki'), findsNothing);
   });
 }
