@@ -17,6 +17,7 @@ class LibraryExerciseList extends StatelessWidget {
     this.selectedIds,
     this.selectionOrder = const [],
     this.existingIds = const {},
+    this.existingLabel = 'W planie',
   });
 
   final List<Exercise> exercises;
@@ -35,6 +36,7 @@ class LibraryExerciseList extends StatelessWidget {
 
   /// Ćwiczenia, które już są w planie lub treningu („W planie”).
   final Set<String> existingIds;
+  final String existingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +57,11 @@ class LibraryExerciseList extends StatelessWidget {
           selectionNumber: selectionOrder.contains(exercise.id)
               ? selectionOrder.indexOf(exercise.id) + 1
               : null,
-          inPlan: existingIds.contains(exercise.id),
+          inPlan:
+              existingIds.contains(exercise.id) ||
+              (exercise.serverId != null &&
+                  existingIds.contains(exercise.serverId)),
+          inPlanLabel: existingLabel,
           lastResult: usage.lastResultFor(exercise)?.label,
           lastDate: usage.lastResultFor(exercise)?.dateLabel(DateTime.now()),
           onTap: () => onExerciseTap(exercise),

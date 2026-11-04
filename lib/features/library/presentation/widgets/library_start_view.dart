@@ -22,6 +22,7 @@ class LibraryStartView extends StatelessWidget {
     required this.onShowAll,
     required this.onExerciseTap,
     this.selectedIds = const {},
+    this.selectionOrder = const [],
   });
 
   final LibraryOverview overview;
@@ -31,6 +32,9 @@ class LibraryStartView extends StatelessWidget {
 
   /// Zaznaczone w trybie wyboru (obwódka na karcie „Ostatnio robione”).
   final Set<String> selectedIds;
+
+  /// Kolejność zaznaczania — numer na zaznaczonej karcie.
+  final List<String> selectionOrder;
 
   static final _highlights = {
     for (final part in LibraryPart.values)
@@ -60,6 +64,8 @@ class LibraryStartView extends StatelessWidget {
               itemBuilder: (context, index) => _RecentCard(
                 exercise: overview.recent[index],
                 selected: selectedIds.contains(overview.recent[index].id),
+                selectionNumber:
+                    selectionOrder.indexOf(overview.recent[index].id) + 1,
                 onTap: () => onExerciseTap(overview.recent[index]),
               ),
             ),
@@ -162,10 +168,14 @@ class _RecentCard extends StatelessWidget {
     required this.exercise,
     required this.onTap,
     this.selected = false,
+    this.selectionNumber = 0,
   });
 
   final Exercise exercise;
   final bool selected;
+
+  /// Numer zaznaczenia (od 1); 0 — brak numeru.
+  final int selectionNumber;
   final VoidCallback onTap;
 
   @override
@@ -187,13 +197,39 @@ class _RecentCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: double.infinity,
-                height: 62,
-                child: ExerciseCardIllustration(exercise: exercise),
-              ),
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 62,
+                    child: ExerciseCardIllustration(exercise: exercise),
+                  ),
+                ),
+                if (selected && selectionNumber > 0)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary,
+                      ),
+                      child: Text(
+                        '$selectionNumber',
+                        style: const TextStyle(
+                          color: AppColors.onPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 6),
             Expanded(

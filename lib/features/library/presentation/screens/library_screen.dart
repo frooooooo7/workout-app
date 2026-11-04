@@ -37,6 +37,7 @@ class LibraryScreen extends StatefulWidget {
     this.pickTitle = 'Wybierz ćwiczenia',
     this.pickSubtitle,
     this.existingIds = const {},
+    this.existingLabel = 'W planie',
   });
 
   final bool pickMode;
@@ -45,6 +46,9 @@ class LibraryScreen extends StatefulWidget {
 
   /// Tryb wyboru: id ćwiczeń już dodanych (plakietka „W planie”).
   final Set<String> existingIds;
+
+  /// Tekst plakietki przy takich ćwiczeniach („W planie”, „W treningu”).
+  final String existingLabel;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -457,6 +461,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 cubit.setCategory(MuscleGroup.all);
                               },
                               selectedIds: _selected.keys.toSet(),
+                              selectionOrder: _selected.keys.toList(),
                               onExerciseTap: (exercise) =>
                                   _tapExercise(context, exercise),
                             );
@@ -586,6 +591,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 : null,
                             selectionOrder: _selected.keys.toList(),
                             existingIds: widget.existingIds,
+                            existingLabel: widget.existingLabel,
                             onExerciseTap: (exercise) =>
                                 _tapExercise(context, exercise),
                             onMoreTap: (exercise) =>

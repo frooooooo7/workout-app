@@ -134,6 +134,7 @@ class _EditWorkoutView extends StatelessWidget {
             MaterialPageRoute(
               builder: (_) => PickExerciseScreen(
                 title: 'Dodaj do treningu',
+                existingLabel: 'W treningu',
                 subtitle: _pickSubtitle(cubit),
                 existingIds: {
                   for (final e in cubit.state.draft?.exercises ?? const [])

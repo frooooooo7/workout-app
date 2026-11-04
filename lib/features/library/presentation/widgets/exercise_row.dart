@@ -19,6 +19,7 @@ class ExerciseRow extends StatelessWidget {
     this.selected,
     this.selectionNumber,
     this.inPlan = false,
+    this.inPlanLabel = 'W planie',
   });
 
   final Exercise exercise;
@@ -38,6 +39,7 @@ class ExerciseRow extends StatelessWidget {
 
   /// Ćwiczenie już jest w planie lub treningu — plakietka „W planie”.
   final bool inPlan;
+  final String inPlanLabel;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -126,9 +128,9 @@ class ExerciseRow extends StatelessWidget {
                                   ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: const Text(
-                                  'W planie',
-                                  style: TextStyle(
+                                child: Text(
+                                  inPlanLabel,
+                                  style: const TextStyle(
                                     color: AppColors.primaryVariant,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,

@@ -12,6 +12,7 @@ class PickExerciseScreen extends StatelessWidget {
     this.title = 'Wybierz ćwiczenia',
     this.subtitle,
     this.existingIds = const {},
+    this.existingLabel = 'W planie',
   });
 
   final String title;
@@ -22,11 +23,15 @@ class PickExerciseScreen extends StatelessWidget {
   /// Id ćwiczeń, które już są w planie/treningu — dostają plakietkę „W planie”.
   final Set<String> existingIds;
 
+  /// Tekst plakietki: „W planie” albo „W treningu”.
+  final String existingLabel;
+
   @override
   Widget build(BuildContext context) => LibraryScreen(
     pickMode: true,
     pickTitle: title,
     pickSubtitle: subtitle,
     existingIds: existingIds,
+    existingLabel: existingLabel,
   );
 }

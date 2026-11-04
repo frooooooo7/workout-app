@@ -1132,6 +1132,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             MaterialPageRoute(
               builder: (_) => PickExerciseScreen(
                 title: 'Dodaj do treningu',
+                existingLabel: 'W treningu',
                 subtitle: session.planName.trim().isEmpty
                     ? '${session.exercises.length} w treningu'
                     : '${session.planName} · ${session.exercises.length} w treningu',
