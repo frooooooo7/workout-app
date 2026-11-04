@@ -92,7 +92,12 @@ class StatsPeriodSummaryCard extends StatelessWidget {
                 ),
               ),
               if (goalWeeks != null)
-                _GoalPill(met: goalWeeks.met, of: goalWeeks.total),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _GoalPill(met: goalWeeks.met, of: goalWeeks.total),
+                  ),
+                ),
             ],
           ),
           if (inactivity != null) ...[
@@ -233,11 +238,13 @@ class StatsPeriodSummaryCard extends StatelessWidget {
     TrainingStatsSnapshot s,
     WeeklyGoalProgress goal,
   ) => [
-    for (final w in goal.weeks)
+    for (final w in goal.allWeeks)
       if (w.start.add(const Duration(days: 7)).isAfter(s.window.start) &&
           w.start.isBefore(s.window.end))
         w,
   ];
+
+  static const _maxBars = 52;
 
   /// Słupki: tygodnie na tle celu, a bez celu kolejne przedziały wykresu.
   static _Bars? _bars(TrainingStatsSnapshot s) {
@@ -245,8 +252,13 @@ class StatsPeriodSummaryCard extends StatelessWidget {
     if (goal != null) {
       final weeks = _weeksInWindow(s, goal);
       if (weeks.isNotEmpty) {
+        // Przy „Całość” tygodni bywa setki — słupki pokazują ostatni rok,
+        // a licznik „cel w X z Y tyg.” liczy cały zakres.
+        final shown = weeks.length > _maxBars
+            ? weeks.sublist(weeks.length - _maxBars)
+            : weeks;
         return _Bars([
-          for (final w in weeks)
+          for (final w in shown)
             _Bar(
               value: w.workouts,
               label: formatStatsDayMonth(w.start),
@@ -326,7 +338,9 @@ class _WeekBars extends StatelessWidget {
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.symmetric(
-                          horizontal: dense ? 1.5 : 3,
+                          horizontal: items.length > 30
+                              ? 0.5
+                              : (dense ? 1.5 : 3),
                         ),
                         child: _BarColumn(
                           bar: items[i],

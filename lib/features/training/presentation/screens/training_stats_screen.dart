@@ -22,7 +22,13 @@ class TrainingStatsScreen extends StatelessWidget {
     this.clock,
     this.weeklyGoalLoader,
     this.bodyWeightRepository,
+    this.sharedCubit,
   });
+
+  /// Cubit Historii, gdy wejście jest stamtąd: sesje i rekordy są już
+  /// wczytane, więc ekran ich nie czyta i nie liczy drugi raz. Bez niego
+  /// (Profil, link) ekran tworzy własny.
+  final TrainingStatsCubit? sharedCubit;
 
   /// Test seam; domyślnie [ServiceLocator.trainingStatsRepository].
   final TrainingStatsRepository? repository;
@@ -40,6 +46,10 @@ class TrainingStatsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shared = sharedCubit;
+    if (shared != null) {
+      return BlocProvider.value(value: shared, child: _scaffold(context));
+    }
     return BlocProvider(
       create: (_) => TrainingStatsCubit(
         repository ?? ServiceLocator.trainingStatsRepository,
@@ -52,30 +62,34 @@ class TrainingStatsScreen extends StatelessWidget {
         clock: clock,
         weeklyGoalLoader: weeklyGoalLoader ?? loadOwnWeeklyGoal,
       )..load(),
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: AppTabBackground(
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AppTabHeader(
-                  title: 'Statystyki',
-                  showSync: false,
-                  leading: AppTabHeaderButton.back(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: AppTabBackground(
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppTabHeader(
+                title: 'Statystyki',
+                showSync: false,
+                leading: AppTabHeaderButton.back(
+                  onPressed: () => Navigator.of(context).maybePop(),
                 ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: TrainingStatsView(
-                    onStartWorkout: () => context.go('/app/training'),
-                    bodyWeightRepository: bodyWeightRepository,
-                  ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: TrainingStatsView(
+                  onStartWorkout: () => context.go('/app/training'),
+                  bodyWeightRepository: bodyWeightRepository,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

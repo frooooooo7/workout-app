@@ -79,7 +79,11 @@ class StatsRegionBarsCard extends StatelessWidget {
     final weeks = math.max(1.0, window.days / 7);
     final rows = <_RegionRow>[
       for (final r in m.regions)
-        _RegionRow(label: r.region.label, perWeek: r.sets / weeks),
+        _RegionRow(
+          label: r.region.label,
+          // Pasmo dotyczy jednej partii — region liczymy średnio na partię.
+          perWeek: r.sets / weeks / r.muscleCount,
+        ),
     ];
     final present = {for (final r in m.regions) r.region};
     for (final g in m.neglected) {
@@ -122,7 +126,7 @@ class StatsRegionBarsCard extends StatelessWidget {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  '10–20 serii / tydz. wystarcza większości osób',
+                  '10–20 serii / tydz. na partię wystarcza większości osób',
                   style: _captionStyle,
                 ),
               ),

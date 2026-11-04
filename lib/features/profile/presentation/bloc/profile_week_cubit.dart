@@ -13,7 +13,9 @@ class ProfileWeekCubit extends Cubit<ProfileWeekSummary?> {
     this._repository, {
     Listenable? dataChanges,
     DateTime Function()? clock,
-  }) : _dataChanges = dataChanges,
+    Future<int?> Function()? weeklyGoalLoader,
+  }) : _weeklyGoalLoader = weeklyGoalLoader,
+       _dataChanges = dataChanges,
        _clock = clock ?? DateTime.now,
        super(null) {
     _dataChanges?.addListener(_onDataChanged);
@@ -22,6 +24,9 @@ class ProfileWeekCubit extends Cubit<ProfileWeekSummary?> {
   final TrainingStatsRepository _repository;
   final Listenable? _dataChanges;
   final DateTime Function() _clock;
+  final Future<int?> Function()? _weeklyGoalLoader;
+
+  static const _goalTimeout = Duration(seconds: 5);
 
   Future<void> load() async {
     try {
@@ -29,10 +34,23 @@ class ProfileWeekCubit extends Cubit<ProfileWeekSummary?> {
       final sessions = await _repository.completedSessionsSince(
         ProfileWeekCalculator.earliestStart(now),
       );
+      final goal = await _loadGoal();
       if (isClosed) return;
-      emit(ProfileWeekCalculator.summarize(sessions, now: now));
+      emit(ProfileWeekCalculator.summarize(sessions, now: now, goal: goal));
     } catch (_) {
       // Podsumowanie jest dodatkiem — przy błędzie zostaje poprzedni stan.
+    }
+  }
+
+  /// Passa liczy się od celu tygodniowego; bez niego (brak sieci i kopii
+  /// profilu) wraca do „tygodnia z jakimkolwiek treningiem”.
+  Future<int?> _loadGoal() async {
+    final loader = _weeklyGoalLoader;
+    if (loader == null) return null;
+    try {
+      return await loader().timeout(_goalTimeout);
+    } catch (_) {
+      return null;
     }
   }
 

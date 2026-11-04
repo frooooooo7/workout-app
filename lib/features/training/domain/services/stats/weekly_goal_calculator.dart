@@ -64,8 +64,19 @@ abstract final class WeeklyGoalCalculator {
       weeks.add(GoalWeek(start: start, workouts: perWeek[start] ?? 0));
     }
 
+    // Pełna historia tygodni (od pierwszego treningu), dla dłuższych zakresów.
+    final all = <GoalWeek>[];
+    if (perWeek.isNotEmpty) {
+      var w = perWeek.keys.reduce((a, b) => a.isBefore(b) ? a : b);
+      while (!w.isAfter(thisWeek)) {
+        all.add(GoalWeek(start: w, workouts: perWeek[w] ?? 0));
+        w = DateTime(w.year, w.month, w.day + 7);
+      }
+    }
+
     return WeeklyGoalProgress(
       goal: goal,
+      allWeeks: List.unmodifiable(all),
       workoutsThisWeek: perWeek[thisWeek] ?? 0,
       weeks: List.unmodifiable(weeks),
       streakWeeks: streak,

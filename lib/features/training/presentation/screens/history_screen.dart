@@ -73,6 +73,16 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
   Future<void> _maybeShowHint() async {
     if (await historyStatsHintSeen()) return;
     if (!mounted) return;
+    // Dymek jest dla osób, które znały zakładkę Statystyki — nowemu
+    // użytkownikowi, bez żadnego treningu, nie ma co wskazywać.
+    final stats = context.read<TrainingStatsCubit>();
+    var state = stats.state;
+    if (state.snapshot == null && !state.failed) {
+      state = await stats.stream
+          .firstWhere((s) => s.snapshot != null || s.failed)
+          .timeout(const Duration(seconds: 10), onTimeout: () => stats.state);
+    }
+    if (!mounted || state.sessions.isEmpty) return;
     setState(() => _showHint = true);
     await markHistoryStatsHintSeen();
   }
@@ -109,7 +119,10 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
 
   void _openStats(BuildContext context) {
     _dismissHint();
-    context.push('/app/training/stats');
+    context.push(
+      '/app/training/stats',
+      extra: context.read<TrainingStatsCubit>(),
+    );
   }
 
   @override
