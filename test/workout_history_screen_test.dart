@@ -68,6 +68,11 @@ TrainingSessionListItem _serverItem(String id, DateTime startedAt) =>
 void main() {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
+  // Dzisiejszy trening o 01:00 albo teraz, jeśli jest wcześniej — inaczej
+  // tuż po północy wypadałby w przyszłości i znikał z historii.
+  final todayWorkout = today.add(const Duration(hours: 1)).isAfter(now)
+      ? now.subtract(const Duration(minutes: 1))
+      : today.add(const Duration(hours: 1));
 
   // Stary Push z 80 kg, dzisiejszy z 100 kg (rekord), Legs tydzień temu.
   List<session.TrainingSession> localSessions() => [
@@ -85,7 +90,7 @@ void main() {
     ),
     _session(
       'today',
-      today.add(const Duration(hours: 1)),
+      todayWorkout,
       sets: const [
         ('Wyciskanie', '100', '5'),
         ('OHP', '50', '8'),
@@ -216,9 +221,7 @@ void main() {
   testWidgets('no filter bar when there is a single plan and no records', (
     tester,
   ) async {
-    setUpRepositories(
-      local: [_session('only', today.add(const Duration(hours: 1)))],
-    );
+    setUpRepositories(local: [_session('only', todayWorkout)]);
     await openHistory(tester);
 
     expect(find.byType(HistorySessionCard), findsOneWidget);

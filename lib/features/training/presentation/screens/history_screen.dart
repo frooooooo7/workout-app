@@ -78,9 +78,15 @@ class _WorkoutHistoryViewState extends State<_WorkoutHistoryView> {
     final stats = context.read<TrainingStatsCubit>();
     var state = stats.state;
     if (state.snapshot == null && !state.failed) {
-      state = await stats.stream
-          .firstWhere((s) => s.snapshot != null || s.failed)
-          .timeout(const Duration(seconds: 10), onTimeout: () => stats.state);
+      try {
+        state = await stats.stream
+            .firstWhere((s) => s.snapshot != null || s.failed)
+            .timeout(const Duration(seconds: 10), onTimeout: () => stats.state);
+      } on StateError {
+        // Historia zamknięta, zanim statystyki się wczytały — nie ma co
+        // pokazywać.
+        return;
+      }
     }
     if (!mounted || state.sessions.isEmpty) return;
     setState(() => _showHint = true);
