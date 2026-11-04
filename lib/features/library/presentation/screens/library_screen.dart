@@ -56,6 +56,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  /// Zaznaczone ćwiczenie mogło zostać zmienione albo usunięte w karcie lub
+  /// menu: podmieniamy je na aktualne dane albo wyrzucamy z wyboru.
+  void _refreshSelectedFrom(Exercise? updated, {String? removedId}) {
+    if (!widget.pickMode) return;
+    setState(() {
+      if (removedId != null) _selected.remove(removedId);
+      if (updated != null && _selected.containsKey(updated.id)) {
+        _selected[updated.id] = updated;
+      }
+    });
+  }
+
+  /// Wyjście z wyboru z zaznaczeniem pytamy o potwierdzenie, żeby nie zgubić
+  /// wyboru jednym gestem „wstecz”.
+  Future<void> _confirmDiscardSelection() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Porzucić wybór?'),
+        content: Text(
+          'Masz zaznaczone: ${exerciseCountLabel(_selected.length)}. '
+          'Wyjście bez dodawania je odrzuci.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zostań'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Porzuć'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) {
+      setState(_selected.clear);
+      Navigator.of(context).pop();
+    }
+  }
+
   void _tapExercise(BuildContext context, Exercise exercise) {
     if (widget.pickMode) {
       _toggleSelected(exercise);
@@ -111,6 +152,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     await cubit.refresh(showLoadingIndicator: false);
     if (!context.mounted) return;
     if (result == ExerciseDetailsResult.deleted) {
+      _refreshSelectedFrom(null, removedId: exercise.id);
       _showMessage(context, 'Usunięto ćwiczenie.');
     }
   }
@@ -138,6 +180,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             distanceUnit: distanceUnit,
           ),
     );
+    if (updated != null) _refreshSelectedFrom(updated);
     if (updated != null && context.mounted) {
       _showMessage(context, 'Zapisano zmiany.');
     }
@@ -149,6 +192,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (!confirmed || !context.mounted) return;
     try {
       await cubit.deleteExercise(exercise);
+      _refreshSelectedFrom(null, removedId: exercise.id);
       if (context.mounted) _showMessage(context, 'Usunięto ćwiczenie.');
     } catch (_) {
       if (context.mounted) {
@@ -232,9 +276,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
           return PopScope(
             // Systemowy „wstecz” z listy lub wyników szukania wraca na ekran
             // startowy, dopiero stamtąd zamyka bibliotekę.
-            canPop: _atStartScreen,
+            canPop:
+                _atStartScreen && !(widget.pickMode && _selected.isNotEmpty),
             onPopInvokedWithResult: (didPop, _) {
-              if (!didPop) _backToStart(cubit);
+              if (didPop) return;
+              if (_atStartScreen) {
+                _confirmDiscardSelection();
+              } else {
+                _backToStart(cubit);
+              }
             },
             child: Scaffold(
             backgroundColor: AppColors.background,
@@ -331,6 +381,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                           ),
                                     );
                                 if (!context.mounted) return;
+                                if (created != null && widget.pickMode) {
+                                  // Nowe ćwiczenie od razu trafia do wyboru.
+                                  setState(
+                                    () => _selected[created.id] = created,
+                                  );
+                                }
                                 if (created != null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(

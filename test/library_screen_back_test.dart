@@ -166,4 +166,46 @@ void main() {
     expect((await result)!.map((e) => e.id), ['1']);
     expect(find.text('trening'), findsOneWidget);
   });
+
+  testWidgets('tryb wyboru: „wstecz” z zaznaczeniem pyta o potwierdzenie', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 1600 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        home: const Scaffold(body: Text('trening')),
+      ),
+    );
+    final result = navigatorKey.currentState!.push<List<Exercise>>(
+      MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Wszystkie ('));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wyciskanie sztangi na ławce'));
+    await tester.pumpAndSettle();
+
+    // Pierwsze „wstecz” wraca na ekran startowy, drugie pyta o wybór.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Porzucić wybór?'), findsOneWidget);
+
+    await tester.tap(find.text('Zostań'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryScreen), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Porzuć'));
+    await tester.pumpAndSettle();
+    expect(find.text('trening'), findsOneWidget);
+    expect(await result, isNull);
+  });
 }
