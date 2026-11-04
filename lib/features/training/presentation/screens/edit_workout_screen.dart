@@ -113,26 +113,52 @@ class _EditWorkoutView extends StatelessWidget {
     return discard == true;
   }
 
+  String _pickSubtitle(EditWorkoutCubit cubit) {
+    final draft = cubit.state.draft;
+    final count = draft?.exercises.length ?? 0;
+    final label = count == 0 ? 'bez ćwiczeń' : '$count w treningu';
+    final name = draft?.name.trim() ?? '';
+    return name.isEmpty ? label : '$name · $label';
+  }
+
   Future<void> _addExercise(BuildContext context) async {
     final cubit = context.read<EditWorkoutCubit>();
-    final picked =
-        await (pickExercise?.call(context) ??
-            Navigator.of(context).push<Exercise>(
-              MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
-            ));
-    if (picked == null) return;
-    cubit.addExercise(
-      TrainingSessionExercise(
-        exerciseId: picked.id,
-        exerciseName: picked.name,
-        exerciseMuscles: picked.muscles.map((m) => m.name).toList(),
-        exerciseCategory: picked.category.name,
-        exerciseImageUrl: picked.imageUrl,
-        tracking: picked.tracking,
-        distanceUnit: picked.distanceUnit,
-        sets: [TrainingSessionSet()],
-      ),
-    );
+    final seam = pickExercise;
+    final List<Exercise> picked;
+    if (seam != null) {
+      final one = await seam(context);
+      picked = [?one];
+    } else {
+      picked =
+          await Navigator.of(context).push<List<Exercise>>(
+            MaterialPageRoute(
+              builder: (_) => PickExerciseScreen(
+                title: 'Dodaj do treningu',
+                existingLabel: 'W treningu',
+                subtitle: _pickSubtitle(cubit),
+                existingIds: {
+                  for (final e in cubit.state.draft?.exercises ?? const [])
+                    e.exerciseId,
+                },
+              ),
+            ),
+          ) ??
+          const [];
+    }
+    for (final exercise in picked) {
+      cubit.addExercise(
+        TrainingSessionExercise(
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          exerciseMuscles: exercise.muscles.map((m) => m.name).toList(),
+          exerciseCategory: exercise.category.name,
+          exerciseImageUrl: exercise.imageUrl,
+          tracking: exercise.tracking,
+          distanceUnit: exercise.distanceUnit,
+          sets: [TrainingSessionSet()],
+        ),
+      );
+    }
   }
 
   @override

@@ -1121,27 +1121,48 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     // z powrotem i klawiatura wyskakuje sama.
     hideKeyboard();
 
-    final picked =
-        await (widget.args?.pickExercise?.call(context) ??
-            Navigator.of(context).push<Exercise>(
-              MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
-            ));
-    if (picked == null || !context.mounted) return;
+    final seam = widget.args?.pickExercise;
+    final List<Exercise> picked;
+    if (seam != null) {
+      final one = await seam(context);
+      picked = [?one];
+    } else {
+      picked =
+          await Navigator.of(context).push<List<Exercise>>(
+            MaterialPageRoute(
+              builder: (_) => PickExerciseScreen(
+                title: 'Dodaj do treningu',
+                existingLabel: 'W treningu',
+                subtitle: session.planName.trim().isEmpty
+                    ? '${session.exercises.length} w treningu'
+                    : '${session.planName} · ${session.exercises.length} w treningu',
+                existingIds: {for (final e in session.exercises) e.exerciseId},
+              ),
+            ),
+          ) ??
+          const [];
+    }
+    if (picked.isEmpty || !context.mounted) return;
 
+    final firstNewIndex = session.exercises.length;
     final exercises = List<TrainingSessionExercise>.from(session.exercises)
-      ..add(
-        TrainingSessionExercise(
-          exerciseId: picked.id,
-          exerciseName: picked.name,
-          exerciseMuscles: picked.muscles.map((muscle) => muscle.name).toList(),
-          exerciseCategory: picked.category.name,
-          exerciseImageUrl: picked.imageUrl,
-          tracking: picked.tracking,
-          distanceUnit: picked.distanceUnit,
-          sets: [TrainingSessionSet()],
-        ),
-      );
-    final nextIndex = exercises.length - 1;
+      ..addAll([
+        for (final exercise in picked)
+          TrainingSessionExercise(
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            exerciseMuscles: exercise.muscles
+                .map((muscle) => muscle.name)
+                .toList(),
+            exerciseCategory: exercise.category.name,
+            exerciseImageUrl: exercise.imageUrl,
+            tracking: exercise.tracking,
+            distanceUnit: exercise.distanceUnit,
+            sets: [TrainingSessionSet()],
+          ),
+      ]);
+    // Po dodaniu kilku ćwiczeń przechodzimy do pierwszego z nich.
+    final nextIndex = firstNewIndex;
     setState(() {
       _draftSession.value = session.copyWith(exercises: exercises);
       _hasUnsavedDraft = true;

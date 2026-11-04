@@ -15,6 +15,7 @@ import '../../../../core/theme/plan_icons.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../../library/domain/models/exercise.dart';
+import '../../../library/presentation/screens/pick_exercise_screen.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_session.dart';
@@ -109,6 +110,13 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
     _nameController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  String _pickSubtitle() {
+    final name = _nameController.text.trim();
+    final count = _exercises.length;
+    final label = count == 0 ? 'plan jest pusty' : '$count w planie';
+    return name.isEmpty ? label : '$name · $label';
   }
 
   void _addExercise(Exercise exercise) {
@@ -413,17 +421,22 @@ class _CreatePlanScreenState extends State<CreatePlanScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           hideKeyboard();
-          final exercise = await context.push<Exercise>(
+          final picked = await context.push<List<Exercise>>(
             '/app/training/create-plan/pick-exercise',
+            extra: PickExerciseScreen(
+              title: 'Dodaj do planu',
+              subtitle: _pickSubtitle(),
+              existingIds: {for (final e in _exercises) e.exercise.id},
+            ),
           );
-          if (exercise != null) {
+          for (final exercise in picked ?? const <Exercise>[]) {
             _addExercise(exercise);
           }
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text(
-          'Dodaj ćwiczenie',
+          'Dodaj ćwiczenia',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),

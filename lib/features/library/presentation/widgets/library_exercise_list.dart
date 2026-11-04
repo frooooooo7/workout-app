@@ -14,6 +14,10 @@ class LibraryExerciseList extends StatelessWidget {
     required this.onExerciseTap,
     required this.onMoreTap,
     this.usage = ExerciseUsage.empty,
+    this.selectedIds,
+    this.selectionOrder = const [],
+    this.existingIds = const {},
+    this.existingLabel = 'W planie',
   });
 
   final List<Exercise> exercises;
@@ -23,6 +27,16 @@ class LibraryExerciseList extends StatelessWidget {
 
   /// Historia treningów — daje „ostatni wynik” w wierszach.
   final ExerciseUsage usage;
+
+  /// Zaznaczone ćwiczenia w trybie wyboru; `null` — zwykła lista.
+  final Set<String>? selectedIds;
+
+  /// Kolejność zaznaczania (id) — daje numery 1, 2, 3 w kółkach.
+  final List<String> selectionOrder;
+
+  /// Ćwiczenia, które już są w planie lub treningu („W planie”).
+  final Set<String> existingIds;
+  final String existingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +53,15 @@ class LibraryExerciseList extends StatelessWidget {
         final exercise = exercises[index];
         return ExerciseRow(
           exercise: exercise,
+          selected: selectedIds?.contains(exercise.id),
+          selectionNumber: selectionOrder.contains(exercise.id)
+              ? selectionOrder.indexOf(exercise.id) + 1
+              : null,
+          inPlan:
+              existingIds.contains(exercise.id) ||
+              (exercise.serverId != null &&
+                  existingIds.contains(exercise.serverId)),
+          inPlanLabel: existingLabel,
           lastResult: usage.lastResultFor(exercise)?.label,
           lastDate: usage.lastResultFor(exercise)?.dateLabel(DateTime.now()),
           onTap: () => onExerciseTap(exercise),
