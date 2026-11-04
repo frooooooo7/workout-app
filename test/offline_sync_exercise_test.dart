@@ -219,6 +219,51 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('zmiana samego sprzętu w trakcie wysyłki nie gubi edycji', () async {
+    final dir = await Directory.systemTemp.createTemp('gym_sync_inflight');
+    final edb = ExerciseDatabase('inflight.db', directoryOverride: dir.path);
+    const localId = '33333333-3333-4333-8333-333333333333';
+    final dto = ExerciseDto.fromDomain(
+      Exercise(
+        id: localId,
+        name: 'Moje ćwiczenie',
+        muscles: const [MuscleGroup.chest],
+        category: ExerciseCategory.compound,
+        isMine: true,
+        createdAt: DateTime.utc(2024),
+      ),
+      pendingOp: 'create',
+    );
+    await edb.run((db) async {
+      await db.insert(ExerciseDatabase.tableExercises, dto.toMap());
+    });
+
+    final remote = _SeqRemote()
+      ..duringCreate = () => edb.run((db) async {
+        await db.update(
+          ExerciseDatabase.tableExercises,
+          {'equipment': ExerciseEquipment.barbell.apiName},
+          where: 'local_id = ?',
+          whereArgs: [localId],
+        );
+      });
+    await ExerciseSyncEngine(remote: remote, localDb: edb).flush();
+
+    final rows = await edb.run(
+      (db) => db.query(
+        ExerciseDatabase.tableExercises,
+        where: 'local_id = ?',
+        whereArgs: [localId],
+      ),
+    );
+    // Edycja sprzętu w trakcie create zostaje do wysłania jako update.
+    expect(rows.single['pending_op'], 'update');
+    expect(rows.single['equipment'], 'barbell');
+
+    await edb.close();
+    await dir.delete(recursive: true);
+  });
+
   test('library search matches Polish letters regardless of case', () async {
     final dir = await Directory.systemTemp.createTemp('gym_search');
     final edb = ExerciseDatabase('search.db', directoryOverride: dir.path);
@@ -376,6 +421,9 @@ class _SeqRemote extends ExerciseRemoteDataSource {
   /// Dodatkowe pola z ostatniego `create`.
   ExerciseExtras? lastExtras;
 
+  /// Wywoływane w środku `create` — symuluje edycję w trakcie wysyłki.
+  Future<void> Function()? duringCreate;
+
   @override
   Future<List<Exercise>> getAll({
     MuscleGroup? muscleGroup,
@@ -399,6 +447,7 @@ class _SeqRemote extends ExerciseRemoteDataSource {
   }) async {
     log.add('create');
     lastExtras = extras;
+    await duringCreate?.call();
     return Exercise(
       id: 'aaaaaaaa-bbbb-4ccc-bddd-eeeeeeeeeeee',
       name: name,

@@ -103,4 +103,53 @@ void main() {
     expect(saved!.instructions!.steps, ['Połóż się', 'Wypchnij w górę']);
     expect(saved!.instructions!.mistakes, ['Odbijanie od klatki']);
   });
+
+  testWidgets('„Użyj tego” zamyka formularz i oddaje podobne ćwiczenie', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 2400 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    Exercise? used;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showLibraryAddExerciseSheet(
+                context,
+                existing: const [_bench],
+                onUseSimilar: (exercise) => used = exercise,
+                onSubmit: ({
+                  required name,
+                  required muscles,
+                  required category,
+                  required description,
+                  required tracking,
+                  required distanceUnit,
+                  required extras,
+                  imageBytes,
+                  imageFilename,
+                }) async => throw UnimplementedError(),
+              ),
+              child: const Text('otwórz'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('otwórz'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nazwa ćwiczenia'),
+      'Wyciskanie na ławce',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Użyj tego'));
+    await tester.pumpAndSettle();
+
+    expect(used, _bench);
+    expect(find.text('Nowe ćwiczenie'), findsNothing);
+  });
 }

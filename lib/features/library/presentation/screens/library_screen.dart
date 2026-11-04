@@ -402,6 +402,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                     await showLibraryAddExerciseSheet(
                                       context,
                                       existing: existing,
+                                      // Podobne ćwiczenie już jest: w trybie
+                                      // wyboru zaznaczamy je, w bibliotece
+                                      // otwieramy jego kartę.
+                                      onUseSimilar: (exercise) {
+                                        if (widget.pickMode) {
+                                          setState(
+                                            () => _selected[exercise.id] =
+                                                exercise,
+                                          );
+                                        } else {
+                                          _openDetails(context, exercise);
+                                        }
+                                      },
                                       onSubmit:
                                           ({
                                             required String name,

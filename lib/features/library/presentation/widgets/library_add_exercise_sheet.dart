@@ -36,14 +36,18 @@ Future<Exercise?> showLibraryAddExerciseSheet(
   BuildContext context, {
   required LibraryAddExerciseSubmit onSubmit,
   List<Exercise> existing = const [],
+  ValueChanged<Exercise>? onUseSimilar,
 }) async {
   final result = await showModalBottomSheet<Exercise?>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black54,
-    builder: (sheetContext) =>
-        _LibraryAddExerciseSheet(onSubmit: onSubmit, existing: existing),
+    builder: (sheetContext) => _LibraryAddExerciseSheet(
+      onSubmit: onSubmit,
+      existing: existing,
+      onUseSimilar: onUseSimilar,
+    ),
   );
   return result;
 }
@@ -94,9 +98,13 @@ class _LibraryAddExerciseSheet extends StatefulWidget {
     required this.onSubmit,
     this.initial,
     this.existing = const [],
+    this.onUseSimilar,
   });
 
   final LibraryAddExerciseSubmit onSubmit;
+
+  /// „Użyj tego” w ostrzeżeniu o duplikacie; `null` — bez przycisku.
+  final ValueChanged<Exercise>? onUseSimilar;
 
   /// Cała baza — do ostrzeżenia o podobnym ćwiczeniu.
   final List<Exercise> existing;
@@ -473,7 +481,17 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                     });
                   },
                 ),
-                if (_similar != null) _SimilarWarning(exercise: _similar!),
+                if (_similar != null)
+                  _SimilarWarning(
+                    exercise: _similar!,
+                    onUse: widget.onUseSimilar == null
+                        ? null
+                        : () {
+                            final similar = _similar!;
+                            Navigator.of(context).pop(null);
+                            widget.onUseSimilar!(similar);
+                          },
+                  ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _descriptionController,
@@ -860,9 +878,10 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
 
 /// Żółta karta pod nazwą: takie ćwiczenie już jest w bibliotece.
 class _SimilarWarning extends StatelessWidget {
-  const _SimilarWarning({required this.exercise});
+  const _SimilarWarning({required this.exercise, this.onUse});
 
   final Exercise exercise;
+  final VoidCallback? onUse;
 
   @override
   Widget build(BuildContext context) {
@@ -894,6 +913,8 @@ class _SimilarWarning extends StatelessWidget {
               ),
             ),
           ),
+          if (onUse != null)
+            TextButton(onPressed: onUse, child: const Text('Użyj tego')),
         ],
       ),
     );
