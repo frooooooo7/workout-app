@@ -118,6 +118,19 @@ class _SwapExerciseScreenState extends State<SwapExerciseScreen> {
         if (!similarIds.contains(e.id)) e,
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
+    // Nagłówki sekcji (String) i ćwiczenia w jednej liście — buduje się leniwie.
+    final items = <Object>[
+      if (searching)
+        ...results
+      else ...[
+        if (similar.isNotEmpty) ...['Podobne', ...similar],
+        if (others.isNotEmpty) ...[
+          similar.isEmpty ? 'Wszystkie' : 'Pozostałe',
+          ...others,
+        ],
+      ],
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -178,39 +191,27 @@ class _SwapExerciseScreenState extends State<SwapExerciseScreen> {
                         color: AppColors.primary,
                       ),
                     )
-                  : ListView(
+                  : (searching && results.isEmpty)
+                  ? const Center(
+                      child: Text(
+                        'Brak ćwiczeń pasujących do wyszukiwania.',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(16, 0, 8, 24),
-                      children: [
-                        if (searching) ...[
-                          if (results.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 32),
-                              child: Center(
-                                child: Text(
-                                  'Brak ćwiczeń pasujących do wyszukiwania.',
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 13.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          for (final e in results) _row(e),
-                        ] else ...[
-                          if (similar.isNotEmpty) ...[
-                            const _SectionLabel('Podobne'),
-                            for (final e in similar) _row(e),
-                          ],
-                          if (others.isNotEmpty) ...[
-                            _SectionLabel(
-                              similar.isEmpty ? 'Wszystkie' : 'Pozostałe',
-                            ),
-                            for (final e in others) _row(e),
-                          ],
-                        ],
-                      ],
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return item is String
+                            ? _SectionLabel(item)
+                            : _row(item as Exercise);
+                      },
                     ),
             ),
           ],

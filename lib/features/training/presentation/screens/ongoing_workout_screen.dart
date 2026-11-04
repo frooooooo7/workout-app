@@ -1662,7 +1662,6 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (current == null) return;
     final result = ExerciseSwap.apply(current.exercises, replaced.id, picked);
     if (result == null) return;
-    final before = current.exercises;
 
     // Stoper dotyczył serii, której już nie ma przy żadnym ćwiczeniu.
     final keptSetIds = {
@@ -1694,29 +1693,35 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       key: const ValueKey('exercise-swapped-snackbar'),
       message: 'Zamieniono na „${picked.name}”',
       duration: const Duration(seconds: 6),
-      onUndo: () => _undoSwap(cubit, before, result.newExerciseId),
+      onUndo: () => _undoSwap(cubit, result),
     );
   }
 
-  /// „Cofnij” po zamianie: wraca poprzednia lista ćwiczeń, o ile nowe
-  /// ćwiczenie nadal jest w sesji.
-  void _undoSwap(
-    TrainingSessionCubit cubit,
-    List<TrainingSessionExercise> before,
-    String newExerciseId,
-  ) {
+  /// „Cofnij” po zamianie: cofa tylko zamianę (stare ćwiczenie wraca, nowe
+  /// znika); serie odhaczone w międzyczasie zostają.
+  void _undoSwap(TrainingSessionCubit cubit, ExerciseSwapResult swap) {
     final session = _draftSession.value;
     if (!mounted || session == null) return;
-    if (!session.exercises.any((e) => e.id == newExerciseId)) return;
+    final restored = ExerciseSwap.undo(session.exercises, swap);
+    if (restored == null) return;
+    final currentId = _currentExerciseIndex.value < session.exercises.length
+        ? session.exercises[_currentExerciseIndex.value].id
+        : null;
     setState(() {
-      _draftSession.value = session.copyWith(exercises: before);
+      _draftSession.value = session.copyWith(exercises: restored);
       _hasUnsavedDraft = true;
       _noRest = null;
     });
     _scheduleDraftSave(cubit);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final index = _currentExerciseIndex.value.clamp(0, before.length - 1);
+      // Zostajemy na tym samym ćwiczeniu; jeśli to nowe zniknęło, idziemy
+      // do przywróconego starego.
+      var index = restored.indexWhere((e) => e.id == currentId);
+      if (index == -1) {
+        index = restored.indexWhere((e) => e.id == swap.original.id);
+      }
+      if (index == -1) index = 0;
       if (_exercisePageController.hasClients) {
         _exercisePageController.jumpToPage(_pageOf(index));
       }

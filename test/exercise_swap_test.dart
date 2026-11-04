@@ -85,6 +85,76 @@ void main() {
     expect(swapped.tracking, ExerciseTracking.reps);
     expect(swapped.sets, hasLength(2));
     expect(swapped.sets.every((s) => s.plannedWeight == null), isTrue);
-    expect(swapped.sets.every((s) => s.plannedReps.isEmpty), isTrue);
+    // Powtórzenia zostają, ciężar jest czyszczony.
+    expect(swapped.sets.every((s) => s.plannedReps == '5'), isTrue);
+  });
+
+  test('serie zachowują typ, powtórzenia, RIR i tempo; czas zaczyna od zera', () {
+    final weighted = TrainingSessionExercise(
+      id: 'a',
+      exerciseId: 'ex-a',
+      exerciseName: 'Wyciskanie',
+      exerciseMuscles: const ['chest'],
+      exerciseCategory: 'compound',
+      sets: [
+        TrainingSessionSet(
+          setType: SetType.warmup,
+          plannedWeight: '40',
+          plannedReps: '8–12',
+          plannedRir: '2',
+          plannedTempo: '3-1-1',
+        ),
+      ],
+    );
+    final carried = ExerciseSwap.apply([weighted], 'a', _dumbbell)!
+        .exercises
+        .single
+        .sets
+        .single;
+    expect(carried.setType, SetType.warmup);
+    expect(carried.plannedReps, '8–12');
+    expect(carried.plannedRir, '2');
+    expect(carried.plannedTempo, '3-1-1');
+    expect(carried.plannedWeight, isNull);
+
+    const plank = Exercise(
+      id: 'plank',
+      name: 'Deska',
+      muscles: [MuscleGroup.abs],
+      category: ExerciseCategory.isolation,
+      tracking: ExerciseTracking.duration,
+    );
+    final empty = ExerciseSwap.apply([weighted], 'a', plank)!
+        .exercises
+        .single
+        .sets
+        .single;
+    expect(empty.plannedReps, isEmpty);
+    expect(empty.setType, SetType.normal);
+  });
+
+  test('cofnięcie zamiany zostawia serie odhaczone w międzyczasie', () {
+    final list = [_ex('a', [true, false, false]), _ex('b', [false])];
+    final swap = ExerciseSwap.apply(list, 'a', _dumbbell)!;
+    // W międzyczasie odhaczona seria w ćwiczeniu „b”.
+    final ticked = [
+      for (final e in swap.exercises)
+        e.id == 'b'
+            ? e.copyWith(sets: [e.sets.single.copyWith(completed: true)])
+            : e,
+    ];
+    final undone = ExerciseSwap.undo(ticked, swap)!;
+    expect(undone.map((e) => e.id), ['a', 'b']);
+    expect(undone[0].sets, hasLength(3));
+    expect(undone[1].sets.single.completed, isTrue);
+  });
+
+  test('cofnięcie zamiany w miejscu przywraca oryginał', () {
+    final list = [_ex('a', [false, false]), _ex('b', [false])];
+    final swap = ExerciseSwap.apply(list, 'a', _dumbbell)!;
+    final undone = ExerciseSwap.undo(swap.exercises, swap)!;
+    expect(undone.map((e) => e.id), ['a', 'b']);
+    expect(undone[0].sets, hasLength(2));
+    expect(ExerciseSwap.undo(list, swap), isNull);
   });
 }
