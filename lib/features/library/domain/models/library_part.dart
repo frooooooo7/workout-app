@@ -38,3 +38,12 @@ enum LibraryPart {
     return exercises.where((e) => e.muscles.any(matches.contains)).length;
   }
 }
+
+/// „1 ćwiczenie”, „3 ćwiczenia”, „12 ćwiczeń”.
+String exerciseCountLabel(int n) {
+  if (n == 1) return '1 ćwiczenie';
+  final last = n % 10;
+  final teen = n % 100 >= 12 && n % 100 <= 14;
+  if (last >= 2 && last <= 4 && !teen) return '$n ćwiczenia';
+  return '$n ćwiczeń';
+}

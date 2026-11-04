@@ -22,6 +22,9 @@ void main() {
                 selected: const LibraryFilterSelection(
                   equipment: {ExerciseEquipment.band},
                 ),
+                // Każdy wybrany filtr „zostawia” 5 ćwiczeń mniej niż 12.
+                countFor: (s) =>
+                    12 - s.muscles.length - s.equipment.length - s.types.length,
               ),
               child: const Text('otwórz'),
             ),
@@ -32,10 +35,10 @@ void main() {
     await tester.tap(find.text('otwórz'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Zastosuj (1)'), findsOneWidget);
+    expect(find.text('Pokaż 11 ćwiczeń'), findsOneWidget);
     await tester.tap(find.text('Wyczyść'));
     await tester.pump();
-    expect(find.text('Pokaż wszystkie'), findsOneWidget);
+    expect(find.text('Pokaż 12 ćwiczeń'), findsOneWidget);
 
     await tester.tap(find.text('Biceps'));
     await tester.scrollUntilVisible(
@@ -51,9 +54,9 @@ void main() {
     );
     await tester.tap(find.text(ExerciseCategory.isolation.label));
     await tester.pump();
-    expect(find.text('Zastosuj (3)'), findsOneWidget);
+    expect(find.text('Pokaż 9 ćwiczeń'), findsOneWidget);
 
-    await tester.tap(find.text('Zastosuj (3)'));
+    await tester.tap(find.text('Pokaż 9 ćwiczeń'));
     await tester.pumpAndSettle();
     expect(result!.muscles, {MuscleGroup.biceps});
     expect(result!.equipment, {ExerciseEquipment.dumbbell});

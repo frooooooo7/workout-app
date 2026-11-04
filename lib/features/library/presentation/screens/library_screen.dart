@@ -162,6 +162,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         muscles: state.muscles,
         equipment: state.equipment,
         types: state.types,
+        sort: state.sort,
+      ),
+      countFor: (selection) => cubit.previewCount(
+        types: selection.types,
+        equipment: selection.equipment,
+        muscles: selection.muscles,
       ),
     );
     if (selection == null) return;
@@ -170,6 +176,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
       equipment: selection.equipment,
       muscles: selection.muscles,
     );
+    await cubit.setSort(selection.sort);
+    final any = selection.types.isNotEmpty ||
+        selection.equipment.isNotEmpty ||
+        selection.muscles.isNotEmpty;
+    // Filtry z arkusza działają na całej bazie, więc kafelek partii nie może
+    // ich dodatkowo zawężać; z ekranu startowego idziemy od razu do wyników.
+    if (any) {
+      cubit.setCategory(MuscleGroup.all);
+      if (mounted) setState(() => _browsing = true);
+    }
   }
 
   @override
@@ -333,6 +349,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             },
                           ),
                           const SizedBox(height: 14),
+                          BlocBuilder<LibraryCubit, LibraryState>(
+                            buildWhen: (previous, current) =>
+                                previous.activeFilterCount != current.activeFilterCount,
+                            builder: (context, state) {
+                              if (state.activeFilterCount == 0) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Aktywne filtry: ${state.activeFilterCount}',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryVariant,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => cubit.setFilters(
+                                        types: const {},
+                                        equipment: const {},
+                                        muscles: const {},
+                                      ),
+                                      behavior: HitTestBehavior.opaque,
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(vertical: 4),
+                                        child: Text(
+                                          'Wyczyść filtry',
+                                          style: TextStyle(
+                                            color: AppColors.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                           BlocBuilder<LibraryCubit, LibraryState>(
                             buildWhen: (previous, current) =>
                                 previous.exercises != current.exercises ||

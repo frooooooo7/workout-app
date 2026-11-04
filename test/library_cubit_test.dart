@@ -247,6 +247,64 @@ void main() {
       await cubit.close();
     });
 
+    test('starsze ćwiczenie z ogólnym tagiem pasuje do dokładnego mięśnia', () async {
+      const legacy = Exercise(
+        id: 'old',
+        name: 'Własne plecy',
+        muscles: [MuscleGroup.back],
+        category: ExerciseCategory.compound,
+      );
+      const legacyLegs = Exercise(
+        id: 'legs',
+        name: 'Własne nogi',
+        muscles: [MuscleGroup.legs],
+        category: ExerciseCategory.compound,
+      );
+      final cubit = LibraryCubit(_FakeExerciseRepository([legacy, legacyLegs]));
+      await cubit.refresh();
+      cubit.setFilters(muscles: {MuscleGroup.lats});
+      expect([for (final e in cubit.state.exercises) e.id], ['old']);
+      cubit.setFilters(muscles: {MuscleGroup.quads});
+      expect([for (final e in cubit.state.exercises) e.id], ['legs']);
+      await cubit.close();
+    });
+
+    test('brak sprzętu liczy się jako „Inne”, podgląd liczby wyników', () async {
+      final data = [
+        Exercise(
+          id: 'a',
+          name: 'Własne',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+        ),
+        Exercise(
+          id: 'b',
+          name: 'Ze sztangą',
+          muscles: const [MuscleGroup.chest],
+          category: ExerciseCategory.compound,
+          equipment: ExerciseEquipment.barbell,
+        ),
+      ];
+      final cubit = LibraryCubit(_FakeExerciseRepository(data));
+      await cubit.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(cubit.previewCount(equipment: {ExerciseEquipment.other}), 1);
+      expect(cubit.previewCount(equipment: {ExerciseEquipment.barbell}), 1);
+      expect(cubit.previewCount(), 2);
+      cubit.setFilters(equipment: {ExerciseEquipment.other});
+      expect([for (final e in cubit.state.exercises) e.id], ['a']);
+      await cubit.close();
+    });
+
+    test('data ostatniego wyniku: dziś, wczoraj, dzień tygodnia, data', () {
+      final now = DateTime(2026, 11, 3, 12);
+      String label(DateTime d) => ExerciseLastResult(date: d).dateLabel(now);
+      expect(label(DateTime(2026, 11, 3, 8)), 'dziś');
+      expect(label(DateTime(2026, 11, 2, 20)), 'wczoraj');
+      expect(label(DateTime(2026, 10, 30)), 'pt.');
+      expect(label(DateTime(2026, 10, 12)), '12 paź');
+    });
+
     test('ostatni wynik: najcięższa seria z najnowszego treningu', () {
       TrainingSession at(DateTime day, List<TrainingSessionSet> sets) =>
           TrainingSession(

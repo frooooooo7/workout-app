@@ -15,12 +15,16 @@ class ExerciseRow extends StatelessWidget {
     this.onFavouriteTap,
     this.onMoreTap,
     this.lastResult,
+    this.lastDate,
   });
 
   final Exercise exercise;
 
   /// Ostatni wynik w treningu („80 kg × 5”); `null` — nie robiono.
   final String? lastResult;
+
+  /// Kiedy to było („pon.”, „28 paź”), pod wynikiem.
+  final String? lastDate;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -100,16 +104,31 @@ class ExerciseRow extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 8),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 96),
-                      child: Text(
-                        lastResult!,
-                        textAlign: TextAlign.end,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSubtle,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            lastResult!,
+                            textAlign: TextAlign.end,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSubtle,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (lastDate != null)
+                            Text(
+                              lastDate!,
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),

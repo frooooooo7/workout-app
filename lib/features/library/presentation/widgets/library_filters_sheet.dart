@@ -4,6 +4,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../domain/models/exercise.dart';
+import '../../domain/models/library_part.dart';
+import '../../domain/models/library_sort.dart';
 
 /// Wybór z arkusza „Filtry”.
 class LibraryFilterSelection {
@@ -11,20 +13,23 @@ class LibraryFilterSelection {
     this.muscles = const {},
     this.equipment = const {},
     this.types = const {},
+    this.sort = LibrarySort.popular,
   });
 
   final Set<MuscleGroup> muscles;
   final Set<ExerciseEquipment> equipment;
   final Set<ExerciseCategory> types;
+  final LibrarySort sort;
 }
 
 /// Mięśnie w arkuszu, po partiach. Grupy zbiorcze (plecy, nogi, barki) są
 /// pomijane — ich konkretne mięśnie wystarczą; ćwiczenie z tagiem zbiorczym
 /// pasuje do każdego z nich.
-const _musclesByRegion = <(String, List<MuscleGroup>)>[
-  ('Klatka', [MuscleGroup.chest]),
+const _musclesByRegion = <(String, IconData, List<MuscleGroup>)>[
+  ('Klatka', Icons.fitness_center_rounded, [MuscleGroup.chest]),
   (
     'Plecy',
+    Icons.accessibility_new_rounded,
     [
       MuscleGroup.lats,
       MuscleGroup.traps,
@@ -34,15 +39,18 @@ const _musclesByRegion = <(String, List<MuscleGroup>)>[
   ),
   (
     'Barki',
+    Icons.sports_gymnastics_rounded,
     [MuscleGroup.frontDelts, MuscleGroup.sideDelts, MuscleGroup.rearDelts],
   ),
   (
     'Ramiona',
+    Icons.sports_martial_arts_rounded,
     [MuscleGroup.biceps, MuscleGroup.triceps, MuscleGroup.forearms],
   ),
-  ('Core', [MuscleGroup.abs, MuscleGroup.obliques]),
+  ('Core', Icons.self_improvement_rounded, [MuscleGroup.abs, MuscleGroup.obliques]),
   (
     'Nogi',
+    Icons.directions_run_rounded,
     [
       MuscleGroup.quads,
       MuscleGroup.hamstrings,
@@ -58,6 +66,7 @@ const _musclesByRegion = <(String, List<MuscleGroup>)>[
 Future<LibraryFilterSelection?> showLibraryFiltersSheet(
   BuildContext context, {
   required LibraryFilterSelection selected,
+  required int Function(LibraryFilterSelection selection) countFor,
 }) {
   return showModalBottomSheet<LibraryFilterSelection>(
     context: context,
@@ -68,14 +77,15 @@ Future<LibraryFilterSelection?> showLibraryFiltersSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
     ),
-    builder: (_) => _FiltersSheet(initial: selected),
+    builder: (_) => _FiltersSheet(initial: selected, countFor: countFor),
   );
 }
 
 class _FiltersSheet extends StatefulWidget {
-  const _FiltersSheet({required this.initial});
+  const _FiltersSheet({required this.initial, required this.countFor});
 
   final LibraryFilterSelection initial;
+  final int Function(LibraryFilterSelection selection) countFor;
 
   @override
   State<_FiltersSheet> createState() => _FiltersSheetState();
@@ -85,6 +95,14 @@ class _FiltersSheetState extends State<_FiltersSheet> {
   late Set<MuscleGroup> _muscles = {...widget.initial.muscles};
   late Set<ExerciseEquipment> _equipment = {...widget.initial.equipment};
   late Set<ExerciseCategory> _types = {...widget.initial.types};
+  late LibrarySort _sort = widget.initial.sort;
+
+  LibraryFilterSelection get _selection => LibraryFilterSelection(
+    muscles: _muscles,
+    equipment: _equipment,
+    types: _types,
+    sort: _sort,
+  );
 
   int get _count => _muscles.length + _equipment.length + _types.length;
 
@@ -156,8 +174,8 @@ class _FiltersSheetState extends State<_FiltersSheet> {
             shrinkWrap: true,
             children: [
               const _Heading('Mięśnie'),
-              for (final (region, group) in _musclesByRegion) ...[
-                _SubHeading(region),
+              for (final (region, icon, group) in _musclesByRegion) ...[
+                _SubHeading(region, icon),
                 _Chips(
                   children: [
                     for (final muscle in group)
@@ -172,6 +190,13 @@ class _FiltersSheetState extends State<_FiltersSheet> {
               ],
               const SizedBox(height: AppSpacing.lg),
               const _Heading('Sprzęt'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Ćwiczenia bez podanego sprzętu są w „Inne”.',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                ),
+              ),
               _Chips(
                 children: [
                   for (final item in ExerciseEquipment.values)
@@ -197,6 +222,18 @@ class _FiltersSheetState extends State<_FiltersSheet> {
                     ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.lg),
+              const _Heading('Sortowanie'),
+              _Chips(
+                children: [
+                  for (final sort in LibrarySort.values)
+                    _FilterChip(
+                      label: sort.label,
+                      selected: _sort == sort,
+                      onTap: () => setState(() => _sort = sort),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -210,13 +247,7 @@ class _FiltersSheetState extends State<_FiltersSheet> {
           child: SizedBox(
             height: 52,
             child: ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(
-                LibraryFilterSelection(
-                  muscles: _muscles,
-                  equipment: _equipment,
-                  types: _types,
-                ),
-              ),
+              onPressed: () => Navigator.of(context).pop(_selection),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
@@ -224,7 +255,7 @@ class _FiltersSheetState extends State<_FiltersSheet> {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: Text(_count == 0 ? 'Pokaż wszystkie' : 'Zastosuj ($_count)'),
+              child: Text('Pokaż ${exerciseCountLabel(widget.countFor(_selection))}'),
             ),
           ),
         ),
@@ -254,20 +285,27 @@ class _Heading extends StatelessWidget {
 }
 
 class _SubHeading extends StatelessWidget {
-  const _SubHeading(this.text);
+  const _SubHeading(this.text, this.icon);
 
   final String text;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 8, bottom: 6),
-    child: Text(
-      text,
-      style: const TextStyle(
-        color: AppColors.textSecondary,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-      ),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     ),
   );
 }

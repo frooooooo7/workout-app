@@ -171,6 +171,9 @@ class LibraryCubit extends Cubit<LibraryState> {
   /// zmiana sortowania nie musi ponownie czytać bazy.
   List<Exercise> _source = const [];
 
+  /// Cała baza ćwiczeń (bez filtrów) — do podglądu liczby wyników filtrów.
+  List<Exercise> _all = const [];
+
   Timer? _queryDebounce;
 
   @override
@@ -241,6 +244,7 @@ class LibraryCubit extends Cubit<LibraryState> {
       );
       await _ensureUsage();
       if (isClosed || seq != _refreshSeq) return;
+      _all = all;
       final usage = _usage ?? ExerciseUsage.empty;
       final dated = [
         for (final e in all)
@@ -278,6 +282,47 @@ class LibraryCubit extends Cubit<LibraryState> {
     }
   }
 
+  /// Filtry z arkusza „Filtry” (łączone „i”). Ćwiczenie bez podanego sprzętu
+  /// liczy się jako „Inne”. Dokładny mięsień dopuszcza też ogólną grupę
+  /// (starsze własne ćwiczenia mają tag „Plecy”, nie „Najszersze”).
+  static List<Exercise> _applyFilters(
+    List<Exercise> source, {
+    required Set<ExerciseCategory> types,
+    required Set<ExerciseEquipment> equipment,
+    required Set<MuscleGroup> muscles,
+  }) {
+    final muscleMatches = {
+      for (final m in muscles) ...[
+        ...m.filterMatches,
+        if (m.broadGroup.isCoarse) m.broadGroup,
+      ],
+    };
+    return source.where((e) {
+      if (types.isNotEmpty && !types.contains(e.category)) return false;
+      if (equipment.isNotEmpty &&
+          !equipment.contains(e.equipment ?? ExerciseEquipment.other)) {
+        return false;
+      }
+      if (muscleMatches.isNotEmpty && !e.muscles.any(muscleMatches.contains)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  /// Ile ćwiczeń z całej bazy zostanie po takich filtrach — liczba na przycisku
+  /// arkusza „Filtry”.
+  int previewCount({
+    Set<ExerciseCategory> types = const {},
+    Set<ExerciseEquipment> equipment = const {},
+    Set<MuscleGroup> muscles = const {},
+  }) => _applyFilters(
+    _all,
+    types: types,
+    equipment: equipment,
+    muscles: muscles,
+  ).length;
+
   List<Exercise> _arrange(
     List<Exercise> source, {
     Set<ExerciseCategory>? types,
@@ -285,26 +330,12 @@ class LibraryCubit extends Cubit<LibraryState> {
     Set<MuscleGroup>? muscles,
     LibrarySort? sort,
   }) {
-    final activeTypes = types ?? state.types;
-    final activeEquipment = equipment ?? state.equipment;
-    final activeMuscles = muscles ?? state.muscles;
-    final muscleMatches = {
-      for (final m in activeMuscles) ...m.filterMatches,
-    };
-    final filtered = source.where((e) {
-      if (activeTypes.isNotEmpty && !activeTypes.contains(e.category)) {
-        return false;
-      }
-      if (activeEquipment.isNotEmpty &&
-          !activeEquipment.contains(e.equipment)) {
-        return false;
-      }
-      if (muscleMatches.isNotEmpty &&
-          !e.muscles.any(muscleMatches.contains)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    final filtered = _applyFilters(
+      source,
+      types: types ?? state.types,
+      equipment: equipment ?? state.equipment,
+      muscles: muscles ?? state.muscles,
+    );
     final usage = _usage ?? ExerciseUsage.empty;
     final activeSort = sort ?? state.sort;
     if (state.filter == LibraryFilter.recent) {

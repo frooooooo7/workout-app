@@ -40,6 +40,7 @@ class LibraryExerciseList extends StatelessWidget {
         return ExerciseRow(
           exercise: exercise,
           lastResult: usage.lastResultFor(exercise)?.label,
+          lastDate: usage.lastResultFor(exercise)?.dateLabel(DateTime.now()),
           onTap: () => onExerciseTap(exercise),
           onFavouriteTap: () => onFavouriteTap(exercise),
           onMoreTap: () => onMoreTap(exercise),

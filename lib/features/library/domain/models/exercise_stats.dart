@@ -384,6 +384,22 @@ class ExerciseLastResult {
   final int? reps;
   final int? durationSeconds;
 
+  static const _weekdays = ['pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.', 'niedz.'];
+  static const _months = [
+    'sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru',
+  ];
+
+  /// Kiedy to było: dzień tygodnia w ostatnich 6 dniach, dalej „28 paź”.
+  String dateLabel(DateTime now) {
+    final day = DateTime(date.year, date.month, date.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final days = today.difference(day).inDays;
+    if (days == 0) return 'dziś';
+    if (days == 1) return 'wczoraj';
+    if (days > 1 && days < 7) return _weekdays[date.weekday - 1];
+    return '${date.day} ${_months[date.month - 1]}';
+  }
+
   /// Krótki opis serii; `null`, gdy seria nie ma żadnej liczby do pokazania.
   String? get label {
     final weight = weightKg;
