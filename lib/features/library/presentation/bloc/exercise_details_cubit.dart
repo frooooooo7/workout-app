@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../training/domain/repositories/training_stats_repository.dart';
+import '../../domain/exercise_similarity.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
 import '../../domain/repositories/exercise_repository.dart';
@@ -12,6 +13,7 @@ class ExerciseDetailsState {
   const ExerciseDetailsState({
     this.exercise,
     this.stats,
+    this.similar = const [],
     this.loading = false,
     this.notFound = false,
   });
@@ -23,18 +25,23 @@ class ExerciseDetailsState {
   /// `null` — wyniki jeszcze się liczą.
   final ExerciseStats? stats;
 
+  /// Zamienniki z biblioteki (ten sam ruch lub mięsień).
+  final List<Exercise> similar;
+
   final bool loading;
   final bool notFound;
 
   ExerciseDetailsState copyWith({
     Exercise? exercise,
     ExerciseStats? stats,
+    List<Exercise>? similar,
     bool? loading,
     bool? notFound,
   }) {
     return ExerciseDetailsState(
       exercise: exercise ?? this.exercise,
       stats: stats ?? this.stats,
+      similar: similar ?? this.similar,
       loading: loading ?? this.loading,
       notFound: notFound ?? this.notFound,
     );
@@ -88,6 +95,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
   Future<void> load() async {
     if (state.exercise == null || initialIsSnapshot) await _reloadExercise();
     await _loadStats();
+    await _loadSimilar();
   }
 
   Future<void> _reloadExercise() async {
@@ -114,6 +122,18 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     } catch (_) {
       if (isClosed) return;
       emit(state.copyWith(loading: false, notFound: state.exercise == null));
+    }
+  }
+
+  Future<void> _loadSimilar() async {
+    final exercise = state.exercise;
+    if (exercise == null) return;
+    try {
+      final all = await _repository.getAll();
+      if (isClosed) return;
+      emit(state.copyWith(similar: ExerciseSimilarity.substitutes(exercise, all)));
+    } catch (_) {
+      // Bez zamienników karta działa normalnie.
     }
   }
 

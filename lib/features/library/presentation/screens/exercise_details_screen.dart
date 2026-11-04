@@ -14,8 +14,10 @@ import '../widgets/exercise_actions_sheet.dart';
 import '../widgets/exercise_category_badge.dart';
 import '../widgets/exercise_details/exercise_details_hero.dart';
 import '../widgets/exercise_details/exercise_history_section.dart';
+import '../widgets/exercise_details/exercise_instructions_section.dart';
 import '../widgets/exercise_details/exercise_muscle_map.dart';
 import '../widgets/exercise_details/exercise_stats_section.dart';
+import '../widgets/exercise_details/exercise_substitutes_section.dart';
 import '../widgets/library_add_exercise_sheet.dart';
 
 /// Wynik zamknięcia karty ćwiczenia — lista wie, czy coś zmieniono.
@@ -234,11 +236,32 @@ class _ExerciseDetailsScreenState extends State<ExerciseDetailsScreen> {
               children: [
                 _TitleBlock(exercise: exercise),
                 const SizedBox(height: AppSpacing.xl),
+                if (exercise.instructions case final instructions?) ...[
+                  SessionSectionCard(
+                    icon: Icons.format_list_numbered_rounded,
+                    title: 'Jak wykonać',
+                    child: ExerciseInstructionsSection(
+                      instructions: instructions,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                ],
                 SessionSectionCard(
                   icon: Icons.accessibility_new_rounded,
                   title: 'Zaangażowane mięśnie',
                   child: ExerciseMuscleMap(muscles: exercise.workingMuscles),
                 ),
+                if (state.similar.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  SessionSectionCard(
+                    icon: Icons.swap_horiz_rounded,
+                    title: 'Zamienniki',
+                    child: ExerciseSubstitutesSection(
+                      exercises: state.similar,
+                      onOpen: (other) => openExerciseDetails(context, other),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
                 SessionSectionCard(
                   icon: Icons.insights_rounded,
@@ -304,6 +327,12 @@ class _TitleBlock extends StatelessWidget {
           runSpacing: 6,
           children: [
             ExerciseCategoryBadge(category: exercise.category),
+            if (exercise.equipment case final equipment?)
+              _Pill(
+                icon: Icons.fitness_center_rounded,
+                label: equipment.label,
+                color: AppColors.textSecondary,
+              ),
             if (exercise.isMine)
               const _Pill(
                 icon: Icons.person_rounded,
