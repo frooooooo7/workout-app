@@ -20,6 +20,7 @@ class ExerciseRow extends StatelessWidget {
     this.selectionNumber,
     this.inPlan = false,
     this.inPlanLabel = 'W planie',
+    this.trailing,
   });
 
   final Exercise exercise;
@@ -40,6 +41,9 @@ class ExerciseRow extends StatelessWidget {
   /// Ćwiczenie już jest w planie lub treningu — plakietka „W planie”.
   final bool inPlan;
   final String inPlanLabel;
+
+  /// Własny element z prawej zamiast gwiazdki ulubionych (np. ikona zamiany).
+  final Widget? trailing;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -177,7 +181,12 @@ class ExerciseRow extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (selected != null)
+                if (trailing != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 8),
+                    child: trailing,
+                  )
+                else if (selected != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 8, right: 8),
                     child: AnimatedContainer(

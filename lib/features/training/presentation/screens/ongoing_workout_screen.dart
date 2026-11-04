@@ -14,6 +14,8 @@ import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
+import '../../../library/presentation/screens/swap_exercise_screen.dart';
+import '../../domain/services/exercise_swap.dart';
 import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
@@ -50,6 +52,7 @@ class OngoingWorkoutArgs {
     this.initialSession,
     this.sessionCubit,
     this.pickExercise,
+    this.swapExercise,
     this.restTimerScheduler,
     this.restTimerClock,
     this.previousPerformance,
@@ -59,6 +62,13 @@ class OngoingWorkoutArgs {
   final TrainingSession? initialSession;
   final TrainingSessionCubit? sessionCubit;
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
+
+  /// Test seam dla zamiany ćwiczenia; domyślnie [SwapExerciseScreen].
+  final Future<Exercise?> Function(
+    BuildContext context,
+    TrainingSessionExercise replacing,
+  )?
+  swapExercise;
   final RestTimerScheduler? restTimerScheduler;
 
   /// Zegar odliczania przerwy; domyślnie [DateTime.now].
@@ -83,7 +93,7 @@ enum _WorkoutMenuAction {
 }
 
 /// Menu po przytrzymaniu ćwiczenia.
-enum _ExerciseMenuAction { earlier, later, reorder, remove }
+enum _ExerciseMenuAction { earlier, later, reorder, swap, remove }
 
 class OngoingWorkoutScreen extends StatefulWidget {
   const OngoingWorkoutScreen({super.key, this.args});
@@ -1580,6 +1590,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           ),
         ],
         AppSheetAction(
+          value: _ExerciseMenuAction.swap,
+          icon: Icons.swap_horiz_rounded,
+          label: superset
+              ? 'Zamień „${exercise.exerciseName}”'
+              : 'Zamień ćwiczenie',
+          subtitle: 'Podobne na górze; zrobione serie zostają przy starym',
+        ),
+        AppSheetAction(
           value: _ExerciseMenuAction.remove,
           icon: Icons.remove_circle_outline_rounded,
           label: superset
@@ -1605,9 +1623,111 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         _applyBlockOrder(context, order);
       case _ExerciseMenuAction.reorder:
         await _showOrderSheet(context, exerciseIndex);
+      case _ExerciseMenuAction.swap:
+        await _swapExercise(context, exerciseIndex);
       case _ExerciseMenuAction.remove:
         await _removeExercise(context, exerciseIndex);
     }
+  }
+
+  /// Zamienia ćwiczenie na inne tylko w tej sesji (plan zostaje bez zmian).
+  /// Zrobione serie zostają przy starym ćwiczeniu; zawsze jest „Cofnij”.
+  Future<void> _swapExercise(BuildContext context, int exerciseIndex) async {
+    hideKeyboard();
+    final session = _draftSession.value;
+    if (session == null || exerciseIndex >= session.exercises.length) return;
+    final replaced = session.exercises[exerciseIndex];
+
+    final seam = widget.args?.swapExercise;
+    final Exercise? picked;
+    if (seam != null) {
+      picked = await seam(context, replaced);
+    } else {
+      picked = await Navigator.of(context).push<Exercise>(
+        MaterialPageRoute(
+          builder: (_) => SwapExerciseScreen(
+            replacing: TrainingSessionExerciseSummary(
+              exerciseId: replaced.exerciseId,
+              name: replaced.exerciseName,
+              tracking: replaced.tracking,
+            ),
+          ),
+        ),
+      );
+    }
+    if (picked == null || !context.mounted) return;
+
+    // Wybór mógł trwać chwilę — bierzemy aktualny stan sesji.
+    final current = _draftSession.value;
+    if (current == null) return;
+    final result = ExerciseSwap.apply(current.exercises, replaced.id, picked);
+    if (result == null) return;
+
+    // Stoper dotyczył serii, której już nie ma przy żadnym ćwiczeniu.
+    final keptSetIds = {
+      for (final e in result.exercises) ...[for (final s in e.sets) s.id],
+    };
+    if (_stopwatch.setId != null && !keptSetIds.contains(_stopwatch.setId)) {
+      _stopwatch.stop();
+    }
+    final newIndex = result.exercises.indexWhere(
+      (e) => e.id == result.newExerciseId,
+    );
+    setState(() {
+      _draftSession.value = current.copyWith(exercises: result.exercises);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    final cubit = context.read<TrainingSessionCubit>();
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(newIndex));
+      }
+      _currentExerciseIndex.value = newIndex;
+      _saveResume();
+    });
+    _showUndoSnackBar(
+      context,
+      key: const ValueKey('exercise-swapped-snackbar'),
+      message: 'Zamieniono na „${picked.name}”',
+      duration: const Duration(seconds: 6),
+      onUndo: () => _undoSwap(cubit, result),
+    );
+  }
+
+  /// „Cofnij” po zamianie: cofa tylko zamianę (stare ćwiczenie wraca, nowe
+  /// znika); serie odhaczone w międzyczasie zostają.
+  void _undoSwap(TrainingSessionCubit cubit, ExerciseSwapResult swap) {
+    final session = _draftSession.value;
+    if (!mounted || session == null) return;
+    final restored = ExerciseSwap.undo(session.exercises, swap);
+    if (restored == null) return;
+    final currentId = _currentExerciseIndex.value < session.exercises.length
+        ? session.exercises[_currentExerciseIndex.value].id
+        : null;
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: restored);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Zostajemy na tym samym ćwiczeniu; jeśli to nowe zniknęło, idziemy
+      // do przywróconego starego.
+      var index = restored.indexWhere((e) => e.id == currentId);
+      if (index == -1) {
+        index = restored.indexWhere((e) => e.id == swap.original.id);
+      }
+      if (index == -1) index = 0;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(index));
+      }
+      _currentExerciseIndex.value = index;
+      _saveResume();
+    });
   }
 
   /// Usuwa ćwiczenie tylko z tej sesji (plan zostaje taki, jaki był). Gdy
