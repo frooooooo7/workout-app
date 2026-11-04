@@ -208,4 +208,40 @@ void main() {
     expect(find.text('trening'), findsOneWidget);
     expect(await result, isNull);
   });
+
+  testWidgets('tryb wyboru: tytuł z planem, numer zaznaczenia, „W planie”', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390 * 3, 1600 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        home: const Scaffold(body: Text('trening')),
+      ),
+    );
+    navigatorKey.currentState!.push<List<Exercise>>(
+      MaterialPageRoute(
+        builder: (_) => const PickExerciseScreen(
+          title: 'Dodaj do planu',
+          subtitle: 'Push A · 1 w planie',
+          existingIds: {'1'},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Dodaj do planu'), findsOneWidget);
+    expect(find.text('Push A · 1 w planie'), findsOneWidget);
+
+    await tester.tap(find.textContaining('Wszystkie ('));
+    await tester.pumpAndSettle();
+    expect(find.text('W planie'), findsOneWidget);
+
+    await tester.tap(find.text('Wyciskanie sztangi na ławce'));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget);
+  });
 }

@@ -284,7 +284,10 @@ GoRouter buildRouter({
                         parentNavigatorKey: appRootNavigatorKey,
                         name: 'pick-exercise-for-plan',
                         path: 'pick-exercise',
-                        builder: (_, s) => const PickExerciseScreen(),
+                        // Kontekst planu (tytuł, „W planie”) przychodzi jako `extra`.
+                        builder: (_, s) => s.extra is PickExerciseScreen
+                            ? s.extra! as PickExerciseScreen
+                            : const PickExerciseScreen(),
                       ),
                     ],
                   ),

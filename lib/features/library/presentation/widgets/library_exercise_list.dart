@@ -15,6 +15,8 @@ class LibraryExerciseList extends StatelessWidget {
     required this.onMoreTap,
     this.usage = ExerciseUsage.empty,
     this.selectedIds,
+    this.selectionOrder = const [],
+    this.existingIds = const {},
   });
 
   final List<Exercise> exercises;
@@ -27,6 +29,12 @@ class LibraryExerciseList extends StatelessWidget {
 
   /// Zaznaczone ćwiczenia w trybie wyboru; `null` — zwykła lista.
   final Set<String>? selectedIds;
+
+  /// Kolejność zaznaczania (id) — daje numery 1, 2, 3 w kółkach.
+  final List<String> selectionOrder;
+
+  /// Ćwiczenia, które już są w planie lub treningu („W planie”).
+  final Set<String> existingIds;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +52,10 @@ class LibraryExerciseList extends StatelessWidget {
         return ExerciseRow(
           exercise: exercise,
           selected: selectedIds?.contains(exercise.id),
+          selectionNumber: selectionOrder.contains(exercise.id)
+              ? selectionOrder.indexOf(exercise.id) + 1
+              : null,
+          inPlan: existingIds.contains(exercise.id),
           lastResult: usage.lastResultFor(exercise)?.label,
           lastDate: usage.lastResultFor(exercise)?.dateLabel(DateTime.now()),
           onTap: () => onExerciseTap(exercise),

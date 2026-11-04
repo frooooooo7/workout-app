@@ -12,6 +12,7 @@ class LibraryHeader extends StatelessWidget {
     required this.onAddTap,
     required this.onBackTap,
     this.title = 'Biblioteka',
+    this.subtitle,
     this.activeFilterCount = 0,
   });
 
@@ -21,6 +22,9 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback onAddTap;
   final VoidCallback onBackTap;
   final String title;
+
+  /// Druga linia pod tytułem (np. nazwa planu w trybie wyboru).
+  final String? subtitle;
 
   /// Liczba aktywnych filtrów typu — pokazywana jako plakietka na „tune”.
   final int activeFilterCount;
@@ -43,6 +47,19 @@ class LibraryHeader extends StatelessWidget {
             ),
           ],
         ),
+        if (subtitle != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         _SearchBar(
           controller: searchController,

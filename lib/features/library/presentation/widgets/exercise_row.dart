@@ -17,6 +17,8 @@ class ExerciseRow extends StatelessWidget {
     this.lastResult,
     this.lastDate,
     this.selected,
+    this.selectionNumber,
+    this.inPlan = false,
   });
 
   final Exercise exercise;
@@ -30,6 +32,12 @@ class ExerciseRow extends StatelessWidget {
   /// Tryb wyboru: `true` — zaznaczone, `false` — nie; `null` — zwykły wiersz
   /// (z gwiazdką ulubionych).
   final bool? selected;
+
+  /// Numer zaznaczenia (1, 2, 3…) w kółku zamiast „ptaszka”.
+  final int? selectionNumber;
+
+  /// Ćwiczenie już jest w planie lub treningu — plakietka „W planie”.
+  final bool inPlan;
   final VoidCallback? onTap;
   final VoidCallback? onFavouriteTap;
   final VoidCallback? onMoreTap;
@@ -90,16 +98,45 @@ class ExerciseRow extends StatelessWidget {
                           height: 1.2,
                         ),
                       ),
-                      if (subtitle.isNotEmpty) ...[
+                      if (subtitle.isNotEmpty || inPlan) ...[
                         const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12.5,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ),
+                            if (inPlan) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.16,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'W planie',
+                                  style: TextStyle(
+                                    color: AppColors.primaryVariant,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ],
@@ -154,11 +191,22 @@ class ExerciseRow extends StatelessWidget {
                         ),
                       ),
                       child: selected!
-                          ? const Icon(
-                              Icons.check_rounded,
-                              size: 18,
-                              color: AppColors.onPrimary,
-                            )
+                          ? (selectionNumber != null
+                                ? Center(
+                                    child: Text(
+                                      '$selectionNumber',
+                                      style: const TextStyle(
+                                        color: AppColors.onPrimary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                    color: AppColors.onPrimary,
+                                  ))
                           : null,
                     ),
                   )

@@ -1129,7 +1129,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     } else {
       picked =
           await Navigator.of(context).push<List<Exercise>>(
-            MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+            MaterialPageRoute(
+              builder: (_) => PickExerciseScreen(
+                title: 'Dodaj do treningu',
+                subtitle: session.planName.trim().isEmpty
+                    ? '${session.exercises.length} w treningu'
+                    : '${session.planName} · ${session.exercises.length} w treningu',
+                existingIds: {for (final e in session.exercises) e.exerciseId},
+              ),
+            ),
           ) ??
           const [];
     }

@@ -113,6 +113,14 @@ class _EditWorkoutView extends StatelessWidget {
     return discard == true;
   }
 
+  String _pickSubtitle(EditWorkoutCubit cubit) {
+    final draft = cubit.state.draft;
+    final count = draft?.exercises.length ?? 0;
+    final label = count == 0 ? 'bez ćwiczeń' : '$count w treningu';
+    final name = draft?.name.trim() ?? '';
+    return name.isEmpty ? label : '$name · $label';
+  }
+
   Future<void> _addExercise(BuildContext context) async {
     final cubit = context.read<EditWorkoutCubit>();
     final seam = pickExercise;
@@ -123,7 +131,16 @@ class _EditWorkoutView extends StatelessWidget {
     } else {
       picked =
           await Navigator.of(context).push<List<Exercise>>(
-            MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
+            MaterialPageRoute(
+              builder: (_) => PickExerciseScreen(
+                title: 'Dodaj do treningu',
+                subtitle: _pickSubtitle(cubit),
+                existingIds: {
+                  for (final e in cubit.state.draft?.exercises ?? const [])
+                    e.exerciseId,
+                },
+              ),
+            ),
           ) ??
           const [];
     }

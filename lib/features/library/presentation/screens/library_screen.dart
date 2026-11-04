@@ -12,6 +12,7 @@ import '../../domain/models/exercise_stats.dart';
 import '../../domain/models/library_part.dart';
 import '../bloc/library_cubit.dart';
 import '../widgets/exercise_actions_sheet.dart';
+import '../widgets/exercise_card_illustration.dart';
 import '../widgets/library_add_exercise_sheet.dart';
 import '../widgets/library_category_tabs.dart';
 import '../widgets/library_empty_state.dart';
@@ -30,9 +31,20 @@ class LibraryScreen extends StatefulWidget {
   /// [pickMode] — wybór ćwiczeń do planu albo treningu: stuknięcie zaznacza
   /// (wielokrotny wybór), na dole pojawia się „Dodaj N ćwiczeń”, a ekran
   /// zwraca `List<Exercise>`. Szczegóły ćwiczenia: przytrzymanie wiersza.
-  const LibraryScreen({super.key, this.pickMode = false});
+  const LibraryScreen({
+    super.key,
+    this.pickMode = false,
+    this.pickTitle = 'Wybierz ćwiczenia',
+    this.pickSubtitle,
+    this.existingIds = const {},
+  });
 
   final bool pickMode;
+  final String pickTitle;
+  final String? pickSubtitle;
+
+  /// Tryb wyboru: id ćwiczeń już dodanych (plakietka „W planie”).
+  final Set<String> existingIds;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -304,7 +316,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: SizedBox(
                         height: 52,
-                        child: ElevatedButton(
+                        child: Row(
+                          children: [
+                            _SelectedThumbs(
+                              exercises: _selected.values.toList(),
+                            ),
+                            Expanded(child: ElevatedButton(
                           onPressed: () => Navigator.of(
                             context,
                           ).pop(_selected.values.toList()),
@@ -318,6 +335,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           child: Text(
                             'Dodaj ${exerciseCountLabel(_selected.length)}',
                           ),
+                        )),
+                          ],
                         ),
                       ),
                     ),
@@ -339,8 +358,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 current.activeFilterCount,
                             builder: (context, state) => LibraryHeader(
                               title: widget.pickMode
-                                  ? 'Wybierz ćwiczenia'
+                                  ? widget.pickTitle
                                   : 'Biblioteka',
+                              subtitle:
+                                  widget.pickMode ? widget.pickSubtitle : null,
                               searchController: _searchController,
                               onSearchChanged: (query) {
                                 cubit.setQuery(query);
@@ -563,6 +584,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             selectedIds: widget.pickMode
                                 ? _selected.keys.toSet()
                                 : null,
+                            selectionOrder: _selected.keys.toList(),
+                            existingIds: widget.existingIds,
                             onExerciseTap: (exercise) =>
                                 _tapExercise(context, exercise),
                             onMoreTap: (exercise) =>
@@ -583,6 +606,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Pasek na dole w trybie wyboru: miniatury ostatnich zaznaczonych ćwiczeń.
+class _SelectedThumbs extends StatelessWidget {
+  const _SelectedThumbs({required this.exercises});
+
+  final List<Exercise> exercises;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = exercises.reversed.take(3).toList().reversed.toList();
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final exercise in shown)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: ExerciseCardIllustration(exercise: exercise),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
