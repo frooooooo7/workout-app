@@ -156,6 +156,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     required String description,
     required ExerciseTracking tracking,
     required DistanceUnit distanceUnit,
+    ExerciseExtras? extras,
   }) async {
     final updated = await _repository.update(
       id: state.exercise?.id ?? exerciseId,
@@ -165,6 +166,7 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
       description: description,
       tracking: tracking,
       distanceUnit: distanceUnit,
+      extras: extras,
     );
     if (!isClosed) {
       emit(state.copyWith(exercise: updated));
@@ -173,6 +175,8 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     }
     return updated;
   }
+
+  Future<List<Exercise>> allExercises() => _repository.getAll();
 
   Future<void> delete() => _repository.delete(state.exercise?.id ?? exerciseId);
 }

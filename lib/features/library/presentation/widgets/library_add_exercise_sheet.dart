@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/exercise_search.dart';
 import '../../domain/models/exercise.dart';
 import 'exercise_tracking_picker.dart';
 
@@ -14,6 +15,7 @@ typedef LibraryAddExerciseSubmit = Future<Exercise> Function({
   required String description,
   required ExerciseTracking tracking,
   required DistanceUnit distanceUnit,
+  required ExerciseExtras extras,
   Uint8List? imageBytes,
   String? imageFilename,
 });
@@ -25,6 +27,7 @@ typedef LibraryEditExerciseSubmit = Future<Exercise> Function({
   required String description,
   required ExerciseTracking tracking,
   required DistanceUnit distanceUnit,
+  required ExerciseExtras extras,
 });
 
 /// Opens a modal bottom sheet to create a user-owned exercise.
@@ -32,13 +35,15 @@ typedef LibraryEditExerciseSubmit = Future<Exercise> Function({
 Future<Exercise?> showLibraryAddExerciseSheet(
   BuildContext context, {
   required LibraryAddExerciseSubmit onSubmit,
+  List<Exercise> existing = const [],
 }) async {
   final result = await showModalBottomSheet<Exercise?>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black54,
-    builder: (sheetContext) => _LibraryAddExerciseSheet(onSubmit: onSubmit),
+    builder: (sheetContext) =>
+        _LibraryAddExerciseSheet(onSubmit: onSubmit, existing: existing),
   );
   return result;
 }
@@ -50,6 +55,7 @@ Future<Exercise?> showLibraryEditExerciseSheet(
   BuildContext context, {
   required Exercise exercise,
   required LibraryEditExerciseSubmit onSubmit,
+  List<Exercise> existing = const [],
 }) {
   return showModalBottomSheet<Exercise?>(
     context: context,
@@ -58,6 +64,7 @@ Future<Exercise?> showLibraryEditExerciseSheet(
     barrierColor: Colors.black54,
     builder: (sheetContext) => _LibraryAddExerciseSheet(
       initial: exercise,
+      existing: existing,
       onSubmit: ({
         required String name,
         required List<MuscleGroup> muscles,
@@ -65,6 +72,7 @@ Future<Exercise?> showLibraryEditExerciseSheet(
         required String description,
         required ExerciseTracking tracking,
         required DistanceUnit distanceUnit,
+        required ExerciseExtras extras,
         Uint8List? imageBytes,
         String? imageFilename,
       }) =>
@@ -75,15 +83,23 @@ Future<Exercise?> showLibraryEditExerciseSheet(
         description: description,
         tracking: tracking,
         distanceUnit: distanceUnit,
+        extras: extras,
       ),
     ),
   );
 }
 
 class _LibraryAddExerciseSheet extends StatefulWidget {
-  const _LibraryAddExerciseSheet({required this.onSubmit, this.initial});
+  const _LibraryAddExerciseSheet({
+    required this.onSubmit,
+    this.initial,
+    this.existing = const [],
+  });
 
   final LibraryAddExerciseSubmit onSubmit;
+
+  /// Cała baza — do ostrzeżenia o podobnym ćwiczeniu.
+  final List<Exercise> existing;
 
   /// Edytowane ćwiczenie; `null` — tworzymy nowe.
   final Exercise? initial;
@@ -100,6 +116,17 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _nameFocus = FocusNode();
+  final _aliasesController = TextEditingController();
+  final _stepsController = TextEditingController();
+  final _mistakesController = TextEditingController();
+
+  ExerciseEquipment? _equipment;
+
+  /// Sekcja „Więcej” (inne nazwy, jak wykonać) rozwinięta.
+  bool _moreOpen = false;
+
+  /// Podobne ćwiczenie, które już jest w bazie (ostrzeżenie pod nazwą).
+  Exercise? _similar;
 
   Set<MuscleGroup> _selectedMuscles = {};
 
@@ -146,6 +173,12 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
       _trackingChosen = true;
       _selectedMuscles = initial.workingMuscles.toSet();
       _legacyMuscles = _selectedMuscles.where((m) => m.isCoarse).toSet();
+      _equipment = initial.equipment;
+      _aliasesController.text = initial.aliases.join(', ');
+      _stepsController.text = initial.instructions?.steps.join('\n') ?? '';
+      _mistakesController.text =
+          initial.instructions?.mistakes.join('\n') ?? '';
+      _moreOpen = initial.aliases.isNotEmpty || initial.instructions != null;
     }
   }
 
@@ -179,6 +212,9 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
     _nameController.dispose();
     _descriptionController.dispose();
     _nameFocus.dispose();
+    _aliasesController.dispose();
+    _stepsController.dispose();
+    _mistakesController.dispose();
     super.dispose();
   }
 
@@ -208,6 +244,47 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
     return null;
   }
 
+  static List<String> _lines(String raw) => [
+    for (final line in raw.split('\n'))
+      if (line.trim().isNotEmpty) line.trim(),
+  ];
+
+  static List<String> _aliasList(String raw) => [
+    for (final part in raw.split(RegExp(r'[,\n]')))
+      if (part.trim().isNotEmpty) part.trim(),
+  ];
+
+  String? _validateExtras() {
+    final aliases = _aliasList(_aliasesController.text);
+    if (aliases.length > 10) return 'Inne nazwy: najwyżej 10.';
+    if (aliases.any((a) => a.length > 60)) {
+      return 'Inna nazwa może mieć co najwyżej 60 znaków.';
+    }
+    final steps = _lines(_stepsController.text);
+    if (steps.length > 10) return 'Kroki: najwyżej 10.';
+    if (steps.any((s) => s.length > 300)) {
+      return 'Krok może mieć co najwyżej 300 znaków.';
+    }
+    final mistakes = _lines(_mistakesController.text);
+    if (mistakes.length > 6) return 'Częste błędy: najwyżej 6.';
+    if (mistakes.any((m) => m.length > 200)) {
+      return 'Błąd może mieć co najwyżej 200 znaków.';
+    }
+    return null;
+  }
+
+  ExerciseExtras _buildExtras() {
+    final steps = _lines(_stepsController.text);
+    final mistakes = _lines(_mistakesController.text);
+    return ExerciseExtras(
+      equipment: _equipment,
+      aliases: _aliasList(_aliasesController.text),
+      instructions: steps.isEmpty && mistakes.isEmpty
+          ? null
+          : ExerciseInstructions(steps: steps, mistakes: mistakes),
+    );
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
@@ -235,7 +312,9 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
     final nameErr = _validateName(_nameController.text);
     final descErr = _validateDescription(_descriptionController.text);
     final musclesErr = _validateMuscles(_selectedMuscles);
-    final combined = nameErr ?? descErr ?? musclesErr;
+    final extrasErr = _validateExtras();
+    if (extrasErr != null && !_moreOpen) _moreOpen = true;
+    final combined = nameErr ?? descErr ?? musclesErr ?? extrasErr;
     setState(() => _errorText = combined);
     if (combined != null) return;
 
@@ -264,6 +343,7 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
         description: _descriptionController.text.trim(),
         tracking: _tracking,
         distanceUnit: _distanceUnit,
+        extras: _buildExtras(),
         imageBytes: imageBytes,
         imageFilename: imageFilename,
       );
@@ -381,12 +461,19 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                   cursorColor: AppColors.primary,
                   decoration: _fieldDecoration(hintText: 'Nazwa ćwiczenia'),
-                  onChanged: (_) {
-                    if (_errorText != null) {
-                      setState(() => _errorText = null);
-                    }
+                  onChanged: (value) {
+                    final similar = ExerciseSearch.findSimilar(
+                      widget.existing,
+                      value,
+                      excludeId: widget.initial?.id,
+                    );
+                    setState(() {
+                      _similar = similar;
+                      if (_errorText != null) _errorText = null;
+                    });
                   },
                 ),
+                if (_similar != null) _SimilarWarning(exercise: _similar!),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _descriptionController,
@@ -529,6 +616,54 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   ),
                   const SizedBox(height: 12),
                 ],
+                const SizedBox(height: 6),
+                const Text(
+                  'Sprzęt',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final equipment in ExerciseEquipment.values)
+                      ChoiceChip(
+                        label: Text(equipment.label),
+                        selected: _equipment == equipment,
+                        showCheckmark: false,
+                        onSelected: _submitting
+                            ? null
+                            : (selected) => setState(
+                                () => _equipment = selected ? equipment : null,
+                              ),
+                        selectedColor: AppColors.primary.withValues(
+                          alpha: 0.22,
+                        ),
+                        backgroundColor: AppColors.background,
+                        labelStyle: TextStyle(
+                          color: _equipment == equipment
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                          fontWeight: _equipment == equipment
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                        side: BorderSide(
+                          color: _equipment == equipment
+                              ? AppColors.primary
+                              : AppColors.border,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 18),
                 const Text(
                   'Kategoria',
@@ -598,6 +733,74 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
                   onDistanceUnitChanged: (unit) =>
                       setState(() => _distanceUnit = unit),
                 ),
+                const SizedBox(height: 14),
+                InkWell(
+                  onTap: _submitting
+                      ? null
+                      : () => setState(() => _moreOpen = !_moreOpen),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Więcej: inne nazwy, jak wykonać',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _moreOpen
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_moreOpen) ...[
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _aliasesController,
+                    enabled: !_submitting,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    cursorColor: AppColors.primary,
+                    decoration: _fieldDecoration(
+                      hintText: 'Inne nazwy po przecinku, np. DB bench',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _stepsController,
+                    enabled: !_submitting,
+                    minLines: 3,
+                    maxLines: 8,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    cursorColor: AppColors.primary,
+                    decoration: _fieldDecoration(
+                      hintText: 'Jak wykonać: jeden krok w linii (do 10)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _mistakesController,
+                    enabled: !_submitting,
+                    minLines: 2,
+                    maxLines: 6,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    cursorColor: AppColors.primary,
+                    decoration: _fieldDecoration(
+                      hintText: 'Częste błędy: jeden w linii (do 6)',
+                    ),
+                  ),
+                ],
                 if (_errorText != null) ...[
                   const SizedBox(height: 14),
                   Text(
@@ -650,6 +853,48 @@ class _LibraryAddExerciseSheetState extends State<_LibraryAddExerciseSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Żółta karta pod nazwą: takie ćwiczenie już jest w bibliotece.
+class _SimilarWarning extends StatelessWidget {
+  const _SimilarWarning({required this.exercise});
+
+  final Exercise exercise;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB74D).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFB74D).withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: Color(0xFFFFB74D),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Masz już podobne ćwiczenie: ${exercise.name}',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

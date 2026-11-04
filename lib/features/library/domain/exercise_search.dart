@@ -116,4 +116,36 @@ abstract final class ExerciseSearch {
     });
     return [for (final item in scored) item.$3];
   }
+
+  /// Ćwiczenie, które wygląda na to samo co wpisana [name] — do ostrzeżenia
+  /// o duplikacie w formularzu. Tak samo nazwane (także z innych nazw) albo,
+  /// od dwóch słów, takie, którego nazwa zawiera wszystkie wpisane słowa
+  /// („Wyciskanie na ławce” → „Wyciskanie sztangi na ławce”). [excludeId]
+  /// pomija edytowane ćwiczenie. Przy kilku trafieniach wygrywa najkrótsza
+  /// nazwa.
+  static Exercise? findSimilar(
+    Iterable<Exercise> exercises,
+    String name, {
+    String? excludeId,
+  }) {
+    final typed = tokens(name);
+    if (typed.isEmpty) return null;
+    final typedKey = (List.of(typed)..sort()).join(' ');
+    Exercise? best;
+    for (final exercise in exercises) {
+      if (exercise.id == excludeId) continue;
+      final names = [exercise.name, ...exercise.aliases];
+      final same = names.any(
+        (n) => (List.of(tokens(n))..sort()).join(' ') == typedKey,
+      );
+      final contains = typed.length >= 2 &&
+          (score(exercise, name) ?? 0) >= 80 &&
+          tokens(exercise.name).length >= typed.length;
+      if (!same && !contains) continue;
+      if (best == null || exercise.name.length < best.name.length) {
+        best = exercise;
+      }
+    }
+    return best;
+  }
 }

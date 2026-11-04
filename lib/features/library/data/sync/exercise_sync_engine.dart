@@ -190,6 +190,12 @@ class ExerciseSyncEngine extends SyncEngineBase {
     return true;
   }
 
+  static ExerciseExtras _extrasOf(Exercise e) => ExerciseExtras(
+    equipment: e.equipment,
+    aliases: e.aliases,
+    instructions: e.instructions,
+  );
+
   Future<bool> _flushCreate(ExerciseDto dto) async {
     final domain = dto.toDomain();
     final created = await _callRemote(
@@ -203,6 +209,7 @@ class ExerciseSyncEngine extends SyncEngineBase {
         clientId: dto.localId,
         tracking: domain.tracking,
         distanceUnit: domain.distanceUnit,
+        extras: _extrasOf(domain),
       ),
     );
     if (created == null) return false;
@@ -278,6 +285,7 @@ class ExerciseSyncEngine extends SyncEngineBase {
         description: domain.description,
         tracking: domain.tracking,
         distanceUnit: domain.distanceUnit,
+        extras: _extrasOf(domain),
       ),
     );
     if (updated == null) return false;

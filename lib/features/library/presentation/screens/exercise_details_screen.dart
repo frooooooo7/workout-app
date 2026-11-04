@@ -80,9 +80,12 @@ class _ExerciseDetailsScreenState extends State<ExerciseDetailsScreen> {
 
   Future<void> _edit(Exercise exercise) async {
     final cubit = context.read<ExerciseDetailsCubit>();
+    final existing = await cubit.allExercises();
+    if (!mounted) return;
     final updated = await showLibraryEditExerciseSheet(
       context,
       exercise: exercise,
+      existing: existing,
       onSubmit: cubit.update,
     );
     if (!mounted || updated == null) return;
