@@ -142,6 +142,65 @@ void main() {
     );
   });
 
+  testWidgets('shows the comparison card against the previous plan workout', (
+    tester,
+  ) async {
+    final current = _completedSession().copyWith(planLocalId: 'plan-push');
+    final earlier = _benchSession(
+      DateTime.utc(2026, 9, 6, 15),
+      weight: '60',
+      reps: '8',
+    ).copyWith(planLocalId: 'plan-push');
+    final repository = _FakeTrainingSessionRepository(current);
+
+    await tester.pumpWidget(
+      buildScreen(repository, history: [earlier, current]),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('workout-comparison-card'));
+    await scrollTo(tester, card);
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.text('Progres w 1 z 1 ćwiczenia'),
+      ),
+      findsOneWidget,
+    );
+    // 60 × 8 → 62,5 × 8.
+    expect(
+      find.descendant(of: card, matching: find.text('2,5 kg')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('first workout of a plan shows one line, no comparison card', (
+    tester,
+  ) async {
+    final current = _completedSession().copyWith(planLocalId: 'plan-push');
+    final repository = _FakeTrainingSessionRepository(current);
+
+    await tester.pumpWidget(buildScreen(repository, history: [current]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pierwszy trening „Push”'), findsOneWidget);
+    expect(find.byKey(const ValueKey('workout-comparison-card')), findsNothing);
+  });
+
+  testWidgets('no comparison without any earlier history', (tester) async {
+    final repository = _FakeTrainingSessionRepository(_completedSession());
+
+    await tester.pumpWidget(buildScreen(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('workout-comparison-card')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('workout-comparison-first')),
+      findsNothing,
+    );
+  });
+
   testWidgets('no record banner without a better result or earlier history', (
     tester,
   ) async {
