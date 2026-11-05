@@ -6,6 +6,7 @@ import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/training_session.dart';
 import '../bloc/training_session_cubit.dart';
 import '../screens/ongoing_workout_screen.dart';
+import 'warmup_gate.dart';
 
 /// Rozpoczyna trening z [plan] i otwiera ekran trwającej sesji.
 /// Szczegóły zachowania — [startWorkout].
@@ -18,6 +19,7 @@ Future<bool> startPlanWorkout(
     context,
     start: (cubit) => cubit.startFromPlan(plan),
     replace: replace,
+    warmup: WarmupRequest.plan(plan),
   );
 }
 
@@ -28,13 +30,26 @@ Future<bool> startPlanWorkout(
 /// [replace] podmienia bieżący ekran (ekrany wyboru); w przeciwnym razie
 /// czeka na zamknięcie ekranu sesji i odświeża cubit. Zwraca `true`, jeśli
 /// ekran sesji został otwarty.
+///
+/// Gdy podano [warmup], przed utworzeniem sesji działa bramka rozgrzewki
+/// ([runWarmupGate]): pytanie przy pierwszym starcie albo panel ze stoperem.
+/// Zegar treningu rusza dopiero po „Rozpocznij trening”.
 Future<bool> startWorkout(
   BuildContext context, {
   required Future<TrainingSession?> Function(TrainingSessionCubit cubit) start,
   bool replace = false,
+  WarmupRequest? warmup,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final sessionCubit = context.read<TrainingSessionCubit>();
+  if (warmup != null) {
+    final proceed = await runWarmupGate(
+      context,
+      warmup,
+      sessionInProgress: sessionCubit.state.activeSession != null,
+    );
+    if (!proceed || !context.mounted) return false;
+  }
   final session = await start(sessionCubit);
   if (!context.mounted) return false;
 

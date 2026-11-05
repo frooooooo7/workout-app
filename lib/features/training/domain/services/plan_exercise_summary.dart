@@ -1,4 +1,4 @@
-import '../../../library/domain/models/exercise_tracking.dart';
+import '../../../library/domain/models/exercise.dart';
 import '../models/custom_training_plan.dart';
 
 /// Skrót ćwiczenia w planie w jednej linii: „4 × 8–10 · 60 kg”,
@@ -69,4 +69,19 @@ String _extreme(List<String> raw, List<String> shown, {required bool min}) {
     if (min ? a < b : a > b) best = i;
   }
   return shown[best];
+}
+
+/// „Klatka · Barki · Triceps” — główna partia każdego ćwiczenia, bez
+/// powtórzeń, najwyżej cztery.
+String planMuscleSummary(List<PlanExercise> exercises) {
+  final labels = <String>{};
+  for (final exercise in exercises) {
+    final muscles = exercise.exercise.muscles.where(
+      (m) => m != MuscleGroup.all,
+    );
+    if (muscles.isEmpty) continue;
+    labels.add(muscles.first.shortLabel);
+    if (labels.length == 4) break;
+  }
+  return labels.join(' · ');
 }

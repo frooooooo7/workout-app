@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/training/data/offline_first_training_session_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/post_draft.dart';
@@ -8,11 +9,19 @@ import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
+import 'package:gym/features/training/presentation/utils/warmup_gate.dart';
 import 'package:gym/features/training/presentation/screens/training_session_details_screen.dart';
 import 'package:gym/features/training/presentation/widgets/workout_summary/share_workout_sheet.dart';
 
 void main() {
   const sessionId = 'session-1';
+
+  setUp(() async {
+    // Powtórzenie przechodzi przez bramkę rozgrzewki; testy bez niej.
+    await ServiceLocator.warmupSettings.attach(null);
+    await ServiceLocator.warmupSession.attach(null);
+    await ServiceLocator.warmupSettings.setEnabled(false);
+  });
 
   Widget buildScreen({
     required _FakeHistoryRepository history,
@@ -340,6 +349,61 @@ void main() {
     expect(args.sessionCubit, isNotNull);
     expect(args.initialSession?.status, TrainingSessionStatus.active);
     expect(args.initialSession?.exercises.single.exerciseName, 'Bench');
+  });
+
+  testWidgets('repeat opens the warm-up panel first and starts after it', (
+    tester,
+  ) async {
+    await ServiceLocator.warmupSettings.setEnabled(true);
+    final history = _FakeHistoryRepository(_detail());
+    final sessions = _FakeSessionRepository(_completed(withExercises: true));
+    final navigations = <String>[];
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        navigate: (context, location, {extra}) async {
+          navigations.add(location);
+          return location == kWarmupRoute ? true : null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenuItem(tester, 'Powtórz trening');
+
+    expect(navigations, [kWarmupRoute, '/app/training/ongoing-workout']);
+    expect(sessions.repeatedFrom.single.id, sessionId);
+    // Panel „zjadł” rozgrzewkę przy starcie; tu zostaje tylko trwająca.
+    expect(
+      ServiceLocator.warmupSession.current?.target.key,
+      'repeat:$sessionId',
+    );
+  });
+
+  testWidgets('hiding the warm-up panel does not start the repeat', (
+    tester,
+  ) async {
+    await ServiceLocator.warmupSettings.setEnabled(true);
+    final history = _FakeHistoryRepository(_detail());
+    final sessions = _FakeSessionRepository(_completed(withExercises: true));
+    final navigations = <String>[];
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        navigate: (context, location, {extra}) async {
+          navigations.add(location);
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenuItem(tester, 'Powtórz trening');
+
+    expect(navigations, [kWarmupRoute]);
+    expect(sessions.repeatedFrom, isEmpty);
   });
 
   testWidgets('repeat with an active workout offers going back to it', (

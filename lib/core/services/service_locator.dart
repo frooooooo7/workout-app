@@ -40,6 +40,8 @@ import '../../features/training/data/offline_first_training_session_repository.d
 import '../../features/training/data/plan_sharing_repository.dart';
 import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/settings_aware_rest_timer_scheduler.dart';
+import '../../features/training/data/warmup_goal_notification_scheduler.dart';
+import '../../features/training/data/warmup_stores.dart';
 import '../../features/training/data/shared_preferences_rest_timer_notification_settings.dart';
 import '../../features/training/data/shared_preferences_workout_reminder_settings.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
@@ -57,6 +59,7 @@ import '../../features/training/domain/repositories/training_session_repository.
 import '../../features/training/domain/repositories/training_stats_repository.dart';
 import '../../features/training/domain/services/rest_timer_notification_settings.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
+import '../../features/training/domain/services/warmup_goal_scheduler.dart';
 import '../../features/training/domain/services/workout_reminder_scheduler.dart';
 import '../../features/training/domain/services/workout_reminder_settings.dart';
 import '../../features/profile/data/api_body_measurements_repository.dart';
@@ -135,6 +138,13 @@ class ServiceLocator {
   /// Metoda progresji konta (Ustawienia → Progresja).
   static final progressionSettings = ProgressionSettingsStore();
   static ProgressionSettingsRemote? _progressionRemote;
+
+  /// Rozgrzewka przed treningiem: ustawienia konta, trwająca rozgrzewka
+  /// i powiadomienie o osiągnięciu celu czasu.
+  static final warmupSettings = WarmupSettingsStore();
+  static final warmupSession = WarmupSessionStore();
+  static WarmupGoalScheduler warmupGoalScheduler =
+      const NoopWarmupGoalScheduler();
 
   /// Dziennik masy ciała w bazie konta (offline-first). `null` bez
   /// zalogowanego użytkownika (i w testach bez bazy) — karty i zapisy wagi
@@ -303,6 +313,9 @@ class ServiceLocator {
     workoutReminderScheduler = WorkoutReminderNotificationScheduler(
       notifications: localNotifications,
     );
+    warmupGoalScheduler = WarmupGoalNotificationScheduler(
+      notifications: localNotifications,
+    );
     unawaited(_restoreWorkoutReminder());
 
     currentUser.addListener(_onUserChanged);
@@ -365,6 +378,11 @@ class ServiceLocator {
         requestedUserId == null ? null : _progressionRemote,
       ),
     );
+    unawaited(warmupSettings.attach(requestedUserId));
+    unawaited(warmupSession.attach(requestedUserId));
+    if (requestedUserId == null) {
+      unawaited(warmupGoalScheduler.cancelGoalReached().catchError((_) {}));
+    }
 
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((
       _,

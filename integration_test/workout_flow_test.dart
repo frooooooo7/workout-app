@@ -41,6 +41,7 @@ import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/services/rest_timer_scheduler.dart';
 import 'package:gym/features/training/presentation/screens/training_session_details_screen.dart';
 import 'package:gym/features/training/presentation/widgets/ongoing_workout/set_check_button.dart';
+import 'package:gym/features/training/presentation/widgets/warmup_first_start_sheet.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:integration_test/integration_test.dart';
@@ -213,6 +214,10 @@ void main() {
 
       // ── Trening ──────────────────────────────────────────────────────────
       await tester.tap(find.byKey(const ValueKey('start-workout-button')));
+      // Pierwszy start pyta o rozgrzewkę — odpowiadamy „od razu trening”.
+      await _pumpUntilFound(tester, find.byKey(warmupFirstStartNoKey));
+      await _pumpFrames(tester, count: 10); // arkusz jeszcze wjeżdża
+      await tester.tap(find.byKey(warmupFirstStartNoKey));
       await _pumpUntilFound(
         tester,
         find.byKey(const Key('finish-workout-button')),

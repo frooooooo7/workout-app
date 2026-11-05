@@ -13,6 +13,7 @@ import '../../features/pro/presentation/screens/pro_trial_end_screen.dart';
 import '../../features/pro/presentation/screens/pro_welcome_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../../features/training/presentation/screens/warmup_screen.dart';
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
@@ -238,6 +239,13 @@ GoRouter buildRouter({
                       final args = s.extra as OngoingWorkoutArgs?;
                       return OngoingWorkoutScreen(args: args);
                     },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    name: 'warmup',
+                    path: 'warmup',
+                    builder: (_, s) =>
+                        WarmupScreen(args: s.extra as WarmupArgs?),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
