@@ -8,6 +8,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/training_session_cubit.dart';
 import '../utils/start_workout.dart';
+import '../utils/warmup_gate.dart';
 import '../widgets/activity_type_option_tile.dart';
 
 class ActivityTypeSelectionScreen extends StatelessWidget {
@@ -30,6 +31,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
     context,
     start: (cubit) => cubit.startCustom(),
     replace: true,
+    warmup: const WarmupRequest.custom(),
   );
 
   @override

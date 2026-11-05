@@ -6,10 +6,10 @@ import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../../../core/widgets/skeleton.dart';
-import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_home_insights.dart';
+import '../../domain/services/plan_exercise_summary.dart';
 import 'training_day_status.dart';
 import 'training_plan_exercises_table.dart';
 import 'training_record_to_beat.dart';
@@ -31,6 +31,7 @@ class TrainingTodayPlanSection extends StatelessWidget {
     this.insights = TrainingHomeInsights.empty,
     this.today,
     this.sessionInProgress = false,
+    this.warmupInProgress = false,
   });
 
   /// 1 = poniedziałek … 7 = niedziela.
@@ -51,6 +52,9 @@ class TrainingTodayPlanSection extends StatelessWidget {
   /// Trwa już trening — „Rozpocznij” jest wyszarzony (wraca się do niego
   /// paskiem „Trwa trening” nad kartą).
   final bool sessionInProgress;
+
+  /// Trwa (schowana) rozgrzewka przed treningiem, więc starty są wyszarzone.
+  final bool warmupInProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +164,9 @@ class TrainingTodayPlanSection extends StatelessWidget {
           insights: insights,
           onOpen: () => onOpenPlan(plan),
           onStart: sessionInProgress ? null : () => onStartPlan(plan),
+          disabledHint: warmupInProgress
+              ? 'Trwa rozgrzewka — wróć do niej albo ją przerwij.'
+              : 'Trwa trening — dokończ go, zanim zaczniesz kolejny.',
           customButton: customButton,
         ),
       ),
@@ -360,6 +367,7 @@ class _PlanContent extends StatelessWidget {
     required this.insights,
     required this.onOpen,
     required this.onStart,
+    required this.disabledHint,
     required this.customButton,
   });
 
@@ -369,12 +377,15 @@ class _PlanContent extends StatelessWidget {
 
   /// `null` — trwa inny trening, przycisk wyszarzony.
   final VoidCallback? onStart;
+
+  /// Podpowiedź pod wyszarzonym przyciskiem.
+  final String disabledHint;
   final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
     final color = PlanColors.of(plan.name);
-    final muscles = _muscleSummary(plan.exercises);
+    final muscles = planMuscleSummary(plan.exercises);
     final setsCount = plan.exercises.fold<int>(0, (s, e) => s + e.sets.length);
     final durationSec = insights.durationFor(plan.name);
     final record = recordToBeatFor(
@@ -471,11 +482,11 @@ class _PlanContent extends StatelessWidget {
         ),
         if (onStart == null) ...[
           const SizedBox(height: 8),
-          const Text(
-            'Trwa trening — dokończ go, zanim zaczniesz kolejny.',
-            key: ValueKey('start-disabled-hint'),
+          Text(
+            disabledHint,
+            key: const ValueKey('start-disabled-hint'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.textSubtle,
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
@@ -492,21 +503,6 @@ class _PlanContent extends StatelessWidget {
   static int _roundedMinutes(int seconds) {
     final minutes = (seconds / 60 / 5).round() * 5;
     return minutes < 5 ? 5 : minutes;
-  }
-
-  /// „Klatka · Barki · Triceps” — główna partia każdego ćwiczenia, bez
-  /// powtórzeń, najwyżej cztery.
-  static String _muscleSummary(List<PlanExercise> exercises) {
-    final labels = <String>{};
-    for (final exercise in exercises) {
-      final muscles = exercise.exercise.muscles.where(
-        (m) => m != MuscleGroup.all,
-      );
-      if (muscles.isEmpty) continue;
-      labels.add(muscles.first.shortLabel);
-      if (labels.length == 4) break;
-    }
-    return labels.join(' · ');
   }
 }
 

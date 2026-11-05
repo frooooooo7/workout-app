@@ -12,6 +12,8 @@ import '../../../../core/widgets/app_header.dart';
 import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/models/warmup.dart';
+import '../utils/warmup_gate.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
 import '../bloc/training_session_cubit.dart';
@@ -495,8 +497,24 @@ class _TrainingSessionDetailsScreenState
         } else if (source.exercises.isEmpty) {
           failure = 'Ten trening nie ma ćwiczeń do powtórzenia.';
         } else {
-          started = await cubit.startFromSession(source);
-          conflict = started == null ? cubit.state.activeConflict : null;
+          // Rozgrzewka przed powtórzonym treningiem: panel ze stoperem albo
+          // pytanie przy pierwszym starcie. Przerwana — nic nie startuje.
+          if (!mounted) return;
+          final proceed = await runWarmupGate(
+            context,
+            WarmupRequest(
+              target: WarmupTarget.repeat(
+                sessionId: widget.sessionId,
+                name: source.planName,
+              ),
+            ),
+            sessionInProgress: false,
+            navigate: (location, {extra}) => _navigate(location, extra: extra),
+          );
+          if (proceed && mounted) {
+            started = await cubit.startFromSession(source);
+            conflict = started == null ? cubit.state.activeConflict : null;
+          }
         }
       }
     } catch (_) {
