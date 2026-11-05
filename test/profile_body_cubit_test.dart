@@ -46,13 +46,13 @@ void main() {
     'latest weight and change against the oldest entry of 30 days',
     () async {
       final cubit = ProfileBodyCubit(
-        clock: _now,
         weightRepository: _Weights([
           _w(8, 1, 90), // starszy niż 30 dni — pomijany
           _w(10, 5, 87),
           _w(10, 20, 86),
           _w(11, 1, 84.5),
         ]),
+        clock: _now,
       );
       await cubit.load();
 
