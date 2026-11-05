@@ -11,6 +11,7 @@ import 'core/theme/app_localization.dart';
 import 'core/theme/app_theme.dart';
 import 'core/units/weight_unit.dart';
 import 'core/units/weight_unit_scope.dart';
+import 'features/training/data/plate_settings_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,7 @@ void main() async {
   }
 
   ServiceLocator.init();
-  await WeightUnits.load();
+  await (WeightUnits.load(), PlateSettingsStore.load()).wait;
   runApp(const GymApp());
 }
 

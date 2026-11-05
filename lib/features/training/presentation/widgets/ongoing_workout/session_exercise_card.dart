@@ -40,6 +40,8 @@ class SessionExerciseCard extends StatefulWidget {
     required this.onRemoveSet,
     required this.onNoteChanged,
     required this.onRecord,
+    this.onOpenPlates,
+    this.setsRevision = 0,
   });
 
   final int exerciseIndex;
@@ -59,6 +61,13 @@ class SessionExerciseCard extends StatefulWidget {
 
   /// Odhaczona seria pobiła rekord.
   final ValueChanged<RecordBurstData> onRecord;
+
+  /// Kafelek kalkulatora talerzy w nagłówku; `null` — bez kafelka.
+  final VoidCallback? onOpenPlates;
+
+  /// Rośnie, gdy serie zmieniono spoza karty (np. ciężar z kalkulatora
+  /// talerzy) — karta bierze wtedy serie z [exercise] zamiast swoich.
+  final int setsRevision;
 
   @override
   State<SessionExerciseCard> createState() => _SessionExerciseCardState();
@@ -84,6 +93,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   void didUpdateWidget(covariant SessionExerciseCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.exercise.id != widget.exercise.id ||
+        oldWidget.setsRevision != widget.setsRevision ||
         widget.exercise.sets.length != _sets.length) {
       _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
     }
@@ -218,7 +228,21 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                 ),
               ),
               const SizedBox(width: 12),
-              _HistoryButton(
+              if (widget.onOpenPlates != null) ...[
+                _HeaderTile(
+                  key: ValueKey(
+                    'session-exercise-plates-${widget.exerciseIndex}',
+                  ),
+                  icon: Icons.fitness_center_rounded,
+                  semanticLabel: 'Kalkulator talerzy',
+                  accent: true,
+                  onTap: widget.onOpenPlates!,
+                ),
+                const SizedBox(width: 8),
+              ],
+              _HeaderTile(
+                icon: Icons.show_chart_rounded,
+                semanticLabel: 'Historia ćwiczenia',
                 key: ValueKey(
                   'session-exercise-details-${widget.exerciseIndex}',
                 ),
@@ -342,27 +366,40 @@ class _SetTable extends StatelessWidget {
   }
 }
 
-class _HistoryButton extends StatelessWidget {
-  const _HistoryButton({super.key, required this.onTap});
+/// Kafelek 44 px w nagłówku karty (kalkulator talerzy, historia ćwiczenia).
+/// [accent] — niebieska ikona na granatowym tle.
+class _HeaderTile extends StatelessWidget {
+  const _HeaderTile({
+    super.key,
+    required this.icon,
+    required this.semanticLabel,
+    required this.onTap,
+    this.accent = false,
+  });
 
+  final IconData icon;
+  final String semanticLabel;
   final VoidCallback onTap;
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: WorkoutColors.chip,
+      color: accent
+          ? AppColors.primary.withValues(alpha: 0.16)
+          : WorkoutColors.chip,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: const SizedBox(
+        child: SizedBox(
           width: 44,
           height: 44,
           child: Icon(
-            Icons.show_chart_rounded,
-            color: AppColors.iconOnTile,
+            icon,
+            color: accent ? WorkoutColors.link : AppColors.iconOnTile,
             size: 20,
-            semanticLabel: 'Historia ćwiczenia',
+            semanticLabel: semanticLabel,
           ),
         ),
       ),

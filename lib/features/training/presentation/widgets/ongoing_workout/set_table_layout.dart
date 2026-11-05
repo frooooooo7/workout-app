@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../../../../core/units/weight_unit.dart';
@@ -58,7 +56,9 @@ class SetTableLayout {
     }
     // Bez kolumny „Poprzednio” pola rosną (z umiarem), resztę zostawiamy
     // pustą; na bardzo wąskim ekranie się kurczą.
-    final factor = math.min(available / inputsWidth, 1.4);
+    // Nie mniej niż zero — w pierwszej klatce na webie okno bywa prawie
+    // zerowej szerokości, a ujemna szerokość pola wywraca cały ekran.
+    final factor = (available / inputsWidth).clamp(0.0, 1.4);
     return SetTableLayout._(
       previousWidth: null,
       weightWidth: _weight * factor,

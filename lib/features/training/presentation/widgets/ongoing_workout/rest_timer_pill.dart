@@ -51,7 +51,14 @@ class RestTimerPill extends StatelessWidget {
     required this.onExtend,
     required this.onSkip,
     required this.onChangeDuration,
+    this.footer,
   });
+
+  /// Wysokość panelu bez [footer].
+  static const height = 92.0;
+
+  /// Dodatkowa wysokość z [footer] (pasek talerzy).
+  static const footerHeight = 56.0;
 
   final ValueListenable<Duration> remaining;
   final Duration total;
@@ -62,71 +69,87 @@ class RestTimerPill extends StatelessWidget {
   final VoidCallback onSkip;
   final VoidCallback onChangeDuration;
 
+  /// Pasek pod licznikiem (np. talerze na następną serię).
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
+    final footer = this.footer;
     return ClipRRect(
       borderRadius: BorderRadius.circular(26),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           key: const Key('rest-timer-pill'),
-          height: 92,
+          height: footer == null ? height : height + footerHeight,
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
             color: WorkoutColors.restPanel,
             borderRadius: BorderRadius.circular(26),
             border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
           ),
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  hint: 'Zmień czas odpoczynku',
-                  child: GestureDetector(
-                    key: const Key('rest-timer-change-duration'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onChangeDuration,
-                    child: Row(
-                      children: [
-                        ValueListenableBuilder<Duration>(
-                          valueListenable: remaining,
-                          builder: (context, value, _) =>
-                              _RestRing(remaining: value, total: total),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: _RestLabels(caption: caption)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 72,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _PillButton(
-                      key: const Key('rest-timer-extend'),
-                      label: '+15 s',
-                      color: WorkoutColors.restTrack,
-                      onTap: onExtend,
-                    ),
-                    const SizedBox(height: 6),
-                    _PillButton(
-                      key: const Key('rest-timer-skip'),
-                      label: 'Pomiń',
-                      color: AppColors.primary,
-                      onTap: onSkip,
-                    ),
-                  ],
-                ),
-              ),
+              SizedBox(height: height - 22, child: _buildTimerRow()),
+              if (footer != null) ...[
+                const SizedBox(height: 8),
+                SizedBox(height: footerHeight - 8, child: footer),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTimerRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            button: true,
+            hint: 'Zmień czas odpoczynku',
+            child: GestureDetector(
+              key: const Key('rest-timer-change-duration'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onChangeDuration,
+              child: Row(
+                children: [
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: remaining,
+                    builder: (context, value, _) =>
+                        _RestRing(remaining: value, total: total),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _RestLabels(caption: caption)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 72,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PillButton(
+                key: const Key('rest-timer-extend'),
+                label: '+15 s',
+                color: WorkoutColors.restTrack,
+                onTap: onExtend,
+              ),
+              const SizedBox(height: 6),
+              _PillButton(
+                key: const Key('rest-timer-skip'),
+                label: 'Pomiń',
+                color: AppColors.primary,
+                onTap: onSkip,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

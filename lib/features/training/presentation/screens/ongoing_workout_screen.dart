@@ -12,11 +12,13 @@ import '../../../../core/units/weight_unit.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
+import '../../data/plate_settings_store.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
 import '../../domain/services/live_workout_insights.dart';
+import '../../domain/services/plate_calculator.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/stats/stats_sets.dart' show statsExerciseKey;
@@ -32,6 +34,8 @@ import '../widgets/ongoing_workout/rest_timer_pill.dart';
 import '../widgets/ongoing_workout/session_exercise_card.dart';
 import '../widgets/ongoing_workout/workout_colors.dart';
 import '../widgets/ongoing_workout/workout_progress_header.dart';
+import '../widgets/plates/plate_calculator_sheet.dart';
+import '../widgets/plates/rest_plate_strip.dart';
 import 'workout_summary_screen.dart';
 
 class OngoingWorkoutArgs {
@@ -57,7 +61,7 @@ class OngoingWorkoutArgs {
 }
 
 /// Pozycje menu ⋯ w nagłówku treningu.
-enum _WorkoutMenuAction { rest, rir, tempo, note, exercises, discard }
+enum _WorkoutMenuAction { rest, plates, rir, tempo, note, exercises, discard }
 
 class OngoingWorkoutScreen extends StatefulWidget {
   const OngoingWorkoutScreen({super.key, this.args});
@@ -83,6 +87,10 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Ćwiczenia, w których notatkę otwarto z menu ⋯.
   final Set<String> _openNotes = {};
+
+  /// Ile razy serie ćwiczenia zmieniono spoza jego karty (kalkulator
+  /// talerzy) — karta odświeża wtedy pola.
+  final Map<String, int> _setsRevision = {};
 
   /// Poprzedni trening i rekord każdego ćwiczenia (po id ćwiczenia w sesji).
   final Map<String, ExerciseHistoryInsights> _history = {};
@@ -344,7 +352,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         24 +
         MediaQuery.paddingOf(context).bottom +
         // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
-        (restVisible ? 92 + 16 : 0);
+        (restVisible
+            ? RestTimerPill.height +
+                  16 +
+                  (_restPlates() == null ? 0 : RestTimerPill.footerHeight)
+            : 0);
     return PageView.builder(
       controller: _exercisePageController,
       itemCount: session.exercises.length,
@@ -379,6 +391,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
                       _removeSet(context, index, setIndex),
                   onNoteChanged: (note) => _updateNote(context, index, note),
                   onRecord: _showRecord,
+                  onOpenPlates: () =>
+                      unawaited(_openPlateCalculator(context, index)),
+                  setsRevision: _setsRevision[exercise.id] ?? 0,
                 ),
                 if (next != null) ...[
                   const SizedBox(height: 12),
@@ -422,11 +437,16 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     return RestTimerDock(
       visible: _restDockVisible(context),
       child: ListenableBuilder(
-        listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
+        listenable: Listenable.merge([
+          _draftSession,
+          _currentExerciseIndex,
+          PlateSettingsStore.notifier,
+        ]),
         builder: (context, _) => RestTimerPill(
           remaining: _rest.remaining,
           total: _rest.total,
           caption: _upNextCaption(),
+          footer: _buildRestPlateStrip(context),
           onExtend: () =>
               unawaited(_reportSchedule(_rest.extend(_restExtension))),
           onSkip: _rest.stop,
@@ -437,6 +457,126 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   static const _restExtension = Duration(seconds: 15);
+
+  Widget? _buildRestPlateStrip(BuildContext context) {
+    final calculation = _restPlates();
+    if (calculation == null) return null;
+    return RestPlateStrip(
+      calculation: calculation,
+      unit: WeightUnits.current,
+      onTap: () =>
+          unawaited(_openPlateCalculator(context, _currentExerciseIndex.value)),
+    );
+  }
+
+  /// Talerze na następną serię bieżącego ćwiczenia — tylko przy ćwiczeniach,
+  /// przy których użyto już kalkulatora, i gdy znany jest ciężar.
+  PlateCalculation? _restPlates() {
+    final settings = PlateSettingsStore.current;
+    if (!settings.showInRest) return null;
+    final session = _draftSession.value;
+    if (session == null || session.exercises.isEmpty) return null;
+    final exercise =
+        session.exercises[_currentExerciseIndex.value.clamp(
+          0,
+          session.exercises.length - 1,
+        )];
+    if (!settings.barbellExercises.contains(statsExerciseKey(exercise))) {
+      return null;
+    }
+    final weightKg = _upcomingSet(exercise)?.weightKg;
+    if (weightKg == null || weightKg <= 0) return null;
+    final unit = WeightUnits.current;
+    final equipment = settings.equipmentFor(unit);
+    final calculation = PlateCalculator.calculate(
+      target: unit.fromKg(weightKg),
+      barWeight: equipment.barWeight,
+      plates: equipment.enabledPlates,
+    );
+    return calculation.belowBar ? null : calculation;
+  }
+
+  /// Pierwsza nieodhaczona seria ćwiczenia i jej ciężar: wpisany, z planu
+  /// albo z podpowiedzi progresji. `null`, gdy wszystkie serie są zrobione.
+  ({int index, double? weightKg})? _upcomingSet(
+    TrainingSessionExercise exercise,
+  ) {
+    final setIndex = exercise.sets.indexWhere((set) => !set.completed);
+    if (setIndex == -1) return null;
+    final set = exercise.sets[setIndex];
+    final previous = _history[exercise.id]?.previousSets;
+    final previousSet = previous == null || previous.isEmpty
+        ? null
+        : previousSetFor(exercise.sets, setIndex, previous);
+    final weight =
+        parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
+        progressionHintFor(set, previousSet)?.weightKg;
+    return (index: setIndex, weightKg: weight);
+  }
+
+  /// Kalkulator talerzy dla ćwiczenia: startuje z ciężarem następnej serii
+  /// i wpisuje do niej wybrany ciężar. Po wszystkich seriach — sam
+  /// kalkulator z ciężarem ostatniej serii.
+  Future<void> _openPlateCalculator(
+    BuildContext context,
+    int exerciseIndex,
+  ) async {
+    final session = _draftSession.value;
+    if (session == null || exerciseIndex >= session.exercises.length) return;
+    final exercise = session.exercises[exerciseIndex];
+    // Od teraz to ćwiczenie ze sztangą — pasek talerzy w przerwie.
+    unawaited(PlateSettingsStore.markBarbell(statsExerciseKey(exercise)));
+
+    final upcoming = _upcomingSet(exercise);
+    final lastWeight = exercise.sets.isEmpty
+        ? null
+        : parseWeightKg(exercise.sets.last.actualWeight);
+    final weightKg = upcoming == null ? lastWeight : upcoming.weightKg;
+    final unit = WeightUnits.current;
+    String? setLabel;
+    String? applyLabel;
+    if (upcoming != null) {
+      final set = exercise.sets[upcoming.index];
+      final label = setRowLabels(
+        exercise.sets.map((s) => s.setType),
+      )[upcoming.index];
+      (setLabel, applyLabel) = switch (set.setType) {
+        SetType.warmup => ('rozgrzewka', 'rozgrzewki'),
+        SetType.normal => ('seria $label', 'serii $label'),
+        _ => (set.setType.label.toLowerCase(), 'serii'),
+      };
+    }
+
+    final picked = await showPlateCalculatorSheet(
+      context,
+      exerciseName: exercise.exerciseName,
+      initialWeight: weightKg == null ? null : unit.fromKg(weightKg),
+      setLabel: setLabel,
+      applyLabel: applyLabel,
+    );
+    if (picked == null || upcoming == null || !context.mounted) return;
+    final current = _draftSession.value;
+    if (current == null || exerciseIndex >= current.exercises.length) return;
+    final currentExercise = current.exercises[exerciseIndex];
+    if (currentExercise.id != exercise.id ||
+        upcoming.index >= currentExercise.sets.length) {
+      return;
+    }
+    final kg = (unit.toKg(picked) * 100).round() / 100;
+    _updateSet(
+      context,
+      exerciseIndex,
+      upcoming.index,
+      currentExercise.sets[upcoming.index].copyWith(
+        actualWeight: kg == kg.roundToDouble()
+            ? kg.toInt().toString()
+            : kg.toString(),
+      ),
+    );
+    setState(() {
+      _setsRevision[exercise.id] = (_setsRevision[exercise.id] ?? 0) + 1;
+    });
+  }
 
   /// „Teraz: seria 3 · 95 kg × 6” — co czeka po przerwie.
   String? _upNextCaption() {
@@ -506,6 +646,12 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
               : 'Wybierz czas — przerwa startuje sama po odhaczeniu serii',
         ),
         if (exercise != null) ...[
+          const AppSheetAction(
+            value: _WorkoutMenuAction.plates,
+            icon: Icons.fitness_center_rounded,
+            label: 'Kalkulator talerzy',
+            subtitle: 'Ile talerzy założyć na każdą stronę gryfu',
+          ),
           AppSheetAction(
             value: _WorkoutMenuAction.rir,
             icon: Icons.speed_rounded,
@@ -550,6 +696,11 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         } else {
           await _pickRestDuration(context);
         }
+      case _WorkoutMenuAction.plates:
+        await _openPlateCalculator(
+          context,
+          _currentExerciseIndex.value.clamp(0, session.exercises.length - 1),
+        );
       case _WorkoutMenuAction.rir:
         _toggleRirColumn(exercise!);
       case _WorkoutMenuAction.tempo:

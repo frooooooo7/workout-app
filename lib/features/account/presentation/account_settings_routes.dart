@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/service_locator.dart';
+import '../../training/presentation/screens/plate_equipment_screen.dart';
 import 'bloc/change_password_cubit.dart';
 import 'bloc/delete_account_cubit.dart';
 import 'bloc/notification_settings_cubit.dart';
@@ -16,6 +17,7 @@ const kChangePasswordRoute = '/app/profile/settings/change-password';
 const kNotificationSettingsRoute = '/app/profile/settings/notifications';
 const kHelpRoute = '/app/profile/settings/help';
 const kDeleteAccountRoute = '/app/profile/settings/delete-account';
+const kPlateEquipmentRoute = '/app/profile/settings/equipment';
 
 /// Podtrasy `/app/profile/settings/*` (konto i bezpieczeństwo).
 List<RouteBase> buildAccountSettingsRoutes(
@@ -51,6 +53,11 @@ List<RouteBase> buildAccountSettingsRoutes(
         ],
         child: const NotificationSettingsScreen(),
       ),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: 'equipment',
+      builder: (_, _) => const PlateEquipmentScreen(),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,

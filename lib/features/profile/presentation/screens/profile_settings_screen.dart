@@ -25,6 +25,7 @@ const settingsNotificationsRowKey = Key('settings-notifications');
 const settingsWeightUnitRowKey = Key('settings-weight-unit');
 Key settingsWeightUnitOptionKey(WeightUnit unit) =>
     Key('settings-weight-unit-${unit.name}');
+const settingsEquipmentRowKey = Key('settings-equipment');
 const settingsHelpRowKey = Key('settings-help');
 const settingsDeleteAccountRowKey = Key('settings-delete-account');
 
@@ -259,6 +260,13 @@ class _ProfileSettingsView extends StatelessWidget {
                 const _SectionLabel(label: 'Ustawienia'),
                 const SizedBox(height: 12),
                 const _WeightUnitRow(key: settingsWeightUnitRowKey),
+                const SizedBox(height: 10),
+                _MenuRow(
+                  key: settingsEquipmentRowKey,
+                  icon: Icons.tune_rounded,
+                  label: 'Twój sprzęt (gryf i talerze)',
+                  onTap: () => context.push(kPlateEquipmentRoute),
+                ),
                 const SizedBox(height: 10),
                 _MenuRow(
                   key: settingsNotificationsRowKey,
