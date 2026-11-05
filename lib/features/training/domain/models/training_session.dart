@@ -194,6 +194,7 @@ class TrainingSession {
     this.planIconKey,
     this.postTitle,
     this.postPhotoUrl,
+    this.warmupSeconds,
   }) : id = id ?? const Uuid().v4(),
        startedAt = startedAt ?? DateTime.now().toUtc();
 
@@ -226,6 +227,11 @@ class TrainingSession {
   /// offline czeka osobno, aż sesja i ono zostaną wysłane.
   final String? postPhotoUrl;
 
+  /// Zmierzony czas rozgrzewki przed treningiem (sekundy, co najmniej minuta);
+  /// `null` — bez rozgrzewki albo nieznany. Osobno od [startedAt]/[finishedAt]:
+  /// zegar treningu rusza dopiero po rozgrzewce.
+  final int? warmupSeconds;
+
   bool get isActive => status == TrainingSessionStatus.active;
 
   TrainingSession copyWith({
@@ -247,6 +253,7 @@ class TrainingSession {
     String? planIconKey,
     String? postTitle,
     String? postPhotoUrl,
+    int? warmupSeconds,
     bool clearNote = false,
     bool clearPostTitle = false,
     bool clearPostPhotoUrl = false,
@@ -270,6 +277,7 @@ class TrainingSession {
       postPhotoUrl: clearPostPhotoUrl
           ? null
           : (postPhotoUrl ?? this.postPhotoUrl),
+      warmupSeconds: warmupSeconds ?? this.warmupSeconds,
     );
   }
 

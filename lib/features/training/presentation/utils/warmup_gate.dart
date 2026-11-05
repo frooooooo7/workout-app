@@ -31,6 +31,18 @@ class WarmupRequest {
   final CustomTrainingPlan? plan;
 }
 
+/// Wynik bramki rozgrzewki: [proceed] — czy zaczynać trening, [seconds] —
+/// zmierzony czas rozgrzewki do zapisania przy sesji (`null` — bez rozgrzewki,
+/// krótsza niż minuta albo nieznany).
+class WarmupGateResult {
+  const WarmupGateResult.go({this.seconds}) : proceed = true;
+
+  const WarmupGateResult.stop() : proceed = false, seconds = null;
+
+  final bool proceed;
+  final int? seconds;
+}
+
 /// Bramka rozgrzewki przed startem treningu. Zwraca `true`, gdy trening ma się
 /// teraz zacząć (rozgrzewka wyłączona, pominięta albo skończona stuknięciem
 /// „Rozpocznij trening”), `false`, gdy start przerwano (zamknięte pytanie,
@@ -38,7 +50,7 @@ class WarmupRequest {
 ///
 /// Trwający trening ([sessionInProgress]) omija bramkę — start działa jak
 /// dotąd i wznawia ten trening. [navigate] podmienia otwarcie panelu (testy).
-Future<bool> runWarmupGate(
+Future<WarmupGateResult> runWarmupGate(
   BuildContext context,
   WarmupRequest request, {
   required bool sessionInProgress,
@@ -47,7 +59,7 @@ Future<bool> runWarmupGate(
   WarmupGoalScheduler? scheduler,
   Future<Object?> Function(String location, {Object? extra})? navigate,
 }) async {
-  if (sessionInProgress) return true;
+  if (sessionInProgress) return const WarmupGateResult.go();
   settings ??= ServiceLocator.warmupSettings;
   session ??= ServiceLocator.warmupSession;
   scheduler ??= ServiceLocator.warmupGoalScheduler;
@@ -57,7 +69,7 @@ Future<bool> runWarmupGate(
   final push =
       navigate ??
       (String location, {Object? extra}) =>
-          GoRouter.of(context).push<bool>(location, extra: extra);
+          GoRouter.of(context).push<Object>(location, extra: extra);
 
   final running = session.active;
   if (running != null) {
@@ -77,17 +89,17 @@ Future<bool> runWarmupGate(
                 ),
         ),
       );
-      return false;
+      return const WarmupGateResult.stop();
     }
   } else {
     if (settings.current.shouldAsk) {
       final choice = await showWarmupFirstStartSheet(context);
-      if (choice == null) return false;
+      if (choice == null) return const WarmupGateResult.stop();
       // Wybór jest w pamięci od razu; zapis na dysk nie blokuje startu.
       unawaited(settings.setEnabled(choice));
-      if (!context.mounted) return false;
+      if (!context.mounted) return const WarmupGateResult.stop();
     }
-    if (!settings.current.isOn) return true;
+    if (!settings.current.isOn) return const WarmupGateResult.go();
 
     final minutes = settings.current.targetMinutes;
     unawaited(session.begin(request.target, minutes));
@@ -102,7 +114,10 @@ Future<bool> runWarmupGate(
     kWarmupRoute,
     extra: WarmupArgs(request: request, session: session, scheduler: scheduler),
   );
-  return start == true;
+  if (start is WarmupGateResult) return start;
+  return start == true
+      ? const WarmupGateResult.go()
+      : const WarmupGateResult.stop();
 }
 
 /// Plan trwającej rozgrzewki: najpierw z listy widoku, a gdy jej tam nie ma

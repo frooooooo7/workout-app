@@ -162,6 +162,7 @@ void main() {
 
   group('gate and panel', () {
     final results = <bool>[];
+    int? lastSeconds;
 
     /// Zapis ustawień idzie w tle — po teście pozwalamy mu się skończyć.
     void gateTest(
@@ -182,6 +183,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(412, 892));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       results.clear();
+      lastSeconds = null;
       final router = GoRouter(
         routes: [
           GoRoute(
@@ -200,7 +202,8 @@ void main() {
                         session: session,
                         scheduler: scheduler,
                       );
-                      results.add(go);
+                      results.add(go.proceed);
+                      lastSeconds = go.seconds;
                     },
                     child: const Text('Rozpocznij'),
                   ),
@@ -399,6 +402,34 @@ void main() {
       expect(session.current, isNull);
       expect(scheduler.cancelled, greaterThan(0));
       expect(find.byKey(warmupTimerKey), findsNothing);
+    });
+
+    gateTest('"Rozpocznij trening" returns the measured warm-up time', (
+      tester,
+    ) async {
+      await enable(tester);
+      await pumpApp(tester);
+      await tapBegin(tester);
+      await elapse(tester, const Duration(minutes: 8, seconds: 24));
+
+      await tester.tap(find.byKey(warmupStartButtonKey));
+      await settle(tester);
+
+      expect(results, [true]);
+      expect(lastSeconds, 504);
+    });
+
+    gateTest('a warm-up under a minute is not reported', (tester) async {
+      await enable(tester);
+      await pumpApp(tester);
+      await tapBegin(tester);
+      await elapse(tester, const Duration(seconds: 40));
+
+      await tester.tap(find.byKey(warmupStartButtonKey));
+      await settle(tester);
+
+      expect(results, [true]);
+      expect(lastSeconds, isNull);
     });
 
     gateTest('hiding the panel keeps the warm-up running, start aborts', (

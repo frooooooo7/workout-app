@@ -122,6 +122,7 @@ class TrainingSessionRemoteDataSource {
       planIconKey: json['planIconKey'] as String?,
       postTitle: json['postTitle'] as String?,
       postPhotoUrl: json['postPhotoUrl'] as String?,
+      warmupSeconds: (json['warmupSeconds'] as num?)?.toInt(),
       exercises: exercises,
     );
   }
@@ -141,6 +142,9 @@ class TrainingSessionRemoteDataSource {
       'finishedAt': session.finishedAt?.toUtc().toIso8601String(),
       'sharedToProfile': session.sharedToProfile,
       'postTitle': session.postTitle,
+      // Nieznany czas pomijamy: `null` skasowałby na serwerze zapisaną
+      // rozgrzewkę (np. przy edycji sesji pobranej przed aktualizacją).
+      if (session.warmupSeconds != null) 'warmupSeconds': session.warmupSeconds,
       'planColorKey': session.planColorKey,
       'planIconKey': session.planIconKey,
       'exercises': session.exercises.asMap().entries.map((entry) {
