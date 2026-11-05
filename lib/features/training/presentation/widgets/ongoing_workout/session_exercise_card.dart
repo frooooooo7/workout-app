@@ -49,6 +49,8 @@ class SessionExerciseCard extends StatefulWidget {
     this.focused = true,
     this.stopwatch,
     this.onLongPress,
+    this.onOpenPlates,
+    this.setsRevision = 0,
   });
 
   final int exerciseIndex;
@@ -82,6 +84,13 @@ class SessionExerciseCard extends StatefulWidget {
   /// Przytrzymanie nagłówka (miniatura i nazwa) — menu kolejności ćwiczeń.
   final VoidCallback? onLongPress;
 
+  /// Kafelek kalkulatora talerzy w nagłówku; `null` — bez kafelka.
+  final VoidCallback? onOpenPlates;
+
+  /// Rośnie, gdy serie zmieniono spoza karty (np. ciężar z kalkulatora
+  /// talerzy) — karta bierze wtedy serie z [exercise] zamiast swoich.
+  final int setsRevision;
+
   @override
   State<SessionExerciseCard> createState() => _SessionExerciseCardState();
 }
@@ -106,6 +115,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   void didUpdateWidget(covariant SessionExerciseCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.exercise.id != widget.exercise.id ||
+        oldWidget.setsRevision != widget.setsRevision ||
         !_sameSets(widget.exercise.sets, _sets)) {
       _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
     }
@@ -319,6 +329,15 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                if (widget.onOpenPlates != null) ...[
+                  _PlatesButton(
+                    key: ValueKey(
+                      'session-exercise-plates-${widget.exerciseIndex}',
+                    ),
+                    onTap: widget.onOpenPlates!,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 _HistoryButton(
                   key: ValueKey(
                     'session-exercise-details-${widget.exerciseIndex}',
@@ -508,6 +527,35 @@ class _HistoryButton extends StatelessWidget {
             color: AppColors.iconOnTile,
             size: 20,
             semanticLabel: 'Historia ćwiczenia',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kafelek 44 px z kalkulatorem talerzy: niebieska ikona na granatowym tle.
+class _PlatesButton extends StatelessWidget {
+  const _PlatesButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: const SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.fitness_center_rounded,
+            color: WorkoutColors.link,
+            size: 20,
+            semanticLabel: 'Kalkulator talerzy',
           ),
         ),
       ),

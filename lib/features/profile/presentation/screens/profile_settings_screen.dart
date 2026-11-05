@@ -28,6 +28,7 @@ const settingsWeightUnitRowKey = Key('settings-weight-unit');
 const settingsProgressionRowKey = Key('settings-progression');
 Key settingsWeightUnitOptionKey(WeightUnit unit) =>
     Key('settings-weight-unit-${unit.name}');
+const settingsEquipmentRowKey = Key('settings-equipment');
 const settingsWarmupRowKey = Key('settings-warmup');
 const settingsWarmupSwitchKey = Key('settings-warmup-switch');
 Key settingsWarmupTargetKey(int minutes) => Key('settings-warmup-$minutes');
@@ -287,6 +288,13 @@ class _ProfileSettingsView extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 const _WarmupRow(key: settingsWarmupRowKey),
+                const SizedBox(height: 10),
+                _MenuRow(
+                  key: settingsEquipmentRowKey,
+                  icon: Icons.tune_rounded,
+                  label: 'Twój sprzęt (gryf i talerze)',
+                  onTap: () => context.push(kPlateEquipmentRoute),
+                ),
                 const SizedBox(height: 10),
                 _MenuRow(
                   key: settingsNotificationsRowKey,

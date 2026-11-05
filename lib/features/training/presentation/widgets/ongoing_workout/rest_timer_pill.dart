@@ -54,7 +54,14 @@ class RestTimerPill extends StatelessWidget {
     required this.onChangeDuration,
     this.title = 'Odpoczynek',
     this.finished = false,
+    this.footer,
   });
+
+  /// Wysokość panelu bez [footer].
+  static const height = 92.0;
+
+  /// Dodatkowa wysokość z [footer] (pasek talerzy).
+  static const footerHeight = 56.0;
 
   /// Przerwa minęła: „0:00”, czerwona obwódka i „OK” zamiast „Pomiń”.
   final bool finished;
@@ -71,97 +78,117 @@ class RestTimerPill extends StatelessWidget {
   final VoidCallback onSkip;
   final VoidCallback onChangeDuration;
 
+  /// Pasek pod licznikiem (np. talerze na następną serię).
+  final Widget? footer;
+
   @override
   Widget build(BuildContext context) {
+    final footer = this.footer;
     return ClipRRect(
       borderRadius: BorderRadius.circular(26),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: AnimatedContainer(
-          key: const Key('rest-timer-pill'),
-          duration: const Duration(milliseconds: 250),
-          height: 92,
-          // Grubsza czerwona ramka „koniec przerwy” zjada miejsce w środku —
-          // mniejszy odstęp, żeby przyciski się zmieściły.
-          padding: finished
-              ? const EdgeInsets.fromLTRB(12.5, 8.5, 10.5, 8.5)
-              : const EdgeInsets.fromLTRB(14, 10, 12, 10),
-          decoration: BoxDecoration(
-            color: finished
-                ? Color.alphaBlend(
-                    AppColors.trendDown.withValues(alpha: 0.12),
-                    WorkoutColors.restPanel,
-                  )
-                : WorkoutColors.restPanel,
-            borderRadius: BorderRadius.circular(26),
-            border: finished
-                ? Border.all(color: AppColors.trendDown, width: 2.5)
-                : Border.all(color: Colors.white.withValues(alpha: 0.09)),
+        // Wysokość z paskiem nie jest animowana — tylko tło i obwódka, jak
+        // bez paska.
+        child: SizedBox(
+          height: footer == null ? height : height + footerHeight,
+          child: AnimatedContainer(
+            key: const Key('rest-timer-pill'),
+            duration: const Duration(milliseconds: 250),
+            // Grubsza czerwona ramka „koniec przerwy” zjada miejsce w środku —
+            // mniejszy odstęp, żeby przyciski się zmieściły.
+            padding: finished
+                ? const EdgeInsets.fromLTRB(12.5, 8.5, 10.5, 8.5)
+                : const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: finished
+                  ? Color.alphaBlend(
+                      AppColors.trendDown.withValues(alpha: 0.12),
+                      WorkoutColors.restPanel,
+                    )
+                  : WorkoutColors.restPanel,
+              borderRadius: BorderRadius.circular(26),
+              border: finished
+                  ? Border.all(color: AppColors.trendDown, width: 2.5)
+                  : Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            ),
+            child: Column(
+              children: [
+                Expanded(child: _buildTimerRow(context)),
+                if (footer != null) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(height: footerHeight - 8, child: footer),
+                ],
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  hint: 'Zmień czas odpoczynku',
-                  child: GestureDetector(
-                    key: const Key('rest-timer-change-duration'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onChangeDuration,
-                    child: Row(
-                      children: [
-                        ValueListenableBuilder<Duration>(
-                          valueListenable: remaining,
-                          builder: (context, value, _) => _RestRing(
-                            remaining: finished ? Duration.zero : value,
-                            total: total,
-                            finished: finished,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _RestLabels(
-                            title: finished ? 'Koniec przerwy' : title,
-                            caption: caption,
-                            finished: finished,
-                          ),
-                        ),
-                      ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            button: true,
+            hint: 'Zmień czas odpoczynku',
+            child: GestureDetector(
+              key: const Key('rest-timer-change-duration'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onChangeDuration,
+              child: Row(
+                children: [
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: remaining,
+                    builder: (context, value, _) => _RestRing(
+                      remaining: finished ? Duration.zero : value,
+                      total: total,
+                      finished: finished,
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RestLabels(
+                      title: finished ? 'Koniec przerwy' : title,
+                      caption: caption,
+                      finished: finished,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 72,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _PillButton(
-                      key: const Key('rest-timer-extend'),
-                      label: '+15 s',
-                      color: WorkoutColors.restTrack,
-                      onTap: onExtend,
-                    ),
-                    const SizedBox(height: 6),
-                    _PillButton(
-                      key: const Key('rest-timer-skip'),
-                      label: finished ? 'OK' : 'Pomiń',
-                      color: finished
-                          ? AppColors.trendDown
-                          : WorkoutAccent.of(context).fill,
-                      textColor: finished
-                          ? Colors.black
-                          : WorkoutAccent.of(context).onFill,
-                      onTap: onSkip,
-                    ),
-                  ],
-                ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 72,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _PillButton(
+                key: const Key('rest-timer-extend'),
+                label: '+15 s',
+                color: WorkoutColors.restTrack,
+                onTap: onExtend,
+              ),
+              const SizedBox(height: 6),
+              _PillButton(
+                key: const Key('rest-timer-skip'),
+                label: finished ? 'OK' : 'Pomiń',
+                color: finished
+                    ? AppColors.trendDown
+                    : WorkoutAccent.of(context).fill,
+                textColor: finished
+                    ? Colors.black
+                    : WorkoutAccent.of(context).onFill,
+                onTap: onSkip,
               ),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 }

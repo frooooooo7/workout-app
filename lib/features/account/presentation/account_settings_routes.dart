@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/service_locator.dart';
 import '../../notifications/presentation/bloc/social_notification_settings_cubit.dart';
+import '../../training/presentation/screens/plate_equipment_screen.dart';
 import '../../training/presentation/screens/progression_settings_screen.dart';
 import 'bloc/change_password_cubit.dart';
 import 'bloc/delete_account_cubit.dart';
@@ -19,6 +20,7 @@ const kNotificationSettingsRoute = '/app/profile/settings/notifications';
 const kHelpRoute = '/app/profile/settings/help';
 const kProgressionSettingsRoute = '/app/profile/settings/progression';
 const kDeleteAccountRoute = '/app/profile/settings/delete-account';
+const kPlateEquipmentRoute = '/app/profile/settings/equipment';
 
 /// Ustawienia powiadomień — z ustawień profilu i z centrum powiadomień.
 Widget buildNotificationSettingsPage() {
@@ -69,6 +71,11 @@ List<RouteBase> buildAccountSettingsRoutes(
       parentNavigatorKey: rootNavigatorKey,
       path: 'progression',
       builder: (_, _) => const ProgressionSettingsScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: 'equipment',
+      builder: (_, _) => const PlateEquipmentScreen(),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
