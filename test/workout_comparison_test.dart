@@ -264,6 +264,54 @@ void main() {
       expect(result.verdict!.compared, 1);
     });
 
+    test('sets ticked without numbers are not a result', () {
+      final blank = TrainingSessionSet(
+        plannedWeight: '80',
+        plannedReps: '8',
+        completed: true,
+      );
+
+      // Dziś odhaczone puste serie: bez znaczka i poza werdyktem.
+      final previous = _session(_monday, [
+        _exercise('Bench', [_set('80', '8')]),
+        _exercise('Row', [_set('60', '8')]),
+      ]);
+      final today = _session(_thursday, [
+        _exercise('Bench', [blank, blank]),
+        _exercise('Row', [_set('60', '8')]),
+      ]);
+      final result = compareWithPrevious(today, [previous])!;
+      final bench = result.exercises.first;
+      expect(bench.trend, ExerciseTrend.skipped);
+      expect(bench.delta, isNull);
+      expect(bench.completedSets, 2);
+      expect(result.verdict!.compared, 1);
+      expect(result.verdict!.worse, 0);
+
+      // Poprzednio puste serie: szukamy dalej wstecz, a gdy nic nie ma, to „Nowe”.
+      final blankBefore = _session(_monday, [
+        _exercise('Bench', [blank, blank]),
+        _exercise('Row', [_set('60', '8')]),
+      ]);
+      final older = _session(DateTime.utc(2026, 10, 26, 17), [
+        _exercise('Bench', [_set('77,5', '8')]),
+      ]);
+      final todayDone = _session(_thursday, [
+        _exercise('Bench', [_set('80', '8')]),
+        _exercise('Row', [_set('60', '8')]),
+      ]);
+      final fromOlder = compareWithPrevious(todayDone, [
+        blankBefore,
+        older,
+      ])!.exercises.first;
+      expect(fromOlder.previous!.weightKg, 77.5);
+      expect(fromOlder.trend, ExerciseTrend.improved);
+      expect(fromOlder.delta!.value, 2.5);
+
+      final onlyBlank = compareWithPrevious(todayDone, [blankBefore])!;
+      expect(onlyBlank.exercises.first.trend, ExerciseTrend.fresh);
+    });
+
     test('exercise never done before is fresh', () {
       final previous = _session(_monday, [
         _exercise('Bench', [_set('80', '8')]),

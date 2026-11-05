@@ -380,14 +380,19 @@ List<ExerciseComparison> _compareExercises(
       final sets = (grouped[candidate] ??= _groupByExercise(
         candidate,
       ))[entry.key];
-      if (sets != null && sets.completed.isNotEmpty) {
+      // Serie odhaczone bez wpisanych liczb nie są wynikiem — szukamy dalej
+      // wstecz, zamiast porównywać z „0 kg × 0”.
+      if (sets != null && !_bestOf(sets.completed, tracking).isEmpty) {
         previousSession = candidate;
         previousSets = sets;
         break;
       }
     }
 
-    if (doneToday.isEmpty) {
+    final todayBest = _bestOf(doneToday, tracking);
+    // Bez ukończonej serii albo z seriami odhaczonymi bez liczb nie ma wyniku,
+    // który dałoby się ocenić.
+    if (todayBest.isEmpty) {
       result.add(
         ExerciseComparison(
           key: entry.key,
@@ -396,13 +401,12 @@ List<ExerciseComparison> _compareExercises(
           distanceUnit: exercise.distanceUnit,
           trend: ExerciseTrend.skipped,
           workingSets: entry.value.working.length,
-          completedSets: 0,
+          completedSets: doneToday.length,
         ),
       );
       continue;
     }
 
-    final todayBest = _bestOf(doneToday, tracking);
     if (previousSets == null || previousSession == null) {
       result.add(
         ExerciseComparison(

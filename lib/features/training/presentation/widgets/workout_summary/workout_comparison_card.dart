@@ -89,8 +89,12 @@ class _WorkoutComparisonCardState extends State<WorkoutComparisonCard> {
             _ExerciseRow(
               exercise: exercise,
               expanded: _expanded.contains(exercise.key),
+              // Trening bez planu: zawsze. W planie tylko wtedy, gdy „było”
+              // pochodzi z innego treningu niż data w nagłówku karty.
               showDate:
-                  comparison.kind == WorkoutComparisonKind.lastPerformances,
+                  comparison.kind == WorkoutComparisonKind.lastPerformances ||
+                  (exercise.previousDate != null &&
+                      exercise.previousDate != comparison.previousDate),
               onToggle: _canExpand(exercise)
                   ? () => _toggle(exercise.key)
                   : null,
@@ -447,7 +451,9 @@ class _TotalsRow extends StatelessWidget {
       return const _TotalDelta(text: '—');
     }
     final diff = t.volumeDeltaKg;
-    final was = 'było ${formatVolumeKg(t.previousVolumeKg)}';
+    final was = t.previousVolumeKg <= 0
+        ? 'było 0 ${WeightUnits.current.label}'
+        : 'było ${formatVolumeKg(t.previousVolumeKg)}';
     if (diff.abs() < 0.5) return _TotalDelta(text: 'tyle samo', was: was);
     return _TotalDelta(
       text: formatVolumeKg(diff.abs()),
@@ -744,7 +750,9 @@ class _Subtitle extends StatelessWidget {
       case ExerciseTrend.skipped:
         final n = exercise.workingSets;
         return Text(
-          '0/$n ${polishPlural(n, 'seria', 'serie', 'serii')}',
+          exercise.completedSets > 0
+              ? 'bez wpisanego wyniku'
+              : '0/$n ${polishPlural(n, 'seria', 'serie', 'serii')}',
           style: muted,
         );
       case ExerciseTrend.fresh:

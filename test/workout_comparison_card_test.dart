@@ -202,6 +202,43 @@ void main() {
     });
   });
 
+  testWidgets('row shows a date only when it differs from the header', (
+    tester,
+  ) async {
+    final previous = _session(_monday, [
+      _exercise('Wyciskanie', [_set('80', '8')]),
+      _exercise('Wiosłowanie', [_set('60', '8')]),
+    ]);
+    // Wiosłowanie ostatnio w innym planie, dzień po poniedziałku.
+    final otherPlan = _session(DateTime.utc(2026, 11, 3, 17), [
+      _exercise('Wiosłowanie', [_set('65', '8')]),
+    ], planLocalId: 'plan-2');
+    final today = _session(_thursday, [
+      _exercise('Wyciskanie', [_set('82,5', '8')]),
+      _exercise('Wiosłowanie', [_set('67,5', '8')]),
+    ]);
+    await _pump(tester, compareWithPrevious(today, [previous, otherPlan])!);
+
+    expect(find.textContaining('3 lis'), findsOneWidget);
+    expect(find.textContaining('· 2 lis'), findsNothing);
+  });
+
+  testWidgets('zero previous volume reads "było 0 kg"', (tester) async {
+    final previous = _session(_monday, [
+      _exercise('Pompki', [_set('', '14')]),
+    ]);
+    final today = _session(_thursday, [
+      _exercise('Pompki', [_set('10', '14')]),
+    ]);
+    await _pump(tester, compareWithPrevious(today, [previous])!);
+
+    final volume = find.byKey(const ValueKey('comparison-volume'));
+    expect(
+      find.descendant(of: volume, matching: find.text('było 0 kg')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('weaker day keeps a neutral verdict and red drops', (
     tester,
   ) async {
