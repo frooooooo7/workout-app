@@ -42,15 +42,20 @@ Future<bool> startWorkout(
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   final sessionCubit = context.read<TrainingSessionCubit>();
+  int? warmupSeconds;
   if (warmup != null) {
-    final proceed = await runWarmupGate(
+    final gate = await runWarmupGate(
       context,
       warmup,
       sessionInProgress: sessionCubit.state.activeSession != null,
     );
-    if (!proceed || !context.mounted) return false;
+    if (!gate.proceed || !context.mounted) return false;
+    warmupSeconds = gate.seconds;
   }
-  final session = await start(sessionCubit);
+  var session = await start(sessionCubit);
+  if (session != null) {
+    session = await attachWarmupSeconds(sessionCubit, session, warmupSeconds);
+  }
   if (!context.mounted) return false;
 
   final target = session ?? sessionCubit.state.activeConflict;
@@ -75,6 +80,24 @@ Future<bool> startWorkout(
   await context.push(route, extra: args);
   if (context.mounted) sessionCubit.refresh();
   return true;
+}
+
+/// Zapisuje przy świeżo utworzonej [session] czas rozgrzewki ([seconds] z
+/// bramki). Bez czasu nic nie robi. Błąd zapisu nie przerywa startu treningu,
+/// rozgrzewka po prostu nie trafi do historii.
+Future<TrainingSession> attachWarmupSeconds(
+  TrainingSessionCubit cubit,
+  TrainingSession session,
+  int? seconds,
+) async {
+  if (seconds == null) return session;
+  final withWarmup = session.copyWith(warmupSeconds: seconds);
+  try {
+    await cubit.save(withWarmup);
+    return withWarmup;
+  } catch (_) {
+    return session;
+  }
 }
 
 /// Po wyjściu z ekranu wolnego treningu: pusta sesja bez planu i bez

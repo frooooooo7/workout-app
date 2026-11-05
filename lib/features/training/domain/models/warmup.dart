@@ -154,6 +154,20 @@ class WarmupInProgress {
 }
 
 /// Minuty `mm:ss` do stopera (`03:12`, `12:05`).
+/// Najkrótsza rozgrzewka, którą zapisujemy przy treningu (krótsza to brak).
+const int kWarmupSaveMinSeconds = 60;
+
+/// Najdłuższa zapisywana rozgrzewka (jak limit na serwerze).
+const int kWarmupSaveMaxSeconds = 7200;
+
+/// Sekundy rozgrzewki do zapisania przy sesji: `null`, gdy była krótsza niż
+/// minuta (przypadkowe stuknięcie), a zbyt długa jest obcinana do limitu.
+int? warmupSecondsToSave(Duration elapsed) {
+  final seconds = elapsed.inSeconds;
+  if (seconds < kWarmupSaveMinSeconds) return null;
+  return seconds > kWarmupSaveMaxSeconds ? kWarmupSaveMaxSeconds : seconds;
+}
+
 String formatWarmupClock(Duration duration) {
   final total = duration.inSeconds;
   final minutes = total ~/ 60;

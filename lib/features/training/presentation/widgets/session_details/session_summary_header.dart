@@ -5,6 +5,7 @@ import '../../../domain/models/training_history_models.dart';
 import 'session_details_formatters.dart';
 import 'session_metrics_row.dart';
 import 'session_status_chip.dart';
+import 'warmup_time_note.dart';
 
 /// Nagłówek sesji — **jedyne** miejsce z metrykami całego treningu.
 ///
@@ -109,6 +110,10 @@ class SessionSummaryHeader extends StatelessWidget {
               ),
             ],
           ),
+          if (detail.warmupSeconds != null) ...[
+            const SizedBox(height: 14),
+            WarmupTimeNote(seconds: detail.warmupSeconds!),
+          ],
           if (note != null && note.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(

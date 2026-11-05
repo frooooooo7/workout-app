@@ -105,9 +105,13 @@ class _WarmupScreenState extends State<WarmupScreen> {
   Future<void> _start() async {
     if (_starting) return;
     _starting = true;
+    final running = _args.session.current;
+    final seconds = running == null
+        ? null
+        : warmupSecondsToSave(running.elapsed(_clock()));
     unawaited(_args.scheduler.cancelGoalReached().catchError((_) {}));
     unawaited(_args.session.clear());
-    context.pop(true);
+    context.pop(WarmupGateResult.go(seconds: seconds));
   }
 
   Future<void> _abort() async {
@@ -203,7 +207,8 @@ class _WarmupScreenState extends State<WarmupScreen> {
                         reached
                             ? 'Zacznij trening, kiedy chcesz'
                             : 'Rozgrzej się po swojemu. Stoper mierzy czas, '
-                                  'zegar treningu ruszy po starcie.',
+                                  'zapiszemy go przy treningu osobno. '
+                                  'Zegar treningu ruszy po starcie.',
                         key: const ValueKey('warmup-hint'),
                         textAlign: TextAlign.center,
                         style: TextStyle(

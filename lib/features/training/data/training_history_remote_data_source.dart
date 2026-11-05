@@ -89,6 +89,7 @@ class TrainingHistoryRemoteDataSource {
       'sharedToProfile': detail.sharedToProfile,
       'postTitle': detail.postTitle,
       'postPhotoUrl': detail.postPhotoUrl,
+      'warmupSeconds': detail.warmupSeconds,
     };
   }
 
@@ -169,6 +170,7 @@ class TrainingHistoryRemoteDataSource {
       sharedToProfile: json['sharedToProfile'] as bool? ?? false,
       postTitle: json['postTitle'] as String?,
       postPhotoUrl: json['postPhotoUrl'] as String?,
+      warmupSeconds: (json['warmupSeconds'] as num?)?.toInt(),
     );
   }
 

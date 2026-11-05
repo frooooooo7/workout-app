@@ -154,6 +154,7 @@ TrainingSession applyWorkoutEdit(
     sharedToProfile: original.sharedToProfile,
     postTitle: original.postTitle,
     postPhotoUrl: original.postPhotoUrl,
+    warmupSeconds: original.warmupSeconds,
     planColorKey: original.planColorKey,
     planIconKey: original.planIconKey,
     pendingOp: original.pendingOp,

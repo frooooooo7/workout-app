@@ -251,6 +251,7 @@ class TrainingSessionDetail {
     this.sharedToProfile = false,
     this.postTitle,
     this.postPhotoUrl,
+    this.warmupSeconds,
   });
 
   final String id;
@@ -267,6 +268,10 @@ class TrainingSessionDetail {
   /// Tytuł posta (gdy inny niż nazwa treningu) i zdjęcie z serwera.
   final String? postTitle;
   final String? postPhotoUrl;
+
+  /// Czas rozgrzewki przed treningiem (sekundy), jeśli był zmierzony. Nie jest
+  /// częścią [durationSec].
+  final int? warmupSeconds;
 
   /// Te same szczegóły z nową treścią posta — po zapisie w arkuszu, zanim
   /// sesja dotrze na serwer i wróci w odświeżonych szczegółach.
@@ -289,6 +294,7 @@ class TrainingSessionDetail {
       sharedToProfile: sharedToProfile,
       postTitle: postTitle,
       postPhotoUrl: postPhotoUrl,
+      warmupSeconds: warmupSeconds,
     );
   }
 

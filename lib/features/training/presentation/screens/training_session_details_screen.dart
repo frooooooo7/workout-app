@@ -13,6 +13,7 @@ import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/warmup.dart';
+import '../utils/start_workout.dart';
 import '../utils/warmup_gate.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
@@ -500,7 +501,7 @@ class _TrainingSessionDetailsScreenState
           // Rozgrzewka przed powtórzonym treningiem: panel ze stoperem albo
           // pytanie przy pierwszym starcie. Przerwana — nic nie startuje.
           if (!mounted) return;
-          final proceed = await runWarmupGate(
+          final gate = await runWarmupGate(
             context,
             WarmupRequest(
               target: WarmupTarget.repeat(
@@ -511,8 +512,11 @@ class _TrainingSessionDetailsScreenState
             sessionInProgress: false,
             navigate: (location, {extra}) => _navigate(location, extra: extra),
           );
-          if (proceed && mounted) {
+          if (gate.proceed && mounted) {
             started = await cubit.startFromSession(source);
+            if (started != null) {
+              started = await attachWarmupSeconds(cubit, started, gate.seconds);
+            }
             conflict = started == null ? cubit.state.activeConflict : null;
           }
         }

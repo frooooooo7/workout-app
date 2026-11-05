@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 22;
+  static const _dbVersion = 23;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -332,6 +332,7 @@ class ExerciseDatabase {
     await _addPlanProgressionColumn(db);
     await _addPlanCoverColumns(db);
     await _addExerciseDetailColumns(db);
+    await _addSessionWarmupColumn(db);
   }
 
   /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
@@ -830,6 +831,19 @@ class ExerciseDatabase {
     if (oldVersion < 22) {
       await _addExerciseDetailColumns(db);
     }
+    if (oldVersion < 23) {
+      await _addSessionWarmupColumn(db);
+    }
+  }
+
+  /// v23: czas rozgrzewki przed treningiem (sekundy), osobno od czasu sesji.
+  Future<void> _addSessionWarmupColumn(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'warmup_seconds',
+      definition: 'INTEGER',
+    );
   }
 
   /// v22: sprzęt, inne nazwy (JSON), opis techniki (JSON) i rodzaj ruchu.

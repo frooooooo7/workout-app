@@ -36,6 +36,7 @@ TrainingSessionDetail trainingSessionDetailFromSession(
     sharedToProfile: session.sharedToProfile,
     postTitle: session.postTitle,
     postPhotoUrl: session.postPhotoUrl,
+    warmupSeconds: session.warmupSeconds,
   );
 }
 

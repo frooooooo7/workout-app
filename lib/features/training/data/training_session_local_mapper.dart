@@ -109,6 +109,7 @@ class TrainingSessionLocalMapper {
       planIconKey: sessionRow['plan_icon_key'] as String?,
       postTitle: sessionRow['post_title'] as String?,
       postPhotoUrl: sessionRow['post_photo_url'] as String?,
+      warmupSeconds: sessionRow['warmup_seconds'] as int?,
       exercises: [
         for (final exerciseRow in exerciseRows)
           TrainingSessionExercise(
@@ -212,6 +213,10 @@ class TrainingSessionLocalMapper {
         'plan_icon_key': session.planIconKey,
         'post_title': session.postTitle,
         'post_photo_url': postPhotoUrl,
+        // Serwer bez pola (starszy backend) nie kasuje lokalnego czasu.
+        'warmup_seconds':
+            session.warmupSeconds ??
+            (old.isEmpty ? null : old.first['warmup_seconds'] as int?),
         'created_at': old.isEmpty ? now : old.first['created_at'],
         'updated_at': now,
         'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),

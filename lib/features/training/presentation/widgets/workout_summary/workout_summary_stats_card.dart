@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/models/training_history_models.dart';
 import '../session_details/session_details_formatters.dart';
+import '../session_details/warmup_time_note.dart';
 
 /// Kluczowe liczby sesji w jednej karcie: czas, objętość, serie i pasek
 /// ukończenia planu. Jedyne miejsce na ekranie z metrykami całej sesji.
@@ -56,6 +57,10 @@ class WorkoutSummaryStatsCard extends StatelessWidget {
               ],
             ),
           ),
+          if (detail.warmupSeconds != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Center(child: WarmupTimeNote(seconds: detail.warmupSeconds!)),
+          ],
           if (planned > 0) ...[
             const SizedBox(height: AppSpacing.lg),
             _CompletionBar(
