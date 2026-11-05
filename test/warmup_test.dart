@@ -320,7 +320,7 @@ void main() {
       await elapse(tester, const Duration(minutes: 3, seconds: 12));
       expect(find.text('03:12'), findsOneWidget);
       expect(find.text('z 8:00 min'), findsOneWidget);
-      expect(find.text('Cel 8 min'), findsOneWidget);
+      expect(find.byKey(const ValueKey('warmup-goal-8')), findsOneWidget);
       expect(find.text('ROZGRZEWKA'), findsOneWidget);
     });
 
@@ -331,7 +331,7 @@ void main() {
       await pumpApp(tester);
       await tapBegin(tester);
 
-      expect(find.text('Rozgrzej się po swojemu'), findsOneWidget);
+      expect(find.textContaining('Rozgrzej się po swojemu'), findsOneWidget);
       expect(find.byKey(const ValueKey('warmup-after-card')), findsOneWidget);
       expect(find.text('1 ćwiczenie · 3 serie · Klatka'), findsOneWidget);
       expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
@@ -444,15 +444,12 @@ void main() {
       await tapBegin(tester);
       await elapse(tester, const Duration(minutes: 1));
 
-      await tester.tap(find.byKey(warmupGoalChipKey));
-      await settle(tester);
       await tester.tap(find.byKey(const ValueKey('warmup-goal-10')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(session.current!.targetMinutes, 10);
       expect(settings.current.targetMinutes, 8);
-      expect(find.text('Cel 10 min'), findsOneWidget);
       expect(find.text('z 10:00 min'), findsOneWidget);
       expect(scheduler.scheduled.last, const Duration(minutes: 9));
     });

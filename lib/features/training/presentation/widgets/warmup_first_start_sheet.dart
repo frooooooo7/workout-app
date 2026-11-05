@@ -52,29 +52,16 @@ class _WarmupFirstStartSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.35),
-                      blurRadius: 18,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.directions_run_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
+            const Text(
+              'ROZGRZEWKA',
+              style: TextStyle(
+                color: AppColors.primaryVariant,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.8,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             const Text(
               'Zaczynasz od rozgrzewki?',
               style: TextStyle(
@@ -114,10 +101,8 @@ class _WarmupFirstStartSheet extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.onPrimary,
-                minimumSize: const Size.fromHeight(54),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                ),
+                minimumSize: const Size.fromHeight(56),
+                shape: const StadiumBorder(),
                 textStyle: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -143,10 +128,8 @@ class _WarmupFirstStartSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.4),
-                ),
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
               child: const Row(
                 children: [
@@ -205,16 +188,8 @@ class _Point extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: AppColors.primaryVariant, size: 22),
-        ),
-        const SizedBox(width: 12),
+        Icon(icon, color: AppColors.primaryVariant, size: 22),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

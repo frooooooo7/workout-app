@@ -116,53 +116,9 @@ class _WarmupScreenState extends State<WarmupScreen> {
     context.pop();
   }
 
-  Future<void> _pickGoal(WarmupInProgress running) async {
-    final minutes = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Cel czasu na dziś',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Stały cel zmienisz w Ustawieniach.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final choice in kWarmupTargetChoices)
-                    ChoiceChip(
-                      key: ValueKey('warmup-goal-$choice'),
-                      label: Text('$choice min'),
-                      selected: choice == running.targetMinutes,
-                      onSelected: (_) => Navigator.of(sheetContext).pop(choice),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (minutes == null || minutes == running.targetMinutes) return;
+  /// Zmiana celu tylko na dziś — ustawienia konta zostają.
+  void _setGoal(WarmupInProgress running, int minutes) {
+    if (minutes == running.targetMinutes) return;
     unawaited(_args.session.setTargetMinutes(minutes));
     final updated = _args.session.current;
     if (updated == null) return;
@@ -173,6 +129,7 @@ class _WarmupScreenState extends State<WarmupScreen> {
           ? _args.scheduler.scheduleGoalReached(after: left).catchError((_) {})
           : _args.scheduler.cancelGoalReached().catchError((_) {}),
     );
+    setState(() {});
   }
 
   @override
@@ -190,14 +147,13 @@ class _WarmupScreenState extends State<WarmupScreen> {
       backgroundColor: AppColors.background,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+          gradient: RadialGradient(
+            center: const Alignment(0, -0.55),
+            radius: 1.1,
             colors: [
-              Color.lerp(AppColors.background, accent, 0.18)!,
+              Color.lerp(AppColors.background, accent, 0.22)!,
               AppColors.background,
             ],
-            stops: const [0, 0.55],
           ),
         ),
         child: SafeArea(
@@ -205,12 +161,6 @@ class _WarmupScreenState extends State<WarmupScreen> {
             children: [
               _TopBar(
                 target: request.target,
-                planColor: request.plan == null
-                    ? null
-                    : PlanColors.of(
-                        request.plan!.name,
-                        colorKey: request.plan!.colorKey,
-                      ),
                 onHide: () => context.pop(),
                 onAbort: _abort,
               ),
@@ -222,7 +172,7 @@ class _WarmupScreenState extends State<WarmupScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       Center(
                         child: _Ring(
                           elapsed: running?.elapsed(now) ?? Duration.zero,
@@ -234,22 +184,41 @@ class _WarmupScreenState extends State<WarmupScreen> {
                           reached: reached,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 24),
                       Center(
-                        child: _GoalChip(
-                          reached: reached,
-                          minutes:
-                              running?.targetMinutes ??
-                              kWarmupDefaultTargetMinutes,
-                          onTap: running == null
-                              ? null
-                              : () => _pickGoal(running),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _GoalSelector(
+                            selected:
+                                running?.targetMinutes ??
+                                kWarmupDefaultTargetMinutes,
+                            onSelected: running == null
+                                ? null
+                                : (minutes) => _setGoal(running, minutes),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      const _InfoCard(),
+                      const SizedBox(height: 14),
+                      Text(
+                        reached
+                            ? 'Zacznij trening, kiedy chcesz'
+                            : 'Rozgrzej się po swojemu. Stoper mierzy czas, '
+                                  'zegar treningu ruszy po starcie.',
+                        key: const ValueKey('warmup-hint'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: reached
+                              ? AppColors.success
+                              : AppColors.textSecondary,
+                          fontSize: 13.5,
+                          height: 1.4,
+                          fontWeight: reached
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
                       if (request.plan != null) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 28),
                         _AfterWarmupCard(plan: request.plan!),
                       ],
                       const SizedBox(height: 20),
@@ -264,53 +233,50 @@ class _WarmupScreenState extends State<WarmupScreen> {
                   AppSpacing.pageGutter,
                   AppSpacing.md,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(AppRadius.xl),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(
-                              alpha: reached ? 0.55 : 0.28,
-                            ),
-                            blurRadius: reached ? 28 : 18,
-                          ),
-                        ],
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(
+                          alpha: reached ? 0.55 : 0.3,
+                        ),
+                        blurRadius: reached ? 30 : 20,
+                        offset: const Offset(0, 6),
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: FilledButton.icon(
-                          key: warmupStartButtonKey,
-                          onPressed: _start,
-                          icon: const Icon(Icons.play_arrow_rounded, size: 26),
-                          label: const Text('Rozpocznij trening'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: AppColors.onPrimary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppRadius.xl),
-                            ),
-                            textStyle: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                    ],
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 58,
+                    child: FilledButton(
+                      key: warmupStartButtonKey,
+                      onPressed: _start,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.onPrimary,
+                        shape: const StadiumBorder(),
+                        textStyle: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Zegar treningu ruszy od zera po stuknięciu.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12.5,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Rozpocznij trening',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_rounded, size: 22),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -324,69 +290,50 @@ class _WarmupScreenState extends State<WarmupScreen> {
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.target,
-    required this.planColor,
     required this.onHide,
     required this.onAbort,
   });
 
   final WarmupTarget target;
-  final Color? planColor;
   final VoidCallback onHide;
   final VoidCallback onAbort;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pageGutter,
-        8,
-        AppSpacing.pageGutter,
-        0,
-      ),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
       child: Row(
         children: [
-          _RoundIconButton(
+          IconButton(
             key: warmupHideKey,
-            icon: Icons.keyboard_arrow_down_rounded,
             tooltip: 'Schowaj rozgrzewkę',
-            onTap: onHide,
+            onPressed: onHide,
+            iconSize: 30,
+            color: AppColors.textSubtle,
+            icon: const Icon(Icons.keyboard_arrow_down_rounded),
           ),
           Expanded(
             child: Column(
               children: [
                 const Text(
-                  'Rozgrzewka',
+                  'ROZGRZEWKA',
                   style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 17,
+                    color: AppColors.textSecondary,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: 1.8,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: planColor ?? AppColors.primaryVariant,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'przed: ${target.name}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  'przed: ${target.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -394,13 +341,10 @@ class _TopBar extends StatelessWidget {
           PopupMenuButton<void>(
             tooltip: 'Więcej',
             color: AppColors.surfaceVariant,
-            offset: const Offset(0, 48),
+            iconColor: AppColors.textSubtle,
+            iconSize: 24,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: const _RoundIconButton(
-              icon: Icons.more_vert_rounded,
-              tooltip: null,
             ),
             itemBuilder: (_) => [
               PopupMenuItem<void>(
@@ -419,41 +363,8 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({
-    super.key,
-    required this.icon,
-    this.tooltip,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String? tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final button = Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.tile),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.tile),
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(icon, color: AppColors.textPrimary, size: 24),
-        ),
-      ),
-    );
-    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
-  }
-}
-
-/// Pierścień ze stoperem: liczy w górę do celu, po celu świeci na zielono.
+/// Pierścień ze stoperem: cienki, ze światłem, liczy w górę do celu.
+/// Po celu świeci na zielono i pokazuje „Cel osiągnięty”.
 class _Ring extends StatelessWidget {
   const _Ring({
     required this.elapsed,
@@ -470,14 +381,14 @@ class _Ring extends StatelessWidget {
     final progress = target.inMilliseconds == 0
         ? 1.0
         : (elapsed.inMilliseconds / target.inMilliseconds).clamp(0.0, 1.0);
-    final color = reached ? AppColors.success : AppColors.primary;
+    final color = reached ? AppColors.success : AppColors.primaryVariant;
     return Semantics(
       label:
           'Rozgrzewka ${formatWarmupClock(elapsed)} z '
           '${formatWarmupClock(target)}',
       child: SizedBox(
-        width: 256,
-        height: 256,
+        width: 272,
+        height: 272,
         child: CustomPaint(
           painter: _RingPainter(progress: progress, color: color),
           child: Center(
@@ -485,36 +396,39 @@ class _Ring extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  reached ? 'CEL OSIĄGNIĘTY' : 'ROZGRZEWKA',
-                  style: TextStyle(
-                    color: reached
-                        ? AppColors.success
-                        : AppColors.textSecondary,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
                   formatWarmupClock(elapsed),
                   key: warmupTimerKey,
                   style: AppTextStyles.number(
-                    size: 84,
-                    weight: FontWeight.w700,
+                    size: 88,
+                    weight: FontWeight.w600,
                     color: reached ? AppColors.success : AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Text(
-                  reached
-                      ? 'stoper liczy dalej'
-                      : 'z ${_targetLabel(target)} min',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14.5,
-                  ),
+                  reached ? 'CEL OSIĄGNIĘTY' : 'z ${_targetLabel(target)} min',
+                  style: reached
+                      ? const TextStyle(
+                          color: AppColors.success,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.6,
+                        )
+                      : const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14.5,
+                        ),
                 ),
+                if (reached) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                    'stoper liczy dalej',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -538,31 +452,49 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 14.0;
+    const stroke = 7.0;
     final rect = Offset.zero & size;
-    final arcRect = rect.deflate(stroke / 2);
-    final track = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color = AppColors.chartTrack;
-    canvas.drawArc(arcRect, 0, math.pi * 2, false, track);
+    final arcRect = rect.deflate(stroke * 2);
+    canvas.drawArc(
+      arcRect,
+      0,
+      math.pi * 2,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = Colors.white.withValues(alpha: 0.07),
+    );
     if (progress <= 0) return;
 
+    final sweep = math.pi * 2 * progress;
+    // Miękka poświata pod łukiem.
+    canvas.drawArc(
+      arcRect,
+      -math.pi / 2,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke + 6
+        ..strokeCap = StrokeCap.round
+        ..color = color.withValues(alpha: 0.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
     final arc = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
     if (progress >= 1) {
-      // Pełny pierścień bez przejścia, żeby nie było widać szwu.
       arc.color = color;
     } else {
       arc.shader = SweepGradient(
         startAngle: -math.pi / 2,
         endAngle: math.pi * 1.5,
-        colors: [color.withValues(alpha: 0.55), color],
+        colors: [color.withValues(alpha: 0.5), color],
       ).createShader(rect);
     }
-    canvas.drawArc(arcRect, -math.pi / 2, math.pi * 2 * progress, false, arc);
+    canvas.drawArc(arcRect, -math.pi / 2, sweep, false, arc);
   }
 
   @override
@@ -570,112 +502,62 @@ class _RingPainter extends CustomPainter {
       old.progress != progress || old.color != color;
 }
 
-class _GoalChip extends StatelessWidget {
-  const _GoalChip({
-    required this.reached,
-    required this.minutes,
-    required this.onTap,
-  });
+/// Cel czasu na dziś: przełącznik segmentowy, bez dodatkowego arkusza.
+class _GoalSelector extends StatelessWidget {
+  const _GoalSelector({required this.selected, required this.onSelected});
 
-  final bool reached;
-  final int minutes;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = reached ? AppColors.success : AppColors.primaryVariant;
-    return Material(
-      key: warmupGoalChipKey,
-      color: color.withValues(alpha: 0.10),
-      shape: StadiumBorder(
-        side: BorderSide(color: color.withValues(alpha: 0.4)),
-      ),
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: reached ? null : onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                reached ? Icons.check_circle_rounded : Icons.flag_outlined,
-                color: color,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  reached
-                      ? 'Zacznij trening, kiedy chcesz'
-                      : 'Cel $minutes min',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              if (!reached) ...[
-                const SizedBox(width: 4),
-                Icon(Icons.keyboard_arrow_down_rounded, color: color, size: 20),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  const _InfoCard();
+  final int selected;
+  final ValueChanged<int>? onSelected;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      key: warmupGoalChipKey,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.border),
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.directions_run_rounded,
-            color: AppColors.primaryVariant,
-            size: 26,
-          ),
-          SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Rozgrzej się po swojemu',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+          for (final minutes in kWarmupTargetChoices)
+            GestureDetector(
+              key: ValueKey('warmup-goal-$minutes'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onSelected == null ? null : () => onSelected!(minutes),
+              child: Semantics(
+                button: true,
+                selected: minutes == selected,
+                label: 'Cel $minutes min',
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: minutes == selected
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$minutes min',
+                    style: TextStyle(
+                      color: minutes == selected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                      fontSize: 14,
+                      fontWeight: minutes == selected
+                          ? FontWeight.w800
+                          : FontWeight.w600,
+                    ),
                   ),
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'Stoper mierzy czas rozgrzewki. Zegar treningu ruszy '
-                  'dopiero po „Rozpocznij trening”.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -724,20 +606,19 @@ class _AfterWarmupCard extends StatelessWidget {
       key: const ValueKey('warmup-after-card'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.border),
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'PO ROZGRZEWCE',
+            'Po rozgrzewce',
             style: TextStyle(
               color: AppColors.textSecondary,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.3,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 12),
