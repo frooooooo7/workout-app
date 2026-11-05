@@ -11,11 +11,11 @@ import 'package:gym/features/training/domain/repositories/training_stats_reposit
 import 'package:gym/features/training/presentation/screens/history_screen.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_range_selector.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_calendar_sheet.dart';
-import 'package:gym/features/training/presentation/widgets/workout_history/history_filter_bar.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_formatters.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_month_calendar.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_month_navigator.dart';
-import 'package:gym/features/training/presentation/widgets/workout_history/history_session_card.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_compact_row.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_latest_card.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_session_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,6 +28,7 @@ session.TrainingSession _session(
 }) => session.TrainingSession(
   id: id,
   planName: plan,
+  planLocalId: 'plan-$plan',
   status: session.TrainingSessionStatus.completed,
   startedAt: startedAt.toUtc(),
   finishedAt: startedAt.add(const Duration(hours: 1)).toUtc(),
@@ -125,14 +126,9 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  Finder inCards(String text) => find.descendant(
-    of: find.byType(HistorySessionCard),
+  Finder inLatest(String text) => find.descendant(
+    of: find.byType(HistoryLatestCard),
     matching: find.text(text),
-  );
-
-  Finder chip(String label) => find.descendant(
-    of: find.byType(HistoryFilterBar),
-    matching: find.text(label),
   );
 
   Future<void> openHistory(WidgetTester tester, {double width = 390}) async {
@@ -146,7 +142,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows trainings as one list with weeks and exercises', (
+  testWidgets('shows the last workout as a card and earlier ones as rows', (
     tester,
   ) async {
     await openHistory(tester);
@@ -157,75 +153,76 @@ void main() {
     expect(find.byType(HistoryMonthNavigator), findsNothing);
     expect(find.byTooltip('Kalendarz'), findsOneWidget);
 
-    expect(
-      find.textContaining('Ten tydzień', findRichText: true),
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('Poprzedni tydzień', findRichText: true),
-      findsOneWidget,
-    );
-    expect(find.byType(HistorySessionCard), findsNWidgets(3));
-
-    // Karta dzisiejszego Pusha: 3 główne ćwiczenia, bez czwartego.
-    expect(inCards('Wyciskanie'), findsNWidgets(2));
-    expect(inCards('OHP'), findsOneWidget);
-    expect(inCards('Rozpiętki'), findsOneWidget);
-    expect(inCards('Dipy'), findsNothing);
-    // Legs: obie pozycje i notatka.
-    expect(inCards('Przysiad'), findsOneWidget);
-    expect(inCards('Martwy ciąg'), findsOneWidget);
-    expect(inCards('Kolana w porządku'), findsOneWidget);
+    // Karta ostatniego treningu: plan, kiedy, trzy główne ćwiczenia.
+    expect(find.byType(HistoryLatestCard), findsOneWidget);
+    expect(inLatest('Push'), findsOneWidget);
+    expect(find.text('OSTATNI TRENING · DZIŚ'), findsOneWidget);
+    expect(inLatest('Wyciskanie'), findsOneWidget);
+    expect(inLatest('OHP'), findsOneWidget);
+    expect(inLatest('Rozpiętki'), findsOneWidget);
+    expect(inLatest('Dipy'), findsNothing);
     // Rekord tylko na dzisiejszym Pushu.
     expect(find.text('rekord'), findsOneWidget);
-    expect(inCards('4 ćwiczenia'), findsNothing);
+
+    // Reszta to zwarte wiersze pod „Wcześniej”, bez dzisiejszego treningu.
+    expect(find.text('Wcześniej'), findsOneWidget);
+    expect(find.byType(HistoryCompactRow), findsNWidgets(2));
+    expect(
+      find.descendant(
+        of: find.byType(HistoryCompactRow),
+        matching: find.text('Legs'),
+      ),
+      findsOneWidget,
+    );
+    // Bez pasków filtrów i nagłówków tygodni.
+    expect(find.text('Wszystkie'), findsNothing);
+    expect(
+      find.textContaining('Ten tydzień', findRichText: true),
+      findsNothing,
+    );
   });
 
-  testWidgets('month header sums the month of the visible trainings', (
+  testWidgets('the card compares with the previous workout of the plan', (
     tester,
   ) async {
     await openHistory(tester);
 
+    // Dziś 1,32 t, poprzedni Push 400 kg.
+    expect(inLatest('1,32'), findsOneWidget);
+    expect(inLatest('230%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('latest-footnote')), findsOneWidget);
     expect(
-      find.text(formatMonthYear(today).toUpperCase()),
+      find.textContaining('Zmiany względem poprzedniego Push'),
+      findsOneWidget,
+    );
+    // Wyciskanie 100 zamiast 80 kg, OHP robione pierwszy raz.
+    expect(inLatest('+20 kg'), findsOneWidget);
+    expect(inLatest('nowe'), findsNWidgets(2));
+  });
+
+  testWidgets('month header names the month and sums the earlier trainings', (
+    tester,
+  ) async {
+    await openHistory(tester);
+
+    final legsDay = today.subtract(const Duration(days: 7));
+    // Pierwszy miesiąc pod „Wcześniej” to miesiąc treningu Legs.
+    expect(
+      find.textContaining(formatMonthName(legsDay), findRichText: true),
       findsAtLeastNWidgets(1),
     );
   });
 
-  testWidgets('plan chips narrow the list and Rekordy keeps record trainings', (
-    tester,
-  ) async {
-    // Testowa czcionka jest szeroka — szerszy ekran, żeby wszystkie chipy
-    // były widoczne.
-    await openHistory(tester, width: 700);
-
-    expect(find.text('Wszystkie'), findsOneWidget);
-    expect(chip('Legs'), findsOneWidget);
-    expect(chip('Rekordy'), findsOneWidget);
-
-    await tester.tap(chip('Legs'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HistorySessionCard), findsOneWidget);
-    expect(inCards('Przysiad'), findsOneWidget);
-
-    await tester.tap(chip('Rekordy'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HistorySessionCard), findsOneWidget);
-    expect(inCards('Wyciskanie'), findsOneWidget);
-
-    await tester.tap(chip('Wszystkie'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HistorySessionCard), findsNWidgets(3));
-  });
-
-  testWidgets('no filter bar when there is a single plan and no records', (
+  testWidgets('a single workout has the card and no earlier list', (
     tester,
   ) async {
     setUpRepositories(local: [_session('only', todayWorkout)]);
     await openHistory(tester);
 
-    expect(find.byType(HistorySessionCard), findsOneWidget);
-    expect(find.text('Wszystkie'), findsNothing);
+    expect(find.byType(HistoryLatestCard), findsOneWidget);
+    expect(find.byType(HistoryCompactRow), findsNothing);
+    expect(find.text('Wcześniej'), findsNothing);
+    expect(find.text('Pierwszy trening tego planu'), findsOneWidget);
   });
 
   testWidgets('falls back to the server list when the phone has no sessions', (
@@ -237,10 +234,12 @@ void main() {
     );
     await openHistory(tester);
 
-    expect(find.byType(HistorySessionCard), findsOneWidget);
-    expect(inCards('Plan Serwer'), findsOneWidget);
-    expect(inCards('15'), findsOneWidget);
-    expect(inCards('ćwiczeń'), findsOneWidget);
+    expect(find.byType(HistoryLatestCard), findsOneWidget);
+    expect(inLatest('Plan Serwer'), findsOneWidget);
+    expect(inLatest('15'), findsOneWidget);
+    expect(inLatest('Serii'), findsOneWidget);
+    // Z samej listy serwera nie ma ćwiczeń ani porównania.
+    expect(find.byKey(const ValueKey('latest-footnote')), findsNothing);
   });
 
   testWidgets('empty history shows a hint instead of an empty list', (
@@ -250,7 +249,7 @@ void main() {
     await openHistory(tester);
 
     expect(find.text('Brak zarejestrowanych treningów'), findsOneWidget);
-    expect(find.byType(HistorySessionCard), findsNothing);
+    expect(find.byType(HistoryLatestCard), findsNothing);
   });
 
   group('calendar sheet', () {
@@ -326,41 +325,22 @@ void main() {
       await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
       expect(find.byType(HistoryCalendarSheet), findsNothing);
-      final highlighted = tester
-          .widgetList<HistorySessionCard>(find.byType(HistorySessionCard))
-          .where((card) => card.highlighted);
-      expect(highlighted.map((c) => c.entry.item.id), ['today']);
+      // Dzień ostatniego treningu: podświetla się jego karta.
+      expect(
+        tester
+            .widget<HistoryLatestCard>(find.byType(HistoryLatestCard))
+            .highlighted,
+        isTrue,
+      );
 
       // Podświetlenie gaśnie samo.
       await tester.pump(const Duration(seconds: 3));
       expect(
         tester
-            .widgetList<HistorySessionCard>(find.byType(HistorySessionCard))
-            .any((card) => card.highlighted),
+            .widget<HistoryLatestCard>(find.byType(HistoryLatestCard))
+            .highlighted,
         isFalse,
       );
-    });
-
-    testWidgets('"Pokaż na liście" drops a filter that hides the day', (
-      tester,
-    ) async {
-      await openHistory(tester, width: 700);
-      await tester.tap(chip('Legs'));
-      await tester.pumpAndSettle();
-      expect(find.byType(HistorySessionCard), findsOneWidget);
-
-      await openCalendar(tester);
-      await tester.tap(
-        find.descendant(
-          of: find.byType(HistoryMonthCalendar),
-          matching: find.text('${today.day}'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Pokaż na liście'));
-      await tester.pumpAndSettle(const Duration(milliseconds: 100));
-
-      expect(find.byType(HistorySessionCard), findsNWidgets(3));
     });
 
     testWidgets('arrow goes to the previous month', (tester) async {
@@ -405,7 +385,7 @@ void main() {
       expect(find.text('Sesje'), findsNothing);
       expect(find.text('Statystyki'), findsNothing);
       expect(find.byType(StatsRangeSelector), findsNothing);
-      expect(find.byType(HistorySessionCard), findsNWidgets(3));
+      expect(find.byType(HistoryLatestCard), findsOneWidget);
       // Obie ikony stoją w nagłówku listy.
       expect(find.byTooltip('Statystyki'), findsOneWidget);
       expect(find.byTooltip('Kalendarz'), findsOneWidget);

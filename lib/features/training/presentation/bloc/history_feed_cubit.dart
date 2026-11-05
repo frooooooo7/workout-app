@@ -8,12 +8,14 @@ import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../../domain/services/history_feed_builder.dart';
+import '../../domain/services/history_latest.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import 'training_stats_cubit.dart';
 
 class HistoryFeedState {
   const HistoryFeedState({
     this.entries = const [],
+    this.latest,
     this.loading = true,
     this.failed = false,
     this.fromServer = false,
@@ -21,6 +23,10 @@ class HistoryFeedState {
 
   /// Treningi od najnowszego.
   final List<HistoryFeedEntry> entries;
+
+  /// Najnowszy trening z porównaniem do poprzedniego (karta „Ostatni
+  /// trening”); `null` przy pustej liście.
+  final HistoryLatest? latest;
 
   /// Trwa pierwsze wczytanie.
   final bool loading;
@@ -116,11 +122,17 @@ class HistoryFeedCubit extends Cubit<HistoryFeedState> {
   ) async {
     final seq = ++_buildSeq;
     final args = _FeedArgs(sessions: sessions, records: records);
-    final entries = sessions.length >= isolateThreshold
+    final feed = sessions.length >= isolateThreshold
         ? await compute(_feedJob, args)
         : _feedJob(args);
     if (isClosed || seq != _buildSeq) return;
-    emit(HistoryFeedState(entries: entries, loading: false));
+    emit(
+      HistoryFeedState(
+        entries: feed.entries,
+        latest: feed.latest,
+        loading: false,
+      ),
+    );
   }
 
   Future<void> _loadFromServer() async {
@@ -141,11 +153,14 @@ class HistoryFeedCubit extends Cubit<HistoryFeedState> {
       // Lokalne sesje, które doszły w międzyczasie, wygrywają z serwerem.
       if (isClosed || seq != _buildSeq || _hadLocalSessions) return;
       items.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+      final entries = [
+        for (final item in items) historyFeedEntryFromListItem(item),
+      ];
       emit(
         HistoryFeedState(
-          entries: [
-            for (final item in items) historyFeedEntryFromListItem(item),
-          ],
+          entries: entries,
+          // Z samej listy serwera nie ma ćwiczeń, więc i porównania.
+          latest: entries.isEmpty ? null : HistoryLatest(entry: entries.first),
           loading: false,
           fromServer: items.isNotEmpty,
         ),
@@ -162,6 +177,7 @@ class HistoryFeedCubit extends Cubit<HistoryFeedState> {
       emit(
         HistoryFeedState(
           entries: state.entries,
+          latest: state.latest,
           loading: false,
           failed: state.entries.isEmpty,
           fromServer: state.fromServer,
@@ -184,5 +200,9 @@ class _FeedArgs {
   final PersonalRecordsResult records;
 }
 
-List<HistoryFeedEntry> _feedJob(_FeedArgs args) =>
-    buildHistoryFeed(args.sessions, args.records);
+typedef _FeedResult = ({List<HistoryFeedEntry> entries, HistoryLatest? latest});
+
+_FeedResult _feedJob(_FeedArgs args) {
+  final entries = buildHistoryFeed(args.sessions, args.records);
+  return (entries: entries, latest: buildHistoryLatest(args.sessions, entries));
+}
