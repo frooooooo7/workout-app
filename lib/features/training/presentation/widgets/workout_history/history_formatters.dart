@@ -36,18 +36,6 @@ String formatHoursMinutes(int seconds) {
 String formatWorkoutCount(int count) =>
     '$count ${polishPlural(count, 'trening', 'treningi', 'treningów')}';
 
-/// Zakres tygodnia: `12–18 paź`, a na przełomie miesięcy `28 wrz – 4 paź`.
-String formatWeekRange(DateTime start, DateTime end) {
-  if (start.month == end.month && start.day == end.day) {
-    return '${end.day} ${formatMonthShort(end)}';
-  }
-  if (start.month == end.month) {
-    return '${start.day}–${end.day} ${formatMonthShort(end)}';
-  }
-  return '${start.day} ${formatMonthShort(start)} – '
-      '${end.day} ${formatMonthShort(end)}';
-}
-
 /// Dzień sesji: `śr 14 paź`.
 String formatSessionDay(DateTime date) =>
     '${formatWeekdayShort(date)} ${formatDayNumber(date)} '
