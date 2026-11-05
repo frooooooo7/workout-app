@@ -115,20 +115,34 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
     WarmupInProgress warmup,
     List<CustomTrainingPlan> plans,
   ) async {
-    switch (warmup.target.kind) {
-      case WarmupTargetKind.custom:
-        return _startCustom(context);
-      case WarmupTargetKind.plan:
-        for (final plan in plans) {
-          if (plan.id == warmup.target.refId) {
-            return _startPlan(context, plan);
+    // Rozgrzewkę kasujemy tylko wtedy, gdy WIEMY, że celu nie ma. Gdy lista
+    // planów się jeszcze ładuje albo odczyt się nie udał, zostaje nietknięta.
+    var gone = false;
+    try {
+      switch (warmup.target.kind) {
+        case WarmupTargetKind.custom:
+          await _startCustom(context);
+          return;
+        case WarmupTargetKind.plan:
+          final planId = warmup.target.refId;
+          final found = await findWarmupPlan(
+            planId,
+            plans,
+            ServiceLocator.trainingPlanRepository,
+          );
+          if (!context.mounted) return;
+          if (found != null) {
+            await _startPlan(context, found);
+            return;
           }
-        }
-      case WarmupTargetKind.repeat:
-        final sessionId = warmup.target.refId;
-        if (sessionId != null) {
-          final source = await ServiceLocator.trainingSessionRepository
-              .loadForEdit(sessionId);
+          gone = true;
+        case WarmupTargetKind.repeat:
+          final sessionId = warmup.target.refId;
+          final source = sessionId == null
+              ? null
+              : await ServiceLocator.trainingSessionRepository.loadForEdit(
+                  sessionId,
+                );
           if (!context.mounted) return;
           if (source != null && source.exercises.isNotEmpty) {
             await startWorkout(
@@ -138,9 +152,22 @@ class _TrainingSessionTabState extends State<TrainingSessionTab> {
             );
             return;
           }
-        }
+          gone = true;
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nie udało się teraz otworzyć treningu. Rozgrzewka trwa dalej, '
+            'spróbuj za chwilę.',
+          ),
+        ),
+      );
+      return;
     }
-    // Plan albo trening nie istnieje już, więc rozgrzewka nie ma celu.
+    if (!gone) return;
+    // Plan albo trening na pewno nie istnieje, więc rozgrzewka nie ma celu.
     await ServiceLocator.warmupSession.clear();
     await ServiceLocator.warmupGoalScheduler.cancelGoalReached().catchError(
       (_) {},

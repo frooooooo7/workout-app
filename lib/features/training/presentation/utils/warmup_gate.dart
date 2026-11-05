@@ -7,6 +7,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../data/warmup_stores.dart';
 import '../../domain/models/custom_training_plan.dart';
 import '../../domain/models/warmup.dart';
+import '../../domain/repositories/training_plan_repository.dart';
 import '../../domain/services/warmup_goal_scheduler.dart';
 import '../screens/warmup_screen.dart';
 import '../widgets/warmup_first_start_sheet.dart';
@@ -52,6 +53,7 @@ Future<bool> runWarmupGate(
   scheduler ??= ServiceLocator.warmupGoalScheduler;
 
   final messenger = ScaffoldMessenger.of(context);
+  final router = GoRouter.maybeOf(context);
   final push =
       navigate ??
       (String location, {Object? extra}) =>
@@ -67,6 +69,12 @@ Future<bool> runWarmupGate(
             'Trwa rozgrzewka przed „${running.target.name}”. Wróć do niej '
             'z ekranu Trening albo ją przerwij.',
           ),
+          action: router == null
+              ? null
+              : SnackBarAction(
+                  label: 'Wróć',
+                  onPressed: () => router.go('/app/training'),
+                ),
         ),
       );
       return false;
@@ -95,4 +103,19 @@ Future<bool> runWarmupGate(
     extra: WarmupArgs(request: request, session: session, scheduler: scheduler),
   );
   return start == true;
+}
+
+/// Plan trwającej rozgrzewki: najpierw z listy widoku, a gdy jej tam nie ma
+/// (lista może się jeszcze ładować), z repozytorium. `null` znaczy, że planu
+/// na pewno nie ma; błąd odczytu leci wyżej, żeby nie kasować rozgrzewki.
+Future<CustomTrainingPlan?> findWarmupPlan(
+  String? planId,
+  List<CustomTrainingPlan> plans,
+  TrainingPlanRepository repository,
+) async {
+  if (planId == null) return null;
+  for (final plan in plans) {
+    if (plan.id == planId) return plan;
+  }
+  return repository.getById(planId);
 }

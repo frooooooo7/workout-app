@@ -5,6 +5,7 @@ import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/data/warmup_stores.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/warmup.dart';
+import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/training/domain/services/warmup_goal_scheduler.dart';
 import 'package:gym/features/training/presentation/screens/warmup_screen.dart';
 import 'package:gym/features/training/presentation/utils/warmup_gate.dart';
@@ -22,6 +23,24 @@ class _FakeScheduler implements WarmupGoalScheduler {
 
   @override
   Future<void> cancelGoalReached() async => cancelled++;
+}
+
+class _PlanRepo implements TrainingPlanRepository {
+  _PlanRepo({this.plan, this.fail = false});
+
+  final CustomTrainingPlan? plan;
+  final bool fail;
+  var lookups = 0;
+
+  @override
+  Future<CustomTrainingPlan?> getById(String id) async {
+    lookups++;
+    if (fail) throw StateError('db');
+    return plan;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _Clock {
@@ -481,5 +500,34 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('active-warmup-resume')));
     expect(resumed, 1);
+  });
+
+  group('findWarmupPlan', () {
+    test(
+      'takes the plan from the view list without asking the repository',
+      () async {
+        final repo = _PlanRepo();
+        expect(await findWarmupPlan('plan-1', [_plan()], repo), isNotNull);
+        expect(repo.lookups, 0);
+      },
+    );
+
+    test('empty (still loading) list falls back to the repository', () async {
+      final repo = _PlanRepo(plan: _plan());
+      expect((await findWarmupPlan('plan-1', const [], repo))?.id, 'plan-1');
+      expect(repo.lookups, 1);
+    });
+
+    test('null only when the repository confirms the plan is gone', () async {
+      expect(await findWarmupPlan('plan-1', const [], _PlanRepo()), isNull);
+      expect(await findWarmupPlan(null, [_plan()], _PlanRepo()), isNull);
+    });
+
+    test('a read error propagates so the warm-up is not cleared', () {
+      expect(
+        findWarmupPlan('plan-1', const [], _PlanRepo(fail: true)),
+        throwsStateError,
+      );
+    });
   });
 }
