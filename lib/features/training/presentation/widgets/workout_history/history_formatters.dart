@@ -20,6 +20,9 @@ const _monthNames = [
 String formatMonthYear(DateTime month) =>
     '${_monthNames[month.month - 1]} ${month.year}';
 
+/// `Październik`.
+String formatMonthName(DateTime month) => _monthNames[month.month - 1];
+
 /// Czas treningu: `52 min`, `1 h 02 min`, `9 h 20 min`.
 String formatHoursMinutes(int seconds) {
   final totalMinutes = seconds ~/ 60;

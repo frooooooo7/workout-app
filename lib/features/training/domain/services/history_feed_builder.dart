@@ -9,6 +9,7 @@ import 'training_session_detail_mapper.dart';
 class HistoryFeedLine {
   const HistoryFeedLine({
     required this.name,
+    this.key = '',
     this.weightKg,
     this.reps,
     this.durationSeconds,
@@ -18,6 +19,10 @@ class HistoryFeedLine {
   });
 
   final String name;
+
+  /// Klucz ćwiczenia w statystykach — po nim karta „Ostatni trening” dopasowuje
+  /// porównanie z poprzednim razem.
+  final String key;
 
   /// Najcięższa seria robocza; `null` (albo 0) — ćwiczenie z masą własną.
   final double? weightKg;
@@ -177,6 +182,7 @@ _Candidate? _strengthCandidate(
     index,
     HistoryFeedLine(
       name: exercise.exerciseName.trim(),
+      key: statsExerciseKey(exercise),
       weightKg: bestWeight,
       reps: bestReps,
       isRecord: isRecord,
@@ -208,6 +214,7 @@ _Candidate? _cardioCandidate(
     index,
     HistoryFeedLine(
       name: exercise.exerciseName.trim(),
+      key: statsExerciseKey(exercise),
       durationSeconds: seconds > 0 ? seconds : null,
       distanceM: meters > 0 ? meters : null,
       distanceUnit: exercise.distanceUnit,
