@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/theme/plan_colors.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/repositories/training_plan_repository.dart';
 
 class TrainingPlansState {
@@ -76,20 +78,52 @@ class TrainingPlansCubit extends Cubit<TrainingPlansState> {
     }
   }
 
-  Future<void> addPlan(CustomTrainingPlan plan) async {
-    final saved = await _repository.create(plan);
+  Future<void> addPlan(
+    CustomTrainingPlan plan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async {
+    final saved = await _repository.create(plan, cover: cover);
     final newPlans = List<CustomTrainingPlan>.from(state.plans)..add(saved);
     emit(state.copyWith(plans: newPlans));
   }
 
-  Future<void> updatePlan(CustomTrainingPlan updatedPlan) async {
-    final saved = await _repository.update(updatedPlan);
+  Future<void> updatePlan(
+    CustomTrainingPlan updatedPlan, {
+    PostPhotoChange cover = const KeepPostPhoto(),
+  }) async {
+    final saved = await _repository.update(updatedPlan, cover: cover);
     final index = state.plans.indexWhere((p) => p.id == updatedPlan.id);
     if (index != -1) {
       final newPlans = List<CustomTrainingPlan>.from(state.plans);
       newPlans[index] = saved;
       emit(state.copyWith(plans: newPlans));
     }
+  }
+
+  /// Historia, kalendarz i trening na żywo znają tylko nazwę planu z sesji
+  /// — rejestr podpowiada im kolor, ikonę i ustawienia treningu planu.
+  @override
+  void onChange(Change<TrainingPlansState> change) {
+    super.onChange(change);
+    if (identical(change.currentState.plans, change.nextState.plans)) return;
+    PlanColors.styles.register([
+      for (final plan in change.nextState.plans)
+        (name: plan.name, style: plan.style),
+    ]);
+  }
+
+  /// Zapisuje nową kolejność planów ([orderedIds] od pierwszego); lista
+  /// zmienia się od razu, zapis i wysyłka idą w tle.
+  Future<void> reorderPlans(List<String> orderedIds) async {
+    final byId = {for (final plan in state.plans) plan.id: plan};
+    final reordered = [
+      for (final (index, id) in orderedIds.indexed)
+        if (byId.remove(id) case final plan?) plan.copyWith(sortOrder: index),
+      // Plany spoza listy (np. dodane w międzyczasie) zostają na końcu.
+      ...byId.values,
+    ];
+    emit(state.copyWith(plans: reordered));
+    await _repository.reorder(orderedIds);
   }
 
   Future<void> removePlan(String planId) async {

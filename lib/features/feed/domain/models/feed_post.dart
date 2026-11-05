@@ -25,6 +25,8 @@ class FeedPost {
     required this.author,
     required this.title,
     this.note,
+    this.postTitle,
+    this.photoUrl,
     required this.startedAt,
     this.finishedAt,
     this.durationSec = 0,
@@ -43,9 +45,22 @@ class FeedPost {
 
   final String id;
   final FeedAuthor author;
+
+  /// Nazwa treningu (planu).
   final String title;
+
+  /// Opis posta (notatka treningu).
   final String? note;
+
+  /// Własny tytuł posta; `null` → [title].
+  final String? postTitle;
+
+  /// Zdjęcie posta (`/uploads/...`).
+  final String? photoUrl;
   final DateTime startedAt;
+
+  /// Nagłówek karty: własny tytuł albo nazwa treningu.
+  String get headline => postTitle ?? title;
   final DateTime? finishedAt;
   final int durationSec;
   final int exercisesCount;
@@ -76,6 +91,8 @@ class FeedPost {
       author: author,
       title: title,
       note: note,
+      postTitle: postTitle,
+      photoUrl: photoUrl,
       startedAt: startedAt,
       finishedAt: finishedAt,
       durationSec: durationSec,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../core/theme/plan_icons.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/utils/polish_plural.dart';
@@ -10,6 +11,7 @@ import '../../../domain/models/training_history_models.dart';
 import '../session_details/session_details_formatters.dart';
 import 'history_formatters.dart';
 import 'history_plan_style.dart';
+import 'history_record_badge.dart';
 
 /// Wiersz sesji w Historii: odznaka z kolorem i literą planu, nazwa planu
 /// (z odznaką rekordów, jeśli padły), data · godzina · czas w jednej linii
@@ -44,22 +46,10 @@ class HistorySessionRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: plan.tint(0.17),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Text(
-                plan.letter,
-                style: TextStyle(
-                  color: plan.onTint,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+            PlanBadge(
+              name: plan.name,
+              color: plan.color,
+              iconKey: plan.iconKey,
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
@@ -83,7 +73,7 @@ class HistorySessionRow extends StatelessWidget {
                       ),
                       if (recordsCount > 0) ...[
                         const SizedBox(width: AppSpacing.xs),
-                        _RecordBadge(count: recordsCount),
+                        HistoryRecordBadge(count: recordsCount),
                       ],
                     ],
                   ),
@@ -117,46 +107,6 @@ class HistorySessionRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Złota pigułka „rekord” / „2 rekordy”.
-class _RecordBadge extends StatelessWidget {
-  const _RecordBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = count == 1
-        ? 'rekord'
-        : '$count ${polishPlural(count, 'rekord', 'rekordy', 'rekordów')}';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.record.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.emoji_events_outlined,
-            size: 12,
-            color: AppColors.record,
-          ),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.record,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
       ),
     );
   }

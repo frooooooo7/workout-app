@@ -1,8 +1,6 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/units/weight_unit.dart';
-import 'package:gym/features/profile/presentation/widgets/ruler_picker.dart';
 import 'package:gym/features/training/data/plate_settings_store.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
@@ -174,43 +172,6 @@ void main() {
       ),
       findsOneWidget,
     );
-
-    await cubit.close();
-  });
-
-  testWidgets('mouse drag and wheel on the ruler change the weight', (
-    tester,
-  ) async {
-    final (_, cubit) = await pumpWorkout(tester, plannedWeight: '100');
-    await openFromTile(tester);
-
-    final ruler = find.byType(RulerPicker);
-    String applyLabel() => tester
-        .widget<Text>(
-          find.descendant(
-            of: find.byKey(plateSheetApplyKey),
-            matching: find.byType(Text),
-          ),
-        )
-        .data!;
-    expect(applyLabel(), 'Wpisz 100 kg do serii 1');
-
-    // W lewo — więcej (jedna kreska = 12 px = 2,5 kg).
-    await tester.drag(
-      ruler,
-      const Offset(-80, 0),
-      kind: PointerDeviceKind.mouse,
-    );
-    await tester.pumpAndSettle();
-    final afterDrag = applyLabel();
-    expect(afterDrag, isNot('Wpisz 100 kg do serii 1'));
-
-    // Kółko myszy przewija linijkę i też zmienia ciężar.
-    final pointer = TestPointer(1, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(pointer.hover(tester.getCenter(ruler)));
-    await tester.sendEventToBinding(pointer.scroll(const Offset(60, 0)));
-    await tester.pumpAndSettle();
-    expect(applyLabel(), isNot(afterDrag));
 
     await cubit.close();
   });

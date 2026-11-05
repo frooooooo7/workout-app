@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/previous_performance_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
@@ -94,6 +95,15 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 class _FakePreviousPerformance implements PreviousPerformanceRepository {
@@ -106,6 +116,13 @@ class _FakePreviousPerformance implements PreviousPerformanceRepository {
     required String exerciseId,
     required String exerciseName,
   }) async => byExerciseId[exerciseId];
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
+  }) async => [?byExerciseId[exerciseId]];
 }
 
 class _ThrowingPreviousPerformance implements PreviousPerformanceRepository {
@@ -113,6 +130,13 @@ class _ThrowingPreviousPerformance implements PreviousPerformanceRepository {
   Future<List<TrainingSessionSet>?> lastCompletedSets({
     required String exerciseId,
     required String exerciseName,
+  }) async => throw StateError('db closed');
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
   }) async => throw StateError('db closed');
 }
 
@@ -243,7 +267,7 @@ void main() {
       // (z rozgrzewką w liczniku byłoby „1 / 2 serii”).
       expect(
         find.descendant(
-          of: find.widgetWithText(ListTile, 'Bench press'),
+          of: find.byKey(const ValueKey('order-block-0')),
           matching: find.text('0 / 1 serii'),
         ),
         findsOneWidget,

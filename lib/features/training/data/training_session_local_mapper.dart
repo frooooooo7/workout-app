@@ -82,8 +82,8 @@ class TrainingSessionLocalMapper {
       for (final sessionRow in sessionRows)
         _sessionFromGrouped(
           sessionRow: sessionRow,
-          exerciseRows: exercisesBySession[sessionRow['local_id'] as String] ??
-              const [],
+          exerciseRows:
+              exercisesBySession[sessionRow['local_id'] as String] ?? const [],
           setsByExerciseId: setsByExercise,
         ),
     ];
@@ -105,6 +105,11 @@ class TrainingSessionLocalMapper {
       startedAt: decodeDate(sessionRow['started_at'])!,
       finishedAt: decodeDate(sessionRow['finished_at']),
       sharedToProfile: ((sessionRow['shared_to_profile'] as int?) ?? 0) == 1,
+      planColorKey: sessionRow['plan_color_key'] as String?,
+      planIconKey: sessionRow['plan_icon_key'] as String?,
+      postTitle: sessionRow['post_title'] as String?,
+      postPhotoUrl: sessionRow['post_photo_url'] as String?,
+      warmupSeconds: sessionRow['warmup_seconds'] as int?,
       exercises: [
         for (final exerciseRow in exerciseRows)
           TrainingSessionExercise(
@@ -120,6 +125,14 @@ class TrainingSessionLocalMapper {
             exerciseCategory: exerciseRow['exercise_category'] as String,
             exerciseImageUrl: exerciseRow['exercise_image_url'] as String?,
             note: exerciseRow['note'] as String?,
+            restSeconds: exerciseRow['rest_seconds'] as int?,
+            supersetGroup: exerciseRow['superset_group'] as String?,
+            tracking: ExerciseTracking.fromApi(
+              exerciseRow['tracking_type'] as String?,
+            ),
+            distanceUnit: DistanceUnit.fromApi(
+              exerciseRow['distance_unit'] as String?,
+            ),
             sets: [
               for (final set
                   in setsByExerciseId[exerciseRow['local_id'] as String] ??
@@ -147,6 +160,10 @@ class TrainingSessionLocalMapper {
       actualTempo: set['actual_tempo'] as String?,
       completed: ((set['completed'] as int?) ?? 0) == 1,
       completedAt: decodeDate(set['completed_at']),
+      plannedDurationSeconds: set['planned_duration_seconds'] as int?,
+      plannedDistanceM: set['planned_distance_m'] as int?,
+      actualDurationSeconds: set['actual_duration_seconds'] as int?,
+      actualDistanceM: set['actual_distance_m'] as int?,
     );
   }
 
@@ -156,6 +173,7 @@ class TrainingSessionLocalMapper {
     String? serverId,
     String? pendingOp,
     bool clearPendingOp = false,
+    bool fromServer = false,
   }) async {
     await _inTransaction(db, (txn) async {
       final old = await txn.query(
@@ -164,26 +182,45 @@ class TrainingSessionLocalMapper {
         whereArgs: [session.id],
         limit: 1,
       );
+      var postPhotoUrl = session.postPhotoUrl;
+      if (fromServer && old.isNotEmpty) {
+        // Zmiana zdjęcia czeka w kolejce — serwer jeszcze o niej nie wie,
+        // więc jego adres nie może cofnąć tego, co użytkownik już widzi.
+        final queued = await txn.query(
+          ExerciseDatabase.tablePendingPostPhotos,
+          columns: ['session_local_id'],
+          where: 'session_local_id = ?',
+          whereArgs: [session.id],
+          limit: 1,
+        );
+        if (queued.isNotEmpty) {
+          postPhotoUrl = old.first['post_photo_url'] as String?;
+        }
+      }
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      await txn.insert(
-        ExerciseDatabase.tableTrainingSessions,
-        {
-          'local_id': session.id,
-          'server_id': serverId ?? session.serverId,
-          'plan_local_id': session.planLocalId,
-          'plan_server_id': session.planServerId,
-          'plan_name': session.planName,
-          'status': session.status.name,
-          'note': session.note,
-          'started_at': encodeDate(session.startedAt),
-          'finished_at': encodeDate(session.finishedAt),
-          'shared_to_profile': session.sharedToProfile ? 1 : 0,
-          'created_at': old.isEmpty ? now : old.first['created_at'],
-          'updated_at': now,
-          'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert(ExerciseDatabase.tableTrainingSessions, {
+        'local_id': session.id,
+        'server_id': serverId ?? session.serverId,
+        'plan_local_id': session.planLocalId,
+        'plan_server_id': session.planServerId,
+        'plan_name': session.planName,
+        'status': session.status.name,
+        'note': session.note,
+        'started_at': encodeDate(session.startedAt),
+        'finished_at': encodeDate(session.finishedAt),
+        'shared_to_profile': session.sharedToProfile ? 1 : 0,
+        'plan_color_key': session.planColorKey,
+        'plan_icon_key': session.planIconKey,
+        'post_title': session.postTitle,
+        'post_photo_url': postPhotoUrl,
+        // Serwer bez pola (starszy backend) nie kasuje lokalnego czasu.
+        'warmup_seconds':
+            session.warmupSeconds ??
+            (old.isEmpty ? null : old.first['warmup_seconds'] as int?),
+        'created_at': old.isEmpty ? now : old.first['created_at'],
+        'updated_at': now,
+        'pending_op': clearPendingOp ? null : (pendingOp ?? session.pendingOp),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await _replaceChildrenIn(txn, session);
     });
   }
@@ -198,6 +235,11 @@ class TrainingSessionLocalMapper {
       await txn.delete(
         ExerciseDatabase.tableTrainingSessions,
         where: 'local_id = ?',
+        whereArgs: [sessionLocalId],
+      );
+      await txn.delete(
+        ExerciseDatabase.tablePendingPostPhotos,
+        where: 'session_local_id = ?',
         whereArgs: [sessionLocalId],
       );
     });
@@ -261,9 +303,7 @@ class TrainingSessionLocalMapper {
       db,
       ExerciseDatabase.tableTrainingSessionSets,
       column: 'session_exercise_local_id',
-      ids: [
-        for (final old in oldExercises) old['local_id'] as String,
-      ],
+      ids: [for (final old in oldExercises) old['local_id'] as String],
     );
     await db.delete(
       ExerciseDatabase.tableTrainingSessionExercises,
@@ -286,6 +326,10 @@ class TrainingSessionLocalMapper {
         'exercise_image_url': exercise.exerciseImageUrl,
         'position': entry.key,
         'note': exercise.note,
+        'rest_seconds': exercise.restSeconds,
+        'superset_group': exercise.supersetGroup,
+        'tracking_type': exercise.tracking.apiName,
+        'distance_unit': exercise.distanceUnit.apiName,
       });
       for (final setEntry in exercise.sets.asMap().entries) {
         final set = setEntry.value;
@@ -305,6 +349,10 @@ class TrainingSessionLocalMapper {
           'actual_tempo': set.actualTempo,
           'completed': set.completed ? 1 : 0,
           'completed_at': encodeDate(set.completedAt),
+          'planned_duration_seconds': set.plannedDurationSeconds,
+          'planned_distance_m': set.plannedDistanceM,
+          'actual_duration_seconds': set.actualDurationSeconds,
+          'actual_distance_m': set.actualDistanceM,
         });
       }
     }

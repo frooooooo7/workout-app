@@ -9,8 +9,8 @@ import 'history_plan_style.dart';
 /// kolorem planu, dziś ma biały pierścień. Pod siatką legenda planów z tego
 /// miesiąca i seria tygodni z treningiem.
 ///
-/// Stuknięcie dnia z treningiem zawęża listę do tego dnia (drugie — zdejmuje
-/// filtr).
+/// Stuknięcie dnia z treningiem zaznacza go (arkusz kalendarza pokazuje pod
+/// spodem jego sesje); drugie stuknięcie zdejmuje zaznaczenie.
 class HistoryMonthCalendar extends StatelessWidget {
   const HistoryMonthCalendar({
     super.key,

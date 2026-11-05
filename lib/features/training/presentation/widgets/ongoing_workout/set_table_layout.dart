@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/units/weight_unit.dart';
@@ -22,9 +24,11 @@ class SetTableLayout {
     required bool hasPrevious,
     required bool showRir,
     required bool showTempo,
+    bool showWeight = true,
   }) {
+    final weight = showWeight ? _weight : 0.0;
     final preferred = [
-      _weight,
+      if (showWeight) _weight,
       _reps,
       if (showRir) _rir,
       if (showTempo) _tempo,
@@ -37,7 +41,7 @@ class SetTableLayout {
     if (hasPrevious && previous >= _minPrevious) {
       return SetTableLayout._(
         previousWidth: previous,
-        weightWidth: _weight,
+        weightWidth: weight,
         repsWidth: _reps,
         rirWidth: showRir ? _rir : 0,
         tempoWidth: showTempo ? _tempo : 0,
@@ -48,7 +52,7 @@ class SetTableLayout {
     if (hasPrevious && squeeze >= _minSqueeze) {
       return SetTableLayout._(
         previousWidth: _minPrevious,
-        weightWidth: _weight * squeeze,
+        weightWidth: weight * squeeze,
         repsWidth: _reps * squeeze,
         rirWidth: showRir ? _rir * squeeze : 0,
         tempoWidth: showTempo ? _tempo * squeeze : 0,
@@ -56,12 +60,10 @@ class SetTableLayout {
     }
     // Bez kolumny „Poprzednio” pola rosną (z umiarem), resztę zostawiamy
     // pustą; na bardzo wąskim ekranie się kurczą.
-    // Nie mniej niż zero — w pierwszej klatce na webie okno bywa prawie
-    // zerowej szerokości, a ujemna szerokość pola wywraca cały ekran.
-    final factor = (available / inputsWidth).clamp(0.0, 1.4);
+    final factor = math.min(available / inputsWidth, 1.4);
     return SetTableLayout._(
       previousWidth: null,
-      weightWidth: _weight * factor,
+      weightWidth: weight * factor,
       repsWidth: _reps * factor,
       rirWidth: showRir ? _rir * factor : 0,
       tempoWidth: showTempo ? _tempo * factor : 0,
@@ -83,6 +85,8 @@ class SetTableLayout {
 
   /// `null` — kolumna „Poprzednio” się nie mieści albo nie ma danych.
   final double? previousWidth;
+
+  /// 0 — ćwiczenie na same powtórzenia, bez kolumny ciężaru.
   final double weightWidth;
   final double repsWidth;
 
@@ -91,6 +95,7 @@ class SetTableLayout {
   final double tempoWidth;
 
   bool get showPrevious => previousWidth != null;
+  bool get showWeight => weightWidth > 0;
   bool get showRir => rirWidth > 0;
   bool get showTempo => tempoWidth > 0;
 }
@@ -124,8 +129,10 @@ class SetTableHeader extends StatelessWidget {
             const SizedBox(width: SetTableLayout.gap),
           ] else
             const Spacer(),
-          cell(WeightUnits.current.columnLabel, layout.weightWidth),
-          const SizedBox(width: SetTableLayout.gap),
+          if (layout.showWeight) ...[
+            cell(WeightUnits.current.columnLabel, layout.weightWidth),
+            const SizedBox(width: SetTableLayout.gap),
+          ],
           cell('POWT.', layout.repsWidth),
           if (layout.showRir) ...[
             const SizedBox(width: SetTableLayout.gap),

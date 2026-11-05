@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/launch/launch_logo_anchor.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'login_terms_footer.dart';
 
@@ -20,12 +21,14 @@ class LoginWelcomeCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Center(
-          child: Image.asset(
-            'assets/images/logo.png',
-            width: 48,
-            height: 48,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
+          child: LaunchLogoAnchor(
+            child: Image.asset(
+              'assets/images/logo.webp',
+              width: 48,
+              height: 48,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
           ),
         ),
         const SizedBox(height: 12),

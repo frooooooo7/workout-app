@@ -8,7 +8,9 @@ import '../models/training_session.dart';
 ///
 /// Dzięki temu ekran podsumowania pokazuje te same liczby, które użytkownik
 /// zobaczy później w historii — bez czekania na synchronizację z serwerem.
-TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) {
+TrainingSessionDetail trainingSessionDetailFromSession(
+  TrainingSession session,
+) {
   final endedAt = session.finishedAt;
   final durationSec = endedAt == null
       ? 0
@@ -23,6 +25,8 @@ TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) 
     plan: TrainingPlanSummary(
       id: session.planServerId ?? session.planLocalId ?? '',
       name: session.planName,
+      colorKey: session.planColorKey,
+      iconKey: session.planIconKey,
     ),
     note: session.note,
     exercises: session.exercises
@@ -30,6 +34,9 @@ TrainingSessionDetail trainingSessionDetailFromSession(TrainingSession session) 
         .toList(growable: false),
     updatedAt: endedAt ?? session.startedAt,
     sharedToProfile: session.sharedToProfile,
+    postTitle: session.postTitle,
+    postPhotoUrl: session.postPhotoUrl,
+    warmupSeconds: session.warmupSeconds,
   );
 }
 
@@ -69,6 +76,8 @@ TrainingExerciseDetail _exerciseDetailFromSession(
         .toList(growable: false),
     imageUrl: exercise.exerciseImageUrl,
     note: exercise.note,
+    tracking: exercise.tracking,
+    distanceUnit: exercise.distanceUnit,
     sets: exercise.sets
         .asMap()
         .entries
@@ -81,12 +90,16 @@ TrainingExerciseDetail _exerciseDetailFromSession(
               reps: entry.value.plannedReps,
               rir: entry.value.plannedRir,
               tempo: entry.value.plannedTempo,
+              durationSeconds: entry.value.plannedDurationSeconds,
+              distanceM: entry.value.plannedDistanceM,
             ),
             actual: _metricsFromRaw(
               weight: entry.value.actualWeight,
               reps: entry.value.actualReps,
               rir: entry.value.actualRir,
               tempo: entry.value.actualTempo,
+              durationSeconds: entry.value.actualDurationSeconds,
+              distanceM: entry.value.actualDistanceM,
             ),
             completed: entry.value.completed,
             completedAt: entry.value.completedAt,
@@ -103,13 +116,20 @@ TrainingSetMetrics? _metricsFromRaw({
   String? reps,
   String? rir,
   String? tempo,
+  int? durationSeconds,
+  int? distanceM,
 }) {
   final weightKg = parseWeightKg(weight);
   final repsCount = parseReps(reps);
   final rirValue = parseReps(rir);
   final tempoValue = tempo?.trim();
   final hasTempo = tempoValue != null && tempoValue.isNotEmpty;
-  if (weightKg == null && repsCount == null && rirValue == null && !hasTempo) {
+  if (weightKg == null &&
+      repsCount == null &&
+      rirValue == null &&
+      !hasTempo &&
+      durationSeconds == null &&
+      distanceM == null) {
     return null;
   }
   return TrainingSetMetrics(
@@ -117,16 +137,18 @@ TrainingSetMetrics? _metricsFromRaw({
     reps: repsCount,
     rir: rirValue,
     tempo: hasTempo ? tempoValue : null,
+    durationSeconds: durationSeconds,
+    distanceM: distanceM,
   );
 }
 
 /// `82,5` → 82.5; `60 kg` → 60; `''` / `abc` → `null`.
 double? parseWeightKg(String? raw) {
   if (raw == null) return null;
-  final cleaned = raw.trim().replaceAll(',', '.').replaceAll(
-    RegExp(r'[^0-9.]'),
-    '',
-  );
+  final cleaned = raw
+      .trim()
+      .replaceAll(',', '.')
+      .replaceAll(RegExp(r'[^0-9.]'), '');
   if (cleaned.isEmpty) return null;
   return double.tryParse(cleaned);
 }

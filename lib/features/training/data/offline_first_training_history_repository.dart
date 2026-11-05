@@ -18,23 +18,29 @@ import 'training_session_local_history.dart';
 /// * Jest cache — oddajemy go od razu (stale-while-revalidate), a sieć
 ///   odświeża zapis w tle. Gdy odpowiedź różni się od cache, [onFreshData]
 ///   daje znać ekranom, żeby przeczytały dane jeszcze raz.
-/// * Brak cache — czekamy na sieć. Błąd: lokalne sesje, a bez nich wyjątek.
+/// * Brak cache — czekamy na sieć, ale pierwsza strona listy najwyżej
+///   [slowNetworkGrace]: gdy serwer milczy (Wi-Fi bez internetu), pokazujemy
+///   treningi z telefonu, a odpowiedź dochodzi w tle. Błąd: lokalne sesje,
+///   a bez nich wyjątek. Wyjątek: szczegóły sesji, którą mamy w lokalnej bazie, oddajemy od razu
+///   z telefonu (offline zapytanie wisiałoby do timeoutu).
 /// * Treningi zakończone offline (jeszcze niewysłane) są dokładane do
 ///   pierwszej strony wyników, więc od razu widać je w historii; niewysłana
 ///   edycja zastępuje starszą wersję z serwera.
 /// * Treningi usunięte na tym urządzeniu (usunięcie czeka na wysyłkę) są
 ///   ukrywane na każdej stronie — z sieci i z cache.
-class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository {
+class OfflineFirstTrainingHistoryRepository
+    implements TrainingHistoryRepository {
   OfflineFirstTrainingHistoryRepository({
     required TrainingHistoryRemoteDataSource remote,
     required TrainingHistoryLocalCache localCache,
     TrainingSessionLocalHistory? localSessions,
     VoidCallback? onFreshData,
     this.freshDataDebounce = const Duration(milliseconds: 300),
-  })  : _remote = remote,
-        _localCache = localCache,
-        _localSessions = localSessions,
-        _onFreshData = onFreshData;
+    this.slowNetworkGrace = const Duration(seconds: 3),
+  }) : _remote = remote,
+       _localCache = localCache,
+       _localSessions = localSessions,
+       _onFreshData = onFreshData;
 
   final TrainingHistoryRemoteDataSource _remote;
   final TrainingHistoryLocalCache _localCache;
@@ -45,6 +51,10 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
   /// Kilka odpowiedzi odświeżonych w tle naraz (np. wszystkie strony
   /// miesiąca) daje jedno powiadomienie zamiast serii przeładowań ekranów.
   final Duration freshDataDebounce;
+
+  /// Jak długo pierwsza strona listy bez cache czeka na serwer, zanim pokaże
+  /// treningi z lokalnej bazy.
+  final Duration slowNetworkGrace;
   Timer? _freshDataTimer;
 
   @override
@@ -99,6 +109,10 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
   }) async {
     final isFirstPage = cursor == null || cursor.isEmpty;
 
+    // Strona z telefonu po przekroczeniu [slowNetworkGrace] jest już
+    // kompletna (bez usuniętych, ze wszystkimi lokalnymi sesjami) — nie
+    // przechodzi drugi raz przez dokładanie lokalnych sesji.
+    var servedFromPhone = false;
     try {
       final page = await _preferFresh<TrainingSessionPage>(
         fetch: () async {
@@ -121,7 +135,21 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
         },
         readCache: () => _localCache.readListResponse(cacheKey),
         decodeCache: _remote.pageFromCachedJson,
+        slowFallback: !isFirstPage
+            ? null
+            : () async {
+                final local = await _localOnlyPage(
+                  status: status,
+                  planId: planId,
+                  query: query,
+                  from: from,
+                  to: to,
+                );
+                servedFromPhone = local != null;
+                return local;
+              },
       );
+      if (servedFromPhone) return page;
       final visible = await _withoutPendingDeletions(page);
       if (!isFirstPage) return visible;
       return await _withLocalSessions(
@@ -157,19 +185,38 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       return trainingSessionDetailFromSession(local);
     }
 
+    Future<(TrainingSessionDetail, Map<String, dynamic>)> fetch() async {
+      final detail = await _remote.getSessionDetail(sessionId);
+      final payload = _remote.detailToCachedJson(detail);
+      await _localCache.saveSessionDetail(
+        sessionId: sessionId,
+        payload: payload,
+        updatedAt: detail.updatedAt,
+      );
+      return (detail, payload);
+    }
+
+    Future<Map<String, dynamic>?> readCache() =>
+        _localCache.readSessionDetail(sessionId);
+
+    if (local != null && !await _hasCachedDetail(readCache)) {
+      // Sesja jest w lokalnej bazie (pobrana synchronizacją), ale tych
+      // szczegółów nikt jeszcze nie otwierał. Bez internetu zapytanie potrafi
+      // wisieć do timeoutu, więc pokazujemy kopię z telefonu od razu,
+      // a serwer odświeża ją w tle.
+      unawaited(
+        fetch().then<void>(
+          (_) => _scheduleFreshDataNotice(),
+          onError: (Object _) {},
+        ),
+      );
+      return trainingSessionDetailFromSession(local);
+    }
+
     try {
       return await _preferFresh<TrainingSessionDetail>(
-        fetch: () async {
-          final detail = await _remote.getSessionDetail(sessionId);
-          final payload = _remote.detailToCachedJson(detail);
-          await _localCache.saveSessionDetail(
-            sessionId: sessionId,
-            payload: payload,
-            updatedAt: detail.updatedAt,
-          );
-          return (detail, payload);
-        },
-        readCache: () => _localCache.readSessionDetail(sessionId),
+        fetch: fetch,
+        readCache: readCache,
         decodeCache: _remote.detailFromCachedJson,
       );
     } on ApiException catch (error) {
@@ -178,6 +225,14 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       }
       rethrow;
     }
+  }
+
+  Future<bool> _hasCachedDetail(
+    Future<Map<String, dynamic>?> Function() readCache,
+  ) async {
+    final payload = await _readSafely(readCache);
+    if (payload == null) return false;
+    return _decodeSafely(() => _remote.detailFromCachedJson(payload)) != null;
   }
 
   // ── Network vs cache ──────────────────────────────────────────────────────
@@ -198,6 +253,7 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
     required Future<(T, Map<String, dynamic>)> Function() fetch,
     required Future<Map<String, dynamic>?> Function() readCache,
     required T Function(Map<String, dynamic> payload) decodeCache,
+    Future<T?> Function()? slowFallback,
   }) async {
     // Cache najpierw — inaczej szybki mock zapisze odpowiedź, a my
     // odczytalibyśmy ją jako „stary” cache w tym samym wywołaniu.
@@ -207,19 +263,38 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
         : _decodeSafely(() => decodeCache(cachedPayload));
     final remote = fetch();
     if (cachedPayload == null || cached == null) {
-      final (fresh, _) = await remote;
-      return fresh;
+      if (slowFallback == null) {
+        final (fresh, _) = await remote;
+        return fresh;
+      }
+      try {
+        final (fresh, _) = await remote.timeout(slowNetworkGrace);
+        return fresh;
+      } on TimeoutException {
+        final fallback = await slowFallback();
+        if (fallback == null) {
+          // Nic lokalnego do pokazania — czekamy dalej na serwer.
+          final (fresh, _) = await remote;
+          return fresh;
+        }
+        // Odpowiedź zapisze się w cache; ekrany dostaną sygnał o świeżych
+        // danych i przeczytają listę jeszcze raz.
+        unawaited(
+          remote.then<void>(
+            (_) => _scheduleFreshDataNotice(),
+            onError: (Object _) {},
+          ),
+        );
+        return fallback;
+      }
     }
     unawaited(
-      remote.then<void>(
-        (result) {
-          final (_, freshPayload) = result;
-          if (!_samePayload(cachedPayload, freshPayload)) {
-            _scheduleFreshDataNotice();
-          }
-        },
-        onError: (Object _) {},
-      ),
+      remote.then<void>((result) {
+        final (_, freshPayload) = result;
+        if (!_samePayload(cachedPayload, freshPayload)) {
+          _scheduleFreshDataNotice();
+        }
+      }, onError: (Object _) {}),
     );
     return cached;
   }
@@ -384,8 +459,10 @@ class OfflineFirstTrainingHistoryRepository implements TrainingHistoryRepository
       }
       if (!changed) return page;
 
-      final items = [...byId.values.whereType<TrainingSessionListItem>(), ...extras]
-        ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+      final items = [
+        ...byId.values.whereType<TrainingSessionListItem>(),
+        ...extras,
+      ]..sort((a, b) => b.startedAt.compareTo(a.startedAt));
       return TrainingSessionPage(
         items: items,
         nextCursor: page.nextCursor,

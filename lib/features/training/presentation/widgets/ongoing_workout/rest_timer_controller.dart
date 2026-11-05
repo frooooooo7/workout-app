@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../domain/services/rest_timer_scheduler.dart';
@@ -11,10 +11,22 @@ import '../../../domain/services/rest_timer_scheduler.dart';
 /// długości wołają [notifyListeners].
 ///
 /// Systemowe powiadomienie o końcu przerwy planuje [scheduler] (gdy jest).
+///
+/// Odliczanie idzie od godziny końca przerwy, nie od liczby tyknięć — przy
+/// zablokowanym ekranie system wstrzymuje timery, a po powrocie licznik od
+/// razu pokazuje prawdziwy czas (albo kończy przerwę, jeśli już minęła).
+///
+/// Po końcu przerwy panel nie znika — [isFinished] trzyma „0:00” na
+/// ekranie, aż użytkownik go zamknie albo zacznie kolejną serię.
 class RestTimerController extends ChangeNotifier {
-  RestTimerController({this.scheduler});
+  RestTimerController({this.scheduler, DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   final RestTimerScheduler? scheduler;
+  final DateTime Function() _clock;
+
+  /// Częstsze niż co sekundę, żeby opóźnione tyknięcie nie gubiło sekund.
+  static const _tickInterval = Duration(milliseconds: 250);
 
   /// Ile zostało; [Duration.zero], gdy przerwa nie trwa.
   final ValueNotifier<Duration> remaining = ValueNotifier(Duration.zero);
@@ -35,7 +47,21 @@ class RestTimerController extends ChangeNotifier {
   static const _lastCustomKey = 'last_custom_rest_duration';
 
   Timer? _ticker;
+  DateTime? _endsAt;
   bool _disposed = false;
+
+  /// Koniec bieżącej albo właśnie minionej przerwy (panel na „0:00”) —
+  /// do zapamiętania przy wyjściu z ekranu treningu.
+  DateTime? get endsAt => _endsAt ?? (_finished ? _finishedAt : null);
+  DateTime? _finishedAt;
+
+  /// `false`: zamknięcie kontrolera nie odwołuje powiadomienia — trening
+  /// trwa dalej, tylko ekran został zwinięty.
+  bool cancelNotificationOnDispose = true;
+
+  /// Po powrocie na pierwszy plan licznik od razu łapie prawdziwy czas,
+  /// zamiast czekać na najbliższe tyknięcie.
+  AppLifecycleListener? _lifecycle;
 
   /// Wczytuje zapamiętaną własną długość przerwy.
   Future<void> loadLastCustomDuration() async {
@@ -57,30 +83,84 @@ class RestTimerController extends ChangeNotifier {
 
   bool get isActive => _ticker?.isActive == true;
 
+  /// Wznawia przerwę zapamiętaną przy wyjściu z ekranu. Powiadomienie jest
+  /// już zaplanowane, więc nie planuje go drugi raz. Przerwa, która minęła
+  /// niedawno ([finishedGrace]), wraca jako „0:00”; starsza — wcale.
+  void restore({
+    required DateTime endsAt,
+    required Duration total,
+    Duration finishedGrace = const Duration(minutes: 10),
+  }) {
+    if (_disposed) return;
+    final now = _clock();
+    _ticker?.cancel();
+    _lifecycle ??= AppLifecycleListener(onResume: sync);
+    _total = total;
+    if (!endsAt.isAfter(now)) {
+      _endsAt = null;
+      _finished = now.difference(endsAt) <= finishedGrace;
+      _finishedAt = _finished ? endsAt : null;
+      remaining.value = Duration.zero;
+      notifyListeners();
+      return;
+    }
+    _finished = false;
+    _endsAt = endsAt;
+    _ticker = Timer.periodic(_tickInterval, (_) => sync());
+    sync();
+    notifyListeners();
+  }
+
+  /// Przerwa minęła, a użytkownik jeszcze nie wrócił do serii: panel zostaje
+  /// z „0:00” i czerwoną obwódką, aż do „OK”, kolejnej przerwy albo
+  /// odhaczenia serii.
+  bool get isFinished => _finished;
+  bool _finished = false;
+
+  /// Panel odpoczynku jest na ekranie (odliczanie albo „koniec przerwy”).
+  bool get isVisible => isActive || _finished;
+
   /// Startuje (albo restartuje) przerwę. Zwraca `false`, gdy lokalny licznik
   /// ruszył, ale powiadomienia systemowego nie udało się zaplanować.
   Future<bool> start(Duration duration) async {
     _ticker?.cancel();
+    _finished = false;
+    _lifecycle ??= AppLifecycleListener(onResume: sync);
     selectedDuration = duration;
     _total = duration;
+    _endsAt = _clock().add(duration);
     remaining.value = duration;
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    _ticker = Timer.periodic(_tickInterval, (_) => sync());
     notifyListeners();
     return _schedule(duration);
   }
 
   /// „+15 s”: wydłuża bieżącą przerwę i przesuwa powiadomienie.
   Future<bool> extend(Duration extra) async {
-    if (!isActive) return true;
+    // Po końcu przerwy „+15 s” odlicza jeszcze chwilę od zera.
+    if (_finished) {
+      final keep = selectedDuration;
+      final scheduled = await start(extra);
+      selectedDuration = keep;
+      return scheduled;
+    }
+    final endsAt = _endsAt;
+    if (!isActive || endsAt == null) return true;
     _total += extra;
-    remaining.value += extra;
+    final newEnd = endsAt.add(extra);
+    _endsAt = newEnd;
+    sync();
+    // Przerwa mogła już minąć (ekran wrócił, ticker jeszcze nie tyknął).
+    if (!isActive) return true;
     notifyListeners();
-    return _schedule(remaining.value);
+    return _schedule(newEnd.difference(_clock()));
   }
 
   /// „Pomiń” / „Zatrzymaj”: kończy przerwę i odwołuje powiadomienie.
   void stop() {
     _ticker?.cancel();
+    _endsAt = null;
+    _finished = false;
     final pending = scheduler?.cancelRestFinished();
     if (pending != null) unawaited(pending.catchError((_) {}));
     _reset();
@@ -97,15 +177,25 @@ class RestTimerController extends ChangeNotifier {
     }
   }
 
-  void _tick() {
-    if (remaining.value <= const Duration(seconds: 1)) {
+  /// Przelicza [remaining] z godziny końca przerwy. Woła ją ticker i powrót
+  /// aplikacji na pierwszy plan.
+  void sync() {
+    final endsAt = _endsAt;
+    if (endsAt == null || !isActive) return;
+    final left = endsAt.difference(_clock());
+    if (left <= Duration.zero) {
       _ticker?.cancel();
+      _endsAt = null;
+      _finished = true;
+      _finishedAt = endsAt;
       // Koniec przerwy czuć w dłoni; dźwięk daje powiadomienie systemowe.
       unawaited(HapticFeedback.heavyImpact());
       _reset();
       return;
     }
-    remaining.value -= const Duration(seconds: 1);
+    // W górę do pełnej sekundy: przez pierwszą sekundę widać „1:30”, nie
+    // „1:29”, a „0:00” pojawia się dopiero razem z końcem przerwy.
+    remaining.value = Duration(seconds: (left.inMilliseconds / 1000).ceil());
   }
 
   void _reset() {
@@ -118,8 +208,11 @@ class RestTimerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _ticker?.cancel();
-    final pending = scheduler?.cancelRestFinished();
-    if (pending != null) unawaited(pending.catchError((_) {}));
+    _lifecycle?.dispose();
+    if (cancelNotificationOnDispose) {
+      final pending = scheduler?.cancelRestFinished();
+      if (pending != null) unawaited(pending.catchError((_) {}));
+    }
     remaining.dispose();
     super.dispose();
   }

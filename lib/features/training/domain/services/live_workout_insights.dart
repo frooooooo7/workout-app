@@ -2,7 +2,10 @@ import '../../../../core/units/weight_unit.dart';
 import '../../../library/domain/models/exercise_stats.dart';
 import '../models/training_session.dart';
 import '../models/training_stats.dart';
+import 'cardio_insights.dart';
 import 'training_session_detail_mapper.dart' show parseReps, parseWeightKg;
+
+export 'progression_engine.dart';
 
 /// Wskazówki dla treningu na żywo: najlepsza seria poprzedniego treningu,
 /// rekord ćwiczenia, podpowiedź progresji i wykrywanie rekordu tuż po
@@ -190,59 +193,38 @@ ExerciseRecordBaseline recordBaselineBefore(
   return current;
 }
 
-/// Podpowiedź ciężaru dla serii: poprzedni ciężar, powiększony o [step],
-/// gdy poprzednio zrobiono wszystkie zaplanowane powtórzenia.
-class ProgressionHint {
-  const ProgressionHint({required this.weightKg, required this.deltaKg});
-
-  final double weightKg;
-
-  /// Zwyżka względem poprzedniego treningu; 0, gdy warto powtórzyć ciężar.
-  final double deltaKg;
-
-  bool get isIncrease => deltaKg > 0;
-}
-
-/// Najmniejszy skok ciężaru: 2,5 kg albo 5 lb (para najmniejszych krążków).
-double progressionStepKg(WeightUnit unit) =>
-    unit == WeightUnit.kg ? 2.5 : unit.toKg(5);
-
-/// Podpowiedź dla serii [current] na podstawie pasującej serii z poprzedniego
-/// treningu. Rozgrzewki i serie bez poprzedniego ciężaru jej nie mają. Cel
-/// powtórzeń to plan (górna granica zakresu `8-10`), a bez planu — wynik z
-/// poprzedniego razu.
-ProgressionHint? progressionHintFor(
-  TrainingSessionSet current,
-  TrainingSessionSet? previous, {
-  WeightUnit? unit,
-}) {
-  if (previous == null || !current.countsTowardStats) return null;
-  final weight = parseWeightKg(previous.actualWeight);
-  final reps = parseReps(previous.actualReps);
-  if (weight == null || weight <= 0 || reps == null) return null;
-  final target = _targetReps(current.plannedReps) ?? reps;
-  final delta = reps >= target
-      ? progressionStepKg(unit ?? WeightUnits.current)
-      : 0.0;
-  return ProgressionHint(weightKg: weight + delta, deltaKg: delta);
-}
-
-int? _targetReps(String planned) {
-  final numbers = RegExp(r'\d+').allMatches(planned).map((m) => m.group(0)!);
-  if (numbers.isEmpty) return null;
-  return numbers.map(int.parse).reduce((a, b) => a > b ? a : b);
-}
-
 /// Historia ćwiczenia potrzebna w trakcie treningu: serie z poprzedniego
 /// treningu (kolumna „Poprzednio”, chip „Ostatnio”, progresja) i rekord.
 class ExerciseHistoryInsights {
-  const ExerciseHistoryInsights({this.previousSets, this.record});
+  const ExerciseHistoryInsights({
+    this.previousSets,
+    this.earlierSets = const [],
+    this.record,
+    this.bestPaceSecondsPerKm,
+  });
 
   static const empty = ExerciseHistoryInsights();
 
   /// `null` — ćwiczenia jeszcze nie robiono (albo historia niedostępna).
   final List<TrainingSessionSet>? previousSets;
+
+  /// Serie z treningów przed [previousSets], od najnowszego (do progresji).
+  final List<List<TrainingSessionSet>> earlierSets;
   final ExerciseRecordBaseline? record;
+
+  /// Kardio: najszybsze tempo z całej historii (s/km).
+  final int? bestPaceSecondsPerKm;
+
+  /// „Ostatnio” ćwiczenia: dla kardio suma poprzedniego treningu
+  /// (`3,2 km · 18:10`), dla reszty najlepsza seria.
+  String? lastResult(TrainingSessionExercise exercise, {WeightUnit? unit}) {
+    if (!exercise.tracking.tracksDuration) return lastTopSet(unit: unit);
+    return formatCardioTotals(
+      cardioTotals(previousSets ?? const []),
+      exercise.tracking,
+      exercise.distanceUnit,
+    );
+  }
 
   /// Najlepsza seria z poprzedniego treningu: `92,5 × 6`.
   String? lastTopSet({WeightUnit? unit}) {

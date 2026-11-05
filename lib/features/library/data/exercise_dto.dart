@@ -20,6 +20,12 @@ class ExerciseDto {
     this.isFavouriteDirty = false,
     this.localImageBytes,
     this.localImageFilename,
+    this.trackingType = 'weight_reps',
+    this.distanceUnit = 'km',
+    this.equipment,
+    this.aliases,
+    this.instructions,
+    this.pattern,
   });
 
   final String localId;
@@ -36,6 +42,16 @@ class ExerciseDto {
   final bool isFavouriteDirty;
   final Uint8List? localImageBytes;
   final String? localImageFilename;
+  final String trackingType;
+  final String distanceUnit;
+  final String? equipment;
+
+  /// JSON: lista tekstów.
+  final String? aliases;
+
+  /// JSON: `{steps, mistakes}`.
+  final String? instructions;
+  final String? pattern;
 
   // ── DB ──────────────────────────────────────
 
@@ -59,6 +75,12 @@ class ExerciseDto {
       isFavouriteDirty: ((map['is_favourite_dirty'] as int?) ?? 0) == 1,
       localImageBytes: map['local_image_bytes'] as Uint8List?,
       localImageFilename: map['local_image_filename'] as String?,
+      trackingType: map['tracking_type'] as String? ?? 'weight_reps',
+      distanceUnit: map['distance_unit'] as String? ?? 'km',
+      equipment: map['equipment'] as String?,
+      aliases: map['aliases'] as String?,
+      instructions: map['instructions'] as String?,
+      pattern: map['pattern'] as String?,
     );
   }
 
@@ -77,9 +99,31 @@ class ExerciseDto {
         'is_favourite_dirty': isFavouriteDirty ? 1 : 0,
         'local_image_bytes': localImageBytes,
         'local_image_filename': localImageFilename,
+        'tracking_type': trackingType,
+        'distance_unit': distanceUnit,
+        'equipment': equipment,
+        'aliases': aliases,
+        'instructions': instructions,
+        'pattern': pattern,
       };
 
   // ── Domain ───────────────────────────────────
+
+  /// Inne nazwy jako JSON; `null`, gdy lista jest pusta.
+  static String? encodeAliases(List<String> aliases) =>
+      aliases.isEmpty ? null : jsonEncode(aliases);
+
+  static List<String> decodeAliases(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List
+          ? [for (final a in decoded) if (a is String && a.isNotEmpty) a]
+          : const [];
+    } catch (_) {
+      return const [];
+    }
+  }
 
   static String encodeMusclesToJson(List<MuscleGroup> muscles) =>
       jsonEncode(muscles.map((m) => m.name).toList());
@@ -109,6 +153,12 @@ class ExerciseDto {
         isFavouriteDirty: isFavouriteDirty,
         localImageBytes: localImageBytes,
         localImageFilename: localImageFilename,
+        trackingType: e.tracking.apiName,
+        distanceUnit: e.distanceUnit.apiName,
+        equipment: e.equipment?.apiName,
+        aliases: encodeAliases(e.aliases),
+        instructions: e.instructions?.encode(),
+        pattern: e.pattern,
       );
 
   /// Row shaped after a successful pull from API (`Exercise.id` is server id).
@@ -130,6 +180,12 @@ class ExerciseDto {
             DateTime.now().millisecondsSinceEpoch,
         pendingOp: null,
         isFavouriteDirty: false,
+        trackingType: serverExercise.tracking.apiName,
+        distanceUnit: serverExercise.distanceUnit.apiName,
+        equipment: serverExercise.equipment?.apiName,
+        aliases: encodeAliases(serverExercise.aliases),
+        instructions: serverExercise.instructions?.encode(),
+        pattern: serverExercise.pattern,
       );
 
   bool get isPendingSync =>
@@ -150,5 +206,12 @@ class ExerciseDto {
         isMine: isMine,
         createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true),
         isPendingSync: isPendingSync,
+        serverId: serverId,
+        tracking: ExerciseTracking.fromApi(trackingType),
+        distanceUnit: DistanceUnit.fromApi(distanceUnit),
+        equipment: ExerciseEquipment.tryParse(equipment),
+        aliases: decodeAliases(aliases),
+        instructions: ExerciseInstructions.tryParse(instructions),
+        pattern: pattern,
       );
 }

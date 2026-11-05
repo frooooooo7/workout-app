@@ -31,6 +31,8 @@ String changePasswordErrorMessage(Object error) {
         return 'Nowe hasło musi mieć co najmniej 8 znaków.';
       case 'password_too_weak':
         return 'Nowe hasło musi zawierać wielką literę i cyfrę.';
+      case 'password_too_long':
+        return 'Hasło jest za długie (maks. 72 znaki).';
       case 'password_unchanged':
         return 'Nowe hasło musi różnić się od obecnego.';
       case 'missing_fields':

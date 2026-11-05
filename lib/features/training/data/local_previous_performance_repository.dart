@@ -4,7 +4,8 @@ import '../domain/repositories/previous_performance_repository.dart';
 import 'training_session_local_mapper.dart';
 
 /// „Poprzednio” z lokalnej bazy — działa offline i obejmuje też treningi
-/// pobrane z serwera. Dwa zapytania na ćwiczenie, bez mapowania całych sesji.
+/// pobrane z serwera. Jedno zapytanie o treningi i jedno na każdy z nich,
+/// bez mapowania całych sesji.
 class LocalPreviousPerformanceRepository
     implements PreviousPerformanceRepository {
   const LocalPreviousPerformanceRepository(this._localDb);
@@ -15,6 +16,20 @@ class LocalPreviousPerformanceRepository
   Future<List<TrainingSessionSet>?> lastCompletedSets({
     required String exerciseId,
     required String exerciseName,
+  }) async {
+    final recent = await recentCompletedSets(
+      exerciseId: exerciseId,
+      exerciseName: exerciseName,
+      limit: 1,
+    );
+    return recent.isEmpty ? null : recent.first;
+  }
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
   }) {
     return _localDb.run((db) async {
       // Po identyfikatorze, a gdy go brak — po nazwie (bez rozróżniania
@@ -36,26 +51,29 @@ class LocalPreviousPerformanceRepository
               AND t.set_type <> 'warmup'
           )
         ORDER BY s.started_at DESC
-        LIMIT 1
+        LIMIT ?
         ''',
         [
           TrainingSessionStatus.completed.name,
           exerciseId,
           exerciseId,
           exerciseName.trim(),
+          limit,
         ],
       );
-      if (latest.isEmpty) return null;
-
-      final rows = await db.query(
-        ExerciseDatabase.tableTrainingSessionSets,
-        where: 'session_exercise_local_id = ? AND completed = 1',
-        whereArgs: [latest.first['exercise_row_id']],
-        orderBy: 'position ASC',
-      );
-      return [
-        for (final row in rows) TrainingSessionLocalMapper.setFromRow(row),
-      ];
+      final result = <List<TrainingSessionSet>>[];
+      for (final exercise in latest) {
+        final rows = await db.query(
+          ExerciseDatabase.tableTrainingSessionSets,
+          where: 'session_exercise_local_id = ? AND completed = 1',
+          whereArgs: [exercise['exercise_row_id']],
+          orderBy: 'position ASC',
+        );
+        result.add([
+          for (final row in rows) TrainingSessionLocalMapper.setFromRow(row),
+        ]);
+      }
+      return result;
     });
   }
 }

@@ -152,6 +152,11 @@ TrainingSession applyWorkoutEdit(
     startedAt: startedAt,
     finishedAt: startedAt.add(Duration(minutes: minutes)),
     sharedToProfile: original.sharedToProfile,
+    postTitle: original.postTitle,
+    postPhotoUrl: original.postPhotoUrl,
+    warmupSeconds: original.warmupSeconds,
+    planColorKey: original.planColorKey,
+    planIconKey: original.planIconKey,
     pendingOp: original.pendingOp,
     exercises: [
       for (final exercise in draft.exercises)
@@ -173,6 +178,10 @@ TrainingSession applyWorkoutEdit(
                 actualTempo: clean(set.actualTempo),
                 completed: set.completed,
                 completedAt: set.completed ? set.completedAt?.add(shift) : null,
+                plannedDurationSeconds: set.plannedDurationSeconds,
+                plannedDistanceM: set.plannedDistanceM,
+                actualDurationSeconds: set.actualDurationSeconds,
+                actualDistanceM: set.actualDistanceM,
               ),
           ],
         ),

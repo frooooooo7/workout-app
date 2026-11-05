@@ -13,6 +13,7 @@ class ProfileDetailsState {
   const ProfileDetailsState({
     this.initial,
     this.loading = false,
+    this.refreshing = false,
     this.loadError,
     this.draft = const ProfileDetailsDraft(),
     this.saving = false,
@@ -23,6 +24,11 @@ class ProfileDetailsState {
   /// Profil zapisany na serwerze — punkt odniesienia dla „czy są zmiany”.
   final UserProfile? initial;
   final bool loading;
+
+  /// Ekran pokazuje już zapisaną lokalnie kopię profilu, a świeże dane jeszcze
+  /// jadą z serwera — zapis czeka, żeby nie nadpisać nieaktualnymi polami
+  /// zmian z innego urządzenia.
+  final bool refreshing;
   final String? loadError;
   final ProfileDetailsDraft draft;
   final bool saving;
@@ -35,11 +41,12 @@ class ProfileDetailsState {
 
   bool get hasChanges => initial != null && draft.toDetails() != savedDetails;
 
-  bool get canSave => initial != null && !saving && hasChanges;
+  bool get canSave => initial != null && !saving && !refreshing && hasChanges;
 
   ProfileDetailsState copyWith({
     UserProfile? initial,
     bool? loading,
+    bool? refreshing,
     String? loadError,
     bool clearLoadError = false,
     ProfileDetailsDraft? draft,
@@ -51,6 +58,7 @@ class ProfileDetailsState {
     return ProfileDetailsState(
       initial: initial ?? this.initial,
       loading: loading ?? this.loading,
+      refreshing: refreshing ?? this.refreshing,
       loadError: clearLoadError ? null : (loadError ?? this.loadError),
       draft: draft ?? this.draft,
       saving: saving ?? this.saving,
@@ -78,12 +86,45 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
   void updateDraft(ProfileDetailsDraft draft) =>
       emit(state.copyWith(draft: draft, clearError: true));
 
-  /// Dane o sobie są tylko w `/profile/me` — zawsze świeży odczyt.
+  /// Dane o sobie są tylko w `/profile/me`. Lokalna kopia z ostatniej wizyty
+  /// otwiera ekran od razu (także offline), a świeży odczyt z serwera
+  /// podmienia ją w tle.
   Future<void> load() async {
     emit(state.copyWith(loading: true, clearLoadError: true));
+    UserProfile? cached;
+    try {
+      cached = await _repository.cachedOwnProfile();
+    } catch (_) {
+      /* bez kopii czekamy na serwer */
+    }
+    if (isClosed) return;
+    if (cached != null) {
+      emit(
+        ProfileDetailsState(
+          initial: cached,
+          draft: ProfileDetailsDraft.fromDetails(cached.details),
+          refreshing: true,
+        ),
+      );
+    }
     try {
       final profile = await _repository.getOwnProfile();
       if (isClosed) return;
+      if (cached != null && state.hasChanges) {
+        // Użytkownik już coś zmienił — jego pola zostają, a pozostałe biorą
+        // wartości ze świeżego profilu (inaczej zapis wysłałby stare).
+        emit(
+          state.copyWith(
+            initial: profile,
+            draft: state.draft.rebased(
+              from: state.savedDetails,
+              onto: profile.details ?? ProfileDetails.empty,
+            ),
+            refreshing: false,
+          ),
+        );
+        return;
+      }
       emit(
         ProfileDetailsState(
           initial: profile,
@@ -92,6 +133,11 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
       );
     } catch (error) {
       if (isClosed) return;
+      if (cached != null) {
+        // Zostaje lokalna kopia; zapis i tak powie, czy jest sieć.
+        emit(state.copyWith(refreshing: false));
+        return;
+      }
       emit(
         state.copyWith(
           loading: false,
@@ -108,14 +154,24 @@ class ProfileDetailsCubit extends Cubit<ProfileDetailsState>
     emit(state.copyWith(saving: true, clearError: true));
     try {
       final previousWeight = state.savedDetails.weightKg;
+      final sent = state.draft.toDetails();
+      // Wagę do dziennika dopisujemy tylko, gdy użytkownik sam ją zmienił —
+      // inaczej odpowiedź z nowszą wagą z serwera (lokalna kopia była stara)
+      // dałaby fałszywy pomiar z dzisiejszą datą.
+      final weightEdited = sent.weightKg != previousWeight;
       final updated = await _repository.updateProfile(
-        details: state.draft.toDetails(),
+        details: sent,
+        // Punkt odniesienia mógł się zestarzeć (lokalna kopia) — idą tylko
+        // pola zmienione przez użytkownika.
+        detailsBaseline: state.savedDetails,
       );
-      await logProfileWeightChange(
-        bodyWeight,
-        previous: previousWeight,
-        current: updated.details?.weightKg,
-      );
+      if (weightEdited) {
+        await logProfileWeightChange(
+          bodyWeight,
+          previous: previousWeight,
+          current: updated.details?.weightKg,
+        );
+      }
       if (isClosed) return;
       emit(state.copyWith(initial: updated, saving: false, saved: updated));
     } catch (error) {

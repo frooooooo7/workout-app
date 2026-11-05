@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -48,10 +47,6 @@ class _RulerPickerState extends State<RulerPicker> {
     initialScrollOffset: _offsetFor(widget.value ?? widget.initial),
   );
   bool _userScrolling = false;
-
-  /// Przewijanie z kodu (wartość z zewnątrz, [_nudge]) — nie jest wyborem
-  /// użytkownika, więc nie wywołuje [RulerPicker.onChanged].
-  bool _programmatic = false;
   double? _lastEmitted;
 
   int get _tickCount => ((widget.max - widget.min) / widget.step).round() + 1;
@@ -74,11 +69,7 @@ class _RulerPickerState extends State<RulerPicker> {
     if (widget.value != null && widget.value == _lastEmitted) return;
     // Wartość z zewnątrz (albo nowy punkt startowy, gdy brak wartości).
     final offset = _offsetFor(target);
-    if ((_controller.offset - offset).abs() > 0.5) {
-      _programmatic = true;
-      _controller.jumpTo(offset);
-      _programmatic = false;
-    }
+    if ((_controller.offset - offset).abs() > 0.5) _controller.jumpTo(offset);
   }
 
   @override
@@ -98,12 +89,9 @@ class _RulerPickerState extends State<RulerPicker> {
     if (notification is ScrollStartNotification &&
         notification.dragDetails != null) {
       _userScrolling = true;
-    } else if (notification is ScrollUpdateNotification &&
-        (_userScrolling || !_programmatic)) {
-      // Także kółko myszy / touchpad — przewijają bez przeciągania.
+    } else if (notification is ScrollUpdateNotification && _userScrolling) {
       _emit(_valueAt(notification.metrics.pixels));
-    } else if (notification is ScrollEndNotification &&
-        (_userScrolling || !_programmatic)) {
+    } else if (notification is ScrollEndNotification && _userScrolling) {
       _userScrolling = false;
       _emit(_valueAt(notification.metrics.pixels));
     }
@@ -117,14 +105,11 @@ class _RulerPickerState extends State<RulerPicker> {
         .clamp(widget.min, widget.max)
         .toDouble();
     final value = (next * 10).round() / 10;
-    _programmatic = true;
-    _controller
-        .animateTo(
-          _offsetFor(value),
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-        )
-        .whenComplete(() => _programmatic = false);
+    _controller.animateTo(
+      _offsetFor(value),
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOutCubic,
+    );
     _emit(value);
   }
 
@@ -172,36 +157,29 @@ class _RulerPickerState extends State<RulerPicker> {
                         ],
                         stops: [0, 0.2, 0.8, 1],
                       ).createShader(bounds),
-                      // Na webie i desktopie linijkę da się też przeciągnąć
-                      // myszą (domyślnie Flutter przewija myszą tylko kółkiem).
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          dragDevices: PointerDeviceKind.values.toSet(),
-                        ),
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: _onScroll,
-                          child: ListView.builder(
-                            controller: _controller,
-                            scrollDirection: Axis.horizontal,
-                            physics: widget.enabled
-                                ? _SnapScrollPhysics(
-                                    itemExtent: widget.tickGap,
-                                    parent: const ClampingScrollPhysics(),
-                                  )
-                                : const NeverScrollableScrollPhysics(),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: sidePadding,
-                            ),
-                            itemExtent: widget.tickGap,
-                            itemCount: _tickCount,
-                            itemBuilder: (context, index) => _Tick(
-                              index: index,
-                              majorEvery: widget.majorEvery,
-                              label: widget.formatValue(
-                                ((widget.min + index * widget.step) * 10)
-                                        .round() /
-                                    10,
-                              ),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _onScroll,
+                        child: ListView.builder(
+                          controller: _controller,
+                          scrollDirection: Axis.horizontal,
+                          physics: widget.enabled
+                              ? _SnapScrollPhysics(
+                                  itemExtent: widget.tickGap,
+                                  parent: const ClampingScrollPhysics(),
+                                )
+                              : const NeverScrollableScrollPhysics(),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: sidePadding,
+                          ),
+                          itemExtent: widget.tickGap,
+                          itemCount: _tickCount,
+                          itemBuilder: (context, index) => _Tick(
+                            index: index,
+                            majorEvery: widget.majorEvery,
+                            label: widget.formatValue(
+                              ((widget.min + index * widget.step) * 10)
+                                      .round() /
+                                  10,
                             ),
                           ),
                         ),

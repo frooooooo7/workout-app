@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/navigation/app_bottom_nav.dart';
@@ -8,6 +9,7 @@ void main() {
     bool hasActiveSession = false,
     ValueChanged<int>? onDestinationSelected,
     VoidCallback? onCenterTap,
+    ValueListenable<int>? activityBadge,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -16,6 +18,7 @@ void main() {
           hasActiveSession: hasActiveSession,
           onDestinationSelected: onDestinationSelected ?? (_) {},
           onCenterTap: onCenterTap ?? () {},
+          activityBadge: activityBadge,
         ),
       ),
     );
@@ -97,5 +100,21 @@ void main() {
 
     await tester.pumpWidget(buildSubject(currentIndex: 0));
     expect(decorationOf(tester).border, isNull);
+  });
+
+  testWidgets('activity badge appears with unread notifications', (
+    tester,
+  ) async {
+    final unread = ValueNotifier(0);
+    addTearDown(unread.dispose);
+    await tester.pumpWidget(buildSubject(activityBadge: unread));
+    const badge = Key('app-bottom-nav-activity-badge');
+    expect(tester.widget<AnimatedScale>(find.byKey(badge)).scale, 0);
+
+    unread.value = 3;
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<AnimatedScale>(find.byKey(badge)).scale, 1);
+    expect(find.text('3'), findsOneWidget);
   });
 }

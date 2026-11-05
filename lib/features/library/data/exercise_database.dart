@@ -25,7 +25,7 @@ class ExerciseDatabase {
   int _activeOps = 0;
   Completer<void>? _closeWaiter;
 
-  static const _dbVersion = 14;
+  static const _dbVersion = 23;
   static const tableExercises = 'exercises';
   static const tableOutboxLog = 'outbox_log';
   static const tableTrainingPlans = 'training_plans';
@@ -47,6 +47,15 @@ class ExerciseDatabase {
   /// Klucz → wartość dla silników synchronizacji (np. znacznik ostatniego
   /// pobrania sesji). Baza jest per użytkownik, więc stan też.
   static const tableSyncState = 'sync_state';
+
+  /// Zdjęcia postów czekające na wysłanie albo usunięcie na serwerze —
+  /// jeden wiersz na sesję (`op` = `upload` / `remove`). Bajty trzymamy
+  /// w bazie, bo na webie nie ma trwałych plików.
+  static const tablePendingPostPhotos = 'pending_post_photos';
+
+  /// Okładki planów czekające na wysłanie albo usunięcie na serwerze —
+  /// jeden wiersz na plan (`op` = `upload` / `remove`), jak zdjęcia postów.
+  static const tablePendingPlanCovers = 'pending_plan_covers';
 
   /// Tabele z kolejką wysyłki (`pending_op`) i kolumną `sync_error`.
   static const syncedTables = [
@@ -156,12 +165,16 @@ class ExerciseDatabase {
   Future<void> clearSyncErrors() {
     return run((db) async {
       for (final table in syncedTables) {
-        await db.update(
-          table,
-          {'sync_error': null},
-          where: 'sync_error IS NOT NULL',
-        );
+        await db.update(table, {
+          'sync_error': null,
+        }, where: 'sync_error IS NOT NULL');
       }
+      await db.update(tablePendingPostPhotos, {
+        'sync_error': null,
+      }, where: 'sync_error IS NOT NULL');
+      await db.update(tablePendingPlanCovers, {
+        'sync_error': null,
+      }, where: 'sync_error IS NOT NULL');
     });
   }
 
@@ -185,12 +198,29 @@ class ExerciseDatabase {
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries
              WHERE pending_op IS NOT NULL AND sync_error IS NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries
-             WHERE pending_op IS NOT NULL AND sync_error IS NULL) AS pending,
+             WHERE pending_op IS NOT NULL AND sync_error IS NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos p
+             WHERE p.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingSessions s
+               WHERE s.local_id = p.session_local_id
+                 AND s.sync_error IS NOT NULL
+             ))
+          + (SELECT COUNT(*) FROM $tablePendingPlanCovers c
+             WHERE c.sync_error IS NULL AND NOT EXISTS (
+               SELECT 1 FROM $tableTrainingPlans p
+               WHERE p.local_id = c.plan_local_id
+                 AND p.sync_error IS NOT NULL
+             ))
+          + (SELECT COUNT(*) FROM $tableSyncState
+             WHERE key = 'plan_order_pending')
+            AS pending,
           (SELECT COUNT(*) FROM $tableExercises WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingPlans WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableTrainingSessions WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyWeightEntries WHERE sync_error IS NOT NULL)
           + (SELECT COUNT(*) FROM $tableBodyMeasurementEntries WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPostPhotos WHERE sync_error IS NOT NULL)
+          + (SELECT COUNT(*) FROM $tablePendingPlanCovers WHERE sync_error IS NOT NULL)
             AS failed
       ''');
       final row = rows.first;
@@ -291,9 +321,145 @@ class ExerciseDatabase {
     await _createTrainingHistoryTables(db);
     await _createTrainingSessionTables(db);
     await _createPerformanceIndexes(db);
+    await _createExerciseHistoryIndexes(db);
     await _createSyncStateTable(db);
     await _createBodyWeightTable(db);
     await _createBodyMeasurementsTable(db);
+    await _addPlanStyleAndRestColumns(db);
+    await _addCardioColumns(db);
+    await _addPlanSharingColumns(db);
+    await _addPostColumns(db);
+    await _addPlanProgressionColumn(db);
+    await _addPlanCoverColumns(db);
+    await _addExerciseDetailColumns(db);
+    await _addSessionWarmupColumn(db);
+  }
+
+  /// v19: tytuł i zdjęcie posta oraz kolejka zdjęć do wysłania.
+  Future<void> _addPostColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'post_title',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'post_photo_url',
+      definition: 'TEXT',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePendingPostPhotos (
+        session_local_id TEXT PRIMARY KEY NOT NULL,
+        op TEXT NOT NULL,
+        bytes BLOB,
+        filename TEXT,
+        created_at INTEGER NOT NULL,
+        sync_error TEXT
+      )
+    ''');
+  }
+
+  /// v17: widoczność planu na profilu i pochodzenie kopii („od @anna”).
+  Future<void> _addPlanSharingColumns(Database db) async {
+    const columns = {
+      'is_public': 'INTEGER NOT NULL DEFAULT 0',
+      'copied_from_user_id': 'TEXT',
+      'copied_from_handle': 'TEXT',
+      'copy_count': 'INTEGER NOT NULL DEFAULT 0',
+    };
+    for (final column in columns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingPlans,
+        column: column.key,
+        definition: column.value,
+      );
+    }
+  }
+
+  /// v16: kardio — co zapisuje ćwiczenie (ciężar × powt., czas, czas
+  /// + dystans) oraz czas i dystans serii w planie i w sesji.
+  Future<void> _addCardioColumns(Database db) async {
+    final columns = <String, Map<String, String>>{
+      tableExercises: {
+        'tracking_type': "TEXT NOT NULL DEFAULT 'weight_reps'",
+        'distance_unit': "TEXT NOT NULL DEFAULT 'km'",
+      },
+      tableTrainingPlanSets: {
+        'duration_seconds': 'INTEGER',
+        'distance_m': 'INTEGER',
+      },
+      tableTrainingSessionExercises: {
+        'tracking_type': 'TEXT',
+        'distance_unit': 'TEXT',
+      },
+      tableTrainingSessionSets: {
+        'planned_duration_seconds': 'INTEGER',
+        'planned_distance_m': 'INTEGER',
+        'actual_duration_seconds': 'INTEGER',
+        'actual_distance_m': 'INTEGER',
+      },
+    };
+    for (final table in columns.entries) {
+      for (final column in table.value.entries) {
+        await _addColumnIfMissing(
+          db,
+          table: table.key,
+          column: column.key,
+          definition: column.value,
+        );
+      }
+    }
+  }
+
+  /// v15: wygląd i ustawienia planu, przerwa i superseria ćwiczenia (w planie
+  /// i w sesji) oraz kopia koloru/ikony planu przy sesji.
+  Future<void> _addPlanStyleAndRestColumns(Database db) async {
+    const planColumns = {
+      'default_rest_seconds': 'INTEGER NOT NULL DEFAULT 120',
+      'color_key': 'TEXT',
+      'icon_key': 'TEXT',
+      'goal': 'TEXT',
+      'progression_step_kg': 'REAL',
+      'highlight_plan_color': 'INTEGER NOT NULL DEFAULT 1',
+      'show_rir': 'INTEGER NOT NULL DEFAULT 1',
+      'show_tempo': 'INTEGER NOT NULL DEFAULT 1',
+    };
+    for (final entry in planColumns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingPlans,
+        column: entry.key,
+        definition: entry.value,
+      );
+    }
+    for (final table in [
+      tableTrainingPlanExercises,
+      tableTrainingSessionExercises,
+    ]) {
+      await _addColumnIfMissing(
+        db,
+        table: table,
+        column: 'rest_seconds',
+        definition: 'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        table: table,
+        column: 'superset_group',
+        definition: 'TEXT',
+      );
+    }
+    for (final column in ['plan_color_key', 'plan_icon_key']) {
+      await _addColumnIfMissing(
+        db,
+        table: tableTrainingSessions,
+        column: column,
+        definition: 'TEXT',
+      );
+    }
   }
 
   /// `pending_op`: `upsert` albo `delete` (nagrobek, ukryty w odczytach).
@@ -376,6 +542,20 @@ class ExerciseDatabase {
       'CREATE INDEX IF NOT EXISTS ex_pending_idx '
       'ON $tableExercises(pending_op, is_favourite_dirty) '
       'WHERE pending_op IS NOT NULL OR is_favourite_dirty = 1',
+    );
+  }
+
+  /// „Poprzedni wynik” i sortowanie „Popularne” szukają ćwiczenia w historii
+  /// po identyfikatorze albo nazwie — bez tych indeksów każde ćwiczenie
+  /// dodane do treningu skanowało całą tabelę ćwiczeń z sesji.
+  Future<void> _createExerciseHistoryIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tse_exercise_idx '
+      'ON $tableTrainingSessionExercises(exercise_local_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS tse_exercise_name_idx '
+      'ON $tableTrainingSessionExercises(exercise_name COLLATE NOCASE)',
     );
   }
 
@@ -627,7 +807,96 @@ class ExerciseDatabase {
     if (oldVersion < 14) {
       await _createBodyMeasurementsTable(db);
     }
+    if (oldVersion < 15) {
+      await _addPlanStyleAndRestColumns(db);
+    }
+    if (oldVersion < 16) {
+      await _addCardioColumns(db);
+    }
+    if (oldVersion < 17) {
+      await _addPlanSharingColumns(db);
+    }
+    if (oldVersion < 18) {
+      await _createExerciseHistoryIndexes(db);
+    }
+    if (oldVersion < 19) {
+      await _addPostColumns(db);
+    }
+    if (oldVersion < 20) {
+      await _addPlanProgressionColumn(db);
+    }
+    if (oldVersion < 21) {
+      await _addPlanCoverColumns(db);
+    }
+    if (oldVersion < 22) {
+      await _addExerciseDetailColumns(db);
+    }
+    if (oldVersion < 23) {
+      await _addSessionWarmupColumn(db);
+    }
   }
+
+  /// v23: czas rozgrzewki przed treningiem (sekundy), osobno od czasu sesji.
+  Future<void> _addSessionWarmupColumn(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingSessions,
+      column: 'warmup_seconds',
+      definition: 'INTEGER',
+    );
+  }
+
+  /// v22: sprzęt, inne nazwy (JSON), opis techniki (JSON) i rodzaj ruchu.
+  Future<void> _addExerciseDetailColumns(Database db) async {
+    const columns = {
+      'equipment': 'TEXT',
+      'aliases': 'TEXT',
+      'instructions': 'TEXT',
+      'pattern': 'TEXT',
+    };
+    for (final column in columns.entries) {
+      await _addColumnIfMissing(
+        db,
+        table: tableExercises,
+        column: column.key,
+        definition: column.value,
+      );
+    }
+  }
+
+  /// v21: okładka planu, miejsce planu na liście i kolejka okładek.
+  Future<void> _addPlanCoverColumns(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingPlans,
+      column: 'cover_url',
+      definition: 'TEXT',
+    );
+    await _addColumnIfMissing(
+      db,
+      table: tableTrainingPlans,
+      column: 'sort_order',
+      definition: 'INTEGER',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $tablePendingPlanCovers (
+        plan_local_id TEXT PRIMARY KEY NOT NULL,
+        op TEXT NOT NULL,
+        bytes BLOB,
+        filename TEXT,
+        created_at INTEGER NOT NULL,
+        sync_error TEXT
+      )
+    ''');
+  }
+
+  /// v20: własna metoda progresji planu (JSON); `NULL` = jak w ustawieniach.
+  Future<void> _addPlanProgressionColumn(Database db) => _addColumnIfMissing(
+    db,
+    table: tableTrainingPlans,
+    column: 'progression',
+    definition: 'TEXT',
+  );
 
   /// `ALTER TABLE ... ADD COLUMN` bez ryzyka duplikatu — tabela utworzona
   /// w tej samej ścieżce upgrade'u (np. `oldVersion < 6`) ma już nową kolumnę.
@@ -638,6 +907,8 @@ class ExerciseDatabase {
     required String definition,
   }) async {
     final columns = await db.rawQuery('PRAGMA table_info($table)');
+    // Brak tabeli (np. częściowa baza w testach) — nie ma czego rozszerzać.
+    if (columns.isEmpty) return;
     final exists = columns.any((row) => row['name'] == column);
     if (exists) return;
     await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');

@@ -4,6 +4,7 @@ import 'package:flutter/semantics.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../domain/models/progression_settings.dart';
 import '../../../domain/models/training_session.dart';
 import '../../../domain/services/live_workout_insights.dart';
 import '../table_cell_input.dart';
@@ -12,11 +13,13 @@ import 'session_set_badge.dart';
 import 'set_check_button.dart';
 import 'set_table_layout.dart';
 import 'workout_colors.dart';
+import 'workout_accent.dart';
 
 /// Wiersz serii w treningu na żywo: numer / rodzaj, wynik z poprzedniego
 /// treningu, pola i duży przycisk odhaczenia. Zrobiona seria zielenieje,
 /// następna do zrobienia ([active]) jest wyróżniona i ma podpowiedź
-/// progresji w polu ciężaru. Przesunięcie w lewo usuwa serię.
+/// progresji w polu ciężaru. Znaczek serii otwiera arkusz z rodzajem serii
+/// i usuwaniem.
 class SessionSetRow extends StatelessWidget {
   const SessionSetRow({
     super.key,
@@ -75,6 +78,7 @@ class SessionSetRow extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final completed = set.completed;
     final highlighted = active && !completed;
+    final accent = WorkoutAccent.of(context);
 
     final row = AnimatedContainer(
       duration: reduceMotion
@@ -89,12 +93,12 @@ class SessionSetRow extends StatelessWidget {
         color: completed
             ? AppColors.success.withValues(alpha: 0.06)
             : highlighted
-            ? AppColors.primary.withValues(alpha: 0.10)
+            ? accent.fill.withValues(alpha: 0.10)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
         border: highlighted
             ? Border.all(
-                color: AppColors.primaryVariant.withValues(alpha: 0.55),
+                color: accent.strong.withValues(alpha: 0.55),
                 width: 1.5,
               )
             : null,
@@ -128,30 +132,27 @@ class SessionSetRow extends StatelessWidget {
             const SizedBox(width: SetTableLayout.gap),
           ] else
             const Spacer(),
+          if (layout.showWeight) ...[
+            SizedBox(
+              width: layout.weightWidth,
+              child: _WeightField(
+                key: ValueKey('session-set-weight-$exerciseIndex-$setIndex'),
+                set: set,
+                look: _look(completed: completed, highlighted: highlighted),
+                progression: highlighted ? progression : null,
+                onChanged: onChanged,
+              ),
+            ),
+            const SizedBox(width: SetTableLayout.gap),
+          ],
           SizedBox(
-            width: layout.weightWidth,
-            child: _WeightField(
-              key: ValueKey('session-set-weight-$exerciseIndex-$setIndex'),
+            width: layout.repsWidth,
+            child: _RepsField(
+              key: ValueKey('session-set-reps-$exerciseIndex-$setIndex'),
               set: set,
               look: _look(completed: completed, highlighted: highlighted),
               progression: highlighted ? progression : null,
               onChanged: onChanged,
-            ),
-          ),
-          const SizedBox(width: SetTableLayout.gap),
-          SizedBox(
-            width: layout.repsWidth,
-            child: TableCellInput(
-              key: ValueKey('session-set-reps-$exerciseIndex-$setIndex'),
-              value: set.actualReps ?? '',
-              hint: set.plannedReps,
-              look: _look(completed: completed, highlighted: highlighted),
-              onChanged: (value) => onChanged(
-                set.copyWith(
-                  actualReps: value,
-                  clearActualReps: value.trim().isEmpty,
-                ),
-              ),
             ),
           ),
           if (layout.showRir) ...[
@@ -239,13 +240,7 @@ class SessionSetRow extends StatelessWidget {
       customSemanticsActions: {
         const CustomSemanticsAction(label: 'Usuń serię'): removable,
       },
-      child: Dismissible(
-        key: ValueKey('session-set-dismiss-${set.id}'),
-        direction: DismissDirection.endToStart,
-        onDismissed: (_) => removable(),
-        background: const _DeleteBackground(),
-        child: content,
-      ),
+      child: content,
     );
   }
 
@@ -296,7 +291,9 @@ class _WeightField extends StatelessWidget {
       valueKg: set.actualWeight,
       // Propozycja z progresji ma pierwszeństwo przed ciężarem z planu.
       hintKg: hint == null ? set.plannedWeight : null,
-      fallbackHint: hint == null ? '' : formatWeightNumber(hint.weightKg),
+      fallbackHint: hint == null
+          ? ''
+          : formatStepNumber(unit.fromKg(hint.weightKg)),
       look: look,
       onChanged: (value) => onChanged(
         set.copyWith(
@@ -305,35 +302,120 @@ class _WeightField extends StatelessWidget {
         ),
       ),
     );
-    if (hint == null || !hint.isIncrease) return field;
+    if (hint == null) return field;
+    final String text;
+    if (hint.isDeload) {
+      final percent = ((1 - ProgressionSettings.deloadFactor) * 100).round();
+      text = '−$percent%';
+    } else if (hint.isIncrease) {
+      text = '+${formatStepNumber(unit.fromKg(hint.deltaKg))}';
+    } else {
+      return field;
+    }
+    return _Tagged(
+      field: field,
+      tag: _HintTag(
+        key: const Key('progression-hint-tag'),
+        text: text,
+        deload: hint.isDeload,
+        semanticLabel: 'Propozycja: ${formatWeightWithUnit(hint.weightKg)}',
+      ),
+    );
+  }
+}
+
+/// Pole powtórzeń; przy podwójnej progresji placeholder to cel na dziś,
+/// a znaczek `+1` mówi, o ile więcej niż poprzednio.
+class _RepsField extends StatelessWidget {
+  const _RepsField({
+    super.key,
+    required this.set,
+    required this.look,
+    required this.progression,
+    required this.onChanged,
+  });
+
+  final TrainingSessionSet set;
+  final TableCellInputLook look;
+  final ProgressionHint? progression;
+  final ValueChanged<TrainingSessionSet> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final target = progression?.reps;
+    final field = TableCellInput(
+      value: set.actualReps ?? '',
+      hint: target?.toString() ?? set.plannedReps,
+      look: look,
+      onChanged: (value) => onChanged(
+        set.copyWith(actualReps: value, clearActualReps: value.trim().isEmpty),
+      ),
+    );
+    final hint = progression;
+    if (hint == null || !hint.addsReps) return field;
+    return _Tagged(
+      field: field,
+      tag: _HintTag(
+        key: const Key('progression-reps-tag'),
+        text: '+${hint.repsDelta}',
+        semanticLabel: 'Propozycja: ${hint.reps} powtórzeń',
+      ),
+    );
+  }
+}
+
+class _Tagged extends StatelessWidget {
+  const _Tagged({required this.field, required this.tag});
+
+  final Widget field;
+  final Widget tag;
+
+  @override
+  Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
         field,
-        Positioned(
-          right: 4,
-          top: -9,
-          child: Semantics(
-            label: 'Propozycja: ${formatWeightWithUnit(hint.weightKg)}',
-            child: Container(
-              key: const Key('progression-hint-tag'),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: WorkoutColors.progressionTag,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                '+${formatWeightNumber(hint.deltaKg, unit: unit)}',
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
+        Positioned(right: 4, top: -9, child: tag),
+      ],
+    );
+  }
+}
+
+/// Mały znaczek nad polem: zielony przy zwyżce, bursztynowy przy deloadzie.
+class _HintTag extends StatelessWidget {
+  const _HintTag({
+    super.key,
+    required this.text,
+    required this.semanticLabel,
+    this.deload = false,
+  });
+
+  final String text;
+  final String semanticLabel;
+  final bool deload;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: deload
+              ? WorkoutColors.deloadTag
+              : WorkoutColors.progressionTag,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: deload ? AppColors.statAmber : AppColors.success,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -382,45 +464,6 @@ class _PreviousCell extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: cell,
-      ),
-    );
-  }
-}
-
-/// Czerwone tło odsłaniane przy przesuwaniu serii w lewo.
-class _DeleteBackground extends StatelessWidget {
-  const _DeleteBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 18),
-        decoration: BoxDecoration(
-          color: AppColors.trendDown.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Usuń',
-              style: TextStyle(
-                color: AppColors.trendDown,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(width: 6),
-            Icon(
-              Icons.delete_outline_rounded,
-              color: AppColors.trendDown,
-              size: 20,
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 
 class LibraryHeader extends StatelessWidget {
@@ -10,6 +11,8 @@ class LibraryHeader extends StatelessWidget {
     required this.onFilterTap,
     required this.onAddTap,
     required this.onBackTap,
+    this.title = 'Biblioteka',
+    this.subtitle,
     this.activeFilterCount = 0,
   });
 
@@ -18,6 +21,10 @@ class LibraryHeader extends StatelessWidget {
   final VoidCallback onFilterTap;
   final VoidCallback onAddTap;
   final VoidCallback onBackTap;
+  final String title;
+
+  /// Druga linia pod tytułem (np. nazwa planu w trybie wyboru).
+  final String? subtitle;
 
   /// Liczba aktywnych filtrów typu — pokazywana jako plakietka na „tune”.
   final int activeFilterCount;
@@ -28,7 +35,7 @@ class LibraryHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppTabHeader(
-          title: 'Biblioteka',
+          title: title,
           gutter: 0,
           leading: AppTabHeaderButton.back(onPressed: onBackTap),
           actions: [
@@ -40,6 +47,19 @@ class LibraryHeader extends StatelessWidget {
             ),
           ],
         ),
+        if (subtitle != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ),
         const SizedBox(height: 8),
         _SearchBar(
           controller: searchController,
@@ -107,6 +127,7 @@ class _SearchBarState extends State<_SearchBar> {
               data: _fieldTheme,
               child: TextField(
                 controller: widget.controller,
+                onTapOutside: hideKeyboardOnTapOutside,
                 onChanged: widget.onChanged,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
                 cursorColor: AppColors.primary,
@@ -128,7 +149,7 @@ class _SearchBarState extends State<_SearchBar> {
             ),
           ),
           Tooltip(
-            message: 'Typ ćwiczenia',
+            message: 'Filtry',
             child: GestureDetector(
               onTap: widget.onFilterTap,
               behavior: HitTestBehavior.opaque,

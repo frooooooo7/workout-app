@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Granat aplikacji (AppColors.background): tło okna pod Flutterem, żeby
+         przy odtwarzaniu aplikacji nic nie mignęło na biało. -->
+    <color name="app_window_background">#0A0D13</color>
+</resources>

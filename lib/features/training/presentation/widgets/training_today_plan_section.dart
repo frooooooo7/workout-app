@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/utils/polish_plural.dart';
 import '../../../../core/widgets/app_pressable.dart';
 import '../../../../core/widgets/skeleton.dart';
-import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_home_insights.dart';
+import '../../domain/services/plan_exercise_summary.dart';
 import 'training_day_status.dart';
 import 'training_plan_exercises_table.dart';
 import 'training_record_to_beat.dart';
 
 /// Karta planu wybranego dnia (domyślnie dziś): nazwa planu, partie,
 /// ćwiczenia z ostatnimi wynikami, rekord do pobicia i „Rozpocznij”.
+/// Zrobiony trening dnia zastępuje „Rozpocznij” informacją o ukończeniu.
 /// W dzień wolny i bez planów — ta sama karta z odpowiednią akcją.
 class TrainingTodayPlanSection extends StatelessWidget {
   const TrainingTodayPlanSection({
@@ -27,6 +30,8 @@ class TrainingTodayPlanSection extends StatelessWidget {
     required this.onStartCustom,
     this.insights = TrainingHomeInsights.empty,
     this.today,
+    this.sessionInProgress = false,
+    this.warmupInProgress = false,
   });
 
   /// 1 = poniedziałek … 7 = niedziela.
@@ -37,12 +42,19 @@ class TrainingTodayPlanSection extends StatelessWidget {
   final Future<void> Function(CustomTrainingPlan plan) onStartPlan;
   final ValueChanged<int> onCreatePlanForDay;
 
-  /// Trening bez planu (wybór rodzaju aktywności).
+  /// Trening bez planu — pusta sesja, ćwiczenia dodaje się w trakcie.
   final VoidCallback onStartCustom;
   final TrainingHomeInsights insights;
 
   /// Test seam; domyślnie [DateTime.now].
   final DateTime? today;
+
+  /// Trwa już trening — „Rozpocznij” jest wyszarzony (wraca się do niego
+  /// paskiem „Trwa trening” nad kartą).
+  final bool sessionInProgress;
+
+  /// Trwa (schowana) rozgrzewka przed treningiem, więc starty są wyszarzone.
+  final bool warmupInProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -59,27 +71,77 @@ class TrainingTodayPlanSection extends StatelessWidget {
         if (plan.selectedDays.contains(selectedDay)) plan,
     ];
 
-    final customItem = _MenuItem('Trening bez planu', onStartCustom);
+    // „Trening bez planu” jest zawsze widocznym przyciskiem na karcie.
+    final customButton = _CardButton(
+      key: const ValueKey('start-custom-button'),
+      label: 'Trening bez planu',
+      icon: Icons.bolt_rounded,
+      secondary: true,
+      onTap: sessionInProgress ? null : onStartCustom,
+    );
 
-    if (scheduled.isEmpty) {
+    final doneAny = insights.weekDonePlans[selectedDay] != null;
+    final pending = [
+      for (final plan in scheduled)
+        if (!_isDone(plan)) plan,
+    ];
+
+    if (scheduled.isEmpty && !doneAny) {
       final hasPlans = plans.isNotEmpty;
       return _PlanCardShell(
         key: const ValueKey('plan-card-rest'),
         badge: badge,
         caption: caption,
-        menu: [customItem],
         child: hasPlans
             ? _RestDayContent(
                 nextWorkout: _nextWorkout(plans, selectedDay),
                 onCreatePlan: () => onCreatePlanForDay(selectedDay),
+                customButton: customButton,
               )
             : _NoPlansContent(
                 onCreatePlan: () => onCreatePlanForDay(selectedDay),
+                customButton: customButton,
               ),
       );
     }
 
-    final plan = scheduled.first;
+    // Wszystko, co zaplanowano na ten dzień, jest zrobione (albo zrobiono
+    // wolny trening w dzień bez planu): zamiast „Rozpocznij” — informacja
+    // o ukończeniu. Dopóki któryś plan dnia czeka, karta pokazuje jego.
+    if (pending.isEmpty) {
+      return _PlanCardShell(
+        key: const ValueKey('plan-card-done'),
+        badge: badge,
+        caption: caption,
+        color: scheduled.isEmpty ? null : PlanColors.of(scheduled.first.name),
+        menu: [
+          for (final plan in scheduled) ...[
+            _MenuItem(
+              scheduled.length == 1
+                  ? 'Szczegóły planu'
+                  : 'Szczegóły ${plan.name}',
+              () => onOpenPlan(plan),
+            ),
+            _MenuItem(
+              'Powtórz ${plan.name}',
+              () => onStartPlan(plan),
+              enabled: !sessionInProgress,
+            ),
+          ],
+        ],
+        child: _DoneContent(
+          title: scheduled.isEmpty
+              ? insights.weekDonePlans[selectedDay]!
+              : scheduled.map((p) => p.name).join(' · '),
+          onOpenPlan: scheduled.length == 1
+              ? () => onOpenPlan(scheduled.first)
+              : null,
+          customButton: customButton,
+        ),
+      );
+    }
+
+    final plan = pending.first;
     return _PlanCardShell(
       key: ValueKey('plan-card-${plan.id}'),
       badge: badge,
@@ -87,18 +149,35 @@ class TrainingTodayPlanSection extends StatelessWidget {
       color: PlanColors.of(plan.name),
       menu: [
         _MenuItem('Szczegóły planu', () => onOpenPlan(plan)),
-        for (final other in scheduled.skip(1))
-          _MenuItem('Rozpocznij ${other.name}', () => onStartPlan(other)),
-        customItem,
+        for (final other in pending.skip(1))
+          _MenuItem(
+            'Rozpocznij ${other.name}',
+            () => onStartPlan(other),
+            enabled: !sessionInProgress,
+          ),
       ],
-      child: _PlanContent(
-        plan: plan,
-        insights: insights,
-        onOpen: () => onOpenPlan(plan),
-        onStart: () => onStartPlan(plan),
+      // „Do pobicia” zależy od metody progresji z ustawień.
+      child: ValueListenableBuilder<ProgressionSettings>(
+        valueListenable: ServiceLocator.progressionSettings.notifier,
+        builder: (context, _, _) => _PlanContent(
+          plan: plan,
+          insights: insights,
+          onOpen: () => onOpenPlan(plan),
+          onStart: sessionInProgress ? null : () => onStartPlan(plan),
+          disabledHint: warmupInProgress
+              ? 'Trwa rozgrzewka — wróć do niej albo ją przerwij.'
+              : 'Trwa trening — dokończ go, zanim zaczniesz kolejny.',
+          customButton: customButton,
+        ),
       ),
     );
   }
+
+  bool _isDone(CustomTrainingPlan plan) => insights.isPlanDone(
+    selectedDay,
+    planIds: [plan.id, plan.clientId],
+    planName: plan.name,
+  );
 
   static const _weekdayAccusative = [
     'poniedziałek',
@@ -136,10 +215,11 @@ class TrainingTodayPlanSection extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem(this.label, this.onSelected);
+  const _MenuItem(this.label, this.onSelected, {this.enabled = true});
 
   final String label;
   final VoidCallback onSelected;
+  final bool enabled;
 }
 
 /// Wspólna rama karty: poświata w kolorze planu, plakietka dnia i menu.
@@ -148,8 +228,8 @@ class _PlanCardShell extends StatelessWidget {
     super.key,
     required this.badge,
     required this.caption,
-    required this.menu,
     required this.child,
+    this.menu = const [],
     this.color,
   });
 
@@ -234,7 +314,7 @@ class _PlanCardShell extends StatelessWidget {
                         ),
                       ),
                     ),
-                    _MoreMenu(items: menu),
+                    if (menu.isNotEmpty) _MoreMenu(items: menu),
                   ],
                 ),
                 child,
@@ -270,7 +350,11 @@ class _MoreMenu extends StatelessWidget {
         onSelected: (index) => items[index].onSelected(),
         itemBuilder: (context) => [
           for (var i = 0; i < items.length; i++)
-            PopupMenuItem<int>(value: i, child: Text(items[i].label)),
+            PopupMenuItem<int>(
+              value: i,
+              enabled: items[i].enabled,
+              child: Text(items[i].label),
+            ),
         ],
       ),
     );
@@ -283,20 +367,33 @@ class _PlanContent extends StatelessWidget {
     required this.insights,
     required this.onOpen,
     required this.onStart,
+    required this.disabledHint,
+    required this.customButton,
   });
 
   final CustomTrainingPlan plan;
   final TrainingHomeInsights insights;
   final VoidCallback onOpen;
-  final VoidCallback onStart;
+
+  /// `null` — trwa inny trening, przycisk wyszarzony.
+  final VoidCallback? onStart;
+
+  /// Podpowiedź pod wyszarzonym przyciskiem.
+  final String disabledHint;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
     final color = PlanColors.of(plan.name);
-    final muscles = _muscleSummary(plan.exercises);
+    final muscles = planMuscleSummary(plan.exercises);
     final setsCount = plan.exercises.fold<int>(0, (s, e) => s + e.sets.length);
     final durationSec = insights.durationFor(plan.name);
-    final record = recordToBeatFor(plan.exercises, insights.bests);
+    final record = recordToBeatFor(
+      plan.exercises,
+      insights.bests,
+      settings:
+          plan.planProgression ?? ServiceLocator.progressionSettings.current,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -383,6 +480,21 @@ class _PlanContent extends StatelessWidget {
           icon: Icons.play_arrow_rounded,
           onTap: onStart,
         ),
+        if (onStart == null) ...[
+          const SizedBox(height: 8),
+          Text(
+            disabledHint,
+            key: const ValueKey('start-disabled-hint'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textSubtle,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        const SizedBox(height: 8),
+        customButton,
       ],
     );
   }
@@ -391,21 +503,6 @@ class _PlanContent extends StatelessWidget {
   static int _roundedMinutes(int seconds) {
     final minutes = (seconds / 60 / 5).round() * 5;
     return minutes < 5 ? 5 : minutes;
-  }
-
-  /// „Klatka · Barki · Triceps” — główna partia każdego ćwiczenia, bez
-  /// powtórzeń, najwyżej cztery.
-  static String _muscleSummary(List<PlanExercise> exercises) {
-    final labels = <String>{};
-    for (final exercise in exercises) {
-      final muscles = exercise.exercise.muscles.where(
-        (m) => m != MuscleGroup.all,
-      );
-      if (muscles.isEmpty) continue;
-      labels.add(muscles.first.shortLabel);
-      if (labels.length == 4) break;
-    }
-    return labels.join(' · ');
   }
 }
 
@@ -444,11 +541,13 @@ class _RestDayContent extends StatelessWidget {
   const _RestDayContent({
     required this.nextWorkout,
     required this.onCreatePlan,
+    required this.customButton,
   });
 
   /// „Pull · piątek”; `null`, gdy żaden plan nie ma przypisanych dni.
   final String? nextWorkout;
   final VoidCallback onCreatePlan;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
@@ -474,7 +573,7 @@ class _RestDayContent extends StatelessWidget {
               ),
             ),
             Image.asset(
-              'assets/images/monk_rest.png',
+              'assets/images/monk_rest.webp',
               key: const ValueKey('monk-rest-icon'),
               height: 64,
               fit: BoxFit.contain,
@@ -490,15 +589,91 @@ class _RestDayContent extends StatelessWidget {
           secondary: true,
           onTap: onCreatePlan,
         ),
+        const SizedBox(height: 8),
+        customButton,
+      ],
+    );
+  }
+}
+
+class _DoneContent extends StatelessWidget {
+  const _DoneContent({
+    required this.title,
+    required this.onOpenPlan,
+    required this.customButton,
+  });
+
+  /// Nazwa ukończonego planu (planów) albo wolnego treningu.
+  final String title;
+
+  /// `null` przy wolnym treningu i przy kilku planach (są w menu ⋯).
+  final VoidCallback? onOpenPlan;
+  final Widget customButton;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.success.withValues(alpha: 0.16),
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                key: ValueKey('done-check-icon'),
+                color: AppColors.success,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Trening ukończony', style: _titleStyle),
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _subtitleStyle,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (onOpenPlan != null) ...[
+          _CardButton(
+            key: const ValueKey('done-plan-details-button'),
+            label: 'Szczegóły planu',
+            icon: Icons.view_list_rounded,
+            secondary: true,
+            onTap: onOpenPlan,
+          ),
+          const SizedBox(height: 8),
+        ],
+        customButton,
       ],
     );
   }
 }
 
 class _NoPlansContent extends StatelessWidget {
-  const _NoPlansContent({required this.onCreatePlan});
+  const _NoPlansContent({
+    required this.onCreatePlan,
+    required this.customButton,
+  });
 
   final VoidCallback onCreatePlan;
+  final Widget customButton;
 
   @override
   Widget build(BuildContext context) {
@@ -519,6 +694,8 @@ class _NoPlansContent extends StatelessWidget {
           icon: Icons.add_rounded,
           onTap: onCreatePlan,
         ),
+        const SizedBox(height: 8),
+        customButton,
       ],
     );
   }
@@ -550,28 +727,37 @@ class _CardButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+
+  /// `null` — przycisk wyszarzony i nieaktywny.
+  final VoidCallback? onTap;
   final bool secondary;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = secondary ? AppColors.iconOnTile : AppColors.onPrimary;
+    final disabled = onTap == null;
+    final foreground = disabled
+        ? AppColors.textMuted
+        : (secondary ? AppColors.iconOnTile : AppColors.onPrimary);
     return Semantics(
       button: true,
+      enabled: !disabled,
       label: label,
       excludeSemantics: true,
       child: AppPressable(
         onTap: onTap,
+        enabled: !disabled,
         child: Container(
           height: 50,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: secondary ? AppColors.tile : AppColors.primary,
+            color: disabled
+                ? AppColors.tile
+                : (secondary ? AppColors.tile : AppColors.primary),
             borderRadius: BorderRadius.circular(16),
-            border: secondary
+            border: secondary || disabled
                 ? Border.all(color: AppColors.borderStrong)
                 : null,
-            boxShadow: secondary
+            boxShadow: secondary || disabled
                 ? null
                 : [
                     BoxShadow(

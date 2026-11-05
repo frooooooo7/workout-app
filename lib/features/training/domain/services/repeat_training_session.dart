@@ -11,7 +11,8 @@ import '../models/training_session.dart';
 /// * nowe identyfikatory sesji, ćwiczeń i serii; bez notatki sesji ani
 ///   notatek do ćwiczeń i bez udostępnienia na profilu,
 /// * powiązanie z planem tylko wtedy, gdy plan nadal istnieje ([planLocalId]
-///   / [planServerId] podaje wywołujący), nazwa zostaje zawsze.
+///   / [planServerId] podaje wywołujący), nazwa, kolor i ikona zostają
+///   zawsze, podobnie przerwy i superserie ćwiczeń.
 TrainingSession buildRepeatedSession(
   TrainingSession source, {
   String? planLocalId,
@@ -22,6 +23,8 @@ TrainingSession buildRepeatedSession(
     planLocalId: planLocalId,
     planServerId: planServerId,
     planName: source.planName,
+    planColorKey: source.planColorKey,
+    planIconKey: source.planIconKey,
     startedAt: (startedAt ?? DateTime.now()).toUtc(),
     exercises: [
       for (final exercise in source.exercises)
@@ -31,6 +34,10 @@ TrainingSession buildRepeatedSession(
           exerciseMuscles: List<String>.of(exercise.exerciseMuscles),
           exerciseCategory: exercise.exerciseCategory,
           exerciseImageUrl: exercise.exerciseImageUrl,
+          restSeconds: exercise.restSeconds,
+          supersetGroup: exercise.supersetGroup,
+          tracking: exercise.tracking,
+          distanceUnit: exercise.distanceUnit,
           sets: [for (final set in exercise.sets) _repeatSet(set)],
         ),
     ],
@@ -52,6 +59,10 @@ TrainingSessionSet _repeatSet(TrainingSessionSet previous) {
     actualReps: reps,
     actualRir: rir,
     actualTempo: tempo,
+    // Kardio: poprzedni czas i dystans to cel, wynik wpisuje się na nowo.
+    plannedDurationSeconds:
+        previous.actualDurationSeconds ?? previous.plannedDurationSeconds,
+    plannedDistanceM: previous.actualDistanceM ?? previous.plannedDistanceM,
   );
 }
 

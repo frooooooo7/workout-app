@@ -8,7 +8,7 @@ class AuthHeroBackground extends StatelessWidget {
   const AuthHeroBackground({
     super.key,
     required this.child,
-    this.imageAsset = 'assets/images/login-hero.png',
+    this.imageAsset = 'assets/images/login-hero.webp',
   });
 
   final Widget child;

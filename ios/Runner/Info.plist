@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Gym</string>
+	<string>Stronger</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -67,6 +67,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Aplikacja potrzebuje dostępu do zdjęć, aby dodać obraz do własnego ćwiczenia.</string>
+	<string>Aplikacja potrzebuje dostępu do zdjęć, aby dodać obraz do ćwiczenia, avatara albo posta z treningu.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikacja potrzebuje aparatu, aby zrobić zdjęcie do posta z treningu albo avatara.</string>
 </dict>
 </plist>

@@ -38,9 +38,12 @@ abstract final class FeedJson {
       author: authorFromJson(json['author'] as Map<String, dynamic>),
       title: json['title'] as String? ?? 'Trening',
       note: _nonBlank(json['note'] as String?),
+      postTitle: _nonBlank(json['postTitle'] as String?),
+      photoUrl: _nonBlank(json['photoUrl'] as String?),
       startedAt: startedAt,
-      finishedAt: DateTime.tryParse(json['finishedAt'] as String? ?? '')
-          ?.toUtc(),
+      finishedAt: DateTime.tryParse(
+        json['finishedAt'] as String? ?? '',
+      )?.toUtc(),
       durationSec: (json['durationSec'] as num?)?.toInt() ?? 0,
       exercisesCount: (json['exercisesCount'] as num?)?.toInt() ?? 0,
       completedSetsCount: (json['completedSetsCount'] as num?)?.toInt() ?? 0,
@@ -71,6 +74,8 @@ abstract final class FeedJson {
     'author': authorToJson(post.author),
     'title': post.title,
     'note': post.note,
+    'postTitle': post.postTitle,
+    'photoUrl': post.photoUrl,
     'startedAt': post.startedAt.toUtc().toIso8601String(),
     'finishedAt': post.finishedAt?.toUtc().toIso8601String(),
     'durationSec': post.durationSec,
@@ -200,8 +205,8 @@ abstract final class FeedJson {
     return TopExercise(
       name: json['name'] as String? ?? 'Ćwiczenie',
       completedSets: (json['completedSets'] as num?)?.toInt() ?? 0,
-      bestSet: metrics == null ||
-              (metrics.weightKg == null && metrics.reps == null)
+      bestSet:
+          metrics == null || (metrics.weightKg == null && metrics.reps == null)
           ? null
           : TrainingSetMetrics(weightKg: metrics.weightKg, reps: metrics.reps),
     );

@@ -375,6 +375,9 @@ class _ExerciseRemote extends ExerciseRemoteDataSource {
     required ExerciseCategory category,
     required String description,
     String? clientId,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     createCalls.add(name);
     if (rejectNames.contains(name)) {

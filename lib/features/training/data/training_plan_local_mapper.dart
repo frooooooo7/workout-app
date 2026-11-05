@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
@@ -7,6 +8,7 @@ import '../../library/data/exercise_database.dart';
 import '../../library/data/exercise_dto.dart';
 import '../../library/domain/models/exercise.dart';
 import '../domain/models/custom_training_plan.dart';
+import '../domain/models/progression_settings.dart';
 
 class LocalTrainingPlanRecord {
   const LocalTrainingPlanRecord({
@@ -30,8 +32,45 @@ class TrainingPlanLocalMapper {
 
   static String encodeDays(List<int> days) => jsonEncode(days);
 
+  static ProgressionSettings? _progressionFromColumn(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return ProgressionSettings.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
   static List<int> decodeDays(String raw) =>
       (jsonDecode(raw) as List).map((d) => d as int).toList();
+
+  /// Kolumny wyglądu i ustawień planu w `training_plans` (zapis lokalny,
+  /// tworzenie, edycja i pull z serwera).
+  ///
+  /// [includeOrder] = false pomija miejsce na liście: edycja treści planu nie
+  /// może cofnąć przesunięcia (kolejność zapisuje tylko `reorder` i pull).
+  static Map<String, Object?> planSettingsValues(
+    CustomTrainingPlan plan, {
+    bool includeOrder = true,
+  }) => {
+    'default_rest_seconds': plan.defaultRestSeconds,
+    'color_key': plan.colorKey,
+    'icon_key': plan.iconKey,
+    'goal': plan.goal?.apiName,
+    'progression_step_kg': plan.progressionStepKg,
+    'progression': plan.progression == null
+        ? null
+        : jsonEncode(plan.progression!.toJson()),
+    'highlight_plan_color': plan.highlightPlanColor ? 1 : 0,
+    'show_rir': plan.showRir ? 1 : 0,
+    'show_tempo': plan.showTempo ? 1 : 0,
+    'is_public': plan.isPublic ? 1 : 0,
+    'copied_from_user_id': plan.copiedFrom?.userId,
+    'copied_from_handle': plan.copiedFrom?.handle,
+    'copy_count': plan.copyCount,
+    'cover_url': plan.coverUrl,
+    if (includeOrder) 'sort_order': plan.sortOrder,
+  };
 
   static Future<LocalTrainingPlanRecord?> fromDb(
     DatabaseExecutor db,
@@ -94,6 +133,18 @@ class TrainingPlanLocalMapper {
       }
     }
 
+    // Okładka wybrana na tym urządzeniu (jeszcze niewysłana) wygrywa z tą
+    // z serwera; usunięta w kolejce znika od razu.
+    final coverRows = await _queryIn(
+      db,
+      ExerciseDatabase.tablePendingPlanCovers,
+      column: 'plan_local_id',
+      ids: planIds,
+    );
+    final pendingCovers = {
+      for (final row in coverRows) row['plan_local_id'] as String: row,
+    };
+
     final planExercisesByPlan = <String, List<Map<String, dynamic>>>{};
     for (final row in planExerciseRows) {
       final planId = row['plan_local_id'] as String;
@@ -114,6 +165,7 @@ class TrainingPlanLocalMapper {
           setsByPlanExercise: setsByPlanExercise,
           exerciseByLocalId: exerciseByLocalId,
           exerciseByServerId: exerciseByServerId,
+          pendingCover: pendingCovers[planRow['local_id'] as String],
         ),
     ];
   }
@@ -124,6 +176,7 @@ class TrainingPlanLocalMapper {
     required Map<String, List<Map<String, dynamic>>> setsByPlanExercise,
     required Map<String, Exercise> exerciseByLocalId,
     required Map<String, Exercise> exerciseByServerId,
+    Map<String, dynamic>? pendingCover,
   }) {
     final planExercises = <PlanExercise>[];
     for (final planExerciseRow in planExerciseRows) {
@@ -148,8 +201,12 @@ class TrainingPlanLocalMapper {
                 reps: set['reps'] as String? ?? '',
                 rir: set['rir'] as String?,
                 tempo: set['tempo'] as String?,
+                durationSeconds: set['duration_seconds'] as int?,
+                distanceM: set['distance_m'] as int?,
               ),
           ],
+          restSeconds: planExerciseRow['rest_seconds'] as int?,
+          supersetGroup: planExerciseRow['superset_group'] as String?,
         ),
       );
     }
@@ -161,6 +218,34 @@ class TrainingPlanLocalMapper {
         note: planRow['note'] as String?,
         selectedDays: decodeDays(planRow['selected_days'] as String),
         exercises: planExercises,
+        defaultRestSeconds:
+            (planRow['default_rest_seconds'] as int?) ??
+            CustomTrainingPlan.defaultRest,
+        colorKey: planRow['color_key'] as String?,
+        iconKey: planRow['icon_key'] as String?,
+        goal: PlanGoal.fromApi(planRow['goal'] as String?),
+        progressionStepKg: (planRow['progression_step_kg'] as num?)
+            ?.toDouble(),
+        progression: _progressionFromColumn(planRow['progression']),
+        highlightPlanColor: (planRow['highlight_plan_color'] as int?) != 0,
+        showRir: (planRow['show_rir'] as int?) != 0,
+        showTempo: (planRow['show_tempo'] as int?) != 0,
+        isPublic: (planRow['is_public'] as int?) == 1,
+        copiedFrom: switch (planRow['copied_from_user_id'] as String?) {
+          final userId? => PlanAuthor(
+            userId: userId,
+            handle: planRow['copied_from_handle'] as String?,
+          ),
+          null => null,
+        },
+        copyCount: (planRow['copy_count'] as int?) ?? 0,
+        coverUrl: pendingCover?['op'] == 'remove'
+            ? null
+            : planRow['cover_url'] as String?,
+        coverBytes: pendingCover?['op'] == 'upload'
+            ? _bytes(pendingCover!['bytes'])
+            : null,
+        sortOrder: planRow['sort_order'] as int?,
       ),
       serverId: planRow['server_id'] as String?,
       pendingOp: planRow['pending_op'] as String?,
@@ -253,6 +338,8 @@ class TrainingPlanLocalMapper {
         'exercise_local_id': pe.exercise.id,
         'exercise_server_id': exerciseServerIdsByLocalId[pe.exercise.id],
         'position': entry.key,
+        'rest_seconds': pe.restSeconds,
+        'superset_group': pe.supersetGroup,
       });
       for (final setEntry in pe.sets.asMap().entries) {
         final set = setEntry.value;
@@ -267,6 +354,8 @@ class TrainingPlanLocalMapper {
           'reps': set.reps,
           'rir': set.rir,
           'tempo': set.tempo,
+          'duration_seconds': set.durationSeconds,
+          'distance_m': set.distanceM,
         });
       }
     }
@@ -313,6 +402,12 @@ class TrainingPlanLocalMapper {
     if (db is Database) return db.transaction(action);
     return action(db);
   }
+
+  static Uint8List? _bytes(Object? raw) => raw is Uint8List
+      ? raw
+      : raw is List<int>
+      ? Uint8List.fromList(raw)
+      : null;
 
   static Future<List<Map<String, dynamic>>> _queryIn(
     DatabaseExecutor db,

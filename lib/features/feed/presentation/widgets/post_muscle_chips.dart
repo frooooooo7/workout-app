@@ -5,15 +5,24 @@ import '../../../library/domain/models/exercise.dart';
 
 /// Trenowane partie jako małe chipy; nadmiar zwija się do „+N”.
 class PostMuscleChips extends StatelessWidget {
-  const PostMuscleChips({super.key, required this.muscles, this.maxVisible = 4});
+  const PostMuscleChips({
+    super.key,
+    required this.muscles,
+    this.maxVisible = 4,
+  });
 
   final List<MuscleGroup> muscles;
   final int maxVisible;
 
   @override
   Widget build(BuildContext context) {
-    final visible = muscles.take(maxVisible).toList(growable: false);
-    final rest = muscles.length - visible.length;
+    // Konkretne mięśnie (przednie, boczne barki…) zwijamy do dużych partii.
+    // Przedramiona zostają sobą: `broadGroup` zamieniłby je w „Biceps”.
+    final broad = {
+      for (final m in muscles) m == MuscleGroup.forearms ? m : m.broadGroup,
+    }.toList();
+    final visible = broad.take(maxVisible).toList(growable: false);
+    final rest = broad.length - visible.length;
 
     return Wrap(
       spacing: 6,

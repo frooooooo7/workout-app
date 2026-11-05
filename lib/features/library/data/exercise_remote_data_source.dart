@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import 'package:mime/mime.dart';
-
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/exercise.dart';
 
 /// Wraps the backend `/exercises` REST endpoints and returns domain [Exercise]
@@ -38,35 +35,16 @@ class ExerciseRemoteDataSource {
     isMine: (j['isMine'] as bool?) ?? true,
     isPendingSync: false,
     clientId: j['clientId'] as String?,
+    tracking: ExerciseTracking.fromApi(j['trackingType'] as String?),
+    distanceUnit: DistanceUnit.fromApi(j['distanceUnit'] as String?),
+    equipment: ExerciseEquipment.tryParse(j['equipment'] as String?),
+    aliases: [
+      for (final a in (j['aliases'] as List?) ?? const [])
+        if (a is String && a.isNotEmpty) a,
+    ],
+    instructions: ExerciseInstructions.tryParse(j['instructions']),
+    pattern: j['pattern'] as String?,
   );
-
-  /// Web clients often use filenames like `blob` without an extension — backend
-  /// and MIME detection need a real extension.
-  String _normalizeExerciseImageFilename(String filename) {
-    var name = filename.trim();
-    if (name.isEmpty || name.toLowerCase() == 'blob') {
-      name = 'upload.jpg';
-    }
-    final lower = name.toLowerCase();
-    final hasExt =
-        lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp');
-    if (!hasExt) {
-      name = '$name.jpg';
-    }
-    return name;
-  }
-
-  MediaType _mediaTypeForExerciseImage(String filename) {
-    final typed = lookupMimeType(filename);
-    if (typed != null) return MediaType.parse(typed);
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return MediaType('image', 'png');
-    if (lower.endsWith('.webp')) return MediaType('image', 'webp');
-    return MediaType('image', 'jpeg');
-  }
 
   String _buildPath({
     required MuscleGroup? muscleGroup,
@@ -78,7 +56,7 @@ class ExerciseRemoteDataSource {
     if (query != null && query.isNotEmpty) params['q'] = query;
 
     if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      params['muscle'] = muscleGroup.apiGroup.name;
+      params['muscle'] = muscleGroup.name;
     }
 
     if (filter != null && filter != LibraryFilter.all) {
@@ -113,13 +91,15 @@ class ExerciseRemoteDataSource {
     );
     final all = <Exercise>[];
     for (var page = 0; page < _maxPages; page++) {
-      final path = base.replace(
-        queryParameters: {
-          ...base.queryParameters,
-          'limit': '$_pageSize',
-          'offset': '${page * _pageSize}',
-        },
-      ).toString();
+      final path = base
+          .replace(
+            queryParameters: {
+              ...base.queryParameters,
+              'limit': '$_pageSize',
+              'offset': '${page * _pageSize}',
+            },
+          )
+          .toString();
       final data = await _api.get(path, auth: true);
       final items = (data as List)
           .cast<Map<String, dynamic>>()
@@ -148,15 +128,27 @@ class ExerciseRemoteDataSource {
     required ExerciseCategory category,
     required String description,
     String? clientId,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final body = <String, dynamic>{
       'name': name,
       'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
+      'trackingType': tracking.apiName,
+      'distanceUnit': distanceUnit.apiName,
     };
     if (clientId != null) {
       body['clientId'] = clientId;
+    }
+    if (extras != null) {
+      if (extras.equipment != null) body['equipment'] = extras.equipment!.apiName;
+      if (extras.aliases.isNotEmpty) body['aliases'] = extras.aliases;
+      if (extras.instructions != null) {
+        body['instructions'] = extras.instructions!.toJson();
+      }
     }
     final data = await _api.post('/exercises', body, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
@@ -168,12 +160,11 @@ class ExerciseRemoteDataSource {
     Uint8List bytes,
     String filename,
   ) async {
-    final safeName = _normalizeExerciseImageFilename(filename);
-    final file = http.MultipartFile.fromBytes(
+    final file = imageMultipartFile(
       'image',
       bytes,
-      filename: safeName,
-      contentType: _mediaTypeForExerciseImage(safeName),
+      filename,
+      fallbackName: 'upload.jpg',
     );
     final data = await _api.postMultipart(
       '/exercises/$exerciseId/image',
@@ -191,12 +182,23 @@ class ExerciseRemoteDataSource {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final data = await _api.put('/exercises/$id', {
       'name': name,
       'muscles': MuscleGroup.toApiList(muscles),
       'category': category.name,
       'description': description,
+      'trackingType': tracking.apiName,
+      'distanceUnit': distanceUnit.apiName,
+      // Brak pola = bez zmian; `null` czyści sprzęt i opis.
+      if (extras != null) ...{
+        'equipment': extras.equipment?.apiName,
+        'aliases': extras.aliases,
+        'instructions': extras.instructions?.toJson(),
+      },
     }, auth: true);
     return ExerciseRemoteDataSource.fromJson(data as Map<String, dynamic>);
   }

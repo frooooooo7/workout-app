@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class LibraryEmptyState extends StatelessWidget {
-  const LibraryEmptyState({super.key});
+  const LibraryEmptyState({super.key, this.message});
+
+  /// Własny opis zamiast domyślnego „Spróbuj zmienić filtry…”.
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +37,10 @@ class LibraryEmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Spróbuj zmienić filtry lub wyszukaj inaczej.',
+          Text(
+            message ?? 'Spróbuj zmienić filtry lub wyszukaj inaczej.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
       ),

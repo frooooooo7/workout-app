@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_header.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
+import '../../../training/data/plan_sharing_repository.dart';
 import '../../../training/domain/models/training_history_models.dart';
+import '../../../training/presentation/utils/plan_copy.dart';
 import '../../../training/presentation/widgets/new_records_banner.dart';
 import '../../../training/presentation/widgets/session_details/session_exercise_card.dart';
 import '../../../training/presentation/widgets/session_details/session_muscle_map.dart';
@@ -21,10 +24,11 @@ import '../widgets/feed_status_views.dart';
 import '../widgets/kudos_sheet.dart';
 import '../widgets/post_author_row.dart';
 import '../widgets/post_comment_tile.dart';
+import '../widgets/post_photo.dart';
 import '../widgets/post_social_bar.dart';
 
 /// Szczegóły posta: autor, metryki, mapa mięśni, ćwiczenia z seriami,
-/// kudosy i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
+/// żółwiki i komentarze. Wymaga [PostDetailsCubit], [PostCommentsCubit]
 /// i `FollowCubit` w kontekście (dostarcza je router).
 class PostDetailsScreen extends StatefulWidget {
   const PostDetailsScreen({
@@ -33,6 +37,7 @@ class PostDetailsScreen extends StatefulWidget {
     required this.repository,
     this.currentUserId,
     this.focusComment = false,
+    this.planSharing,
   });
 
   final String postId;
@@ -43,43 +48,130 @@ class PostDetailsScreen extends StatefulWidget {
   /// komentarzy.
   final bool focusComment;
 
+  /// Kopiowanie treningu jako planu (⋯ → „Skopiuj jako plan”); `null`
+  /// ukrywa menu.
+  final PlanSharingRepository? planSharing;
+
   @override
   State<PostDetailsScreen> createState() => _PostDetailsScreenState();
 }
 
-class _PostDetailsScreenState extends State<PostDetailsScreen> {
+class _PostDetailsScreenState extends State<PostDetailsScreen>
+    with WidgetsBindingObserver {
   final _commentFocus = FocusNode();
   final _commentsKey = GlobalKey();
+  final _scrollController = ScrollController();
   bool _didAutoFocus = false;
+  bool _copying = false;
+
+  /// Ekran trzyma przewinięcie przy komentarzach (po wczytaniu komentarzy
+  /// i po otwarciu klawiatury), dopóki użytkownik sam nie zacznie przewijać.
+  bool _followComments = false;
+
+  /// Numer ostatniego przewijania — nowsze przerywa starsze.
+  int _scrollRun = 0;
+  double _lastKeyboardInset = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     context.read<PostDetailsCubit>().load();
     context.read<PostCommentsCubit>().load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _commentFocus.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) return;
+    final inset = View.of(context).viewInsets.bottom;
+    final opened = inset > _lastKeyboardInset;
+    _lastKeyboardInset = inset;
+    // Klawiatura skraca listę, a pozycja przewinięcia zostaje — bez tego
+    // sekcja komentarzy chowa się pod klawiaturą.
+    if (opened && _followComments) _followCommentsAfterLayout();
   }
 
   void _maybeAutoFocus() {
     if (!widget.focusComment || _didAutoFocus) return;
     _didAutoFocus = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _scrollToComments();
       if (!mounted) return;
       _commentFocus.requestFocus();
+    });
+  }
+
+  /// Przewija po zbudowaniu układu, bez animacji — nadąża za klawiaturą
+  /// i za dopisywanymi komentarzami.
+  void _followCommentsAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_followComments) return;
+      _scrollToComments(animate: false);
+    });
+  }
+
+  /// Przewija do sekcji komentarzy. Lista buduje elementy leniwie, więc
+  /// sekcja na końcu może jeszcze nie istnieć — wtedy zjeżdżamy w dół, aż
+  /// się zbuduje, i dopiero wtedy ustawiamy ją u góry ekranu. Przerywa się,
+  /// gdy użytkownik sam przewinie albo zacznie nowe przewijanie.
+  Future<void> _scrollToComments({bool animate = true}) async {
+    final run = ++_scrollRun;
+    _followComments = true;
+    bool cancelled() => !mounted || run != _scrollRun;
+    for (var attempt = 0; attempt < 12; attempt++) {
+      if (cancelled()) return;
       final commentsContext = _commentsKey.currentContext;
-      if (commentsContext != null) {
-        Scrollable.ensureVisible(
+      if (commentsContext != null && commentsContext.mounted) {
+        await Scrollable.ensureVisible(
           commentsContext,
-          duration: const Duration(milliseconds: 380),
+          duration: animate ? const Duration(milliseconds: 380) : Duration.zero,
           curve: Curves.easeOutCubic,
         );
+        return;
       }
-    });
+      if (!_scrollController.hasClients) {
+        await WidgetsBinding.instance.endOfFrame;
+        continue;
+      }
+      final position = _scrollController.position;
+      if (position.pixels >= position.maxScrollExtent) {
+        await WidgetsBinding.instance.endOfFrame;
+        continue;
+      }
+      if (animate) {
+        await _scrollController.animateTo(
+          position.maxScrollExtent,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(position.maxScrollExtent);
+        await WidgetsBinding.instance.endOfFrame;
+      }
+    }
+  }
+
+  /// Palec na liście kończy automatyczne przewijanie.
+  bool _onScrollNotification(ScrollNotification notification) {
+    final userDriven =
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null) ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null);
+    if (userDriven && _followComments) {
+      _followComments = false;
+      _scrollRun++;
+    }
+    return false;
   }
 
   void _showSnackBar(String message) {
@@ -88,6 +180,51 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       ..showSnackBar(
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
+  }
+
+  Future<void> _showPostActions() async {
+    final isOwn = context.read<PostDetailsCubit>().state.post?.isOwn ?? false;
+    final copy = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            key: const ValueKey('post-copy-plan'),
+            leading: const Icon(
+              Icons.copy_rounded,
+              color: AppColors.textPrimary,
+            ),
+            title: const Text(
+              'Skopiuj jako plan',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              isOwn
+                  ? 'Ćwiczenia, serie i ciężary z tego treningu'
+                  : 'Ćwiczenia i serie, bez ciężarów autora',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            onTap: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ),
+      ),
+    );
+    final sharing = widget.planSharing;
+    if (copy != true || !mounted || sharing == null) return;
+    setState(() => _copying = true);
+    final ok = await copyPlanAndOpenPlans(
+      context,
+      () => sharing.copyFromPost(widget.postId),
+    );
+    if (!ok && mounted) setState(() => _copying = false);
   }
 
   Future<void> _confirmDelete(PostComment comment) async {
@@ -168,6 +305,15 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         ),
         BlocListener<PostCommentsCubit, PostCommentsState>(
           listenWhen: (previous, current) =>
+              previous.status == PostCommentsStatus.loading &&
+              current.status != PostCommentsStatus.loading,
+          listener: (_, _) {
+            // Komentarze dorysowują się pod nagłówkiem — dociągamy widok.
+            if (_followComments) _followCommentsAfterLayout();
+          },
+        ),
+        BlocListener<PostCommentsCubit, PostCommentsState>(
+          listenWhen: (previous, current) =>
               current.notice != null &&
               previous.notice?.id != current.notice!.id,
           listener: (_, state) => _showSnackBar(state.notice!.message),
@@ -180,9 +326,36 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
             bottom: false,
             child: Column(
               children: [
-                AppHeader(
-                  title: 'Trening',
-                  onBack: () => Navigator.of(context).maybePop(),
+                BlocSelector<PostDetailsCubit, PostDetailsState, bool>(
+                  selector: (state) => state.status == PostDetailsStatus.ready,
+                  builder: (context, ready) => AppHeader(
+                    title: 'Trening',
+                    onBack: () => Navigator.of(context).maybePop(),
+                    actions: [
+                      if (ready && widget.planSharing != null)
+                        _copying
+                            ? const SizedBox(
+                                width: AppSpacing.minTapTarget,
+                                height: AppSpacing.minTapTarget,
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : AppHeaderIconButton(
+                                key: const ValueKey('post-more'),
+                                icon: Icons.more_horiz_rounded,
+                                tooltip: 'Więcej opcji',
+                                onTap: _showPostActions,
+                              ),
+                    ],
+                  ),
                 ),
                 Expanded(
                   child: BlocBuilder<PostDetailsCubit, PostDetailsState>(
@@ -196,8 +369,11 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                     if (detailsState.status != PostDetailsStatus.ready) {
                       return const SizedBox.shrink();
                     }
-                    return BlocSelector<PostCommentsCubit, PostCommentsState,
-                        bool>(
+                    return BlocSelector<
+                      PostCommentsCubit,
+                      PostCommentsState,
+                      bool
+                    >(
                       selector: (state) => state.isSending,
                       builder: (context, sending) => CommentInputBar(
                         focusNode: _commentFocus,
@@ -242,6 +418,9 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
           post: state.post!,
           sessionDetail: state.sessionDetail!,
           commentsKey: _commentsKey,
+          scrollController: _scrollController,
+          onScrollNotification: _onScrollNotification,
+          onCommentsTap: _scrollToComments,
           repository: widget.repository,
           currentUserId: widget.currentUserId,
           onDeleteComment: _confirmDelete,
@@ -255,6 +434,9 @@ class _PostDetailsBody extends StatelessWidget {
     required this.post,
     required this.sessionDetail,
     required this.commentsKey,
+    required this.scrollController,
+    required this.onScrollNotification,
+    required this.onCommentsTap,
     required this.repository,
     required this.currentUserId,
     required this.onDeleteComment,
@@ -263,6 +445,9 @@ class _PostDetailsBody extends StatelessWidget {
   final FeedPost post;
   final TrainingSessionDetail sessionDetail;
   final GlobalKey commentsKey;
+  final ScrollController scrollController;
+  final NotificationListenerCallback<ScrollNotification> onScrollNotification;
+  final VoidCallback onCommentsTap;
   final FeedRepository repository;
   final String? currentUserId;
   final ValueChanged<PostComment> onDeleteComment;
@@ -271,52 +456,122 @@ class _PostDetailsBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final exercises = sessionDetail.exercises;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: PostAuthorRow(
-            author: post.author,
-            timestamp: formatFeedTimestamp(post.startedAt),
-            onTap: () =>
-                openAuthorProfile(context, post.author.id, isOwn: post.isOwn),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SessionSummaryHeader(detail: sessionDetail),
-        const SizedBox(height: 12),
-        if (post.personalRecords.isNotEmpty) ...[
-          NewRecordsBanner(records: post.personalRecords),
-          const SizedBox(height: 12),
-        ],
-        _KudosPanel(
-          post: post,
-          onKudosTap: context.read<PostDetailsCubit>().toggleKudos,
-          onKudosListTap: () => showKudosSheet(
-            context: context,
-            postId: post.id,
-            repository: repository,
-            currentUserId: currentUserId,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SessionMuscleMap(detail: sessionDetail),
-        if (exercises.isNotEmpty) ...[
-          const SizedBox(height: 22),
-          const _SectionTitle('Ćwiczenia'),
-          for (var i = 0; i < exercises.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: SessionExerciseCard(exercise: exercises[i], index: i),
+    return NotificationListener<ScrollNotification>(
+      onNotification: onScrollNotification,
+      child: ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: PostAuthorRow(
+              author: post.author,
+              timestamp: post.postTitle == null
+                  ? formatFeedTimestamp(post.startedAt)
+                  : '${formatFeedTimestamp(post.startedAt)} · ${post.title}',
+              onTap: () =>
+                  openAuthorProfile(context, post.author.id, isOwn: post.isOwn),
             ),
+          ),
+          const SizedBox(height: 12),
+          if (post.photoUrl != null ||
+              post.postTitle != null ||
+              post.note != null) ...[
+            _PostContent(post: post),
+            const SizedBox(height: 14),
+          ],
+          SessionSummaryHeader(detail: sessionDetail, showNote: false),
+          const SizedBox(height: 12),
+          if (post.personalRecords.isNotEmpty) ...[
+            NewRecordsBanner(records: post.personalRecords),
+            const SizedBox(height: 12),
+          ],
+          _KudosPanel(
+            post: post,
+            onKudosTap: context.read<PostDetailsCubit>().toggleKudos,
+            onCommentsTap: onCommentsTap,
+            onKudosListTap: () => showKudosSheet(
+              context: context,
+              postId: post.id,
+              repository: repository,
+              currentUserId: currentUserId,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SessionMuscleMap(detail: sessionDetail),
+          if (exercises.isNotEmpty) ...[
+            const SizedBox(height: 22),
+            const _SectionTitle('Ćwiczenia'),
+            for (var i = 0; i < exercises.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: SessionExerciseCard(exercise: exercises[i], index: i),
+              ),
+          ],
+          const SizedBox(height: 18),
+          _CommentsSection(
+            key: commentsKey,
+            commentCount: post.commentCount,
+            onDeleteComment: onDeleteComment,
+          ),
         ],
-        const SizedBox(height: 18),
-        _CommentsSection(
-          key: commentsKey,
-          commentCount: post.commentCount,
-          onDeleteComment: onDeleteComment,
-        ),
+      ),
+    );
+  }
+}
+
+/// Zdjęcie, tytuł i pełny opis posta nad metrykami treningu.
+class _PostContent extends StatelessWidget {
+  const _PostContent({required this.post});
+
+  final FeedPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = post.photoUrl;
+    final title = post.postTitle;
+    final note = post.note;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (photoUrl != null)
+          PostPhoto(
+            key: const ValueKey('post-details-photo'),
+            url: photoUrl,
+            aspectRatio: 1.15,
+            radius: 22,
+          ),
+        if (title != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(4, photoUrl != null ? 14 : 0, 4, 0),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+                height: 1.2,
+              ),
+            ),
+          ),
+        if (note != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              4,
+              title != null ? 6 : (photoUrl != null ? 12 : 0),
+              4,
+              0,
+            ),
+            child: Text(
+              note,
+              style: const TextStyle(
+                color: AppColors.textSubtle,
+                fontSize: 14.5,
+                height: 1.45,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -327,11 +582,13 @@ class _KudosPanel extends StatelessWidget {
     required this.post,
     required this.onKudosTap,
     required this.onKudosListTap,
+    required this.onCommentsTap,
   });
 
   final FeedPost post;
   final VoidCallback onKudosTap;
   final VoidCallback onKudosListTap;
+  final VoidCallback onCommentsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -346,11 +603,15 @@ class _KudosPanel extends StatelessWidget {
         children: [
           Expanded(
             child: post.kudosCount > 0
-                ? PostSocialSummary(post: post, onKudosListTap: onKudosListTap)
+                ? PostSocialSummary(
+                    post: post,
+                    onKudosListTap: onKudosListTap,
+                    onCommentsTap: onCommentsTap,
+                  )
                 : Text(
                     post.isOwn
-                        ? 'Nikt jeszcze nie dał kudosa'
-                        : 'Bądź pierwszą osobą z kudosem',
+                        ? 'Nikt jeszcze nie dał żółwika'
+                        : 'Daj pierwszego żółwika',
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12.5,

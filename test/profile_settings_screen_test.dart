@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/core/network/api_client.dart';
+import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/account/presentation/bloc/logout_all_devices_cubit.dart';
 import 'package:gym/features/auth/domain/models/auth_models.dart';
 import 'package:gym/features/profile/presentation/screens/profile_settings_screen.dart';
@@ -15,6 +16,8 @@ const _user = AuthUser(
 );
 
 void main() {
+  setUp(() => ServiceLocator.warmupSettings.attach(null));
+
   Future<FakeAccountRepository> pumpScreen(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(430, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -80,5 +83,37 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('warm-up row: off at first, switching on reveals the goal', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+    final store = ServiceLocator.warmupSettings;
+
+    expect(find.text('Rozgrzewka przed treningiem'), findsOneWidget);
+    expect(
+      tester.widget<Switch>(find.byKey(settingsWarmupSwitchKey)).value,
+      isFalse,
+    );
+    expect(find.text('Cel czasu'), findsNothing);
+
+    await tester.tap(find.byKey(settingsWarmupSwitchKey));
+    await tester.pumpAndSettle();
+
+    expect(store.current.enabled, isTrue);
+    expect(find.text('Cel czasu'), findsOneWidget);
+    expect(find.text('8 min'), findsOneWidget);
+
+    await tester.tap(find.byKey(settingsWarmupTargetKey(10)));
+    await tester.pumpAndSettle();
+    expect(store.current.targetMinutes, 10);
+
+    await tester.tap(find.byKey(settingsWarmupSwitchKey));
+    await tester.pumpAndSettle();
+    // Wyłączenie też zapisuje wybór, więc pytanie przy starcie już nie wróci.
+    expect(store.current.enabled, isFalse);
+    expect(store.current.shouldAsk, isFalse);
+    expect(find.text('Cel czasu'), findsNothing);
   });
 }

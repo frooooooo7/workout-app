@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
+import 'package:gym/features/training/domain/models/progression_settings.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/previous_performance_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_stats_repository.dart';
@@ -74,7 +77,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('exercise-list-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Bench press'));
+    await tester.tap(find.byKey(const ValueKey('order-block-0')));
     await tester.pumpAndSettle();
 
     expect(find.text('Ćwiczenie 1 z 2'), findsOneWidget);
@@ -83,47 +86,402 @@ void main() {
     await cubit.close();
   });
 
-  testWidgets('adds a set and removes it with a swipe to the left', (
-    tester,
-  ) async {
-    final repository = _FakeTrainingSessionRepository(_session());
-    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+  testWidgets(
+    'removes a set from the set sheet, with undo; a swipe does not delete',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_session());
+      final cubit = TrainingSessionCubit(repository, autoRefresh: false);
 
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OngoingWorkoutScreen(
+            args: OngoingWorkoutArgs(
+              initialSession: repository.session,
+              sessionCubit: cubit,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('add-session-set-button')));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        findsOneWidget,
+      );
+      expect(repository.session.exercises.first.sets, hasLength(2));
+
+      // Przesunięcie wiersza w lewo (jak przy zmianie ćwiczenia) nie usuwa
+      // już serii.
+      await tester.drag(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repository.session.exercises.first.sets, hasLength(2));
+      // Swipe przewinął do następnego ćwiczenia — wracamy.
+      await tester.drag(find.byType(PageView), const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      // Usuwanie: znaczek serii → „Usuń serię”.
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('SERIA 2'), findsOneWidget);
+      await tester.tap(find.text('Usuń serię'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
+      expect(repository.session.exercises.first.sets, hasLength(1));
+
+      // „Cofnij” przywraca serię na jej miejsce.
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        find.byKey(const ValueKey('session-set-type-0-1')),
+        findsOneWidget,
+      );
+      expect(repository.session.exercises.first.sets, hasLength(2));
+
+      // Ostatniej serii nie da się usunąć — arkusz nie ma tej opcji.
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń serię'));
+      await tester.pumpAndSettle();
+      ScaffoldMessenger.of(
+        tester.element(find.byType(OngoingWorkoutScreen)),
+      ).removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('session-set-type-0-0')));
+      await tester.pumpAndSettle();
+      expect(find.text('Usuń serię'), findsNothing);
+
+      await cubit.close();
+    },
+  );
+
+  Future<TrainingSessionCubit> pumpRemovalScreen(
+    WidgetTester tester,
+    _FakeTrainingSessionRepository repository,
+  ) async {
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
     await tester.pumpWidget(
       MaterialApp(
         home: OngoingWorkoutScreen(
           args: OngoingWorkoutArgs(
             initialSession: repository.session,
             sessionCubit: cubit,
+            restTimerScheduler: _FakeRestTimerScheduler(),
+          ),
+        ),
+      ),
+    );
+    return cubit;
+  }
+
+  testWidgets('swaps an exercise from the long-press menu, with undo', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = TrainingSessionCubit(repository, autoRefresh: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: repository.session,
+            sessionCubit: cubit,
+            restTimerScheduler: _FakeRestTimerScheduler(),
+            swapExercise: (context, replacing) async {
+              expect(replacing.exerciseName, 'Bench press');
+              return const Exercise(
+                id: 'db',
+                name: 'Dumbbell press',
+                muscles: [MuscleGroup.chest],
+                category: ExerciseCategory.compound,
+              );
+            },
           ),
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('add-session-set-button')));
+    await tester.longPress(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Zamień ćwiczenie'));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsOneWidget);
-    expect(repository.session.exercises.first.sets, hasLength(2));
-
-    await tester.drag(
-      find.byKey(const ValueKey('session-set-type-0-1')),
-      const Offset(-500, 0),
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Dumbbell press',
+      'Shoulder press',
+    ]);
+    expect(
+      find.byKey(const ValueKey('exercise-swapped-snackbar')),
+      findsOneWidget,
     );
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Bench press',
+      'Shoulder press',
+    ]);
+
+    await cubit.close();
+  });
+
+  testWidgets(
+    'removes an untouched exercise from the ⋯ menu without asking, with undo',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_session());
+      final cubit = await pumpRemovalScreen(tester, repository);
+
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      // Bez odhaczonych serii nie ma pytania — od razu „Cofnij”.
+      expect(find.text('Usunąć ćwiczenie?'), findsNothing);
+      expect(find.byKey(const ValueKey('exercise-removed-snackbar')), findsOne);
+      expect(repository.session.exercises.map((e) => e.exerciseName), [
+        'Shoulder press',
+      ]);
+      expect(find.text('Shoulder press'), findsOneWidget);
+      expect(find.text('Bench press'), findsNothing);
+
+      await tester.tap(find.text('Cofnij'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(repository.session.exercises.map((e) => e.exerciseName), [
+        'Bench press',
+        'Shoulder press',
+      ]);
+      expect(find.text('Ćwiczenie 1 z 2'), findsOneWidget);
+
+      await cubit.close();
+    },
+  );
+
+  testWidgets('⋯ menu has one „Lista ćwiczeń” entry that opens and jumps', (
+    tester,
+  ) async {
+    final repository = _FakeTrainingSessionRepository(_session());
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    // Lista i kolejność to jedna pozycja, nie dwie.
+    expect(find.text('Zmień kolejność ćwiczeń'), findsNothing);
+    await tester.tap(find.text('Lista ćwiczeń'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.drag_handle_rounded), findsNWidgets(2));
+    await tester.tap(find.byKey(const ValueKey('order-block-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ćwiczenie 2 z 2'), findsOneWidget);
+    expect(repository.session.exercises.first.exerciseName, 'Bench press');
+
+    await cubit.close();
+  });
+
+  testWidgets('undo after reordering does not split a superset', (
+    tester,
+  ) async {
+    TrainingSessionExercise exercise(String name, {String? group}) =>
+        TrainingSessionExercise(
+          exerciseId: name,
+          exerciseName: name,
+          exerciseMuscles: const ['chest'],
+          exerciseCategory: 'compound',
+          supersetGroup: group,
+          sets: [TrainingSessionSet(plannedReps: '8')],
+        );
+    final repository = _FakeTrainingSessionRepository(
+      TrainingSession(
+        planName: 'Mix',
+        startedAt: DateTime.now().toUtc(),
+        exercises: [
+          exercise('S1'),
+          exercise('X'),
+          exercise('S2'),
+          exercise('M1', group: 'A'),
+          exercise('M2', group: 'A'),
+        ],
+      ),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    Future<void> longPressSegment(int index, String action) async {
+      await tester.longPress(find.byKey(ValueKey('progress-segment-$index')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text(action));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    await longPressSegment(1, 'Usuń ćwiczenie z treningu');
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'S1',
+      'S2',
+      'M1',
+      'M2',
+    ]);
+
+    // W ciągu kilku sekund superseria ląduje na początku listy.
+    await longPressSegment(2, 'Przesuń wcześniej');
+    await longPressSegment(1, 'Przesuń wcześniej');
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'M1',
+      'M2',
+      'S1',
+      'S2',
+    ]);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+
+    // X wraca przed S2 (swojego dawnego następnego), a nie w środek M1 + M2.
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'M1',
+      'M2',
+      'S1',
+      'X',
+      'S2',
+    ]);
+
+    await cubit.close();
+  });
+
+  testWidgets('removing an exercise with checked sets asks for confirmation', (
+    tester,
+  ) async {
+    // Ekran startuje na ćwiczeniu z odhaczoną serią (tu: drugie).
+    final base = _session();
+    final session = base.copyWith(
+      exercises: [
+        base.exercises.first,
+        base.exercises.last.copyWith(
+          sets: [
+            TrainingSessionSet(
+              plannedReps: '10',
+              actualWeight: '35',
+              actualReps: '10',
+              completed: true,
+            ),
+          ],
+        ),
+      ],
+    );
+    final repository = _FakeTrainingSessionRepository(session);
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    Future<void> startRemoval() async {
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.pumpAndSettle();
+    }
+
+    await startRemoval();
+    expect(find.text('Usunąć ćwiczenie?'), findsOneWidget);
+    await tester.tap(find.text('Anuluj'));
+    await tester.pumpAndSettle();
+    expect(repository.session.exercises, hasLength(2));
+
+    await startRemoval();
+    await tester.tap(find.text('Usuń'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.byKey(const ValueKey('session-set-type-0-1')), findsNothing);
-    expect(repository.session.exercises.first.sets, hasLength(1));
-    // Ostatniej serii nie da się usunąć — wiersz się nie przesuwa.
-    await tester.drag(
-      find.byKey(const ValueKey('session-set-type-0-0')),
-      const Offset(-500, 0),
-    );
+    expect(repository.session.exercises.map((e) => e.exerciseName), [
+      'Bench press',
+    ]);
+    // Zapisane serie wracają razem z ćwiczeniem.
+    await tester.tap(find.text('Cofnij'));
     await tester.pumpAndSettle();
-    expect(repository.session.exercises.first.sets, hasLength(1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.last.exerciseName, 'Shoulder press');
+    expect(repository.session.exercises.last.sets.single.completed, isTrue);
+
+    await cubit.close();
+  });
+
+  testWidgets('long press on the last exercise offers removal; empty session '
+      'shows the add prompt', (tester) async {
+    final session = _session();
+    final repository = _FakeTrainingSessionRepository(
+      session.copyWith(exercises: [session.exercises.first]),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.longPress(find.byKey(const ValueKey('progress-segment-0')));
+    await tester.pumpAndSettle();
+    // Jedno ćwiczenie — nie ma co przesuwać, jest tylko usuwanie.
+    expect(find.text('Przesuń wcześniej'), findsNothing);
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises, isEmpty);
+    expect(find.text('Dodaj pierwsze ćwiczenie'), findsOneWidget);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+    expect(repository.session.exercises, hasLength(1));
+    expect(find.text('Dodaj pierwsze ćwiczenie'), findsNothing);
+
+    await cubit.close();
+  });
+
+  testWidgets('removing one half of a superset unlinks it; undo relinks', (
+    tester,
+  ) async {
+    TrainingSessionExercise member(String id, String name) =>
+        TrainingSessionExercise(
+          exerciseId: id,
+          exerciseName: name,
+          exerciseMuscles: const ['shoulders'],
+          exerciseCategory: 'compound',
+          supersetGroup: 'A',
+          sets: [TrainingSessionSet(plannedWeight: '24', plannedReps: '10')],
+        );
+    final repository = _FakeTrainingSessionRepository(
+      TrainingSession(
+        planName: 'Góra A',
+        startedAt: DateTime.now().toUtc(),
+        exercises: [member('press', 'Wyciskanie'), member('raise', 'Wznosy')],
+      ),
+    );
+    final cubit = await pumpRemovalScreen(tester, repository);
+
+    await tester.tap(find.byKey(const Key('workout-more-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repository.session.exercises, hasLength(1));
+    expect(repository.session.exercises.single.supersetGroup, isNull);
+
+    await tester.tap(find.text('Cofnij'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.session.exercises.map((e) => e.supersetGroup), [
+      'A',
+      'A',
+    ]);
 
     await cubit.close();
   });
@@ -316,7 +674,13 @@ void main() {
     await tester.tap(find.byKey(const Key('exercise-list-button')));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(ListTile, 'Barbell row'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('order-block-2')),
+        matching: find.text('Barbell row'),
+      ),
+      findsOneWidget,
+    );
 
     await cubit.close();
   });
@@ -336,6 +700,7 @@ void main() {
             initialSession: session,
             sessionCubit: cubit,
             restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
           ),
         ),
       ),
@@ -373,6 +738,111 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('a superset goes A1 → A2 without rest, then the plan rest', (
+    tester,
+  ) async {
+    TrainingSessionExercise member(String id, String name, int rest) =>
+        TrainingSessionExercise(
+          exerciseId: id,
+          exerciseName: name,
+          exerciseMuscles: const ['shoulders'],
+          exerciseCategory: 'compound',
+          supersetGroup: 'A',
+          restSeconds: rest,
+          sets: [
+            TrainingSessionSet(plannedWeight: '24', plannedReps: '10'),
+            TrainingSessionSet(plannedWeight: '24', plannedReps: '10'),
+          ],
+        );
+    final session = TrainingSession(
+      planName: 'Góra A',
+      startedAt: DateTime.now().toUtc(),
+      exercises: [
+        member('press', 'Wyciskanie hantli', 999),
+        member('raise', 'Wznosy bokiem', 75),
+      ],
+    );
+    final scheduler = _FakeRestTimerScheduler();
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
+          ),
+        ),
+      ),
+    );
+
+    // Obie części superserii na jednej stronie.
+    expect(find.text('SUPERSERIA A'), findsOneWidget);
+    expect(find.text('Wznosy bokiem'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('session-set-check-0-0')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('superset-next-pill')), findsOneWidget);
+    expect(find.textContaining('Teraz: A2 · Wznosy bokiem'), findsOneWidget);
+    expect(scheduler.scheduledDurations, isEmpty);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('session-set-check-1-0')),
+    );
+    await tester.tap(find.byKey(const ValueKey('session-set-check-1-0')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('superset-next-pill')), findsNothing);
+    expect(find.text('Przerwa po rundzie 1'), findsOneWidget);
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 75)]);
+
+    await cubit.close();
+  });
+
+  testWidgets('rest uses the exercise rest from the plan', (tester) async {
+    final base = _session();
+    final session = base.copyWith(
+      exercises: [
+        base.exercises[0].copyWith(restSeconds: 45),
+        base.exercises[1],
+      ],
+    );
+    final scheduler = _FakeRestTimerScheduler();
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('session-set-check-0-0')));
+    await tester.pump();
+
+    expect(scheduler.scheduledDurations, [const Duration(seconds: 45)]);
+    expect(_restLabel('0:45'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('rest-timer-skip')));
+    await tester.pump();
+    await cubit.close();
+  });
+
   testWidgets('picks the rest length by hand from the ⋯ menu', (tester) async {
     final session = _session();
     final scheduler = _FakeRestTimerScheduler();
@@ -388,6 +858,7 @@ void main() {
             initialSession: session,
             sessionCubit: cubit,
             restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
           ),
         ),
       ),
@@ -440,6 +911,7 @@ void main() {
             initialSession: session,
             sessionCubit: cubit,
             restTimerScheduler: scheduler,
+            restTimerClock: () => tester.binding.clock.now(),
           ),
         ),
       ),
@@ -613,6 +1085,12 @@ void main() {
   testWidgets('a checked set that beats the record shows a gold burst', (
     tester,
   ) async {
+    ServiceLocator.progressionSettings.notifier.value =
+        const ProgressionSettings(method: ProgressionMethod.fixed);
+    addTearDown(
+      () => ServiceLocator.progressionSettings.notifier.value =
+          ProgressionSettings.off,
+    );
     final session = _session(
       firstSet: TrainingSessionSet(
         plannedReps: '8',
@@ -697,9 +1175,57 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('progression off: suggests the last weight without a tag', (
+    tester,
+  ) async {
+    final session = _session(firstSet: TrainingSessionSet(plannedReps: '6-8'));
+    final cubit = TrainingSessionCubit(
+      _FakeTrainingSessionRepository(session),
+      autoRefresh: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OngoingWorkoutScreen(
+          args: OngoingWorkoutArgs(
+            initialSession: session,
+            sessionCubit: cubit,
+            previousPerformance: _FakePreviousPerformance({
+              'bench': [
+                TrainingSessionSet(
+                  actualWeight: '92.5',
+                  actualReps: '8',
+                  completed: true,
+                ),
+              ],
+            }),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final field = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const ValueKey('session-set-weight-0-0')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.decoration?.hintText, '92,5');
+    expect(find.text('+2,5'), findsNothing);
+
+    await cubit.close();
+  });
+
   testWidgets('the progression hint is a placeholder, not a typed value', (
     tester,
   ) async {
+    // Progresja domyślnie wyłączona — tu konto ma stały krok 2,5 kg.
+    ServiceLocator.progressionSettings.notifier.value =
+        const ProgressionSettings(method: ProgressionMethod.fixed);
+    addTearDown(
+      () => ServiceLocator.progressionSettings.notifier.value =
+          ProgressionSettings.off,
+    );
     final session = _session(firstSet: TrainingSessionSet(plannedReps: '6-8'));
     final repository = _FakeTrainingSessionRepository(session);
     final cubit = TrainingSessionCubit(repository, autoRefresh: false);
@@ -950,6 +1476,15 @@ class _FakeTrainingSessionRepository implements TrainingSessionRepository {
 
   @override
   Future<void> delete(String sessionId) async {}
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }
 
 class _FakeRestTimerScheduler implements RestTimerScheduler {
@@ -980,6 +1515,13 @@ class _FakePreviousPerformance implements PreviousPerformanceRepository {
     required String exerciseId,
     required String exerciseName,
   }) async => byExerciseId[exerciseId];
+
+  @override
+  Future<List<List<TrainingSessionSet>>> recentCompletedSets({
+    required String exerciseId,
+    required String exerciseName,
+    required int limit,
+  }) async => [?byExerciseId[exerciseId]];
 }
 
 class _FakeStatsRepository implements TrainingStatsRepository {

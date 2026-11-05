@@ -38,11 +38,27 @@ class ExerciseDetailsHero extends StatelessWidget {
             errorBuilder: (context, error, stackTrace) => fallback,
             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
               if (wasSynchronouslyLoaded) return child;
-              return AnimatedOpacity(
-                opacity: frame == null ? 0 : 1,
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                child: child,
+              // Bez internetu obrazek, którego nie ma na dysku, ładuje się do
+              // 20 s — do pierwszej klatki widać tło z ikoną, które potem
+              // znika razem z pojawieniem się zdjęcia (przezroczyste PNG nie
+              // prześwitują ikoną na stałe).
+              const fade = Duration(milliseconds: 200);
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedOpacity(
+                    opacity: frame == null ? 1 : 0,
+                    duration: fade,
+                    curve: Curves.easeOutCubic,
+                    child: fallback,
+                  ),
+                  AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: fade,
+                    curve: Curves.easeOutCubic,
+                    child: child,
+                  ),
+                ],
               );
             },
           ),

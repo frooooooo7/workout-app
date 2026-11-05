@@ -1,0 +1,17 @@
+# Ikona aplikacji: logo S na granatowym tle. Generuje:
+#   dart run flutter_launcher_icons
+# Źródła obrazów (poza paczką aplikacji): assets/icon/.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon_legacy.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/icon_monochrome.png"
+  web:
+    generate: true
+    image_path: "assets/icon/icon_legacy.png"
+    background_color: "#0A0D13"
+    theme_color: "#0A0D13"

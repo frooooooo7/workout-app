@@ -27,6 +27,9 @@ abstract final class WorkoutColors {
   /// Tło znaczka „+2,5” nad polem ciężaru.
   static const progressionTag = Color(0xFF12301F);
 
+  /// Tło znaczka deloadu (−10%).
+  static const deloadTag = Color(0xFF33240A);
+
   /// Pusty segment paska postępu i tor bieżącego segmentu.
   static const segmentTrack = Color(0xFF1C2333);
   static const segmentTrackCurrent = Color(0xFF2A2F3A);

@@ -15,6 +15,7 @@ class WorkoutProgressHeader extends StatelessWidget {
     required this.accent,
     required this.onShowList,
     required this.onSelectExercise,
+    this.onLongPressExercise,
   });
 
   final List<TrainingSessionExercise> exercises;
@@ -24,6 +25,9 @@ class WorkoutProgressHeader extends StatelessWidget {
   final Color accent;
   final VoidCallback onShowList;
   final ValueChanged<int> onSelectExercise;
+
+  /// Przytrzymanie segmentu — menu kolejności ćwiczeń.
+  final ValueChanged<int>? onLongPressExercise;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +85,9 @@ class WorkoutProgressHeader extends StatelessWidget {
                       current: i == currentIndex,
                       accent: accent,
                       onTap: () => onSelectExercise(i),
+                      onLongPress: onLongPressExercise == null
+                          ? null
+                          : () => onLongPressExercise!(i),
                     ),
                   ),
                 ],
@@ -136,12 +143,14 @@ class _Segment extends StatelessWidget {
     required this.current,
     required this.accent,
     required this.onTap,
+    this.onLongPress,
   });
 
   final double fraction;
   final bool current;
   final Color accent;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +161,7 @@ class _Segment extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: ClipRRect(

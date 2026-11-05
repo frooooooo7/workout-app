@@ -10,6 +10,9 @@ import '../../../library/data/exercise_database.dart';
 import '../../../library/data/exercise_dto.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../domain/models/custom_training_plan.dart';
+import '../pending_plan_cover_store.dart';
+import '../pending_plan_order_store.dart';
+import '../pending_post_photo_store.dart' show PendingPostPhotoOp;
 import '../training_plan_local_mapper.dart';
 import '../training_plan_remote_data_source.dart';
 
@@ -110,7 +113,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
   Future<void> _flushImpl() async {
     if (isStopped) return;
     final rows = await _pendingRows();
-    if (rows == null || rows.isEmpty) return;
+    if (rows == null) return;
 
     final networkMark = networkFailureMark;
     var changed = false;
@@ -129,7 +132,161 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
       }
       if (networkFailedSince(networkMark)) break;
     }
+    // Okładki po planach — upload potrzebuje już id planu z serwera.
+    if (!isStopped && !networkFailedSince(networkMark)) {
+      if (await _flushCovers(networkMark)) changed = true;
+    }
+    if (!isStopped && !networkFailedSince(networkMark)) {
+      if (await _flushOrder(networkMark)) changed = true;
+    }
     if (changed) notifyDataChanged();
+  }
+
+  /// Wysyła kolejność planów (osobne żądanie — bez treści planów). Plan, który
+  /// serwer jeszcze nie zna, wypada z żądania, a flaga zostaje do następnego
+  /// cyklu, żeby dostał swoje miejsce po utworzeniu. Plan odrzucony przez
+  /// serwer się nie liczy — nie dostanie id.
+  Future<bool> _flushOrder(int networkMark) async {
+    try {
+      final version = await _localDb.run(PendingPlanOrderStore.version);
+      if (version == null) return false;
+      final rows = await _localDb.run(
+        (db) => db.query(
+          ExerciseDatabase.tableTrainingPlans,
+          columns: ['server_id', 'sync_error', 'pending_op'],
+          where: 'is_deleted = 0 AND pending_op IS NOT \'delete\'',
+          orderBy: 'sort_order ASC, updated_at DESC',
+        ),
+      );
+      final ids = <String>[];
+      var complete = true;
+      for (final row in rows) {
+        final serverId = row['server_id'] as String?;
+        if (serverId != null) {
+          // Stare bazy mogą mieć dwa wiersze z tym samym server_id.
+          if (!ids.contains(serverId)) ids.add(serverId);
+        } else if (row['sync_error'] == null) {
+          complete = false;
+        }
+      }
+      if (ids.isNotEmpty) {
+        try {
+          await _remote.setOrder(ids);
+        } on ApiException catch (e) {
+          final kind = registerFailure(e);
+          // Serwer nie przyjmie tej kolejności (np. starszy backend) —
+          // zostaje lokalna, a licznik nie wisi w nieskończoność.
+          if (kind != SyncFailureKind.transient) {
+            await _localDb.run(
+              (db) => PendingPlanOrderStore.clear(db, onlyVersion: version),
+            );
+          }
+          return false;
+        }
+      }
+      if (complete) {
+        await _localDb.run(
+          (db) => PendingPlanOrderStore.clear(db, onlyVersion: version),
+        );
+      }
+      return ids.isNotEmpty;
+    } on StateError {
+      return false; /* DB closing */
+    }
+  }
+
+  /// Wysyła (albo usuwa) okładki planów z kolejki. Okładka planu, którego
+  /// serwer jeszcze nie zna albo ma niewysłane zmiany, czeka na kolejny
+  /// cykl; okładka usuniętego planu znika z kolejki.
+  Future<bool> _flushCovers(int networkMark) async {
+    final List<PendingPlanCover> pending;
+    try {
+      pending = await _localDb.run(PendingPlanCoverStore.all);
+    } on StateError {
+      return false; /* DB closing */
+    }
+    var changed = false;
+    for (final cover in pending) {
+      if (isStopped) return changed;
+      final localId = cover.planLocalId;
+      try {
+        final row = await _localDb.run((db) async {
+          final rows = await db.query(
+            ExerciseDatabase.tableTrainingPlans,
+            columns: ['server_id', 'pending_op'],
+            where: 'local_id = ?',
+            whereArgs: [localId],
+            limit: 1,
+          );
+          return rows.isEmpty ? null : rows.first;
+        });
+        if (row == null || row['pending_op'] == 'delete') {
+          await _localDb.run((db) => PendingPlanCoverStore.remove(db, localId));
+          continue;
+        }
+        final serverId = row['server_id'] as String?;
+        if (serverId == null || row['pending_op'] != null) continue;
+
+        final CustomTrainingPlan saved;
+        try {
+          if (cover.op == PendingPostPhotoOp.upload) {
+            final bytes = await _localDb.run(
+              (db) => PendingPlanCoverStore.bytesOf(db, localId, cover.version),
+            );
+            if (bytes == null || bytes.isEmpty) {
+              await _localDb.run(
+                (db) => PendingPlanCoverStore.remove(
+                  db,
+                  localId,
+                  onlyVersion: cover.version,
+                ),
+              );
+              continue;
+            }
+            saved = await _remote.uploadCover(
+              serverId,
+              bytes,
+              cover.filename ?? 'cover.jpg',
+            );
+          } else {
+            saved = await _remote.deleteCover(serverId);
+          }
+        } on ApiException catch (e) {
+          final kind = registerFailure(e);
+          if (kind == SyncFailureKind.gone) {
+            await _localDb.run((db) => PendingPlanCoverStore.remove(db, localId));
+          } else if (kind == SyncFailureKind.permanent) {
+            await _localDb.run(
+              (db) => PendingPlanCoverStore.markRejected(
+                db,
+                localId,
+                e.message,
+                onlyVersion: cover.version,
+              ),
+            );
+          }
+          if (networkFailedSince(networkMark)) break;
+          continue;
+        }
+        await _localDb.run((db) async {
+          await db.update(
+            ExerciseDatabase.tableTrainingPlans,
+            {'cover_url': saved.coverUrl},
+            where: 'local_id = ?',
+            whereArgs: [localId],
+          );
+          await PendingPlanCoverStore.remove(
+            db,
+            localId,
+            onlyVersion: cover.version,
+          );
+        });
+        changed = true;
+      } on StateError {
+        return changed; /* DB closing */
+      }
+    }
+    return changed;
   }
 
   Future<bool> _flushDelete(String localId, String? serverId) async {
@@ -144,13 +301,14 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
         }
       }
     }
-    await _localDb.run(
-      (db) => db.delete(
+    await _localDb.run((db) async {
+      await db.delete(
         ExerciseDatabase.tableTrainingPlans,
         where: 'local_id = ?',
         whereArgs: [localId],
-      ),
-    );
+      );
+      await PendingPlanCoverStore.remove(db, localId);
+    });
     await _localDb.clearSyncAttempts(localId);
     return true;
   }
@@ -222,6 +380,9 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
   Future<void> _pullImpl() async {
     if (isStopped) return;
     markPullAttempt();
+    // Wiersz zapisany po wysłaniu żądania (np. świeżo skopiowany plan) nie
+    // jest sierotą, choć tej listy jeszcze w nim nie ma.
+    final requestedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
     try {
       final serverPlans = await _remote.getAll();
       if (isStopped) return;
@@ -233,12 +394,13 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           final serverIds = serverPlans.map((p) => p.id).toSet();
           final rows = await txn.query(
             ExerciseDatabase.tableTrainingPlans,
-            columns: ['local_id', 'server_id', 'pending_op'],
+            columns: ['local_id', 'server_id', 'pending_op', 'updated_at'],
           );
           final orphanIds = <String>[
             for (final row in rows)
               if (row['pending_op'] == null &&
                   row['server_id'] != null &&
+                  (row['updated_at'] as int? ?? 0) < requestedAt &&
                   !serverIds.contains(row['server_id']))
                 row['local_id'] as String,
           ];
@@ -254,6 +416,11 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
               where: 'local_id IN ($placeholders)',
               whereArgs: chunk,
             );
+            await txn.delete(
+              ExerciseDatabase.tablePendingPlanCovers,
+              where: 'plan_local_id IN ($placeholders)',
+              whereArgs: chunk,
+            );
           }
         });
       });
@@ -263,6 +430,20 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     } on StateError {
       /* DB closing */
     }
+  }
+
+  /// Zapisuje plan skopiowany na serwerze (już zsynchronizowany) pod
+  /// [localId] i odświeża listy planów.
+  Future<void> storeCopiedPlan(
+    CustomTrainingPlan plan, {
+    required String localId,
+  }) async {
+    await _localDb.run(
+      (db) => db.transaction(
+        (txn) => _storePulledPlanOn(txn, plan, newLocalId: localId),
+      ),
+    );
+    notifyDataChanged();
   }
 
   Future<String> _ensureExerciseLocalRow(
@@ -386,6 +567,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
     String? localIdOverride,
     int? expectedUpdatedAt,
     String? sentOp,
+    String? newLocalId,
   }) async {
       final existing = await _findLocalRow(
         db,
@@ -410,6 +592,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           'selected_days': TrainingPlanLocalMapper.encodeDays(
             plan.selectedDays,
           ),
+          ...TrainingPlanLocalMapper.planSettingsValues(plan),
           'created_at': now,
           'updated_at': now,
           'pending_op': 'delete',
@@ -446,9 +629,13 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
         }
       }
 
+      // Przesunięcie czeka na wysłanie — serwer ma jeszcze starą kolejność.
+      final keepLocalOrder =
+          existing != null && await PendingPlanOrderStore.version(db) != null;
       final localId =
           localIdOverride ??
           (existing?['local_id'] as String?) ??
+          newLocalId ??
           _uuid.v4();
       await _removeDuplicateServerRows(
         db,
@@ -465,6 +652,8 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
           'selected_days': TrainingPlanLocalMapper.encodeDays(
             plan.selectedDays,
           ),
+          ...TrainingPlanLocalMapper.planSettingsValues(plan),
+          if (keepLocalOrder) 'sort_order': existing['sort_order'],
           'created_at': existing?['created_at'] ?? now,
           'updated_at': now,
           'pending_op': null,
@@ -497,13 +686,7 @@ class TrainingPlanSyncEngine extends SyncEngineBase {
 
       await TrainingPlanLocalMapper.replacePlanChildren(
         db,
-        CustomTrainingPlan(
-          id: localId,
-          name: plan.name,
-          note: plan.note,
-          selectedDays: plan.selectedDays,
-          exercises: localPlanExercises,
-        ),
+        plan.copyWith(id: localId, exercises: localPlanExercises),
         exerciseServerIdsByLocalId: exerciseServerIds,
       );
   }

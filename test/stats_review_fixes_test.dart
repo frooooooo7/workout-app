@@ -69,68 +69,78 @@ void main() {
       intensity: 1,
     );
 
-    testWidgets('percentages add up and the centre shows real sets', (
+    final window = StatsWindow(
+      start: DateTime(2026, 9, 1),
+      end: DateTime(2026, 9, 29), // 28 dni = 4 tygodnie
+      bucket: StatsBucket.day,
+    );
+
+    testWidgets('region bars show weekly sets against the 10–20 band', (
       tester,
     ) async {
       await _pump(
         tester,
-        StatsMusclesCard(
+        StatsRegionBarsCard(
           muscles: MuscleDistribution(
-            taggedSets: 40,
+            taggedSets: 80,
             muscles: [
-              unit(MuscleGroup.chest, 1 / 3),
-              unit(MuscleGroup.legs, 1 / 3),
-              unit(MuscleGroup.back, 1 / 3),
+              unit(MuscleGroup.chest, 0.5),
+              unit(MuscleGroup.legs, 0.5),
             ],
             regions: const [
-              RegionStat(region: MuscleRegion.chest, sets: 20, share: 1 / 3),
-              RegionStat(region: MuscleRegion.legs, sets: 20, share: 1 / 3),
-              RegionStat(region: MuscleRegion.back, sets: 20, share: 1 / 3),
+              RegionStat(region: MuscleRegion.chest, sets: 60, share: 0.5),
+              RegionStat(region: MuscleRegion.legs, sets: 20, share: 0.5),
             ],
-            neglected: const [],
-            bodyMap: const {MuscleGroup.chest: 1},
+            neglected: const [MuscleGroup.abs],
           ),
+          window: window,
+          rangeLabel: '30 dni',
         ),
       );
 
-      // 34 + 33 + 33 w legendzie partii i w rankingu — razem 200%.
-      expect(find.text('34%'), findsNWidgets(2));
-      expect(find.text('33%'), findsNWidgets(4));
-      // Środek koła: serie z otagowanych ćwiczeń (jak w kafelku „Serie”),
-      // a nie ważona suma partii (60).
-      expect(find.text('40'), findsOneWidget);
-      expect(find.text('60'), findsNothing);
+      // 60 serii w 4 tygodniach to 15 / tydz., 20 serii to 5.
+      expect(find.text('15 / tydz.', findRichText: true), findsOneWidget);
+      expect(find.text('5 / tydz.', findRichText: true), findsOneWidget);
+      expect(find.textContaining('10–20 serii / tydz.'), findsOneWidget);
+      expect(find.text('średnio z 30 dni'), findsOneWidget);
+      // Brzuch (partia bez serii) dostaje wiersz z zerem.
+      expect(find.text('Brzuch'), findsOneWidget);
+      expect(find.text('0 / tydz.', findRichText: true), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a tiny share reads "<1%", not "0%"', (tester) async {
-      await _pump(
-        tester,
-        StatsMusclesCard(
-          muscles: MuscleDistribution(
-            taggedSets: 1000,
-            muscles: [
-              unit(MuscleGroup.chest, 0.997),
-              unit(MuscleGroup.abs, 0.003),
-            ],
-            regions: const [
-              RegionStat(region: MuscleRegion.chest, sets: 997, share: 0.997),
-              RegionStat(region: MuscleRegion.core, sets: 3, share: 0.003),
-            ],
-            neglected: const [],
-          ),
-        ),
-      );
-      expect(find.text('<1%', findRichText: true), findsNWidgets(2));
-      expect(find.text('0%', findRichText: true), findsNothing);
-    });
-
-    testWidgets('a big total and a large font stay inside the donut', (
+    testWidgets('a window shorter than a week counts as one week', (
       tester,
     ) async {
       await _pump(
         tester,
-        StatsMusclesCard(
+        StatsRegionBarsCard(
+          muscles: MuscleDistribution(
+            taggedSets: 12,
+            muscles: [unit(MuscleGroup.chest, 1)],
+            regions: const [
+              RegionStat(region: MuscleRegion.chest, sets: 12, share: 1),
+            ],
+            neglected: const [],
+          ),
+          window: StatsWindow(
+            start: DateTime(2026, 9, 1),
+            end: DateTime(2026, 9, 4),
+            bucket: StatsBucket.day,
+          ),
+          rangeLabel: 'wybranego okresu',
+        ),
+      );
+      // 12 serii w 3 dni nie jest rekordowym tygodniem: liczymy jak tydzień.
+      expect(find.text('12 / tydz.', findRichText: true), findsOneWidget);
+    });
+
+    testWidgets('a big weekly total at a large font stays inside the row', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        StatsRegionBarsCard(
           muscles: MuscleDistribution(
             taggedSets: 3120,
             muscles: [unit(MuscleGroup.chest, 1)],
@@ -139,11 +149,12 @@ void main() {
             ],
             neglected: const [],
           ),
+          window: window,
+          rangeLabel: '30 dni',
         ),
         textScale: 1.5,
       );
       expect(tester.takeException(), isNull);
-      expect(find.text('3 120'), findsOneWidget);
     });
 
     test('the calculator counts completed sets of tagged exercises only', () {

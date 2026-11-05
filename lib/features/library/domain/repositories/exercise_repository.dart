@@ -12,6 +12,9 @@ abstract interface class ExerciseRepository {
     String? query,
   });
 
+  /// Ćwiczenie po lokalnym id albo id z serwera; `null`, gdy go nie ma.
+  Future<Exercise?> getById(String id);
+
   /// Toggles favourite state for the given [id].
   /// Implementations should optimistically update the local cache and
   /// sync with the backend when possible.
@@ -25,6 +28,9 @@ abstract interface class ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   });
 
   /// Updates an existing user-owned exercise via the backend and local cache.
@@ -34,6 +40,9 @@ abstract interface class ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   });
 
   /// Deletes a user-owned exercise from the backend and local cache.

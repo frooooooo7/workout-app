@@ -1,3 +1,5 @@
+import '../../../../core/units/weight_unit.dart';
+import '../../../../core/utils/duration_formatter.dart';
 import '../../../training/domain/models/training_session.dart';
 import '../../../training/domain/services/training_session_detail_mapper.dart'
     show parseReps, parseWeightKg;
@@ -139,7 +141,9 @@ class ExerciseStats {
   /// nieść identyfikator serwera zamiast lokalnego — wtedy ratuje nas nazwa
   /// (zapisana w sesji jako snapshot).
   static bool matches(TrainingSessionExercise entry, Exercise exercise) {
-    if (entry.exerciseId.isNotEmpty && entry.exerciseId == exercise.id) {
+    if (entry.exerciseId.isNotEmpty &&
+        (entry.exerciseId == exercise.id ||
+            entry.exerciseId == exercise.serverId)) {
       return true;
     }
     return _normalize(entry.exerciseName) == _normalize(exercise.name);
@@ -280,38 +284,198 @@ class ExerciseStats {
   static ExerciseUsage usage(Iterable<TrainingSession> sessions) {
     final byId = <String, int>{};
     final byName = <String, int>{};
+    final lastById = <String, DateTime>{};
+    final lastByName = <String, DateTime>{};
+    final resultById = <String, ExerciseLastResult>{};
+    final resultByName = <String, ExerciseLastResult>{};
+    void keepNewest(
+      Map<String, ExerciseLastResult> into,
+      String key,
+      ExerciseLastResult? result,
+    ) {
+      if (result == null || result.label == null) return;
+      final current = into[key];
+      if (current == null || result.date.isAfter(current.date)) {
+        into[key] = result;
+      }
+    }
+
     for (final session in sessions) {
       if (session.status != TrainingSessionStatus.completed) continue;
+      final when = session.finishedAt ?? session.startedAt;
       final seenIds = <String>{};
       final seenNames = <String>{};
       for (final entry in session.exercises) {
         if (!entry.sets.any((s) => s.completed && s.countsTowardStats)) {
           continue;
         }
+        final result = _topSet(entry, when);
         if (entry.exerciseId.isNotEmpty && seenIds.add(entry.exerciseId)) {
+          keepNewest(resultById, entry.exerciseId, result);
           byId.update(entry.exerciseId, (v) => v + 1, ifAbsent: () => 1);
+          lastById.update(
+            entry.exerciseId,
+            (v) => when.isAfter(v) ? when : v,
+            ifAbsent: () => when,
+          );
         }
         final name = _normalize(entry.exerciseName);
         if (seenNames.add(name)) {
+          keepNewest(resultByName, name, result);
           byName.update(name, (v) => v + 1, ifAbsent: () => 1);
+          lastByName.update(
+            name,
+            (v) => when.isAfter(v) ? when : v,
+            ifAbsent: () => when,
+          );
         }
       }
     }
-    return ExerciseUsage._(byId, byName);
+    return ExerciseUsage._(
+      byId,
+      byName,
+      lastById,
+      lastByName,
+      resultById,
+      resultByName,
+    );
+  }
+
+  /// Najlepsza ukończona seria wpisu: najcięższa (przy remisie więcej
+  /// powtórzeń), bez ciężaru — najwięcej powtórzeń, a dla kardio — czas.
+  static ExerciseLastResult? _topSet(
+    TrainingSessionExercise entry,
+    DateTime when,
+  ) {
+    ExerciseLastResult? best;
+    double bestScore = -1;
+    for (final set in entry.sets) {
+      if (!set.completed || !set.countsTowardStats) continue;
+      final weight = parseWeightKg(set.actualWeight);
+      final reps = parseReps(set.actualReps);
+      final duration = set.actualDurationSeconds;
+      final score = (weight ?? 0) * 1000 + (reps ?? 0) + (duration ?? 0) / 1000;
+      if (score > bestScore) {
+        bestScore = score;
+        best = ExerciseLastResult(
+          date: when,
+          weightKg: weight,
+          reps: reps,
+          durationSeconds: duration,
+        );
+      }
+    }
+    return best;
+  }
+}
+
+/// Najlepsza seria ćwiczenia z ostatniego treningu — pokazywana w wierszu listy
+/// biblioteki („80 kg × 5”, „10 powt.”, „12:30”).
+class ExerciseLastResult {
+  const ExerciseLastResult({
+    required this.date,
+    this.weightKg,
+    this.reps,
+    this.durationSeconds,
+  });
+
+  final DateTime date;
+  final double? weightKg;
+  final int? reps;
+  final int? durationSeconds;
+
+  static const _weekdays = ['pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.', 'niedz.'];
+  static const _months = [
+    'sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru',
+  ];
+
+  /// Kiedy to było: dzień tygodnia w ostatnich 6 dniach, dalej „28 paź”.
+  String dateLabel(DateTime now) {
+    // Dni liczymy jako daty UTC, żeby zmiana czasu (doba 23 h / 25 h) nie
+    // przesuwała wyniku o jeden.
+    final day = DateTime.utc(date.year, date.month, date.day);
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final days = today.difference(day).inDays;
+    if (days == 0) return 'dziś';
+    if (days == 1) return 'wczoraj';
+    if (days > 1 && days < 7) return _weekdays[date.weekday - 1];
+    return '${date.day} ${_months[date.month - 1]}';
+  }
+
+  /// Krótki opis serii; `null`, gdy seria nie ma żadnej liczby do pokazania.
+  String? get label {
+    final weight = weightKg;
+    final reps = this.reps;
+    if (weight != null && weight > 0) {
+      final w = formatWeightWithUnit(weight);
+      return reps != null && reps > 0 ? '$w × $reps' : w;
+    }
+    if (reps != null && reps > 0) return '$reps powt.';
+    final duration = durationSeconds;
+    if (duration != null && duration > 0) return formatDuration(duration);
+    return null;
   }
 }
 
 /// Licznik wykonań ćwiczeń — napędza sortowanie „Popularne”.
 class ExerciseUsage {
-  const ExerciseUsage._(this._byId, this._byName);
+  const ExerciseUsage._(
+    this._byId,
+    this._byName,
+    this._lastById,
+    this._lastByName, [
+    this._resultById = const {},
+    this._resultByName = const {},
+  ]);
 
-  static const empty = ExerciseUsage._({}, {});
+  static const empty = ExerciseUsage._({}, {}, {}, {});
 
   final Map<String, int> _byId;
   final Map<String, int> _byName;
+  final Map<String, DateTime> _lastById;
+  final Map<String, DateTime> _lastByName;
+  final Map<String, ExerciseLastResult> _resultById;
+  final Map<String, ExerciseLastResult> _resultByName;
+
+  /// Najlepsza seria z ostatniego treningu z tym ćwiczeniem; `null` — brak.
+  ExerciseLastResult? lastResultFor(Exercise exercise) {
+    final byId = _newer(
+      _resultById[exercise.id],
+      _resultById[exercise.serverId],
+    );
+    final byName = _resultByName[ExerciseStats._normalize(exercise.name)];
+    return _newer(byId, byName);
+  }
+
+  static ExerciseLastResult? _newer(
+    ExerciseLastResult? a,
+    ExerciseLastResult? b,
+  ) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.date.isAfter(b.date) ? a : b;
+  }
+
+  /// Kiedy ćwiczenie było ostatnio w ukończonym treningu; `null` — nigdy.
+  DateTime? lastDoneFor(Exercise exercise) {
+    final byId = _latest(_lastById[exercise.id], _lastById[exercise.serverId]);
+    final byName = _lastByName[ExerciseStats._normalize(exercise.name)];
+    if (byId == null) return byName;
+    if (byName == null) return byId;
+    return byId.isAfter(byName) ? byId : byName;
+  }
+
+  static DateTime? _latest(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
+  }
 
   int countFor(Exercise exercise) {
-    final byId = _byId[exercise.id] ?? 0;
+    final byId = [
+      _byId[exercise.id] ?? 0,
+      _byId[exercise.serverId] ?? 0,
+    ].reduce((a, b) => a > b ? a : b);
     final byName = _byName[ExerciseStats._normalize(exercise.name)] ?? 0;
     return byId > byName ? byId : byName;
   }

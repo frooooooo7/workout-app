@@ -13,12 +13,16 @@ class ExerciseThumb extends StatefulWidget {
     required this.size,
     required this.radius,
     this.opacity = 1,
+    this.cardio = false,
   });
 
   final String? imageUrl;
   final double size;
   final double radius;
   final double opacity;
+
+  /// Bez zdjęcia kardio dostaje turkusowego biegacza zamiast hantla.
+  final bool cardio;
 
   @override
   State<ExerciseThumb> createState() => _ExerciseThumbState();
@@ -65,14 +69,18 @@ class _ExerciseThumbState extends State<ExerciseThumb> {
       width: widget.size,
       height: widget.size,
       decoration: BoxDecoration(
-        color: WorkoutColors.field,
+        color: widget.cardio && widget.imageUrl == null
+            ? AppColors.statTeal.withValues(alpha: 0.14)
+            : WorkoutColors.field,
         borderRadius: BorderRadius.circular(widget.radius),
         image: _image,
       ),
       child: widget.imageUrl == null
           ? Icon(
-              Icons.fitness_center,
-              color: AppColors.textMuted,
+              widget.cardio
+                  ? Icons.directions_run_rounded
+                  : Icons.fitness_center,
+              color: widget.cardio ? AppColors.statTeal : AppColors.textMuted,
               size: widget.size * 0.45,
             )
           : null,

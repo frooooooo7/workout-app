@@ -36,6 +36,7 @@ class LibraryExerciseGrid extends StatelessWidget {
         final tileWidth = (available - _spacing * (columns - 1)) / columns;
 
         return GridView.builder(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(_gutter, 0, _gutter, 24),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,

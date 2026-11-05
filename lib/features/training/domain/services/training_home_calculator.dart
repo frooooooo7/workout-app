@@ -24,6 +24,7 @@ abstract final class TrainingHomeCalculator {
 
     final weekStart = TrainingSummaryCalculator.startOfWeek(today);
     final weekDone = <int, String>{};
+    final weekDoneKeys = <int, Set<String>>{};
     final lastResults = <String, ExerciseLastResult>{};
     final durationSamples = <String, List<int>>{};
 
@@ -32,6 +33,16 @@ abstract final class TrainingHomeCalculator {
       final local = session.startedAt.toLocal();
       if (!local.isBefore(weekStart)) {
         weekDone.putIfAbsent(local.weekday, () => session.planName);
+        weekDoneKeys
+            .putIfAbsent(local.weekday, () => {})
+            .addAll(
+              donePlanKeys(
+                planLocalId: session.planLocalId,
+                planServerId: session.planServerId,
+                planName: session.planName,
+                customName: TrainingSession.defaultCustomName,
+              ),
+            );
       }
 
       final samples = durationSamples.putIfAbsent(
@@ -55,6 +66,7 @@ abstract final class TrainingHomeCalculator {
 
     return TrainingHomeInsights(
       weekDonePlans: weekDone,
+      weekDoneKeys: weekDoneKeys,
       lastResults: lastResults,
       bests: {for (final best in records.bests) best.exerciseKey: best},
       planDurationsSec: {
@@ -69,6 +81,7 @@ abstract final class TrainingHomeCalculator {
         today: today,
         goal: weeklyGoal,
       ),
+      loaded: true,
     );
   }
 

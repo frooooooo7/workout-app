@@ -53,6 +53,16 @@ class _Repo implements TrainingStatsRepository {
       sessions;
 }
 
+class _FailingRepo implements TrainingStatsRepository {
+  @override
+  Future<List<TrainingSession>> allCompletedSessions() async =>
+      throw StateError('baza zamknięta');
+
+  @override
+  Future<List<TrainingSession>> completedSessionsSince(DateTime from) async =>
+      throw StateError('baza zamknięta');
+}
+
 void main() {
   group('TrainingHomeCalculator', () {
     test('marks this week\'s completed days with their plan', () {
@@ -63,6 +73,37 @@ void main() {
       ], today: _today);
 
       expect(insights.weekDonePlans, {1: 'Push', 2: 'Pull'});
+    });
+
+    test('keeps every plan done on a day, not only the latest session', () {
+      final legs = _session(
+        'Legs',
+        DateTime(2026, 7, 29, 9),
+      ).copyWith(planLocalId: 'plan-legs', planServerId: 'srv-legs');
+      final custom = _session('Niestandardowa', DateTime(2026, 7, 29, 11));
+      final old = _session('Pull', DateTime(2026, 7, 28, 9));
+
+      final insights = TrainingHomeCalculator.compute([
+        legs,
+        custom,
+        old,
+      ], today: _today);
+
+      expect(insights.weekDonePlans[3], 'Niestandardowa');
+      expect(insights.weekDoneKeys[3], {'id:plan-legs', 'id:srv-legs'});
+      expect(insights.weekDoneKeys[2], {'name:pull'});
+      expect(
+        insights.isPlanDone(3, planIds: ['plan-legs'], planName: 'Renamed'),
+        isTrue,
+      );
+      expect(
+        insights.isPlanDone(3, planIds: ['other'], planName: 'Niestandardowa'),
+        isFalse,
+      );
+      expect(
+        insights.isPlanDone(2, planIds: [null], planName: ' PULL '),
+        isTrue,
+      );
     });
 
     test('takes the top set of the most recent session as last result', () {
@@ -154,6 +195,24 @@ void main() {
       changes.dispose();
     });
 
+    test('is not loaded until the first read finishes', () async {
+      final cubit = TrainingHomeCubit(_Repo(const []), clock: () => _today);
+      expect(cubit.state.loaded, isFalse);
+      await cubit.refresh();
+
+      expect(cubit.state.loaded, isTrue);
+      await cubit.close();
+    });
+
+    test('a failed first read still ends the loading state', () async {
+      final cubit = TrainingHomeCubit(_FailingRepo(), clock: () => _today);
+      await cubit.refresh();
+
+      expect(cubit.state.loaded, isTrue);
+      expect(cubit.state.weekDonePlans, isEmpty);
+      await cubit.close();
+    });
+
     test('keeps working without a goal source', () async {
       final cubit = TrainingHomeCubit(_Repo(const []), clock: () => _today);
       await cubit.refresh();
@@ -161,6 +220,62 @@ void main() {
       expect(cubit.state.weekDonePlans, isEmpty);
       expect(cubit.state.weeklyGoal, isNull);
       await cubit.close();
+    });
+
+    group('large history is computed off the main isolate', () {
+      List<TrainingSession> history() => [
+        for (var i = 0; i < TrainingHomeCubit.isolateThreshold + 20; i++)
+          _session(
+            'Push',
+            DateTime(2026, 7, 27, 18).subtract(Duration(days: i)),
+            sets: [('${60 + i % 30}', '5')],
+          ),
+      ];
+
+      test('matches the direct calculation', () async {
+        final sessions = history();
+        final cubit = TrainingHomeCubit(_Repo(sessions), clock: () => _today);
+        await cubit.refresh();
+
+        final direct = TrainingHomeCalculator.compute(sessions, today: _today);
+        expect(cubit.state.weekDonePlans, direct.weekDonePlans);
+        expect(cubit.state.recordsBySession, direct.recordsBySession);
+        expect(cubit.state.bests.keys.toSet(), direct.bests.keys.toSet());
+        expect(
+          cubit.state.bests.values.single.bestWeightKg,
+          direct.bests.values.single.bestWeightKg,
+        );
+        await cubit.close();
+      });
+
+      test(
+        'a goal that lands while the isolate is computing is kept',
+        () async {
+          for (final delayMs in [0, 5, 15, 30]) {
+            final cubit = TrainingHomeCubit(
+              _Repo(history()),
+              clock: () => _today,
+              weeklyGoalLoader: () async {
+                await Future<void>.delayed(Duration(milliseconds: delayMs));
+                return 4;
+              },
+            );
+            await cubit.refresh();
+            // Liczenie z refresh() z konstruktora mogło skończyć się później.
+            for (var i = 0; i < 100 && cubit.state.weeklyGoal == null; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 20));
+            }
+
+            expect(
+              cubit.state.weeklyGoal?.goal,
+              4,
+              reason: 'delay $delayMs ms',
+            );
+            expect(cubit.state.weekDonePlans, isNotEmpty);
+            await cubit.close();
+          }
+        },
+      );
     });
   });
 }

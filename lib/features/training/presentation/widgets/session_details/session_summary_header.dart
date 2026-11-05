@@ -5,19 +5,27 @@ import '../../../domain/models/training_history_models.dart';
 import 'session_details_formatters.dart';
 import 'session_metrics_row.dart';
 import 'session_status_chip.dart';
+import 'warmup_time_note.dart';
 
 /// Nagłówek sesji — **jedyne** miejsce z metrykami całego treningu.
 ///
 /// Sekcje poniżej (mapa mięśni, oś czasu, ćwiczenia) celowo ich nie powtarzają:
 /// każda pokazuje wyłącznie to, czego nagłówek nie umie pokazać.
 class SessionSummaryHeader extends StatelessWidget {
-  const SessionSummaryHeader({super.key, required this.detail});
+  const SessionSummaryHeader({
+    super.key,
+    required this.detail,
+    this.showNote = true,
+  });
 
   final TrainingSessionDetail detail;
 
+  /// `false`, gdy notatka stoi już wyżej jako opis posta.
+  final bool showNote;
+
   @override
   Widget build(BuildContext context) {
-    final note = detail.note?.trim();
+    final note = showNote ? detail.note?.trim() : null;
 
     return Container(
       width: double.infinity,
@@ -102,6 +110,10 @@ class SessionSummaryHeader extends StatelessWidget {
               ),
             ],
           ),
+          if (detail.warmupSeconds != null) ...[
+            const SizedBox(height: 14),
+            WarmupTimeNote(seconds: detail.warmupSeconds!),
+          ],
           if (note != null && note.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(
@@ -139,4 +151,3 @@ class SessionSummaryHeader extends StatelessWidget {
     );
   }
 }
-

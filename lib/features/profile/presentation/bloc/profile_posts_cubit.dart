@@ -44,19 +44,22 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
 
   Future<void> load() => _fetchFirstPage();
 
-  Future<void> refresh() => _fetchFirstPage();
+  /// [silent] — błąd odświeżenia nie pokazuje komunikatu (np. tuż po akcji,
+  /// która sama coś zakomunikowała).
+  Future<void> refresh({bool silent = false}) =>
+      _fetchFirstPage(silent: silent);
 
-  Future<void> _fetchFirstPage() {
+  Future<void> _fetchFirstPage({bool silent = false}) {
     final inFlight = _firstPageFuture;
     if (inFlight != null) return inFlight;
-    final future = _doFetchFirstPage();
+    final future = _doFetchFirstPage(silent: silent);
     _firstPageFuture = future;
     return future.whenComplete(() {
       if (identical(_firstPageFuture, future)) _firstPageFuture = null;
     });
   }
 
-  Future<void> _doFetchFirstPage() async {
+  Future<void> _doFetchFirstPage({bool silent = false}) async {
     final generation = ++_generation;
     // Bez sieci odświeżenie się nie uda — usunięty trening i tak ma zniknąć.
     await _hideRemovedPosts();
@@ -87,7 +90,7 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
             offline: isNetworkError(error),
           ),
         );
-      } else {
+      } else if (!silent) {
         _notice('Nie udało się odświeżyć aktywności.');
       }
     }
@@ -130,6 +133,20 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
             : 'Nie udało się wczytać starszych treningów.',
       );
     }
+  }
+
+  /// Zdejmuje post z osi czasu od razu (np. po „Przestań udostępniać”), bez
+  /// czekania na serwer; następne odświeżenie i tak pokaże prawdziwy stan.
+  void removePost(String postId) {
+    if (isClosed || _postById(postId) == null) return;
+    emit(
+      state.copyWith(
+        items: List.unmodifiable([
+          for (final post in state.items)
+            if (post.id != postId) post,
+        ]),
+      ),
+    );
   }
 
   /// Optymistyczny kudos z cofnięciem przy błędzie. Własne posty i posty
@@ -207,7 +224,9 @@ class ProfilePostsCubit extends Cubit<ProfilePostsState> {
 
   void _notice(String message) {
     emit(
-      state.copyWith(notice: FeedNotice(id: ++_noticeSeq, message: message)),
+      state.copyWith(
+        notice: FeedNotice(id: ++_noticeSeq, message: message),
+      ),
     );
   }
 

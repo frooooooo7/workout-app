@@ -35,11 +35,17 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     'category',
     'description',
     'image_url',
+    'tracking_type',
+    'distance_unit',
     'is_favourite',
     'is_mine',
     'created_at',
     'pending_op',
     'is_favourite_dirty',
+    'equipment',
+    'aliases',
+    'instructions',
+    'pattern',
   ];
 
   Future<Map<String, dynamic>?> _findRow(Database db, String id) async {
@@ -122,6 +128,13 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
   }
 
   @override
+  Future<Exercise?> getById(String id) async {
+    final row = await _localDb.run((db) => _findRow(db, id));
+    if (row == null || row['pending_op'] == 'delete') return null;
+    return ExerciseDto.fromMap(row).toDomain();
+  }
+
+  @override
   Future<void> setFavourite(String id, {required bool isFavourite}) async {
     await _localDb.run((db) async {
       final row = await _findRow(db, id);
@@ -151,6 +164,9 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     required String description,
     Uint8List? imageBytes,
     String? imageFilename,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     final localId = _uuid.v4();
     final createdAt = DateTime.now().toUtc();
@@ -165,6 +181,11 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
       isMine: true,
       createdAt: createdAt,
       isPendingSync: true,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
+      equipment: extras?.equipment,
+      aliases: extras?.aliases ?? const [],
+      instructions: extras?.instructions,
     );
 
     final dto = ExerciseDto.fromDomain(
@@ -194,6 +215,9 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    ExerciseTracking tracking = ExerciseTracking.weightReps,
+    DistanceUnit distanceUnit = DistanceUnit.km,
+    ExerciseExtras? extras,
   }) async {
     await _localDb.run((db) async {
       final row = await _findRow(db, id);
@@ -212,6 +236,13 @@ class OfflineFirstExerciseRepository implements ExerciseRepository {
           'muscles': ExerciseDto.encodeMusclesToJson(muscles),
           'category': category.name,
           'description': description,
+          'tracking_type': tracking.apiName,
+          'distance_unit': distanceUnit.apiName,
+          if (extras != null) ...{
+            'equipment': extras.equipment?.apiName,
+            'aliases': ExerciseDto.encodeAliases(extras.aliases),
+            'instructions': extras.instructions?.encode(),
+          },
           'pending_op': nextPending,
           'sync_error': null,
         },

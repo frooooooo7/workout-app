@@ -9,8 +9,11 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/onboarding/presentation/bloc/onboarding_cubit.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../../features/pro/presentation/screens/pro_trial_end_screen.dart';
+import '../../features/pro/presentation/screens/pro_welcome_screen.dart';
 import '../../features/training/presentation/screens/activity_type_selection_screen.dart';
 import '../../features/training/presentation/screens/ongoing_workout_screen.dart';
+import '../../features/training/presentation/screens/warmup_screen.dart';
 import '../../features/training/presentation/screens/pick_training_plan_screen.dart';
 import '../../features/training/presentation/screens/training_screen.dart';
 import '../../features/training/presentation/screens/create_plan_screen.dart';
@@ -20,6 +23,7 @@ import '../../features/training/presentation/screens/plan_details_screen.dart';
 import '../../features/training/presentation/screens/plans_screen.dart';
 import '../../features/training/presentation/screens/training_session_details_screen.dart';
 import '../../features/training/presentation/screens/training_stats_screen.dart';
+import '../../features/training/presentation/screens/user_plan_screen.dart';
 import '../../features/training/presentation/screens/workout_summary_screen.dart';
 import '../../features/training/presentation/bloc/training_session_cubit.dart';
 import '../../features/feed/domain/models/feed_author.dart';
@@ -27,6 +31,8 @@ import '../../features/feed/presentation/bloc/feed_cubit.dart';
 import '../../features/feed/presentation/bloc/post_comments_cubit.dart';
 import '../../features/feed/presentation/bloc/post_details_cubit.dart';
 import '../../features/feed/presentation/screens/activity_feed_screen.dart';
+import '../../features/notifications/presentation/bloc/notifications_cubit.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/feed/presentation/screens/post_details_screen.dart';
 import '../../features/library/domain/models/exercise.dart';
 import '../../features/library/presentation/bloc/exercise_details_cubit.dart';
@@ -37,12 +43,15 @@ import '../../features/profile/domain/models/user_profile.dart';
 import '../../features/profile/domain/repositories/profile_repository.dart';
 import '../../features/profile/presentation/bloc/body_measurements_cubit.dart';
 import '../../features/profile/presentation/bloc/body_weight_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_body_cubit.dart';
 import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
+import '../../features/training/presentation/bloc/training_stats_cubit.dart';
+import '../../features/training/presentation/bloc/weekly_goal_source.dart';
 import '../../features/profile/presentation/screens/body_measurements_screen.dart';
 import '../../features/profile/presentation/screens/body_weight_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
@@ -170,6 +179,17 @@ GoRouter buildRouter({
         },
       ),
 
+      // Miesiąc PRO: powitanie i koniec okresu próbnego (pełny ekran, poza shellem).
+      GoRoute(
+        path: '/pro/welcome',
+        builder: (_, s) =>
+            ProWelcomeScreen(info: s.uri.queryParameters['info'] == '1'),
+      ),
+      GoRoute(
+        path: '/pro/trial-end',
+        builder: (_, s) => const ProTrialEndScreen(),
+      ),
+
       // App shell — authenticated zone
       // User is read from ServiceLocator.currentUser (set before navigating here).
       StatefulShellRoute.indexedStack(
@@ -222,6 +242,13 @@ GoRouter buildRouter({
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
+                    name: 'warmup',
+                    path: 'warmup',
+                    builder: (_, s) =>
+                        WarmupScreen(args: s.extra as WarmupArgs?),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
                     name: 'workout-summary',
                     path: 'workout-summary',
                     builder: (_, s) {
@@ -265,7 +292,10 @@ GoRouter buildRouter({
                         parentNavigatorKey: appRootNavigatorKey,
                         name: 'pick-exercise-for-plan',
                         path: 'pick-exercise',
-                        builder: (_, s) => const PickExerciseScreen(),
+                        // Kontekst planu (tytuł, „W planie”) przychodzi jako `extra`.
+                        builder: (_, s) => s.extra is PickExerciseScreen
+                            ? s.extra! as PickExerciseScreen
+                            : const PickExerciseScreen(),
                       ),
                     ],
                   ),
@@ -284,6 +314,10 @@ GoRouter buildRouter({
                     path: 'stats',
                     builder: (_, s) => TrainingStatsScreen(
                       bodyWeightRepository: ServiceLocator.bodyWeightRepository,
+                      // Historia podaje swój cubit, żeby nie liczyć drugi raz.
+                      sharedCubit: s.extra is TrainingStatsCubit
+                          ? s.extra as TrainingStatsCubit
+                          : null,
                     ),
                   ),
                   GoRoute(
@@ -294,6 +328,8 @@ GoRouter buildRouter({
                       final sessionId = state.pathParameters['sessionId']!;
                       return TrainingSessionDetailsScreen(
                         sessionId: sessionId,
+                        openPostEditorOnStart:
+                            state.extra == kOpenPostEditorExtra,
                         repository: ServiceLocator.trainingHistoryRepository,
                         sessionRepository:
                             ServiceLocator.trainingSessionRepository,
@@ -330,12 +366,13 @@ GoRouter buildRouter({
                         refreshSignal: ServiceLocator.feedRefreshSignal,
                         events: ServiceLocator.feedPostEvents,
                         currentUser: _currentFeedAuthor(),
-                        hiddenPostIds: ServiceLocator.pendingDeletedSessionIds,
+                        hiddenPostIds: ServiceLocator.pendingHiddenPostIds,
                         seenStore: ServiceLocator.feedSeenStore,
                       ),
                       child: ActivityFeedScreen(
                         repository: ServiceLocator.feedRepository,
                         currentUserId: userId,
+                        notifications: ServiceLocator.unreadNotifications,
                       ),
                     ),
                   );
@@ -363,13 +400,23 @@ GoRouter buildRouter({
                           userId: user.id,
                           events: ServiceLocator.feedPostEvents,
                           currentUser: _currentFeedAuthor(),
-                          hiddenPostIds:
-                              ServiceLocator.pendingDeletedSessionIds,
+                          hiddenPostIds: ServiceLocator.pendingHiddenPostIds,
+                        ),
+                      ),
+                      BlocProvider(
+                        create: (_) => ProfileBodyCubit(
+                          weightRepository: ServiceLocator.bodyWeightRepository,
+                          measurementsRepository:
+                              ServiceLocator.bodyMeasurementsRepository,
+                          weightChanges: ServiceLocator.bodyWeightDataChanges,
+                          measurementsChanges:
+                              ServiceLocator.bodyMeasurementsDataChanges,
                         ),
                       ),
                       BlocProvider(
                         create: (_) => ProfileWeekCubit(
                           ServiceLocator.trainingStatsRepository,
+                          weeklyGoalLoader: loadOwnWeeklyGoal,
                           dataChanges:
                               ServiceLocator.trainingSessionDataChanges,
                         ),
@@ -522,10 +569,32 @@ GoRouter buildRouter({
                 repository: repository,
                 currentUserId: ServiceLocator.currentUser.value?.id,
                 focusComment: state.uri.queryParameters['comment'] == '1',
+                planSharing: ServiceLocator.planSharingRepository,
               ),
             ),
           );
         },
+      ),
+
+      GoRoute(
+        parentNavigatorKey: appRootNavigatorKey,
+        path: kNotificationsRoute,
+        builder: (_, _) => _withFollowCubit(
+          BlocProvider(
+            create: (_) => NotificationsCubit(
+              repository: ServiceLocator.notificationsRepository,
+              onUnreadChanged: ServiceLocator.unreadNotifications.set,
+            ),
+            child: const NotificationsScreen(),
+          ),
+        ),
+        routes: [
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'settings',
+            builder: (_, _) => buildNotificationSettingsPage(),
+          ),
+        ],
       ),
 
       // Karta ćwiczenia — poza shellem, otwierana z biblioteki i z planów.
@@ -565,10 +634,26 @@ GoRouter buildRouter({
               currentUserId: ServiceLocator.currentUser.value?.id,
               currentUser: _currentFeedAuthor(),
               postEvents: ServiceLocator.feedPostEvents,
+              planSharing: ServiceLocator.planSharingRepository,
             ),
           );
         },
         routes: [
+          // Podgląd planu wymaga danych z profilu (extra) — bez nich, np. po
+          // odświeżeniu strony, wracamy do profilu.
+          GoRoute(
+            parentNavigatorKey: appRootNavigatorKey,
+            path: 'plans/:planId',
+            redirect: (_, state) =>
+                state.extra is UserPlanArgs &&
+                    ServiceLocator.planSharingRepository != null
+                ? null
+                : '/app/users/${state.pathParameters['userId']}',
+            builder: (_, state) => UserPlanScreen(
+              args: state.extra! as UserPlanArgs,
+              repository: ServiceLocator.planSharingRepository!,
+            ),
+          ),
           GoRoute(
             parentNavigatorKey: appRootNavigatorKey,
             path: 'following',
@@ -602,10 +687,8 @@ class _LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-    );
+    // Ekran ładowania rysuje nakładka z lib/core/launch/, pod nią sam granat.
+    return const Scaffold(backgroundColor: AppColors.background);
   }
 }
 
@@ -639,9 +722,7 @@ class _SplashRouteState extends State<_SplashRoute> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-    );
+    // Ekran ładowania rysuje nakładka z lib/core/launch/, pod nią sam granat.
+    return const Scaffold(backgroundColor: AppColors.background);
   }
 }

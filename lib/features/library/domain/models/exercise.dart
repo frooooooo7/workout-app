@@ -1,3 +1,9 @@
+import 'exercise_details.dart';
+import 'exercise_tracking.dart';
+
+export 'exercise_details.dart';
+export 'exercise_tracking.dart';
+
 // ──────────────────────────────────────────────
 // Enums
 // ──────────────────────────────────────────────
@@ -29,7 +35,8 @@ enum MuscleRegion {
 /// rozparsowanie zapisanych ćwiczeń i snapshotów sesji od nich zależy.
 /// Trzy z nich ([back], [legs], [shoulders]) są zbiorcze: na manekinie zapalają
 /// cały swój region przez [expanded], bo nie niosą informacji o konkretnym
-/// mięśniu. Nowe ćwiczenia warto tagować wartościami granularnymi.
+/// mięśniu. Ćwiczenia systemowe i nowe ćwiczenia użytkownika używają wartości
+/// granularnych; zbiorcze zostają w starszych ćwiczeniach i snapshotach sesji.
 enum MuscleGroup {
   all,
 
@@ -155,13 +162,10 @@ enum MuscleGroup {
         _ => {this},
       };
 
-  /// Czy API przyjmuje tę wartość w `muscles` ćwiczenia. Backend
-  /// (`VALID_MUSCLES`) zna tylko 8 grup zapisanych od pierwszego seeda —
-  /// granularne wartości kończyły się `400` i odrzuconą synchronizacją.
-  bool get isApiSupported => this != MuscleGroup.all && apiGroup == this;
-
-  /// Wartość wysyłana do API: grupa granularna → jej grupa zbiorcza.
-  MuscleGroup get apiGroup => switch (this) {
+  /// Grupa nadrzędna: konkretny mięsień → jego grupa zbiorcza (najszersze →
+  /// plecy, czworogłowe → nogi), pozostałe zostają sobą. Służy tam, gdzie
+  /// liczy się duża partia, np. podsumowanie planu.
+  MuscleGroup get broadGroup => switch (this) {
         MuscleGroup.traps ||
         MuscleGroup.lats ||
         MuscleGroup.rhomboids ||
@@ -171,7 +175,7 @@ enum MuscleGroup {
         MuscleGroup.sideDelts ||
         MuscleGroup.rearDelts =>
           MuscleGroup.shoulders,
-        // Brak zbiorczej grupy „ramiona” w API — najbliższe są zginacze.
+        // Brak zbiorczej grupy „ramiona” — najbliższe są zginacze.
         MuscleGroup.forearms => MuscleGroup.biceps,
         MuscleGroup.obliques => MuscleGroup.abs,
         MuscleGroup.quads ||
@@ -182,12 +186,25 @@ enum MuscleGroup {
         _ => this,
       };
 
-  /// `muscles` dla API: bez [all], zmapowane przez [apiGroup], bez
-  /// duplikatów, w kolejności wyboru.
+  /// Mięśnie, które pokazuje zakładka biblioteki o tej grupie. Grupa zbiorcza
+  /// obejmuje swoje konkretne mięśnie (ćwiczenie z tagiem „najszersze”
+  /// pokazuje się pod „Plecy”); tak samo filtruje serwer.
+  Set<MuscleGroup> get filterMatches => switch (this) {
+        MuscleGroup.all => const {},
+        MuscleGroup.back ||
+        MuscleGroup.legs ||
+        MuscleGroup.shoulders =>
+          {this, ...expanded},
+        MuscleGroup.abs => const {MuscleGroup.abs, MuscleGroup.obliques},
+        _ => {this},
+      };
+
+  /// `muscles` dla API: bez [all], bez duplikatów, w kolejności wyboru.
+  /// Serwer przyjmuje zarówno grupy zbiorcze, jak i konkretne mięśnie.
   static List<String> toApiList(Iterable<MuscleGroup> muscles) => [
         ...{
           for (final muscle in muscles)
-            if (muscle != MuscleGroup.all) muscle.apiGroup.name,
+            if (muscle != MuscleGroup.all) muscle.name,
         },
       ];
 
@@ -251,6 +268,13 @@ class Exercise {
     this.createdAt,
     this.isPendingSync = false,
     this.clientId,
+    this.serverId,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
+    this.equipment,
+    this.aliases = const [],
+    this.instructions,
+    this.pattern,
   });
 
   final String id;
@@ -272,6 +296,29 @@ class Exercise {
   /// własnych ćwiczeń) — pozwala sparować rekord z serwera z lokalnym wierszem.
   final String? clientId;
 
+  /// Identyfikator z serwera, gdy ćwiczenie już tam jest. Treningi pobrane na
+  /// nowym telefonie wskazują ćwiczenie właśnie nim, a nie lokalnym [id].
+  final String? serverId;
+
+  /// Co zapisuje seria: ciężar × powt., same powtórzenia, czas albo czas
+  /// + dystans.
+  final ExerciseTracking tracking;
+
+  /// Jednostka dystansu przy [ExerciseTracking.durationDistance].
+  final DistanceUnit distanceUnit;
+
+  /// Sprzęt (`null` — nieznany).
+  final ExerciseEquipment? equipment;
+
+  /// Inne nazwy do szukania (np. „OHP”, „RDL”).
+  final List<String> aliases;
+
+  /// „Jak wykonać”: kroki i częste błędy; `null` — brak opisu.
+  final ExerciseInstructions? instructions;
+
+  /// Rodzaj ruchu (np. `push_horizontal`) — łączy podobne ćwiczenia.
+  final String? pattern;
+
   /// Mięśnie bez sentinela [MuscleGroup.all] — to, co faktycznie pracuje.
   /// Pierwszy na liście to mięsień główny, kolejne są wspomagające.
   List<MuscleGroup> get workingMuscles =>
@@ -287,6 +334,11 @@ class Exercise {
     bool? isMine,
     DateTime? createdAt,
     bool? isPendingSync,
+    ExerciseTracking? tracking,
+    DistanceUnit? distanceUnit,
+    ExerciseEquipment? equipment,
+    List<String>? aliases,
+    ExerciseInstructions? instructions,
   }) {
     return Exercise(
       id: id,
@@ -300,6 +352,13 @@ class Exercise {
       createdAt: createdAt ?? this.createdAt,
       isPendingSync: isPendingSync ?? this.isPendingSync,
       clientId: clientId,
+      serverId: serverId,
+      tracking: tracking ?? this.tracking,
+      distanceUnit: distanceUnit ?? this.distanceUnit,
+      equipment: equipment ?? this.equipment,
+      aliases: aliases ?? this.aliases,
+      instructions: instructions ?? this.instructions,
+      pattern: pattern,
     );
   }
 }

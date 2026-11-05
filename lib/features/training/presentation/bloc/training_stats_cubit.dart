@@ -17,6 +17,8 @@ class TrainingStatsState {
     this.loading = true,
     this.failed = false,
     this.recordsBySession = const {},
+    this.sessions = const [],
+    this.records,
   });
 
   final StatsRange range;
@@ -37,6 +39,13 @@ class TrainingStatsState {
   /// pasuje do pozycji listy historii przed synchronizacją i po niej.
   final Map<String, int> recordsBySession;
 
+  /// Wszystkie ukończone sesje z telefonu i rekordy z całej historii — te
+  /// same dane, z których liczą się statystyki. Lista sesji w Historii
+  /// korzysta z nich, zamiast czytać bazę i liczyć rekordy drugi raz.
+  /// `records` to `null` do pierwszego udanego wczytania.
+  final List<TrainingSession> sessions;
+  final PersonalRecordsResult? records;
+
   TrainingStatsState copyWith({
     StatsRange? range,
     StatsDateRange? customRange,
@@ -44,6 +53,8 @@ class TrainingStatsState {
     bool? loading,
     bool? failed,
     Map<String, int>? recordsBySession,
+    List<TrainingSession>? sessions,
+    PersonalRecordsResult? records,
   }) {
     return TrainingStatsState(
       range: range ?? this.range,
@@ -52,6 +63,8 @@ class TrainingStatsState {
       loading: loading ?? this.loading,
       failed: failed ?? this.failed,
       recordsBySession: recordsBySession ?? this.recordsBySession,
+      sessions: sessions ?? this.sessions,
+      records: records ?? this.records,
     );
   }
 }
@@ -154,6 +167,8 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           loading: false,
           failed: false,
           recordsBySession: records.countsBySession(valid),
+          sessions: sessions,
+          records: records,
         ),
       );
     } catch (_) {
@@ -166,6 +181,8 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           loading: false,
           failed: state.snapshot == null,
           recordsBySession: state.recordsBySession,
+          sessions: state.sessions,
+          records: state.records,
         ),
       );
     }
@@ -245,6 +262,8 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           loading: false,
           failed: state.snapshot == null,
           recordsBySession: state.recordsBySession,
+          sessions: state.sessions,
+          records: state.records,
         ),
       );
     }

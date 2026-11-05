@@ -6,6 +6,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../../pro/presentation/widgets/pro_trial_host.dart';
 import '../bloc/training_history_cubit.dart';
 import '../bloc/training_home_cubit.dart';
 import '../bloc/training_plans_cubit.dart';
@@ -107,6 +108,7 @@ class _TrainingShellContentState extends State<_TrainingShellContent> {
                   onLibraryTap: () => context.push('/app/training/library'),
                 ),
               ),
+              const ProTrialHost(),
               const Expanded(child: TrainingSessionTab()),
             ],
           ),

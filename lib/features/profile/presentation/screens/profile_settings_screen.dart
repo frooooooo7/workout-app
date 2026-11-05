@@ -12,6 +12,8 @@ import '../../../account/domain/repositories/account_repository.dart';
 import '../../../account/presentation/account_settings_routes.dart';
 import '../../../account/presentation/bloc/logout_all_devices_cubit.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../../training/domain/models/progression_settings.dart';
+import '../../../training/domain/models/warmup.dart';
 import 'body_measurements_screen.dart';
 import 'body_weight_screen.dart';
 import 'profile_details_screen.dart';
@@ -23,9 +25,13 @@ const settingsChangePasswordRowKey = Key('settings-change-password');
 const settingsLogoutAllRowKey = Key('settings-logout-all');
 const settingsNotificationsRowKey = Key('settings-notifications');
 const settingsWeightUnitRowKey = Key('settings-weight-unit');
+const settingsProgressionRowKey = Key('settings-progression');
 Key settingsWeightUnitOptionKey(WeightUnit unit) =>
     Key('settings-weight-unit-${unit.name}');
 const settingsEquipmentRowKey = Key('settings-equipment');
+const settingsWarmupRowKey = Key('settings-warmup');
+const settingsWarmupSwitchKey = Key('settings-warmup-switch');
+Key settingsWarmupTargetKey(int minutes) => Key('settings-warmup-$minutes');
 const settingsHelpRowKey = Key('settings-help');
 const settingsDeleteAccountRowKey = Key('settings-delete-account');
 
@@ -260,6 +266,28 @@ class _ProfileSettingsView extends StatelessWidget {
                 const _SectionLabel(label: 'Ustawienia'),
                 const SizedBox(height: 12),
                 const _WeightUnitRow(key: settingsWeightUnitRowKey),
+                const SizedBox(height: 10),
+                ValueListenableBuilder<ProgressionSettings>(
+                  valueListenable: ServiceLocator.progressionSettings.notifier,
+                  builder: (context, progression, _) =>
+                      ValueListenableBuilder<WeightUnit>(
+                        valueListenable: WeightUnits.notifier,
+                        builder: (context, unit, _) => _MenuRow(
+                          key: settingsProgressionRowKey,
+                          icon: Icons.trending_up_rounded,
+                          label: 'Progresja ciężaru',
+                          subtitle: 'Jak aplikacja podpowiada ciężar',
+                          onTap: () => context.push(kProgressionSettingsRoute),
+                          trailing: _ProgressionPill(
+                            text: progression.isOff
+                                ? progression.method.label
+                                : progression.inUnit(unit).stepLabel,
+                          ),
+                        ),
+                      ),
+                ),
+                const SizedBox(height: 10),
+                const _WarmupRow(key: settingsWarmupRowKey),
                 const SizedBox(height: 10),
                 _MenuRow(
                   key: settingsEquipmentRowKey,
@@ -559,12 +587,197 @@ class _UnitOption extends StatelessWidget {
   }
 }
 
+/// Rozgrzewka przed treningiem: przełącznik i, po włączeniu, cel czasu.
+/// Każda zmiana przełącznika zapisuje wybór, więc pytanie przy pierwszym
+/// starcie treningu już się nie pokaże.
+class _WarmupRow extends StatelessWidget {
+  const _WarmupRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = ServiceLocator.warmupSettings;
+    return ValueListenableBuilder<WarmupSettings>(
+      valueListenable: store.notifier,
+      builder: (context, settings, _) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.directions_run_rounded,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rozgrzewka przed treningiem',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Panel ze stoperem, zanim zacznie się trening',
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    key: settingsWarmupSwitchKey,
+                    value: settings.isOn,
+                    onChanged: (value) => unawaited(store.setEnabled(value)),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: settings.isOn
+                  ? Container(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                      decoration: const BoxDecoration(
+                        border: Border(top: BorderSide(color: AppColors.border)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Cel czasu',
+                            style: TextStyle(
+                              color: AppColors.textSubtle,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final minutes in kWarmupTargetChoices)
+                                _TargetChip(
+                                  key: settingsWarmupTargetKey(minutes),
+                                  label: '$minutes min',
+                                  selected: settings.targetMinutes == minutes,
+                                  onTap: () => unawaited(
+                                    store.setTargetMinutes(minutes),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TargetChip extends StatelessWidget {
+  const _TargetChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: selected ? null : onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary : AppColors.surfaceVariant,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : AppColors.textSecondary,
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bieżąca metoda progresji w wierszu ustawień: „Wyłączona”, „+2,5 kg”.
+class _ProgressionPill extends StatelessWidget {
+  const _ProgressionPill({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.primaryVariant,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+      ],
+    );
+  }
+}
+
 class _MenuRow extends StatelessWidget {
   const _MenuRow({
     super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.subtitle,
     this.trailing = const Icon(
       Icons.chevron_right_rounded,
       color: AppColors.textMuted,
@@ -573,6 +786,7 @@ class _MenuRow extends StatelessWidget {
 
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
   final Widget? trailing;
 
@@ -594,13 +808,28 @@ class _MenuRow extends StatelessWidget {
               Icon(icon, color: AppColors.textSecondary, size: 20),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               ?trailing,

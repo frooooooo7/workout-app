@@ -1,33 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
+import '../../../../../core/widgets/app_tab_header.dart';
 import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import '../workout_summary/staggered_reveal.dart';
-import 'stats_activity_card.dart';
+import 'overview/stats_consistency_summary_card.dart';
+import 'overview/stats_muscles_summary_card.dart';
+import 'overview/stats_period_summary_card.dart';
+import 'overview/stats_records_summary_card.dart';
+import 'overview/stats_strength_summary_card.dart';
 import 'stats_body_weight_card.dart';
 import 'stats_date_range_picker.dart';
-import 'stats_exercise_progress_card.dart';
-import 'stats_goal_card.dart';
-import 'stats_habits_card.dart';
-import 'stats_insights_card.dart';
-import 'stats_kpi_grid.dart';
-import 'stats_muscles_card.dart';
+import 'stats_detail_screen.dart';
 import 'stats_range_selector.dart';
-import 'stats_recovery_card.dart';
-import 'stats_records_card.dart';
-import 'stats_rep_ranges_card.dart';
-import 'stats_session_records_card.dart';
+import 'stats_scroll_page.dart';
 import 'stats_states.dart';
-import 'stats_top_exercises_card.dart';
-import 'stats_trend_chart_card.dart';
 
-/// Treść statystyk: zakres, kafelki i karty z wykresami. Wymaga
-/// [TrainingStatsCubit] w kontekście.
+/// Pulpit statystyk: zakres dat nad przewijaną listą sześciu kart. Każda
+/// karta odpowiada na jedno pytanie zdaniem-wnioskiem i otwiera ekran
+/// szczegółów. Wymaga [TrainingStatsCubit] w kontekście.
 class TrainingStatsView extends StatelessWidget {
   const TrainingStatsView({
     super.key,
@@ -47,51 +42,53 @@ class TrainingStatsView extends StatelessWidget {
       builder: (context, state) {
         final cubit = context.read<TrainingStatsCubit>();
         final snapshot = state.snapshot;
+        final hasHistory = snapshot?.hasHistory ?? true;
 
-        final List<Widget> content;
+        final Widget body;
         if (snapshot == null && state.failed) {
-          content = [StatsErrorState(onRetry: cubit.load)];
+          body = StatsScrollPage(
+            onRefresh: cubit.load,
+            children: [StatsErrorState(onRetry: cubit.load)],
+          );
         } else if (snapshot == null) {
-          content = const [StatsSkeleton()];
+          body = StatsScrollPage(
+            onRefresh: cubit.load,
+            children: const [StatsSkeleton()],
+          );
         } else if (!snapshot.hasHistory) {
-          content = [StatsEmptyState(onStartWorkout: onStartWorkout)];
+          body = StatsScrollPage(
+            onRefresh: cubit.load,
+            children: [StatsEmptyState(onStartWorkout: onStartWorkout)],
+          );
         } else {
-          content = _sections(context, snapshot, cubit);
+          body = StatsScrollPage(
+            onRefresh: cubit.load,
+            children: _cards(context, snapshot, cubit),
+          );
         }
 
-        return RefreshIndicator(
-          color: AppColors.primary,
-          onRefresh: () {
-            HapticFeedback.lightImpact();
-            return cubit.load();
-          },
-          // Kolumna zamiast ListView: ListView niszczy karty poza ekranem, więc
-          // po powrocie traciłyby stan (wybrane ćwiczenie, zaznaczony dzień)
-          // i animowały się od nowa. Kart jest kilka — budujemy wszystkie.
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.pageGutter,
-              AppSpacing.xxs,
-              AppSpacing.pageGutter,
-              AppSpacing.xl + MediaQuery.paddingOf(context).bottom,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (snapshot?.hasHistory ?? true) ...[
-                  StatsRangeSelector(
-                    selected: state.range,
-                    customRange: state.customRange,
-                    onChanged: cubit.selectRange,
-                    onPickCustom: () => _pickCustomRange(context, state),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-                ...content,
-              ],
-            ),
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (hasHistory)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageGutter,
+                  AppSpacing.xxs,
+                  AppSpacing.pageGutter,
+                  AppSpacing.sm,
+                ),
+                child: StatsRangeSelector(
+                  selected: state.range,
+                  customRange: state.customRange,
+                  onChanged: cubit.selectRange,
+                  onPickCustom: () => _pickCustomRange(context, state),
+                ),
+              ),
+            // Tuż nad przewijaną treścią, pod przypiętym zakresem.
+            const AppTabScrollEdge(),
+            Expanded(child: body),
+          ],
         );
       },
     );
@@ -112,74 +109,80 @@ class TrainingStatsView extends StatelessWidget {
     if (picked != null) cubit.selectCustomRange(picked);
   }
 
-  List<Widget> _sections(
+  /// Karty pulpitu w stałej kolejności, od najczęstszego pytania. Rekordy,
+  /// passa i regeneracja liczą się z całej historii, więc przy pustym
+  /// zakresie zostają, a karty z danymi okresu znikają.
+  List<Widget> _cards(
     BuildContext context,
-    TrainingStatsSnapshot snapshot,
+    TrainingStatsSnapshot s,
     TrainingStatsCubit cubit,
   ) {
-    final empty = snapshot.isEmpty;
-    final goal = snapshot.goal;
+    final empty = s.isEmpty;
+    final repository = bodyWeightRepository;
+    void open(StatsDetail d) => openStatsDetail(context, d);
+
     final sections = <(String, Widget)>[
-      ('kpi', StatsKpiGrid(snapshot: snapshot)),
-      if (snapshot.insights.isNotEmpty)
-        ('insights', StatsInsightsCard(insights: snapshot.insights)),
-      if (goal != null) ('goal', StatsGoalCard(goal: goal)),
-      if (bodyWeightRepository case final repository?)
-        (
-          'body-weight',
-          StatsBodyWeightCard(repository: repository, window: snapshot.window),
+      (
+        'period',
+        StatsPeriodSummaryCard(
+          snapshot: s,
+          onOpenTrend: () => open(StatsDetail.trend),
         ),
+      ),
       if (empty)
         (
           'empty-range',
           StatsEmptyRangeNotice(
-            onShowAll: snapshot.range == StatsRange.all
+            onShowAll: s.range == StatsRange.all
                 ? null
                 : () => cubit.selectRange(StatsRange.all),
           ),
-        )
-      else
-        ('trend', StatsTrendChartCard(snapshot: snapshot)),
-      // Rekordy, regeneracja i heatmapa liczą się z całej historii, więc mają
-      // sens także przy pustym zakresie.
-      (
-        'records',
-        StatsRecordsCard(
-          records: snapshot.records,
-          bests: snapshot.bests,
-          now: snapshot.activity.today,
         ),
-      ),
-      if (!snapshot.sessionRecords.isEmpty)
+      if (!empty && s.exercises.isNotEmpty)
         (
-          'session-records',
-          StatsSessionRecordsCard(records: snapshot.sessionRecords),
-        ),
-      if (!empty) ('muscles', StatsMusclesCard(muscles: snapshot.muscles)),
-      if (snapshot.recovery.isNotEmpty)
-        ('recovery', StatsRecoveryCard(recovery: snapshot.recovery)),
-      if (!empty) ...[
-        (
-          'progress',
-          StatsExerciseProgressCard(
-            exercises: snapshot.exercises,
-            progressFrom: snapshot.progressFrom,
+          'strength',
+          StatsStrengthSummaryCard(
+            snapshot: s,
+            onTap: () => open(StatsDetail.strength),
           ),
         ),
-        ('top-exercises', StatsTopExercisesCard(exercises: snapshot.exercises)),
-        ('rep-ranges', StatsRepRangesCard(ranges: snapshot.repRanges)),
-      ],
-      ('activity', StatsActivityCard(activity: snapshot.activity)),
-      if (!empty) ('habits', StatsHabitsCard(habits: snapshot.habits)),
+      if (s.recordsCount > 0 || s.bests.isNotEmpty)
+        (
+          'records',
+          StatsRecordsSummaryCard(
+            snapshot: s,
+            onTap: () => open(StatsDetail.records),
+          ),
+        ),
+      if (!empty && !s.muscles.isEmpty)
+        (
+          'muscles',
+          StatsMusclesSummaryCard(
+            snapshot: s,
+            onTap: () => open(StatsDetail.muscles),
+          ),
+        ),
+      (
+        'consistency',
+        StatsConsistencySummaryCard(
+          snapshot: s,
+          onTap: () => open(StatsDetail.consistency),
+        ),
+      ),
+      if (repository != null)
+        (
+          'body-weight',
+          StatsBodyWeightCard(repository: repository, window: s.window),
+        ),
     ];
 
     return [
       for (var i = 0; i < sections.length; i++)
-        // Klucz trzyma stan karty (wybrana miara, ćwiczenie, zaznaczony dzień),
-        // gdy przy zmianie zakresu sekcje nad nią pojawiają się i znikają.
+        // Klucz trzyma stan karty, gdy przy zmianie zakresu sekcje nad nią
+        // pojawiają się i znikają.
         Padding(
           key: ValueKey('stats-${sections[i].$1}'),
-          padding: EdgeInsets.only(top: i == 0 ? 0 : AppSpacing.md),
+          padding: EdgeInsets.only(top: i == 0 ? 0 : AppSpacing.sm),
           child: StaggeredReveal(
             // Pierwsze karty wchodzą kaskadą, dalsze (poza ekranem) razem —
             // inaczej czekałyby na swoją kolej zbyt długo.
@@ -187,6 +190,19 @@ class TrainingStatsView extends StatelessWidget {
             child: sections[i].$2,
           ),
         ),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(8, AppSpacing.md, 8, 0),
+        child: Text(
+          'Rekordy wszystkich czasów, passa i gotowość mięśni liczą się '
+          'z całej historii, niezależnie od zakresu.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 11.5,
+            height: 1.4,
+          ),
+        ),
+      ),
     ];
   }
 }

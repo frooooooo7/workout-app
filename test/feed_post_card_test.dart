@@ -22,12 +22,16 @@ FeedPost _post({
   int kudos = 3,
   int comments = 1,
   List<PersonalRecord> personalRecords = const [],
+  String? postTitle,
+  String? photoUrl,
 }) {
   return FeedPost(
     id: 'p1',
     author: const FeedAuthor(id: 'u1', firstName: 'Anna', lastName: 'Nowak'),
     title: 'Push A',
     note: 'Nowy rekord na ławce',
+    postTitle: postTitle,
+    photoUrl: photoUrl,
     startedAt: DateTime(2026, 9, 15, 18, 5),
     durationSec: 3420,
     exercisesCount: 6,
@@ -77,6 +81,31 @@ Future<void> _pumpCard(
 }
 
 void main() {
+  testWidgets('own post title replaces the workout name, which moves next to the date', (
+    tester,
+  ) async {
+    await _pumpCard(
+      tester,
+      _post(postTitle: 'W końcu 82,5!', photoUrl: '/uploads/post-photos/a.webp'),
+    );
+    await tester.pump();
+
+    expect(find.text('W końcu 82,5!'), findsOneWidget);
+    expect(find.textContaining('· Push A'), findsOneWidget);
+    expect(find.text('Push A'), findsNothing);
+    expect(find.text('Nowy rekord na ławce'), findsOneWidget);
+    expect(find.byType(Image), findsWidgets);
+  });
+
+  testWidgets('without a post title the card keeps the workout name', (
+    tester,
+  ) async {
+    await _pumpCard(tester, _post());
+
+    expect(find.text('Push A'), findsOneWidget);
+    expect(find.textContaining('· Push A'), findsNothing);
+  });
+
   group('formatters', () {
     final now = DateTime(2026, 9, 15, 20);
 
@@ -119,9 +148,9 @@ void main() {
       expect(pickBestSetExercise(const [bench, squat, pushUps]), squat);
       expect(pickBestSetExercise(const [pushUps]), isNull);
       expect(pickBestSetExercise(const []), isNull);
-      expect(formatKudosCount(1), '1 kudos');
-      expect(formatKudosCount(3), '3 kudosy');
-      expect(formatKudosCount(12), '12 kudosów');
+      expect(formatKudosCount(1), '1 żółwik');
+      expect(formatKudosCount(3), '3 żółwiki');
+      expect(formatKudosCount(12), '12 żółwików');
     });
   });
 
@@ -150,13 +179,13 @@ void main() {
       expect(find.text('Wyciskanie sztangi na ławce'), findsOneWidget);
       expect(find.text('82,5 kg × 8'), findsOneWidget);
       expect(find.text('Klatka'), findsOneWidget);
-      expect(find.text('3 kudosy'), findsOneWidget);
+      expect(find.text('3 żółwiki'), findsOneWidget);
       expect(find.text('1 komentarz'), findsOneWidget);
 
       final kudosButton = find.byKey(const ValueKey('feed-kudos-button-p1'));
       expect(kudosButton, findsOneWidget);
-      expect(find.text('Kudos'), findsOneWidget);
-      expect(find.byIcon(Icons.thumb_up_alt_outlined), findsOneWidget);
+      expect(find.text('Daj żółwika'), findsOneWidget);
+      expect(find.byIcon(Icons.sports_mma_outlined), findsOneWidget);
 
       await tester.tap(kudosButton);
       await tester.tap(find.byKey(const ValueKey('feed-kudos-summary-p1')));
@@ -170,8 +199,8 @@ void main() {
     testWidgets('shows filled kudos state when already kudoed', (tester) async {
       await _pumpCard(tester, _post(hasKudoed: true));
 
-      expect(find.text('Dano kudosa'), findsOneWidget);
-      expect(find.byIcon(Icons.thumb_up_alt_rounded), findsOneWidget);
+      expect(find.text('Dano żółwika'), findsOneWidget);
+      expect(find.byIcon(Icons.sports_mma_rounded), findsOneWidget);
     });
 
     testWidgets('own post has no kudos button but keeps comments',
@@ -184,6 +213,68 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('feed-kudos-summary-p1')), findsNothing);
+    });
+
+    testWidgets('compact own post drops muscles, best set and comment button', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FeedPostCard(
+                post: _post(isOwn: true, kudos: 2, comments: 0),
+                showAuthor: false,
+                compact: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Klatka'), findsNothing);
+      expect(find.text('Wyciskanie sztangi na ławce'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('feed-comment-button-p1')),
+        findsNothing,
+      );
+      // Licznik żółwików zostaje.
+      expect(
+        find.byKey(const ValueKey('feed-kudos-summary-p1')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('own post menu calls edit and unshare', (tester) async {
+      var edited = 0;
+      var unshared = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FeedPostCard(
+                post: _post(isOwn: true),
+                showAuthor: false,
+                compact: true,
+                onEditTap: () => edited++,
+                onUnshareTap: () => unshared++,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('profile-post-menu-p1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edytuj post'));
+      await tester.pumpAndSettle();
+      expect(edited, 1);
+
+      await tester.tap(find.byKey(const ValueKey('profile-post-menu-p1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Przestań udostępniać'));
+      await tester.pumpAndSettle();
+      expect(unshared, 1);
     });
 
     testWidgets('new records replace the best set and collapse past two', (

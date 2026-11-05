@@ -48,6 +48,7 @@ class NextExerciseCard extends StatelessWidget {
                 size: 44,
                 radius: 12,
                 opacity: 0.85,
+                cardio: exercise.tracking.isCardio,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -111,6 +112,7 @@ String? nextExercisePlan(TrainingSessionExercise exercise) {
       if (set.countsTowardStats) set,
   ];
   if (working.isEmpty) return null;
+  if (exercise.tracking.isCardio) return cardioSegmentsLabel(working.length);
   final reps = working.map((set) => set.plannedReps.trim()).toSet();
   final count = working.length;
   if (reps.length == 1 && reps.first.isNotEmpty) {

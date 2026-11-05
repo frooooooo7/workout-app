@@ -20,6 +20,7 @@ import '../widgets/body_measurement_entry_sheet.dart';
 import '../widgets/body_measurement_history_link.dart';
 import '../widgets/body_measurement_silhouette.dart';
 import '../widgets/body_measurements_empty_state.dart';
+import '../widgets/profile_details_fields.dart';
 import 'body_measurement_history_screen.dart';
 
 const kBodyMeasurementsRoute = '/app/profile/body-measurements';
@@ -149,6 +150,13 @@ class _BodyMeasurementsScreenState extends State<BodyMeasurementsScreen> {
                     onPressed: _addEntry,
                   ),
                 ],
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: ProfileDetailsPrivacyNote(
+                  key: ValueKey('body-measurements-privacy'),
+                  text: 'Widzisz to tylko Ty — pomiary są prywatne.',
+                ),
               ),
               Expanded(
                 child:

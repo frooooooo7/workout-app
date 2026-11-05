@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,22 +10,32 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/units/weight_unit.dart';
+import '../../../../core/utils/keyboard.dart';
 import '../../../../core/widgets/app_action_sheet.dart';
 import '../../../library/domain/models/exercise.dart';
 import '../../../library/presentation/screens/pick_exercise_screen.dart';
+import '../../../library/presentation/screens/swap_exercise_screen.dart';
 import '../../data/plate_settings_store.dart';
+import '../../domain/services/exercise_swap.dart';
+import '../../domain/models/progression_settings.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
 import '../../domain/repositories/previous_performance_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/cardio_insights.dart';
 import '../../domain/services/live_workout_insights.dart';
 import '../../domain/services/plate_calculator.dart';
 import '../../domain/services/rest_timer_scheduler.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/stats/stats_sets.dart' show statsExerciseKey;
+import '../../domain/services/superset_rounds.dart';
 import '../../domain/services/training_session_detail_mapper.dart'
     show parseWeightKg;
+import '../bloc/training_home_cubit.dart';
 import '../bloc/training_session_cubit.dart';
+import '../utils/workout_resume_store.dart';
+import '../widgets/ongoing_workout/cardio_stopwatch.dart';
+import '../widgets/ongoing_workout/exercise_order_sheet.dart';
 import '../widgets/ongoing_workout/next_exercise_card.dart';
 import '../widgets/ongoing_workout/ongoing_workout_header.dart';
 import '../widgets/ongoing_workout/record_burst.dart';
@@ -32,6 +43,8 @@ import '../widgets/ongoing_workout/rest_timer_controller.dart';
 import '../widgets/ongoing_workout/rest_timer_controls.dart';
 import '../widgets/ongoing_workout/rest_timer_pill.dart';
 import '../widgets/ongoing_workout/session_exercise_card.dart';
+import '../widgets/ongoing_workout/superset_block_card.dart';
+import '../widgets/ongoing_workout/workout_accent.dart';
 import '../widgets/ongoing_workout/workout_colors.dart';
 import '../widgets/ongoing_workout/workout_progress_header.dart';
 import '../widgets/plates/plate_calculator_sheet.dart';
@@ -43,7 +56,9 @@ class OngoingWorkoutArgs {
     this.initialSession,
     this.sessionCubit,
     this.pickExercise,
+    this.swapExercise,
     this.restTimerScheduler,
+    this.restTimerClock,
     this.previousPerformance,
     this.statsRepository,
   });
@@ -51,7 +66,17 @@ class OngoingWorkoutArgs {
   final TrainingSession? initialSession;
   final TrainingSessionCubit? sessionCubit;
   final Future<Exercise?> Function(BuildContext context)? pickExercise;
+
+  /// Test seam dla zamiany ćwiczenia; domyślnie [SwapExerciseScreen].
+  final Future<Exercise?> Function(
+    BuildContext context,
+    TrainingSessionExercise replacing,
+  )?
+  swapExercise;
   final RestTimerScheduler? restTimerScheduler;
+
+  /// Zegar odliczania przerwy; domyślnie [DateTime.now].
+  final DateTime Function()? restTimerClock;
 
   /// Źródło kolumny „Poprzednio”; domyślnie lokalna historia użytkownika.
   final PreviousPerformanceRepository? previousPerformance;
@@ -61,7 +86,19 @@ class OngoingWorkoutArgs {
 }
 
 /// Pozycje menu ⋯ w nagłówku treningu.
-enum _WorkoutMenuAction { rest, plates, rir, tempo, note, exercises, discard }
+enum _WorkoutMenuAction {
+  rest,
+  plates,
+  rir,
+  tempo,
+  note,
+  exercises,
+  removeExercise,
+  discard,
+}
+
+/// Menu po przytrzymaniu ćwiczenia.
+enum _ExerciseMenuAction { earlier, later, reorder, swap, remove }
 
 class OngoingWorkoutScreen extends StatefulWidget {
   const OngoingWorkoutScreen({super.key, this.args});
@@ -74,12 +111,16 @@ class OngoingWorkoutScreen extends StatefulWidget {
 
 class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Timer? _saveDebounce;
-  final PageController _exercisePageController = PageController();
+  ScaffoldMessengerState? _messenger;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _undoSnackBar;
+  late final PageController _exercisePageController;
   final ValueNotifier<TrainingSession?> _draftSession =
       ValueNotifier<TrainingSession?>(null);
   late final RestTimerController _rest = RestTimerController(
     scheduler: _restTimerScheduler,
+    clock: widget.args?.restTimerClock,
   );
+  final CardioStopwatchController _stopwatch = CardioStopwatchController();
   final Set<String> _userEnabledRirColumns = {};
   final Set<String> _userEnabledTempoColumns = {};
   final Set<String> _userHiddenRirColumns = {};
@@ -95,9 +136,16 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   /// Poprzedni trening i rekord każdego ćwiczenia (po id ćwiczenia w sesji).
   final Map<String, ExerciseHistoryInsights> _history = {};
   final Set<String> _historyRequested = {};
-  Future<Map<String, ExerciseBest>?>? _bests;
+  Future<_HistoryBests?>? _bests;
 
   RecordBurstData? _recordBurst;
+
+  /// „Bez przerwy” w superserii: co teraz (A2…) i jaka przerwa po rundzie.
+  /// Znika przy następnej odhaczonej serii albo starcie przerwy.
+  ({String caption, String? footer})? _noRest;
+
+  /// Tytuł panelu przerwy: „Odpoczynek” albo „Przerwa po rundzie 2”.
+  String _restTitle = 'Odpoczynek';
 
   /// Osobny notifier, żeby zmiana strony (także w trakcie swipe'a) nie
   /// przebudowywała całego ekranu — słucha go tylko pasek postępu.
@@ -106,11 +154,125 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   Future<void>? _inFlightSave;
   bool _allowPop = false;
 
+  /// Trening zakończony albo odrzucony — nie ma czego pamiętać po wyjściu.
+  bool _sessionEnded = false;
+
+  /// Ćwiczenie, od którego ekran startuje (ostatnie, na którym był
+  /// użytkownik, albo wyliczone z odhaczonych serii).
+  int _initialIndex = 0;
+
+  /// Zapamiętany stan wczytany (albo go nie ma) — wcześniej zapis
+  /// nadpisałby go stanem startowym.
+  bool _resumeReady = true;
+
   @override
   void initState() {
     super.initState();
+    final args = widget.args;
+    final initial =
+        args?.sessionCubit?.state.activeSession ?? args?.initialSession;
+    final resume = initial == null ? null : WorkoutResumeStore.peek(initial.id);
+    if (initial != null) {
+      _initialIndex = _resumeIndex(initial.exercises, resume);
+    }
+    _exercisePageController = PageController(
+      initialPage: initial == null
+          ? 0
+          : _pageIn(initial.exercises, _initialIndex),
+    );
+    if (resume != null) {
+      _restoreRest(resume);
+    } else if (initial != null) {
+      _resumeReady = false;
+      unawaited(_loadResume(initial.id));
+    }
     _rest.addListener(_onRestChanged);
+    _rest.addListener(_saveResume);
+    _currentExerciseIndex.addListener(_saveResume);
+    // Start, pauza i stop stopera (nie sekundy) pokazują i chowają panel.
+    _stopwatch.addListener(_onRestChanged);
     unawaited(_rest.loadLastCustomDuration());
+  }
+
+  /// Gdzie wrócić: zapamiętane ćwiczenie, a bez niego ostatnie z odhaczoną
+  /// serią (albo następne, jeśli to już skończone).
+  static int _resumeIndex(
+    List<TrainingSessionExercise> exercises,
+    WorkoutResumeSnapshot? resume,
+  ) {
+    if (exercises.isEmpty) return 0;
+    final remembered = resume?.exerciseId;
+    if (remembered != null) {
+      final index = exercises.indexWhere((e) => e.id == remembered);
+      if (index != -1) return index;
+    }
+    var last = -1;
+    for (var i = 0; i < exercises.length; i++) {
+      if (exercises[i].sets.any((set) => set.completed)) last = i;
+    }
+    if (last == -1) return 0;
+    final allDone = exercises[last].sets.every((set) => set.completed);
+    return allDone && last + 1 < exercises.length ? last + 1 : last;
+  }
+
+  static int _pageIn(List<TrainingSessionExercise> exercises, int index) =>
+      exercises.isEmpty
+      ? 0
+      : SupersetRounds.blockOf(SupersetRounds.blocks(exercises), index);
+
+  void _restoreRest(WorkoutResumeSnapshot resume) {
+    final endsAt = resume.restEndsAt;
+    final total = resume.restTotal;
+    if (endsAt == null || total == null) return;
+    _restTitle = resume.restTitle ?? 'Odpoczynek';
+    _rest.restore(endsAt: endsAt, total: total);
+  }
+
+  /// Po zamknięciu aplikacji stan jest tylko na dysku.
+  Future<void> _loadResume(String sessionId) async {
+    final resume = await WorkoutResumeStore.load(sessionId);
+    if (!mounted) return;
+    _resumeReady = true;
+    if (resume == null) {
+      _saveResume();
+      return;
+    }
+    if (!_rest.isVisible) _restoreRest(resume);
+    final session = _draftSession.value;
+    final index = session == null || session.id != sessionId
+        ? -1
+        : session.exercises.indexWhere((e) => e.id == resume.exerciseId);
+    // Użytkownik zdążył już przejść dalej — nie przerzucamy go.
+    if (index == -1 || _currentExerciseIndex.value != _initialIndex) {
+      _saveResume();
+      return;
+    }
+    if (_exercisePageController.hasClients) {
+      _exercisePageController.jumpToPage(_pageOf(index));
+    }
+    _currentExerciseIndex.value = index;
+    _saveResume();
+  }
+
+  /// Zapamiętuje bieżące ćwiczenie i przerwę — po powrocie na ekran (także
+  /// po zamknięciu aplikacji) trening rusza w tym samym miejscu.
+  void _saveResume() {
+    if (_sessionEnded || !_resumeReady) return;
+    final session = _draftSession.value;
+    if (session == null) return;
+    final index = _currentExerciseIndex.value;
+    final endsAt = _rest.isVisible ? _rest.endsAt : null;
+    WorkoutResumeStore.save(
+      WorkoutResumeSnapshot(
+        sessionId: session.id,
+        exerciseId: index < session.exercises.length
+            ? session.exercises[index].id
+            : null,
+        restEndsAt: endsAt,
+        restTotal: endsAt == null ? null : _rest.total,
+        restTitle: endsAt == null ? null : _restTitle,
+      ),
+    );
   }
 
   void _onRestChanged() {
@@ -120,7 +282,27 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   @override
   void dispose() {
     _saveDebounce?.cancel();
+    // Ekran zamknięty w inny sposób (np. po zakończeniu) — „Cofnij” nic by
+    // już nie zmieniło. Po klatce, bo drzewo jest właśnie rozbierane.
+    final messenger = _messenger;
+    if (_undoSnackBar != null && messenger != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (messenger.mounted) messenger.removeCurrentSnackBar();
+      });
+    }
+    if (_sessionEnded) {
+      WorkoutResumeStore.clear();
+    } else {
+      _saveResume();
+      // Zwinięty ekran to nie koniec przerwy — powiadomienie ma zadzwonić.
+      _rest.cancelNotificationOnDispose = false;
+    }
+    _currentExerciseIndex.removeListener(_saveResume);
     _rest
+      ..removeListener(_onRestChanged)
+      ..removeListener(_saveResume)
+      ..dispose();
+    _stopwatch
       ..removeListener(_onRestChanged)
       ..dispose();
     _draftSession.dispose();
@@ -168,11 +350,13 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _loadHistory(TrainingSessionExercise exercise) async {
-    final (previous, bests) = await (
-      _loadPreviousSets(exercise),
+    final (recent, bests) = await (
+      _loadRecentSets(exercise),
       _bests ??= _loadBests(),
     ).wait;
-    final best = bests?[statsExerciseKey(exercise)];
+    final previous = recent.isEmpty ? null : recent.first;
+    final key = statsExerciseKey(exercise);
+    final best = bests?.records[key];
     final record = best != null
         ? ExerciseRecordBaseline.fromBest(best)
         : previous == null
@@ -182,38 +366,42 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     setState(() {
       _history[exercise.id] = ExerciseHistoryInsights(
         previousSets: previous,
+        earlierSets: recent.skip(1).toList(),
         record: record,
+        bestPaceSecondsPerKm: bests?.paces[key],
       );
     });
   }
 
-  /// Poprzedni wynik ćwiczenia; brak danych lub błąd odczytu to po prostu
-  /// brak kolumny — nigdy błąd na ekranie treningu.
-  Future<List<TrainingSessionSet>?> _loadPreviousSets(
+  /// Ostatnie wyniki ćwiczenia (od najnowszego; tyle, ile potrzebuje
+  /// progresja). Brak danych lub błąd odczytu to po prostu brak kolumny —
+  /// nigdy błąd na ekranie treningu.
+  Future<List<List<TrainingSessionSet>>> _loadRecentSets(
     TrainingSessionExercise exercise,
   ) async {
     final repository = _previousPerformance;
-    if (repository == null) return null;
+    if (repository == null) return const [];
     try {
-      return await repository.lastCompletedSets(
+      return await repository.recentCompletedSets(
         exerciseId: exercise.exerciseId,
         exerciseName: exercise.exerciseName,
+        limit: ProgressionSettings.deloadAfterFailures,
       );
     } catch (_) {
-      return null;
+      return const [];
     }
   }
 
   /// Najlepsze wyniki ćwiczeń z całej historii — rekordy do pobicia.
-  Future<Map<String, ExerciseBest>?> _loadBests() async {
+  Future<_HistoryBests?> _loadBests() async {
     final repository = _statsRepository;
     if (repository == null) return null;
     try {
       final history = await repository.allCompletedSessions();
-      return {
-        for (final best in PersonalRecordsCalculator.compute(history).bests)
-          best.exerciseKey: best,
-      };
+      // Długa historia liczy się w osobnym wątku — start treningu nie przycina.
+      return history.length >= TrainingHomeCubit.isolateThreshold
+          ? await compute(_bestsJob, history)
+          : _bestsJob(history);
     } catch (_) {
       return null;
     }
@@ -230,13 +418,34 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         if (sourceSession == null) return const _MissingSessionScreen();
         if (_draftSession.value == null ||
             _draftSession.value!.id != sourceSession.id) {
+          final firstBuild = _draftSession.value == null;
           _draftSession.value = sourceSession;
           _userEnabledRirColumns.clear();
           _userEnabledTempoColumns.clear();
           _userHiddenRirColumns.clear();
           _userHiddenTempoColumns.clear();
           _openNotes.clear();
-          _currentExerciseIndex.value = 0;
+          if (firstBuild) {
+            // Kontroler stron startuje już na tym ćwiczeniu (initState).
+            _currentExerciseIndex.value = _initialIndex.clamp(
+              0,
+              sourceSession.exercises.isEmpty
+                  ? 0
+                  : sourceSession.exercises.length - 1,
+            );
+          } else {
+            final index = _resumeIndex(
+              sourceSession.exercises,
+              WorkoutResumeStore.peek(sourceSession.id),
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (_exercisePageController.hasClients) {
+                _exercisePageController.jumpToPage(_pageOf(index));
+              }
+              _currentExerciseIndex.value = index;
+            });
+          }
         }
         final session = _draftSession.value!;
         final exerciseCount = session.exercises.length;
@@ -248,63 +457,73 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           canPop: _allowPop,
           onPopInvokedWithResult: (didPop, result) async {
             if (didPop) return;
+            _dismissUndoSnackBar();
             await _flushDraft(context.read<TrainingSessionCubit>());
             if (!context.mounted) return;
             setState(() => _allowPop = true);
             context.pop(result);
           },
-          child: Scaffold(
-            backgroundColor: AppColors.background,
-            body: SafeArea(
-              bottom: false,
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                      OngoingWorkoutHeader(
-                        planName: session.planName,
-                        startedAt: session.startedAt,
-                        onCollapse: () => _leaveWorkout(context),
-                        onMore: () => unawaited(_showWorkoutMenu(context)),
-                        onFinish: exerciseCount == 0
-                            ? null
-                            : () {
-                                final current = _draftSession.value;
-                                if (current != null) _finish(context, current);
-                              },
-                      ),
-                      if (exerciseCount == 0)
-                        Expanded(
-                          child: _EmptyWorkout(
-                            onAddExercise: () => _addExerciseToSession(context),
+          child: WorkoutAccentScope(
+            accent: _accentOf(session),
+            progression: _progressionOf(session),
+            child: Scaffold(
+              backgroundColor: AppColors.background,
+              body: SafeArea(
+                bottom: false,
+                child: Stack(
+                  children: [
+                    Column(
+                      children: [
+                        OngoingWorkoutHeader(
+                          planName: session.planName,
+                          startedAt: session.startedAt,
+                          onCollapse: () => _leaveWorkout(context),
+                          onMore: () => unawaited(_showWorkoutMenu(context)),
+                          onFinish: exerciseCount == 0
+                              ? null
+                              : () {
+                                  final current = _draftSession.value;
+                                  if (current != null) {
+                                    _finish(context, current);
+                                  }
+                                },
+                        ),
+                        if (exerciseCount == 0)
+                          Expanded(
+                            child: _EmptyWorkout(
+                              onAddExercise: () =>
+                                  _addExerciseToSession(context),
+                            ),
+                          )
+                        else ...[
+                          _buildProgress(context),
+                          Expanded(
+                            child: _buildExercisePages(context, session),
                           ),
-                        )
-                      else ...[
-                        _buildProgress(context),
-                        Expanded(child: _buildExercisePages(context, session)),
+                        ],
                       ],
-                    ],
-                  ),
-                  if (_recordBurst != null)
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      top: 118,
-                      child: IgnorePointer(
-                        child: RecordBurst(
-                          key: ValueKey(_recordBurst!.id),
-                          data: _recordBurst!,
-                          onDone: () => setState(() => _recordBurst = null),
+                    ),
+                    if (_recordBurst != null)
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        top: 118,
+                        child: IgnorePointer(
+                          child: RecordBurst(
+                            key: ValueKey(_recordBurst!.id),
+                            data: _recordBurst!,
+                            onDone: () => setState(() => _recordBurst = null),
+                          ),
                         ),
                       ),
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: 16 + MediaQuery.paddingOf(context).bottom,
+                      child: _buildRestDock(context),
                     ),
-                  Positioned(
-                    left: 12,
-                    right: 12,
-                    bottom: 16 + MediaQuery.paddingOf(context).bottom,
-                    child: _buildRestDock(context),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -324,6 +543,31 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
   }
 
+  /// Ustawienia planu sesji (z rejestru planów, a gdy planu już nie ma —
+  /// kolor zapisany przy sesji). `null` dla treningu bez planu.
+  PlanStyle? _planStyleOf(TrainingSession session) {
+    if (session.planLocalId == null && session.planServerId == null) {
+      return null;
+    }
+    return PlanColors.styles.styleFor(session.planName) ??
+        PlanStyle(colorKey: session.planColorKey, iconKey: session.planIconKey);
+  }
+
+  /// Metoda progresji tego treningu: własna planu albo z ustawień konta.
+  ProgressionSettings _progressionOf(TrainingSession session) =>
+      _planStyleOf(session)?.progression ??
+      ServiceLocator.progressionSettings.current;
+
+  WorkoutAccent _accentOf(TrainingSession session) {
+    final style = _planStyleOf(session);
+    if (style == null || !style.highlightPlanColor) {
+      return WorkoutAccent.standard;
+    }
+    return WorkoutAccent.plan(
+      PlanColors.of(session.planName, colorKey: session.planColorKey),
+    );
+  }
+
   Widget _buildProgress(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([_draftSession, _currentExerciseIndex]),
@@ -338,9 +582,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             0,
             session.exercises.length - 1,
           ),
-          accent: PlanColors.of(session.planName),
-          onShowList: () => unawaited(_showExercisePicker(context, session)),
+          accent: PlanColors.of(
+            session.planName,
+            colorKey: session.planColorKey,
+          ),
+          onShowList: () =>
+              unawaited(_showOrderSheet(context, _currentExerciseIndex.value)),
           onSelectExercise: _goToExercise,
+          onLongPressExercise: (index) =>
+              unawaited(_showExerciseActions(context, index)),
         );
       },
     );
@@ -351,62 +601,73 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final bottomInset =
         24 +
         MediaQuery.paddingOf(context).bottom +
-        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”.
+        // Panel odpoczynku nie może zasłaniać „Dodaj ćwiczenie”; panel
+        // stopera bywa o linijkę wyższy.
         (restVisible
             ? RestTimerPill.height +
                   16 +
                   (_restPlates() == null ? 0 : RestTimerPill.footerHeight)
-            : 0);
+            : 0) +
+        (_stopwatch.isActive ? 20 : 0);
+    final blocks = SupersetRounds.blocks(session.exercises);
     return PageView.builder(
       controller: _exercisePageController,
-      itemCount: session.exercises.length,
+      itemCount: blocks.length,
+      // Strona zostaje przy swoim ćwiczeniu (z polami i stoperem), gdy inne
+      // ćwiczenie zniknie albo zmieni się kolejność.
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index = blocks.indexWhere(
+          (block) =>
+              'exercise-page-${session.exercises[block.first].id}' == key.value,
+        );
+        return index == -1 ? null : index;
+      },
       // Sąsiednie strony budują się z wyprzedzeniem, więc swipe nie czeka
       // na layout karty.
       allowImplicitScrolling: true,
-      onPageChanged: (index) => _currentExerciseIndex.value = index,
-      itemBuilder: (context, index) {
-        final exercise = session.exercises[index];
-        final next = index + 1 < session.exercises.length
-            ? session.exercises[index + 1]
+      onPageChanged: (page) {
+        // „Bez przerwy” dotyczy superserii, z której użytkownik właśnie
+        // zjechał; zwykła zmiana strony nie przebudowuje ekranu.
+        if (_noRest != null) setState(() => _noRest = null);
+        final current = _draftSession.value;
+        if (current == null || page >= blocks.length) return;
+        _currentExerciseIndex.value = SupersetRounds.focusOf(
+          current.exercises,
+          blocks[page],
+        );
+      },
+      itemBuilder: (context, page) {
+        final block = blocks[page];
+        final first = session.exercises[block.first];
+        final nextIndex = block.last + 1;
+        final next = nextIndex < session.exercises.length
+            ? session.exercises[nextIndex]
             : null;
         return _KeepAlivePage(
-          key: ValueKey('exercise-page-${exercise.id}'),
+          key: ValueKey('exercise-page-${first.id}'),
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: EdgeInsets.fromLTRB(12, 12, 12, bottomInset),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SessionExerciseCard(
-                  key: ValueKey(exercise.id),
-                  exerciseIndex: index,
-                  exercise: exercise,
-                  history: _historyFor(exercise),
-                  showRirColumn: _shouldShowRirColumn(exercise),
-                  showTempoColumn: _shouldShowTempoColumn(exercise),
-                  noteOpen: _openNotes.contains(exercise.id),
-                  onSetChanged: (setIndex, set) =>
-                      _updateSet(context, index, setIndex, set),
-                  onAddSet: () => _addSet(context, index),
-                  onRemoveSet: (setIndex) =>
-                      _removeSet(context, index, setIndex),
-                  onNoteChanged: (note) => _updateNote(context, index, note),
-                  onRecord: _showRecord,
-                  onOpenPlates: () =>
-                      unawaited(_openPlateCalculator(context, index)),
-                  setsRevision: _setsRevision[exercise.id] ?? 0,
-                ),
+                if (block.length == 1)
+                  _exerciseCard(context, session, block.first)
+                else
+                  _supersetCard(context, session, block),
                 if (next != null) ...[
                   const SizedBox(height: 12),
                   NextExerciseCard(
                     exercise: next,
-                    lastResult: _historyFor(next)?.lastTopSet(),
-                    onTap: () => _goToExercise(index + 1),
+                    lastResult: _historyFor(next)?.lastResult(next),
+                    onTap: () => _goToExercise(nextIndex),
                   ),
                 ],
                 const SizedBox(height: 10),
                 Center(
                   child: TextButton.icon(
-                    key: ValueKey('add-exercise-button-$index'),
+                    key: ValueKey('add-exercise-button-$page'),
                     onPressed: () => _addExerciseToSession(context),
                     icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('Dodaj ćwiczenie'),
@@ -429,11 +690,97 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
   }
 
+  Widget _exerciseCard(
+    BuildContext context,
+    TrainingSession session,
+    int index, {
+    bool embedded = false,
+    bool focused = true,
+  }) {
+    final exercise = session.exercises[index];
+    return SessionExerciseCard(
+      key: ValueKey(exercise.id),
+      exerciseIndex: index,
+      exercise: exercise,
+      history: _historyFor(exercise),
+      showRirColumn: _shouldShowRirColumn(exercise),
+      showTempoColumn: _shouldShowTempoColumn(exercise),
+      noteOpen: _openNotes.contains(exercise.id),
+      embedded: embedded,
+      focused: focused,
+      stopwatch: _stopwatch,
+      onSetChanged: (setIndex, set) =>
+          _updateSet(context, index, setIndex, set),
+      onAddSet: () => _addSet(context, index),
+      onRemoveSet: (setIndex) => _removeSet(context, index, setIndex),
+      onNoteChanged: (note) => _updateNote(context, index, note),
+      onRecord: _showRecord,
+      onLongPress: () => unawaited(_showExerciseActions(context, index)),
+      onOpenPlates: () => unawaited(_openPlateCalculator(context, index)),
+      setsRevision: _setsRevision[exercise.id] ?? 0,
+    );
+  }
+
+  /// Superseria: ćwiczenia grupy w jednej karcie, podświetlona seria tylko
+  /// w tym, które jest teraz na kolei.
+  Widget _supersetCard(
+    BuildContext context,
+    TrainingSession session,
+    List<int> block,
+  ) {
+    final focus = SupersetRounds.focusOf(session.exercises, block);
+    final (round, total) = SupersetRounds.roundOf(session.exercises, block);
+    return SupersetBlockCard(
+      key: ValueKey('superset-${session.exercises[block.first].id}'),
+      group: session.exercises[block.first].supersetGroup ?? '',
+      round: round,
+      totalRounds: total,
+      onLongPress: () => unawaited(_showExerciseActions(context, block.first)),
+      members: [
+        for (final index in block)
+          _exerciseCard(
+            context,
+            session,
+            index,
+            embedded: true,
+            focused: index == focus,
+          ),
+      ],
+    );
+  }
+
   /// Panel znika pod klawiaturą — nie zasłania pól serii w trakcie pisania.
   bool _restDockVisible(BuildContext context) =>
-      _rest.isActive && MediaQuery.viewInsetsOf(context).bottom == 0;
+      (_rest.isVisible || _noRest != null || _stopwatch.isActive) &&
+      MediaQuery.viewInsetsOf(context).bottom == 0;
 
   Widget _buildRestDock(BuildContext context) {
+    final noRest = _noRest;
+    if (!_rest.isActive && noRest == null && _stopwatch.isActive) {
+      final measured = _stopwatchSet();
+      return RestTimerDock(
+        visible: _restDockVisible(context),
+        child: CardioStopwatchPill(
+          elapsed: _stopwatch.elapsed,
+          running: _stopwatch.isRunning,
+          caption: measured?.caption ?? 'Odcinek',
+          target: measured?.target,
+          onTogglePause: _stopwatch.isRunning
+              ? _stopwatch.pause
+              : _stopwatch.resume,
+          onSave: () => _saveStopwatch(context),
+        ),
+      );
+    }
+    if (!_rest.isActive && noRest != null) {
+      return RestTimerDock(
+        visible: _restDockVisible(context),
+        child: SupersetNextPill(
+          caption: noRest.caption,
+          restAfterRound: noRest.footer,
+        ),
+      );
+    }
     return RestTimerDock(
       visible: _restDockVisible(context),
       child: ListenableBuilder(
@@ -443,6 +790,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           PlateSettingsStore.notifier,
         ]),
         builder: (context, _) => RestTimerPill(
+          title: _restTitle,
+          finished: _rest.isFinished,
           remaining: _rest.remaining,
           total: _rest.total,
           caption: _upNextCaption(),
@@ -484,7 +833,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (!settings.barbellExercises.contains(statsExerciseKey(exercise))) {
       return null;
     }
-    final weightKg = _upcomingSet(exercise)?.weightKg;
+    final weightKg = _upcomingSet(session, exercise)?.weightKg;
     if (weightKg == null || weightKg <= 0) return null;
     final unit = WeightUnits.current;
     final equipment = settings.equipmentFor(unit);
@@ -499,18 +848,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   /// Pierwsza nieodhaczona seria ćwiczenia i jej ciężar: wpisany, z planu
   /// albo z podpowiedzi progresji. `null`, gdy wszystkie serie są zrobione.
   ({int index, double? weightKg})? _upcomingSet(
+    TrainingSession session,
     TrainingSessionExercise exercise,
   ) {
     final setIndex = exercise.sets.indexWhere((set) => !set.completed);
     if (setIndex == -1) return null;
     final set = exercise.sets[setIndex];
-    final previous = _history[exercise.id]?.previousSets;
-    final previousSet = previous == null || previous.isEmpty
-        ? null
-        : previousSetFor(exercise.sets, setIndex, previous);
     final weight =
         parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
-        progressionHintFor(set, previousSet)?.weightKg;
+        _progressionHint(session, exercise, setIndex)?.weightKg;
     return (index: setIndex, weightKg: weight);
   }
 
@@ -527,7 +873,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     // Od teraz to ćwiczenie ze sztangą — pasek talerzy w przerwie.
     unawaited(PlateSettingsStore.markBarbell(statsExerciseKey(exercise)));
 
-    final upcoming = _upcomingSet(exercise);
+    final upcoming = _upcomingSet(session, exercise);
     final lastWeight = exercise.sets.isEmpty
         ? null
         : parseWeightKg(exercise.sets.last.actualWeight);
@@ -578,6 +924,56 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     });
   }
 
+  /// „Zapisz” stopera: czas trafia do odcinka po jego id. Karta ćwiczenia
+  /// robi to sama, ale po zmianie kolejności albo usunięciu innego ćwiczenia
+  /// mogła zostać zbudowana od nowa — wtedy zapisujemy tu, w szkicu sesji.
+  void _saveStopwatch(BuildContext context) {
+    final setId = _stopwatch.setId;
+    final seconds = _stopwatch.current.inSeconds;
+    _stopwatch.save();
+    final session = _draftSession.value;
+    if (setId == null || session == null) return;
+    for (var e = 0; e < session.exercises.length; e++) {
+      final sets = session.exercises[e].sets;
+      final i = sets.indexWhere((set) => set.id == setId);
+      if (i == -1) continue;
+      if (sets[i].actualDurationSeconds != seconds) {
+        _updateSet(
+          context,
+          e,
+          i,
+          sets[i].copyWith(actualDurationSeconds: seconds),
+        );
+        setState(() {});
+      }
+      return;
+    }
+  }
+
+  /// Mierzony odcinek: „Odcinek 1 · cel 15:00” i cel do pierścienia.
+  ({String caption, Duration? target})? _stopwatchSet() {
+    final session = _draftSession.value;
+    final setId = _stopwatch.setId;
+    if (session == null || setId == null) return null;
+    for (final exercise in session.exercises) {
+      final index = exercise.sets.indexWhere((set) => set.id == setId);
+      if (index == -1) continue;
+      final set = exercise.sets[index];
+      final label = setRowLabels(exercise.sets.map((s) => s.setType))[index];
+      final name = set.setType == SetType.warmup
+          ? 'Rozgrzewka'
+          : 'Odcinek $label';
+      final target = set.plannedDurationSeconds;
+      return (
+        caption: target == null
+            ? name
+            : '$name · cel ${formatSetDuration(target)}',
+        target: target == null ? null : Duration(seconds: target),
+      );
+    }
+    return null;
+  }
+
   /// „Teraz: seria 3 · 95 kg × 6” — co czeka po przerwie.
   String? _upNextCaption() {
     final session = _draftSession.value;
@@ -596,25 +992,72 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
     final set = exercise.sets[setIndex];
     final label = setRowLabels(exercise.sets.map((s) => s.setType))[setIndex];
-    final name = set.setType == SetType.warmup
+    final setName = set.setType == SetType.warmup
         ? 'rozgrzewka'
         : (set.setType.badge == null ? 'seria $label' : set.setType.label);
-    final previous = _history[exercise.id]?.previousSets;
-    final previousSet = previous == null || previous.isEmpty
-        ? null
-        : previousSetFor(exercise.sets, setIndex, previous);
+    final memberLabel = _supersetLabel(session.exercises, index);
+    if (exercise.tracking.tracksDuration) {
+      final cardioName = set.setType == SetType.warmup
+          ? 'rozgrzewka'
+          : 'odcinek $label';
+      final name = memberLabel == null
+          ? cardioName
+          : '$memberLabel · $cardioName';
+      final target = set.plannedDurationSeconds;
+      return target == null
+          ? 'Teraz: $name'
+          : 'Teraz: $name · ${formatSetDuration(target)}';
+    }
+    final name = memberLabel == null ? setName : '$memberLabel · $setName';
     // Bez wpisanego ciężaru — ten z podpowiedzi progresji w polu KG.
+    final hint = _progressionHint(session, exercise, setIndex);
     final weight =
-        parseWeightKg(set.actualWeight ?? set.plannedWeight) ??
-        progressionHintFor(set, previousSet)?.weightKg;
+        parseWeightKg(set.actualWeight ?? set.plannedWeight) ?? hint?.weightKg;
     final reps = (set.actualReps?.trim().isNotEmpty ?? false)
         ? set.actualReps!.trim()
-        : set.plannedReps.trim();
+        : (hint?.reps?.toString() ?? set.plannedReps.trim());
     final load = [
       if (weight != null && weight > 0) formatWeightWithUnit(weight),
       if (reps.isNotEmpty) reps,
     ].join(' × ');
     return load.isEmpty ? 'Teraz: $name' : 'Teraz: $name · $load';
+  }
+
+  /// Podpowiedź progresji dla serii [setIndex] — ta sama, którą widać w polu
+  /// KG aktywnej serii.
+  ProgressionHint? _progressionHint(
+    TrainingSession session,
+    TrainingSessionExercise exercise,
+    int setIndex,
+  ) {
+    final history = _history[exercise.id];
+    final previous = history?.previousSets;
+    final previousSet = previous == null || previous.isEmpty
+        ? null
+        : previousSetFor(exercise.sets, setIndex, previous);
+    return progressionHintFor(
+      exercise.sets[setIndex],
+      previousSet,
+      settings: _progressionOf(session),
+      earlier: [
+        for (final sets
+            in history?.earlierSets ?? const <List<TrainingSessionSet>>[])
+          previousSetFor(exercise.sets, setIndex, sets),
+      ],
+      legs: isLegExercise(exercise.exerciseMuscles),
+    );
+  }
+
+  /// „A2” — litera grupy i miejsce ćwiczenia w superserii.
+  String? _supersetLabel(List<TrainingSessionExercise> exercises, int index) {
+    final group = exercises[index].supersetGroup;
+    if (group == null) return null;
+    var position = 1;
+    for (var i = index - 1; i >= 0; i--) {
+      if (exercises[i].supersetGroup != group) break;
+      position++;
+    }
+    return '$group$position';
   }
 
   void _showRecord(RecordBurstData data) {
@@ -623,6 +1066,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _showWorkoutMenu(BuildContext context) async {
+    hideKeyboard();
     final session = _draftSession.value;
     if (session == null) return;
     final hasExercises = session.exercises.isNotEmpty;
@@ -678,6 +1122,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
             value: _WorkoutMenuAction.exercises,
             icon: Icons.format_list_bulleted_rounded,
             label: 'Lista ćwiczeń',
+            subtitle: 'Przejdź do ćwiczenia albo zmień kolejność',
+          ),
+          const AppSheetAction(
+            value: _WorkoutMenuAction.removeExercise,
+            icon: Icons.remove_circle_outline_rounded,
+            label: 'Usuń ćwiczenie z treningu',
+            subtitle: 'Tylko z tej sesji — plan zostaje bez zmian',
+            destructive: true,
           ),
         ],
         const AppSheetAction(
@@ -708,7 +1160,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       case _WorkoutMenuAction.note:
         setState(() => _openNotes.add(exercise!.id));
       case _WorkoutMenuAction.exercises:
-        await _showExercisePicker(context, session);
+        await _showOrderSheet(context, _currentExerciseIndex.value);
+      case _WorkoutMenuAction.removeExercise:
+        await _removeExercise(context, _currentExerciseIndex.value);
       case _WorkoutMenuAction.discard:
         await _cancelWorkout(context, session);
     }
@@ -743,6 +1197,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
   }
 
   Future<void> _finish(BuildContext context, TrainingSession session) async {
+    hideKeyboard();
     final confirmed = await showAppConfirmDialog(
       context,
       title: 'Zakończyć trening?',
@@ -753,10 +1208,15 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
 
     if (!confirmed || !context.mounted) return;
+    _dismissUndoSnackBar();
 
+    // Odcinek mierzony do końca — czas trafia do serii przed zapisem.
+    if (_stopwatch.isActive) _saveStopwatch(context);
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     final finished = await cubit.finish(session.id);
+    _sessionEnded = true;
+    WorkoutResumeStore.clear();
     if (!context.mounted) return;
     _openSummary(context, finished);
   }
@@ -785,6 +1245,8 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Zwija ekran — trening trwa dalej i wraca z karty na ekranie Trening.
   Future<void> _leaveWorkout(BuildContext context) async {
+    hideKeyboard();
+    _dismissUndoSnackBar();
     final cubit = context.read<TrainingSessionCubit>();
     await _flushDraft(cubit);
     if (!context.mounted) return;
@@ -796,6 +1258,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     BuildContext context,
     TrainingSession session,
   ) async {
+    hideKeyboard();
     final confirmed = await showAppConfirmDialog(
       context,
       title: 'Odrzucić trening?',
@@ -805,9 +1268,12 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     );
 
     if (confirmed && context.mounted) {
+      _dismissUndoSnackBar();
       final cubit = context.read<TrainingSessionCubit>();
       _saveDebounce?.cancel();
       await cubit.cancel(session.id);
+      _sessionEnded = true;
+      WorkoutResumeStore.clear();
       if (!context.mounted) return;
       setState(() => _allowPop = true);
       context.pop();
@@ -819,26 +1285,52 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     if (session == null) return;
 
     final wasEmpty = session.exercises.isEmpty;
+    // Inaczej po powrocie z listy ćwiczeń ostatnie pole dostaje fokus
+    // z powrotem i klawiatura wyskakuje sama.
+    hideKeyboard();
 
-    final picked =
-        await (widget.args?.pickExercise?.call(context) ??
-            Navigator.of(context).push<Exercise>(
-              MaterialPageRoute(builder: (_) => const PickExerciseScreen()),
-            ));
-    if (picked == null || !context.mounted) return;
+    final seam = widget.args?.pickExercise;
+    final List<Exercise> picked;
+    if (seam != null) {
+      final one = await seam(context);
+      picked = [?one];
+    } else {
+      picked =
+          await Navigator.of(context).push<List<Exercise>>(
+            MaterialPageRoute(
+              builder: (_) => PickExerciseScreen(
+                title: 'Dodaj do treningu',
+                existingLabel: 'W treningu',
+                subtitle: session.planName.trim().isEmpty
+                    ? '${session.exercises.length} w treningu'
+                    : '${session.planName} · ${session.exercises.length} w treningu',
+                existingIds: {for (final e in session.exercises) e.exerciseId},
+              ),
+            ),
+          ) ??
+          const [];
+    }
+    if (picked.isEmpty || !context.mounted) return;
 
+    final firstNewIndex = session.exercises.length;
     final exercises = List<TrainingSessionExercise>.from(session.exercises)
-      ..add(
-        TrainingSessionExercise(
-          exerciseId: picked.id,
-          exerciseName: picked.name,
-          exerciseMuscles: picked.muscles.map((muscle) => muscle.name).toList(),
-          exerciseCategory: picked.category.name,
-          exerciseImageUrl: picked.imageUrl,
-          sets: [TrainingSessionSet()],
-        ),
-      );
-    final nextIndex = exercises.length - 1;
+      ..addAll([
+        for (final exercise in picked)
+          TrainingSessionExercise(
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            exerciseMuscles: exercise.muscles
+                .map((muscle) => muscle.name)
+                .toList(),
+            exerciseCategory: exercise.category.name,
+            exerciseImageUrl: exercise.imageUrl,
+            tracking: exercise.tracking,
+            distanceUnit: exercise.distanceUnit,
+            sets: [TrainingSessionSet()],
+          ),
+      ]);
+    // Po dodaniu kilku ćwiczeń przechodzimy do pierwszego z nich.
+    final nextIndex = firstNewIndex;
     setState(() {
       _draftSession.value = session.copyWith(exercises: exercises);
       _hasUnsavedDraft = true;
@@ -853,15 +1345,20 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_exercisePageController.hasClients) return;
-      _exercisePageController.jumpToPage(nextIndex);
+      _exercisePageController.jumpToPage(_pageOf(nextIndex));
       _currentExerciseIndex.value = nextIndex;
     });
   }
 
   /// Ręczny wybór długości przerwy (menu ⋯ albo dotknięcie panelu).
   Future<void> _pickRestDuration(BuildContext context) async {
+    hideKeyboard();
     final duration = await showRestDurationPicker(context, controller: _rest);
     if (duration == null || !context.mounted) return;
+    setState(() {
+      _noRest = null;
+      _restTitle = 'Odpoczynek';
+    });
     await _reportSchedule(_rest.start(duration));
   }
 
@@ -892,13 +1389,60 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final justCompleted = set.completed && !sets[setIndex].completed;
     sets[setIndex] = set;
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
-    _draftSession.value = session.copyWith(exercises: exercises);
+    final updated = session.copyWith(exercises: exercises);
+    _draftSession.value = updated;
     _hasUnsavedDraft = true;
     _scheduleDraftSave(context.read<TrainingSessionCubit>());
-    // Przerwa startuje sama po odhaczeniu serii, z ostatnio wybraną długością.
-    if (justCompleted) {
-      unawaited(_reportSchedule(_rest.start(_rest.selectedDuration)));
+    final inSuperset = exercise.supersetGroup != null;
+    if (inSuperset && set.completed != exercise.sets[setIndex].completed) {
+      // Runda i ćwiczenie „na kolei” w karcie superserii.
+      setState(() {});
     }
+    if (justCompleted) _afterSetCompleted(updated, exerciseIndex);
+  }
+
+  /// Przerwa startuje sama po odhaczeniu serii: z przerwą ćwiczenia z planu
+  /// albo ostatnio wybraną. W superserii dopiero po całej rundzie — wcześniej
+  /// panel „Bez przerwy” mówi, które ćwiczenie teraz.
+  void _afterSetCompleted(TrainingSession session, int exerciseIndex) {
+    final exercises = session.exercises;
+    final next = SupersetRounds.afterSet(exercises, exerciseIndex);
+    final restSeconds = next.restSeconds;
+    final restDuration = restSeconds == null
+        ? _rest.selectedDuration
+        : Duration(seconds: restSeconds);
+    if (!next.rest) {
+      _rest.stop();
+      final member = exercises[next.next];
+      final setNumber = member.sets.where((s) => s.completed).length + 1;
+      setState(() {
+        _noRest = (
+          caption:
+              'Teraz: ${_supersetLabel(exercises, next.next)} · '
+              '${member.exerciseName}, seria $setNumber',
+          footer: 'po rundzie przerwa ${formatRestRemaining(restDuration)}',
+        );
+      });
+      _currentExerciseIndex.value = next.next;
+      return;
+    }
+    final inSuperset = exercises[exerciseIndex].supersetGroup != null;
+    final block = inSuperset
+        ? SupersetRounds.blocks(
+            exercises,
+          ).firstWhere((b) => b.contains(exerciseIndex))
+        : null;
+    setState(() {
+      _noRest = null;
+      _restTitle = block == null
+          ? 'Odpoczynek'
+          : 'Przerwa po rundzie '
+                '${exercises[exerciseIndex].sets.where((s) => s.completed).length}';
+    });
+    if (block != null) {
+      _currentExerciseIndex.value = SupersetRounds.focusOf(exercises, block);
+    }
+    unawaited(_reportSchedule(_rest.start(restDuration)));
   }
 
   void _updateNote(BuildContext context, int exerciseIndex, String note) {
@@ -931,6 +1475,9 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
         actualReps: previousSet?.actualReps ?? previousSet?.plannedReps,
         actualRir: previousSet?.actualRir ?? previousSet?.plannedRir,
         actualTempo: previousSet?.actualTempo ?? previousSet?.plannedTempo,
+        // Kardio: nowy odcinek ma ten sam cel, wynik mierzy się na nowo.
+        plannedDurationSeconds: previousSet?.plannedDurationSeconds,
+        plannedDistanceM: previousSet?.plannedDistanceM,
       ),
     );
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
@@ -947,6 +1494,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     final exercises = List<TrainingSessionExercise>.from(session.exercises);
     final exercise = exercises[exerciseIndex];
     if (exercise.sets.length <= 1) return;
+    final removed = exercise.sets[setIndex];
     final sets = List<TrainingSessionSet>.from(exercise.sets)
       ..removeAt(setIndex);
     exercises[exerciseIndex] = exercise.copyWith(sets: sets);
@@ -954,7 +1502,96 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _draftSession.value = session.copyWith(exercises: exercises);
       _hasUnsavedDraft = true;
     });
-    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    final cubit = context.read<TrainingSessionCubit>();
+    _scheduleDraftSave(cubit);
+    _showUndoSnackBar(
+      context,
+      key: const ValueKey('set-removed-snackbar'),
+      message: exercise.tracking.tracksDuration
+          ? 'Usunięto odcinek'
+          : 'Usunięto serię',
+      duration: const Duration(seconds: 5),
+      onUndo: () => _restoreSet(cubit, exercise.id, setIndex, removed),
+    );
+  }
+
+  /// Snackbar z „Cofnij” nad panelem odpoczynku. Znika razem z ekranem
+  /// treningu ([_dismissUndoSnackBar]) — po wyjściu „Cofnij” nic by nie dało.
+  void _showUndoSnackBar(
+    BuildContext context, {
+    required Key key,
+    required String message,
+    required Duration duration,
+    required VoidCallback onUndo,
+  }) {
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    _messenger = messenger;
+    // Nad panelem odpoczynku, żeby go nie zasłaniać.
+    final dockHeight = _restDockVisible(context) ? 92 + 16 + 8 : 0;
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        key: key,
+        content: Text(
+          message,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: AppColors.surfaceVariant,
+        duration: duration,
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.fromLTRB(12, 0, 12, 12.0 + dockHeight),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        action: SnackBarAction(
+          label: 'Cofnij',
+          textColor: AppColors.primaryVariant,
+          onPressed: onUndo,
+        ),
+      ),
+    );
+    _undoSnackBar = controller;
+    // Poprzedni snackbar kończy się już po pokazaniu tego — zerujemy tylko
+    // własny wpis.
+    unawaited(
+      controller.closed.then((_) {
+        if (identical(_undoSnackBar, controller)) _undoSnackBar = null;
+      }),
+    );
+  }
+
+  void _dismissUndoSnackBar() {
+    if (_undoSnackBar == null) return;
+    _undoSnackBar = null;
+    _messenger?.removeCurrentSnackBar();
+  }
+
+  /// „Cofnij” po usunięciu serii — wraca na swoje miejsce.
+  void _restoreSet(
+    TrainingSessionCubit cubit,
+    String exerciseId,
+    int setIndex,
+    TrainingSessionSet set,
+  ) {
+    final session = _draftSession.value;
+    if (!mounted || session == null) return;
+    final exerciseIndex = session.exercises.indexWhere(
+      (e) => e.id == exerciseId,
+    );
+    if (exerciseIndex == -1) return;
+    final exercises = List<TrainingSessionExercise>.from(session.exercises);
+    final exercise = exercises[exerciseIndex];
+    if (exercise.sets.any((s) => s.id == set.id)) return;
+    final sets = List<TrainingSessionSet>.from(exercise.sets)
+      ..insert(setIndex.clamp(0, exercise.sets.length), set);
+    exercises[exerciseIndex] = exercise.copyWith(sets: sets);
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+    });
+    _scheduleDraftSave(cubit);
   }
 
   void _scheduleDraftSave(TrainingSessionCubit cubit) {
@@ -994,24 +1631,45 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
   }
 
+  /// Plan z wyłączoną kolumną (Ustawienia planu) ukrywa ją, dopóki
+  /// użytkownik nie włączy jej z menu ⋯.
+  bool _planHides({required bool rir}) {
+    final session = _draftSession.value;
+    final style = session == null ? null : _planStyleOf(session);
+    if (style == null) return false;
+    return rir ? !style.showRir : !style.showTempo;
+  }
+
   bool _shouldShowRirColumn(TrainingSessionExercise exercise) {
     if (_userHiddenRirColumns.contains(exercise.id)) return false;
-    return _userEnabledRirColumns.contains(exercise.id) ||
-        exercise.sets.any(
-          (set) =>
-              (set.plannedRir?.trim().isNotEmpty ?? false) ||
-              (set.actualRir?.trim().isNotEmpty ?? false),
-        );
+    if (_userEnabledRirColumns.contains(exercise.id)) return true;
+    if (_planHides(rir: true)) return false;
+    return exercise.sets.any(
+      (set) =>
+          (set.plannedRir?.trim().isNotEmpty ?? false) ||
+          (set.actualRir?.trim().isNotEmpty ?? false),
+    );
   }
 
   bool _shouldShowTempoColumn(TrainingSessionExercise exercise) {
     if (_userHiddenTempoColumns.contains(exercise.id)) return false;
-    return _userEnabledTempoColumns.contains(exercise.id) ||
-        exercise.sets.any(
-          (set) =>
-              (set.plannedTempo?.trim().isNotEmpty ?? false) ||
-              (set.actualTempo?.trim().isNotEmpty ?? false),
-        );
+    if (_userEnabledTempoColumns.contains(exercise.id)) return true;
+    if (_planHides(rir: false)) return false;
+    return exercise.sets.any(
+      (set) =>
+          (set.plannedTempo?.trim().isNotEmpty ?? false) ||
+          (set.actualTempo?.trim().isNotEmpty ?? false),
+    );
+  }
+
+  /// Strona (blok) ćwiczenia [index] — superseria to jedna strona.
+  int _pageOf(int index) {
+    final session = _draftSession.value;
+    if (session == null) return index;
+    return SupersetRounds.blockOf(
+      SupersetRounds.blocks(session.exercises),
+      index,
+    );
   }
 
   void _goToExercise(int index) {
@@ -1019,92 +1677,430 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       _currentExerciseIndex.value = index;
       return;
     }
+    final target = _pageOf(index);
     final from =
-        _exercisePageController.page?.round() ?? _currentExerciseIndex.value;
-    if (from == index) return;
+        _exercisePageController.page?.round() ??
+        _pageOf(_currentExerciseIndex.value);
+    _currentExerciseIndex.value = index;
+    if (from == target) return;
     // Przy skoku o kilka ćwiczeń animacja przez wszystkie strony pośrednie
     // buduje każdą z nich po drodze — przeskakujemy na sąsiada celu i
     // animujemy już tylko ostatnią stronę.
-    if ((index - from).abs() > 1) {
-      _exercisePageController.jumpToPage(index > from ? index - 1 : index + 1);
+    if ((target - from).abs() > 1) {
+      _exercisePageController.jumpToPage(
+        target > from ? target - 1 : target + 1,
+      );
     }
-    _currentExerciseIndex.value = index;
     _exercisePageController.animateToPage(
-      index,
+      target,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
+    // Po animacji `onPageChanged` ustawia ćwiczenie na kolei w bloku —
+    // wybrane z listy ma pierwszeństwo.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _currentExerciseIndex.value = index;
+    });
   }
 
-  Future<void> _showExercisePicker(
+  /// Przytrzymanie ćwiczenia: przesunięcie o jedno miejsce, arkusz z całą
+  /// kolejnością (superseria przesuwa się w całości) albo usunięcie
+  /// ćwiczenia z treningu.
+  Future<void> _showExerciseActions(
     BuildContext context,
-    TrainingSession session,
+    int exerciseIndex,
   ) async {
-    final selectedIndex = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: ListView.separated(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            itemCount: session.exercises.length,
-            separatorBuilder: (_, _) =>
-                const Divider(color: AppColors.border, height: 1),
-            itemBuilder: (context, index) {
-              final exercise = session.exercises[index];
-              final workingSets = exercise.sets.where(
-                (set) => set.countsTowardStats,
-              );
-              final completedSets = workingSets
-                  .where((set) => set.completed)
-                  .length;
-              final isCurrent = index == _currentExerciseIndex.value;
-              return ListTile(
-                selected: isCurrent,
-                selectedTileColor: AppColors.primary.withValues(alpha: 0.12),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: CircleAvatar(
-                  backgroundColor: isCurrent
-                      ? AppColors.primary.withValues(alpha: 0.2)
-                      : AppColors.surfaceVariant,
-                  child: Text(
-                    '${index + 1}',
-                    style: TextStyle(
-                      color: isCurrent
-                          ? AppColors.primaryVariant
-                          : AppColors.textSecondary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                title: Text(
-                  exercise.exerciseName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                subtitle: Text(
-                  '$completedSets / ${workingSets.length} serii',
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-                trailing: isCurrent
-                    ? const Icon(
-                        Icons.check_rounded,
-                        color: AppColors.primaryVariant,
-                      )
-                    : null,
-                onTap: () => Navigator.of(context).pop(index),
-              );
-            },
+    hideKeyboard();
+    final session = _draftSession.value;
+    if (session == null || exerciseIndex >= session.exercises.length) return;
+    final blocks = SupersetRounds.blocks(session.exercises);
+    unawaited(HapticFeedback.mediumImpact());
+    final block = SupersetRounds.blockOf(blocks, exerciseIndex);
+    final exercise = session.exercises[exerciseIndex];
+    final superset = blocks[block].length > 1;
+    final canReorder = blocks.length > 1;
+    final action = await showAppActionSheet<_ExerciseMenuAction>(
+      context,
+      title: superset
+          ? 'Superseria ${exercise.supersetGroup ?? ''}'.trim()
+          : exercise.exerciseName,
+      actions: [
+        if (canReorder) ...[
+          AppSheetAction(
+            value: _ExerciseMenuAction.earlier,
+            icon: Icons.arrow_upward_rounded,
+            label: 'Przesuń wcześniej',
+            subtitle: block == 0 ? 'Już jest pierwsze' : null,
+            enabled: block > 0,
           ),
-        );
-      },
+          AppSheetAction(
+            value: _ExerciseMenuAction.later,
+            icon: Icons.arrow_downward_rounded,
+            label: 'Przesuń później',
+            subtitle: block == blocks.length - 1 ? 'Już jest ostatnie' : null,
+            enabled: block < blocks.length - 1,
+          ),
+          const AppSheetAction(
+            value: _ExerciseMenuAction.reorder,
+            icon: Icons.swap_vert_rounded,
+            label: 'Zmień kolejność ćwiczeń',
+            subtitle: 'Przeciągnij na liście',
+          ),
+        ],
+        AppSheetAction(
+          value: _ExerciseMenuAction.swap,
+          icon: Icons.swap_horiz_rounded,
+          label: superset
+              ? 'Zamień „${exercise.exerciseName}”'
+              : 'Zamień ćwiczenie',
+          subtitle: 'Podobne na górze; zrobione serie zostają przy starym',
+        ),
+        AppSheetAction(
+          value: _ExerciseMenuAction.remove,
+          icon: Icons.remove_circle_outline_rounded,
+          label: superset
+              ? 'Usuń „${exercise.exerciseName}” z treningu'
+              : 'Usuń ćwiczenie z treningu',
+          subtitle: 'Tylko z tej sesji — plan zostaje bez zmian',
+          destructive: true,
+        ),
+      ],
     );
-    if (selectedIndex == null || !mounted) return;
-    _goToExercise(selectedIndex);
+    if (action == null || !context.mounted) return;
+    final order = [for (var i = 0; i < blocks.length; i++) i];
+    switch (action) {
+      case _ExerciseMenuAction.earlier:
+        order
+          ..removeAt(block)
+          ..insert(block - 1, block);
+        _applyBlockOrder(context, order);
+      case _ExerciseMenuAction.later:
+        order
+          ..removeAt(block)
+          ..insert(block + 1, block);
+        _applyBlockOrder(context, order);
+      case _ExerciseMenuAction.reorder:
+        await _showOrderSheet(context, exerciseIndex);
+      case _ExerciseMenuAction.swap:
+        await _swapExercise(context, exerciseIndex);
+      case _ExerciseMenuAction.remove:
+        await _removeExercise(context, exerciseIndex);
+    }
+  }
+
+  /// Zamienia ćwiczenie na inne tylko w tej sesji (plan zostaje bez zmian).
+  /// Zrobione serie zostają przy starym ćwiczeniu; zawsze jest „Cofnij”.
+  Future<void> _swapExercise(BuildContext context, int exerciseIndex) async {
+    hideKeyboard();
+    final session = _draftSession.value;
+    if (session == null || exerciseIndex >= session.exercises.length) return;
+    final replaced = session.exercises[exerciseIndex];
+
+    final seam = widget.args?.swapExercise;
+    final Exercise? picked;
+    if (seam != null) {
+      picked = await seam(context, replaced);
+    } else {
+      picked = await Navigator.of(context).push<Exercise>(
+        MaterialPageRoute(
+          builder: (_) => SwapExerciseScreen(
+            replacing: TrainingSessionExerciseSummary(
+              exerciseId: replaced.exerciseId,
+              name: replaced.exerciseName,
+              tracking: replaced.tracking,
+            ),
+          ),
+        ),
+      );
+    }
+    if (picked == null || !context.mounted) return;
+
+    // Wybór mógł trwać chwilę — bierzemy aktualny stan sesji.
+    final current = _draftSession.value;
+    if (current == null) return;
+    final result = ExerciseSwap.apply(current.exercises, replaced.id, picked);
+    if (result == null) return;
+
+    // Stoper dotyczył serii, której już nie ma przy żadnym ćwiczeniu.
+    final keptSetIds = {
+      for (final e in result.exercises) ...[for (final s in e.sets) s.id],
+    };
+    if (_stopwatch.setId != null && !keptSetIds.contains(_stopwatch.setId)) {
+      _stopwatch.stop();
+    }
+    final newIndex = result.exercises.indexWhere(
+      (e) => e.id == result.newExerciseId,
+    );
+    setState(() {
+      _draftSession.value = current.copyWith(exercises: result.exercises);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    final cubit = context.read<TrainingSessionCubit>();
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(newIndex));
+      }
+      _currentExerciseIndex.value = newIndex;
+      _saveResume();
+    });
+    _showUndoSnackBar(
+      context,
+      key: const ValueKey('exercise-swapped-snackbar'),
+      message: 'Zamieniono na „${picked.name}”',
+      duration: const Duration(seconds: 6),
+      onUndo: () => _undoSwap(cubit, result),
+    );
+  }
+
+  /// „Cofnij” po zamianie: cofa tylko zamianę (stare ćwiczenie wraca, nowe
+  /// znika); serie odhaczone w międzyczasie zostają.
+  void _undoSwap(TrainingSessionCubit cubit, ExerciseSwapResult swap) {
+    final session = _draftSession.value;
+    if (!mounted || session == null) return;
+    final restored = ExerciseSwap.undo(session.exercises, swap);
+    if (restored == null) return;
+    final currentId = _currentExerciseIndex.value < session.exercises.length
+        ? session.exercises[_currentExerciseIndex.value].id
+        : null;
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: restored);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Zostajemy na tym samym ćwiczeniu; jeśli to nowe zniknęło, idziemy
+      // do przywróconego starego.
+      var index = restored.indexWhere((e) => e.id == currentId);
+      if (index == -1) {
+        index = restored.indexWhere((e) => e.id == swap.original.id);
+      }
+      if (index == -1) index = 0;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(index));
+      }
+      _currentExerciseIndex.value = index;
+      _saveResume();
+    });
+  }
+
+  /// Usuwa ćwiczenie tylko z tej sesji (plan zostaje taki, jaki był). Gdy
+  /// ma już odhaczone serie, najpierw pyta; potem zawsze jest „Cofnij”.
+  Future<void> _removeExercise(BuildContext context, int exerciseIndex) async {
+    hideKeyboard();
+    final session = _draftSession.value;
+    if (session == null || exerciseIndex >= session.exercises.length) return;
+    final exercise = session.exercises[exerciseIndex];
+    final done = exercise.sets.where((set) => set.completed).length;
+    if (done > 0) {
+      final confirmed = await showAppConfirmDialog(
+        context,
+        title: 'Usunąć ćwiczenie?',
+        message:
+            '„${exercise.exerciseName}” zniknie z tego treningu razem '
+            'z zapisanymi seriami ($done). Plan zostaje bez zmian.',
+        confirmLabel: 'Usuń',
+      );
+      if (!confirmed || !context.mounted) return;
+    }
+    // Dialog mógł trwać chwilę — bierzemy aktualny stan sesji.
+    final current = _draftSession.value;
+    if (current == null) return;
+    final index = current.exercises.indexWhere((e) => e.id == exercise.id);
+    if (index == -1) return;
+
+    final remaining = List<TrainingSessionExercise>.of(current.exercises)
+      ..removeAt(index);
+    // Superseria z jednym ćwiczeniem przestaje być superserią — zapamiętujemy
+    // zmienione ćwiczenia, żeby „Cofnij” przywróciło grupę.
+    final unlinked = <String, String>{};
+    final group = exercise.supersetGroup;
+    if (group != null) {
+      final members = remaining.where((e) => e.supersetGroup == group);
+      if (members.length == 1) {
+        final member = members.single;
+        unlinked[member.id] = group;
+        remaining[remaining.indexOf(member)] = member.copyWith(
+          clearSupersetGroup: true,
+        );
+      }
+    }
+
+    // Zostajemy na tym samym ćwiczeniu; jeśli to ono zniknęło, idziemy do
+    // następnego (a po ostatnim — do poprzedniego).
+    final currentId = _currentExerciseIndex.value < current.exercises.length
+        ? current.exercises[_currentExerciseIndex.value].id
+        : null;
+    var newIndex = remaining.indexWhere((e) => e.id == currentId);
+    if (newIndex == -1) {
+      newIndex = remaining.isEmpty ? 0 : index.clamp(0, remaining.length - 1);
+    }
+
+    // Stoper i „Bez przerwy” dotyczyły usuwanego ćwiczenia.
+    final setIds = {for (final set in exercise.sets) set.id};
+    if (_stopwatch.setId != null && setIds.contains(_stopwatch.setId)) {
+      _stopwatch.stop();
+    }
+    setState(() {
+      _draftSession.value = current.copyWith(exercises: remaining);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    final cubit = context.read<TrainingSessionCubit>();
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (remaining.isNotEmpty && _exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(newIndex));
+      }
+      _currentExerciseIndex.value = newIndex;
+      _saveResume();
+    });
+
+    // Sąsiedzi po id — kolejność mogła się zmienić, zanim ktoś kliknie „Cofnij”.
+    final beforeId = index > 0 ? current.exercises[index - 1].id : null;
+    final afterId = index + 1 < current.exercises.length
+        ? current.exercises[index + 1].id
+        : null;
+    _showUndoSnackBar(
+      context,
+      key: const ValueKey('exercise-removed-snackbar'),
+      message: 'Usunięto „${exercise.exerciseName}”',
+      duration: const Duration(seconds: 6),
+      onUndo: () => _restoreExercise(
+        cubit,
+        exercise,
+        index: index,
+        beforeId: beforeId,
+        afterId: afterId,
+        unlinked: unlinked,
+      ),
+    );
+  }
+
+  /// „Cofnij” po usunięciu ćwiczenia — wraca na swoje miejsce, z seriami
+  /// i grupą superserii.
+  void _restoreExercise(
+    TrainingSessionCubit cubit,
+    TrainingSessionExercise exercise, {
+    required int index,
+    required String? beforeId,
+    required String? afterId,
+    required Map<String, String> unlinked,
+  }) {
+    final session = _draftSession.value;
+    if (!mounted || session == null) return;
+    if (session.exercises.any((e) => e.id == exercise.id)) return;
+    final exercises = [
+      for (final e in session.exercises)
+        unlinked.containsKey(e.id)
+            ? e.copyWith(supersetGroup: unlinked[e.id])
+            : e,
+    ];
+    // Wracamy przed dawnego następnego albo za dawnego poprzedniego; stary
+    // numer to ostatnia deska ratunku.
+    var at = exercises.indexWhere((e) => e.id == afterId);
+    if (at == -1) {
+      final before = exercises.indexWhere((e) => e.id == beforeId);
+      at = before == -1 ? index.clamp(0, exercises.length) : before + 1;
+    }
+    // Nie rozbijamy cudzej superserii: w jej środku cofamy się na początek.
+    final group = exercise.supersetGroup;
+    while (at > 0 &&
+        at < exercises.length &&
+        exercises[at].supersetGroup != null &&
+        exercises[at].supersetGroup != group &&
+        exercises[at - 1].supersetGroup == exercises[at].supersetGroup) {
+      at--;
+    }
+    exercises.insert(at, exercise);
+    final newIndex = exercises.indexWhere((e) => e.id == exercise.id);
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    _scheduleDraftSave(cubit);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(newIndex));
+      }
+      _currentExerciseIndex.value = newIndex;
+      _saveResume();
+    });
+  }
+
+  Future<void> _showOrderSheet(BuildContext context, int exerciseIndex) async {
+    hideKeyboard();
+    final session = _draftSession.value;
+    if (session == null || session.exercises.isEmpty) return;
+    final blocks = SupersetRounds.blocks(session.exercises);
+    final result = await showExerciseOrderSheet(
+      context,
+      exercises: session.exercises,
+      highlightBlock: SupersetRounds.blockOf(
+        blocks,
+        exerciseIndex.clamp(0, session.exercises.length - 1),
+      ),
+    );
+    if (result == null || !context.mounted) return;
+    final order = result.order;
+    if (order != null) _applyBlockOrder(context, order);
+    final target = result.goToExerciseId;
+    if (target == null) return;
+    final from = order == null ? null : _draftSession.value;
+    if (from == null || from.exercises.isEmpty) {
+      _goToExerciseById(target);
+    } else {
+      // Po zmianie kolejności strony przeskakują dopiero w następnej klatce.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _goToExerciseById(target);
+      });
+    }
+  }
+
+  void _goToExerciseById(String exerciseId) {
+    final session = _draftSession.value;
+    if (session == null) return;
+    final index = session.exercises.indexWhere((e) => e.id == exerciseId);
+    if (index != -1) _goToExercise(index);
+  }
+
+  /// Nowa kolejność bloków (indeksy z [SupersetRounds.blocks]). Ekran
+  /// zostaje na tym samym ćwiczeniu, tylko pod nowym numerem.
+  void _applyBlockOrder(BuildContext context, List<int> order) {
+    final session = _draftSession.value;
+    if (session == null || session.exercises.isEmpty) return;
+    final blocks = SupersetRounds.blocks(session.exercises);
+    if (order.length != blocks.length) return;
+    final current =
+        session.exercises[_currentExerciseIndex.value.clamp(
+          0,
+          session.exercises.length - 1,
+        )];
+    final exercises = [
+      for (final block in order)
+        for (final index in blocks[block]) session.exercises[index],
+    ];
+    final newIndex = exercises.indexWhere((e) => e.id == current.id);
+    setState(() {
+      _draftSession.value = session.copyWith(exercises: exercises);
+      _hasUnsavedDraft = true;
+      _noRest = null;
+    });
+    _scheduleDraftSave(context.read<TrainingSessionCubit>());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_exercisePageController.hasClients) {
+        _exercisePageController.jumpToPage(_pageOf(newIndex));
+      }
+      _currentExerciseIndex.value = newIndex;
+    });
   }
 }
 
@@ -1210,3 +2206,18 @@ class _MissingSessionScreen extends StatelessWidget {
     );
   }
 }
+
+/// Rekordy ćwiczeń i najlepsze tempo kardio z całej historii (klucz:
+/// [statsExerciseKey]).
+typedef _HistoryBests = ({
+  Map<String, ExerciseBest> records,
+  Map<String, int> paces,
+});
+
+_HistoryBests _bestsJob(List<TrainingSession> history) => (
+  records: {
+    for (final best in PersonalRecordsCalculator.compute(history).bests)
+      best.exerciseKey: best,
+  },
+  paces: bestPacesByExercise(history),
+);

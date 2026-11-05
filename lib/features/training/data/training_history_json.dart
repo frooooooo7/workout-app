@@ -20,6 +20,8 @@ TrainingExerciseDetail trainingExerciseDetailFromJson(
         .toList(growable: false),
     imageUrl: json['imageUrl'] as String?,
     note: json['note'] as String?,
+    tracking: ExerciseTracking.fromApi(json['trackingType'] as String?),
+    distanceUnit: DistanceUnit.fromApi(json['distanceUnit'] as String?),
     sets: setsRaw
         .whereType<Map<String, dynamic>>()
         .map(trainingExerciseSetDetailFromJson)
@@ -51,5 +53,7 @@ TrainingSetMetrics? trainingSetMetricsFromJson(Map<String, dynamic>? json) {
     reps: (json['reps'] as num?)?.toInt(),
     rir: (json['rir'] as num?)?.toInt(),
     tempo: json['tempo'] as String?,
+    durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
+    distanceM: (json['distanceM'] as num?)?.toInt(),
   );
 }

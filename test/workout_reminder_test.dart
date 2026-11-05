@@ -5,11 +5,14 @@ import 'package:gym/features/account/presentation/bloc/notification_settings_cub
 import 'package:gym/features/account/presentation/bloc/workout_reminder_cubit.dart';
 import 'package:gym/features/account/presentation/screens/notification_settings_screen.dart';
 import 'package:gym/features/account/presentation/widgets/workout_reminder_section.dart';
+import 'package:gym/features/notifications/presentation/bloc/social_notification_settings_cubit.dart';
 import 'package:gym/features/training/data/shared_preferences_rest_timer_notification_settings.dart';
 import 'package:gym/features/training/data/shared_preferences_workout_reminder_settings.dart';
 import 'package:gym/features/training/domain/models/workout_reminder.dart';
 import 'package:gym/features/training/domain/services/workout_reminder_scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/fake_notifications_repository.dart';
 
 class _RecordingReminderScheduler implements WorkoutReminderScheduler {
   _RecordingReminderScheduler({this.granted = true});
@@ -28,6 +31,10 @@ Future<void> _pumpScreen(
   WidgetTester tester,
   WorkoutReminderScheduler scheduler,
 ) async {
+  // Sekcja społeczności nad przypomnieniami — cały ekran ma się zmieścić.
+  tester.view.physicalSize = const Size(800, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
       home: MultiBlocProvider(
@@ -42,6 +49,10 @@ Future<void> _pumpScreen(
               const SharedPreferencesWorkoutReminderSettings(),
               scheduler,
             ),
+          ),
+          BlocProvider(
+            create: (_) =>
+                SocialNotificationSettingsCubit(FakeNotificationsRepository()),
           ),
         ],
         child: const NotificationSettingsScreen(),

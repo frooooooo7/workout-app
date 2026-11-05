@@ -1,26 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/services/service_locator.dart';
 import 'package:gym/features/training/data/offline_first_training_session_repository.dart';
 import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/models/post_draft.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/repositories/training_history_repository.dart';
 import 'package:gym/features/training/domain/repositories/training_session_repository.dart';
 import 'package:gym/features/training/presentation/screens/ongoing_workout_screen.dart';
+import 'package:gym/features/training/presentation/utils/warmup_gate.dart';
 import 'package:gym/features/training/presentation/screens/training_session_details_screen.dart';
+import 'package:gym/features/training/presentation/widgets/workout_summary/share_workout_sheet.dart';
 
 void main() {
   const sessionId = 'session-1';
+
+  setUp(() async {
+    // Powtórzenie przechodzi przez bramkę rozgrzewki; testy bez niej.
+    await ServiceLocator.warmupSettings.attach(null);
+    await ServiceLocator.warmupSession.attach(null);
+    await ServiceLocator.warmupSettings.setEnabled(false);
+  });
 
   Widget buildScreen({
     required _FakeHistoryRepository history,
     required _FakeSessionRepository sessions,
     SessionDetailsNavigate? navigate,
     VoidCallback? onSessionsChanged,
+    bool openPostEditorOnStart = false,
   }) {
     return MaterialApp(
       home: TrainingSessionDetailsScreen(
         sessionId: sessionId,
+        openPostEditorOnStart: openPostEditorOnStart,
         repository: history,
         sessionRepository: sessions,
         navigate: navigate,
@@ -75,7 +88,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('share button publishes session to profile', (tester) async {
+  Future<void> publishFromSheet(WidgetTester tester) async {
+    final button = find.byKey(const ValueKey('share-sheet-publish'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('share button opens the post sheet and publishes', (
+    tester,
+  ) async {
     final history = _FakeHistoryRepository(_detail());
     final sessions = _FakeSessionRepository(_completed());
 
@@ -84,13 +106,45 @@ void main() {
 
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    expect(find.text('Udostępnij trening'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('share-sheet-title')),
+      'Mocny push',
+    );
+    await publishFromSheet(tester);
 
-    expect(sessions.sharedCalls, [(sessionId, true)]);
+    expect(sessions.postDrafts.single.cleanTitle, 'Mocny push');
     expect(sessions.session.sharedToProfile, isTrue);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(find.text('Trening pojawił się na Twoim profilu'), findsOneWidget);
+  });
+
+  testWidgets('opening from the profile post menu shows the post editor', (
+    tester,
+  ) async {
+    final history = _FakeHistoryRepository(_detail(sharedToProfile: true));
+    final sessions = _FakeSessionRepository(_completed(sharedToProfile: true));
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        openPostEditorOnStart: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(ShareWorkoutSheet),
+        matching: find.text('Edytuj post'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('already shared session can be removed from profile', (
@@ -104,13 +158,47 @@ void main() {
 
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(ShareWorkoutSheet),
+        matching: find.text('Edytuj post'),
+      ),
+      findsOneWidget,
+    );
+    final unshare = find.byKey(const ValueKey('share-sheet-unshare'));
+    await tester.ensureVisible(unshare);
+    await tester.tap(unshare);
     await tester.pumpAndSettle();
 
     expect(sessions.sharedCalls, [(sessionId, false)]);
     expect(sessions.session.sharedToProfile, isFalse);
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
     expect(find.text('Usunięto trening z profilu'), findsOneWidget);
+  });
+
+  testWidgets('a shared session shows its post instead of the bare note', (
+    tester,
+  ) async {
+    final history = _FakeHistoryRepository(_detail(sharedToProfile: true));
+    final sessions = _FakeSessionRepository(_completed(sharedToProfile: true));
+
+    await tester.pumpWidget(buildScreen(history: history, sessions: sessions));
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(const ValueKey('session-post-card'));
+    expect(card, findsOneWidget);
+    expect(
+      find.descendant(of: card, matching: find.text('Udostępniono na profilu')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('workout-share-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShareWorkoutSheet), findsOneWidget);
   });
 
   testWidgets('prefers local shared flag over stale history detail', (
@@ -152,11 +240,14 @@ void main() {
     await tester.pumpWidget(buildScreen(history: history, sessions: sessions));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    await publishFromSheet(tester);
 
     expect(
-      find.text('Nie udało się zapisać zmiany. Spróbuj ponownie.'),
+      find.text('Nie udało się zapisać posta. Spróbuj ponownie.'),
       findsOneWidget,
     );
     expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
@@ -181,7 +272,7 @@ void main() {
     expect(find.text('Usunąć trening?'), findsOneWidget);
     expect(
       find.text(
-        'Tej operacji nie można cofnąć. Znikną też kudosy i komentarze.',
+        'Tej operacji nie można cofnąć. Znikną też żółwiki i komentarze.',
       ),
       findsOneWidget,
     );
@@ -223,8 +314,11 @@ void main() {
       sessions: sessions,
       onSessionsChanged: () => changes++,
     );
-    await tester.tap(find.byKey(const ValueKey('session-details-share-button')));
+    await tester.tap(
+      find.byKey(const ValueKey('session-details-share-button')),
+    );
     await tester.pumpAndSettle();
+    await publishFromSheet(tester);
 
     expect(results, [true]);
     expect(changes, 1);
@@ -255,6 +349,61 @@ void main() {
     expect(args.sessionCubit, isNotNull);
     expect(args.initialSession?.status, TrainingSessionStatus.active);
     expect(args.initialSession?.exercises.single.exerciseName, 'Bench');
+  });
+
+  testWidgets('repeat opens the warm-up panel first and starts after it', (
+    tester,
+  ) async {
+    await ServiceLocator.warmupSettings.setEnabled(true);
+    final history = _FakeHistoryRepository(_detail());
+    final sessions = _FakeSessionRepository(_completed(withExercises: true));
+    final navigations = <String>[];
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        navigate: (context, location, {extra}) async {
+          navigations.add(location);
+          return location == kWarmupRoute ? true : null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenuItem(tester, 'Powtórz trening');
+
+    expect(navigations, [kWarmupRoute, '/app/training/ongoing-workout']);
+    expect(sessions.repeatedFrom.single.id, sessionId);
+    // Panel „zjadł” rozgrzewkę przy starcie; tu zostaje tylko trwająca.
+    expect(
+      ServiceLocator.warmupSession.current?.target.key,
+      'repeat:$sessionId',
+    );
+  });
+
+  testWidgets('hiding the warm-up panel does not start the repeat', (
+    tester,
+  ) async {
+    await ServiceLocator.warmupSettings.setEnabled(true);
+    final history = _FakeHistoryRepository(_detail());
+    final sessions = _FakeSessionRepository(_completed(withExercises: true));
+    final navigations = <String>[];
+
+    await tester.pumpWidget(
+      buildScreen(
+        history: history,
+        sessions: sessions,
+        navigate: (context, location, {extra}) async {
+          navigations.add(location);
+          return null;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenuItem(tester, 'Powtórz trening');
+
+    expect(navigations, [kWarmupRoute]);
+    expect(sessions.repeatedFrom, isEmpty);
   });
 
   testWidgets('repeat with an active workout offers going back to it', (
@@ -469,4 +618,25 @@ class _FakeSessionRepository implements TrainingSessionRepository {
     session = session.copyWith(sharedToProfile: shared);
     return session;
   }
+
+  final List<PostDraft> postDrafts = [];
+
+  @override
+  Future<TrainingSession> sharePost(String sessionId, PostDraft draft) async {
+    postDrafts.add(draft);
+    if (shareDeleted) throw TrainingSessionDeletedException(sessionId);
+    if (failShare) throw StateError('offline');
+    session = session.copyWith(
+      sharedToProfile: true,
+      postTitle: draft.cleanTitle,
+      clearPostTitle: draft.cleanTitle == null,
+      note: draft.cleanBody,
+      clearNote: draft.cleanBody == null,
+    );
+    return session;
+  }
+
+  @override
+  Future<PostPhotoChange> pendingPostPhoto(String sessionId) async =>
+      const KeepPostPhoto();
 }

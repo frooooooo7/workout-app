@@ -15,12 +15,17 @@ class PostSocialBar extends StatelessWidget {
     this.onKudosTap,
     this.onKudosListTap,
     this.onCommentTap,
+    this.showCommentButton = true,
   });
 
   final FeedPost post;
   final VoidCallback? onKudosTap;
   final VoidCallback? onKudosListTap;
   final VoidCallback? onCommentTap;
+
+  /// `false` w kompaktowej karcie własnego posta — komentarze otwiera
+  /// stuknięcie karty albo licznik.
+  final bool showCommentButton;
 
   @override
   Widget build(BuildContext context) {
@@ -31,35 +36,36 @@ class PostSocialBar extends StatelessWidget {
       children: [
         if (hasSummary)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: EdgeInsets.only(bottom: showCommentButton ? 10 : 0),
             child: PostSocialSummary(
               post: post,
               onKudosListTap: onKudosListTap,
               onCommentsTap: onCommentTap,
             ),
           ),
-        Row(
-          children: [
-            if (!post.isOwn) ...[
+        if (showCommentButton || !post.isOwn)
+          Row(
+            children: [
+              if (!post.isOwn) ...[
+                Expanded(
+                  child: PostKudosButton(
+                    key: ValueKey('feed-kudos-button-${post.id}'),
+                    hasKudoed: post.hasKudoed,
+                    onTap: onKudosTap,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               Expanded(
-                child: PostKudosButton(
-                  key: ValueKey('feed-kudos-button-${post.id}'),
-                  hasKudoed: post.hasKudoed,
-                  onTap: onKudosTap,
+                child: _PillButton(
+                  key: ValueKey('feed-comment-button-${post.id}'),
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: 'Komentarz',
+                  onTap: onCommentTap,
                 ),
               ),
-              const SizedBox(width: 8),
             ],
-            Expanded(
-              child: _PillButton(
-                key: ValueKey('feed-comment-button-${post.id}'),
-                icon: Icons.chat_bubble_outline_rounded,
-                label: 'Komentarz',
-                onTap: onCommentTap,
-              ),
-            ),
-          ],
-        ),
+          ),
       ],
     );
   }
@@ -135,7 +141,10 @@ class PostSocialSummary extends StatelessWidget {
                     color: AppColors.textMuted,
                   ),
                   const SizedBox(width: 5),
-                  Text(formatCommentsCount(post.commentCount), style: countStyle),
+                  Text(
+                    formatCommentsCount(post.commentCount),
+                    style: countStyle,
+                  ),
                 ],
               ),
             ),
@@ -159,7 +168,11 @@ class _KudosGlyph extends StatelessWidget {
           colors: [AppColors.primaryVariant, AppColors.primary],
         ),
       ),
-      child: const Icon(Icons.thumb_up_rounded, size: 11, color: Colors.white),
+      child: const Icon(
+        Icons.sports_mma_rounded,
+        size: 11,
+        color: Colors.white,
+      ),
     );
   }
 }
@@ -180,10 +193,8 @@ class PostKudosButton extends StatelessWidget {
     return Semantics(
       toggled: hasKudoed,
       child: _PillButton(
-        icon: hasKudoed
-            ? Icons.thumb_up_alt_rounded
-            : Icons.thumb_up_alt_outlined,
-        label: hasKudoed ? 'Dano kudosa' : 'Kudos',
+        icon: hasKudoed ? Icons.sports_mma_rounded : Icons.sports_mma_outlined,
+        label: hasKudoed ? 'Dano żółwika' : 'Daj żółwika',
         active: hasKudoed,
         onTap: onTap == null
             ? null
@@ -265,7 +276,12 @@ class _PillButton extends StatelessWidget {
                       ),
                       child: child,
                     ),
-                    child: Icon(icon, key: ValueKey(icon), size: 18, color: color),
+                    child: Icon(
+                      icon,
+                      key: ValueKey(icon),
+                      size: 18,
+                      color: color,
+                    ),
                   ),
                   const SizedBox(width: 7),
                   Flexible(

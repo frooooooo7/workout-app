@@ -23,18 +23,25 @@ import '../../features/library/data/exercise_remote_data_source.dart';
 import '../../features/library/data/offline_first_exercise_repository.dart';
 import '../../features/library/data/sync/exercise_sync_engine.dart';
 import '../../features/library/domain/repositories/exercise_repository.dart';
+import '../../features/notifications/data/api_notifications_repository.dart';
+import '../../features/notifications/domain/repositories/notifications_repository.dart';
+import '../../features/notifications/presentation/unread_notifications.dart';
 import '../../features/feed/data/api_feed_repository.dart';
 import '../../features/feed/data/shared_preferences_feed_cache.dart';
 import '../../features/feed/data/shared_preferences_feed_seen_store.dart';
 import '../../features/feed/domain/repositories/feed_repository.dart';
 import '../../features/feed/domain/services/feed_post_events.dart';
+import '../../features/training/data/progression_settings_store.dart';
 import '../../features/training/data/local_previous_performance_repository.dart';
 import '../../features/training/data/local_training_stats_repository.dart';
 import '../../features/training/data/offline_first_training_plan_repository.dart';
 import '../../features/training/data/offline_first_training_history_repository.dart';
 import '../../features/training/data/offline_first_training_session_repository.dart';
+import '../../features/training/data/plan_sharing_repository.dart';
 import '../../features/training/data/rest_timer_notification_scheduler.dart';
 import '../../features/training/data/settings_aware_rest_timer_scheduler.dart';
+import '../../features/training/data/warmup_goal_notification_scheduler.dart';
+import '../../features/training/data/warmup_stores.dart';
 import '../../features/training/data/shared_preferences_rest_timer_notification_settings.dart';
 import '../../features/training/data/shared_preferences_workout_reminder_settings.dart';
 import '../../features/training/data/sync/training_plan_sync_engine.dart';
@@ -52,6 +59,7 @@ import '../../features/training/domain/repositories/training_session_repository.
 import '../../features/training/domain/repositories/training_stats_repository.dart';
 import '../../features/training/domain/services/rest_timer_notification_settings.dart';
 import '../../features/training/domain/services/rest_timer_scheduler.dart';
+import '../../features/training/domain/services/warmup_goal_scheduler.dart';
 import '../../features/training/domain/services/workout_reminder_scheduler.dart';
 import '../../features/training/domain/services/workout_reminder_settings.dart';
 import '../../features/profile/data/api_body_measurements_repository.dart';
@@ -59,6 +67,7 @@ import '../../features/profile/data/api_body_weight_repository.dart';
 import '../../features/profile/data/api_profile_repository.dart';
 import '../../features/profile/data/offline_first_body_measurements_repository.dart';
 import '../../features/profile/data/offline_first_body_weight_repository.dart';
+import '../../features/profile/data/own_profile_cache.dart';
 import '../../features/profile/data/sync/body_measurements_sync_engine.dart';
 import '../../features/profile/data/sync/body_weight_sync_engine.dart';
 import '../../features/profile/domain/repositories/body_measurements_repository.dart';
@@ -102,6 +111,7 @@ class ServiceLocator {
   static TrainingPlanRepository? _trainingPlanRepository;
   static TrainingHistoryRepository? _trainingHistoryRepository;
   static TrainingPlanSyncEngine? _trainingPlanSyncEngine;
+  static PlanSharingRepository? _planSharingRepository;
   static TrainingSessionRepository? _trainingSessionRepository;
   static TrainingSessionSyncEngine? _trainingSessionSyncEngine;
   static SyncCoordinator? _syncCoordinator;
@@ -120,6 +130,21 @@ class ServiceLocator {
   static final feedPostEvents = FeedPostEvents();
   static final _feedRefreshTick = ValueNotifier<int>(0);
   static late final ProfileRepository profileRepository;
+  static late final NotificationsRepository notificationsRepository;
+
+  /// Nieprzeczytane powiadomienia (dzwonek, plakietka w dolnym pasku).
+  static final unreadNotifications = UnreadNotificationsCounter();
+
+  /// Metoda progresji konta (Ustawienia → Progresja).
+  static final progressionSettings = ProgressionSettingsStore();
+  static ProgressionSettingsRemote? _progressionRemote;
+
+  /// Rozgrzewka przed treningiem: ustawienia konta, trwająca rozgrzewka
+  /// i powiadomienie o osiągnięciu celu czasu.
+  static final warmupSettings = WarmupSettingsStore();
+  static final warmupSession = WarmupSessionStore();
+  static WarmupGoalScheduler warmupGoalScheduler =
+      const NoopWarmupGoalScheduler();
 
   /// Dziennik masy ciała w bazie konta (offline-first). `null` bez
   /// zalogowanego użytkownika (i w testach bez bazy) — karty i zapisy wagi
@@ -186,6 +211,11 @@ class ServiceLocator {
     );
     return _trainingPlanRepository!;
   }
+
+  /// Publiczne plany i kopiowanie planów; `null` bez zalogowanego
+  /// użytkownika (i w testach bez bazy).
+  static PlanSharingRepository? get planSharingRepository =>
+      _planSharingRepository;
 
   static TrainingHistoryRepository get trainingHistoryRepository {
     assert(
@@ -270,6 +300,8 @@ class ServiceLocator {
     _bodyWeightRemote = ApiBodyWeightRepository(apiClient);
     _bodyMeasurementsRemote = ApiBodyMeasurementsRepository(apiClient);
     _feedRepository = ApiFeedRepository(apiClient);
+    notificationsRepository = ApiNotificationsRepository(apiClient);
+    _progressionRemote = ApiProgressionSettingsRemote(apiClient);
     restTimerNotificationSettings =
         const SharedPreferencesRestTimerNotificationSettings();
     final localNotifications = LocalNotifications();
@@ -279,6 +311,9 @@ class ServiceLocator {
     );
     workoutReminderSettings = const SharedPreferencesWorkoutReminderSettings();
     workoutReminderScheduler = WorkoutReminderNotificationScheduler(
+      notifications: localNotifications,
+    );
+    warmupGoalScheduler = WarmupGoalNotificationScheduler(
       notifications: localNotifications,
     );
     unawaited(_restoreWorkoutReminder());
@@ -294,7 +329,9 @@ class ServiceLocator {
     TrainingHistoryRepository? trainingHistoryRepository,
     TrainingSessionRepository? trainingSessionRepository,
     TrainingStatsRepository? trainingStatsRepository,
+    PlanSharingRepository? planSharingRepository,
   }) {
+    _planSharingRepository = planSharingRepository;
     _exerciseRepository = exerciseRepository;
     _trainingPlanRepository = trainingPlanRepository;
     _trainingHistoryRepository = trainingHistoryRepository;
@@ -332,6 +369,20 @@ class ServiceLocator {
     // repozytoria z bieżącego scope'u, a ich synchronizacja by stanęła.
     if (requestedUserId == _scopeUserId) return;
     _scopeUserId = requestedUserId;
+    unreadNotifications.attach(
+      requestedUserId == null ? null : notificationsRepository,
+    );
+    unawaited(
+      progressionSettings.attach(
+        requestedUserId,
+        requestedUserId == null ? null : _progressionRemote,
+      ),
+    );
+    unawaited(warmupSettings.attach(requestedUserId));
+    unawaited(warmupSession.attach(requestedUserId));
+    if (requestedUserId == null) {
+      unawaited(warmupGoalScheduler.cancelGoalReached().catchError((_) {}));
+    }
 
     _exerciseScopeFuture = (_exerciseScopeFuture ?? Future<void>.value()).then((
       _,
@@ -369,12 +420,14 @@ class ServiceLocator {
     _trainingSessionRepository = null;
     _trainingPlanSyncEngine = null;
     _trainingPlanRepository = null;
+    _planSharingRepository = null;
     _trainingHistoryRepository = null;
     _trainingStatsRepository = null;
     _localSessionHistory = null;
     _previousPerformanceRepository = null;
     _exerciseSyncEngine = null;
     _exerciseRepository = null;
+    _apiProfileRepository?.attachCache(null);
     await _exerciseDatabase?.close();
     _exerciseDatabase = null;
     _syncStatus.value = const SyncStatus();
@@ -385,6 +438,10 @@ class ServiceLocator {
       LocalAccountDataCleaner.databaseFileName(userId),
     );
     _exerciseDatabase = database;
+    // Własny profil (Dane i cele, cel masy ciała) otwiera się z lokalnej kopii.
+    _apiProfileRepository?.attachCache(
+      DatabaseOwnProfileCache(database, userId: userId),
+    );
 
     final exerciseSync = ExerciseSyncEngine(
       remote: _remoteDataSource,
@@ -433,6 +490,10 @@ class ServiceLocator {
     );
     _trainingPlanRepository = OfflineFirstTrainingPlanRepository(
       localDb: database,
+      syncEngine: planSync,
+    );
+    _planSharingRepository = PlanSharingRepository(
+      remote: _trainingPlanRemoteDataSource,
       syncEngine: planSync,
     );
     final localSessions = TrainingSessionLocalHistory(database);
@@ -487,6 +548,12 @@ class ServiceLocator {
     _trainingSessionDataChanges.value++;
   }
 
+  /// Plan zmieniony poza edytorem (np. „Zaktualizuj plan” po treningu) —
+  /// zakładka Plany i ekran Trening wczytują plany jeszcze raz.
+  static void notifyTrainingPlansChanged() {
+    _trainingPlanDataChanges.value++;
+  }
+
   /// Id (lokalne i serwerowe) treningów usuniętych na tym urządzeniu, których
   /// usunięcie nie dotarło jeszcze na serwer. Feed i aktywności profilu je
   /// ukrywają (id posta = id sesji na serwerze).
@@ -495,6 +562,21 @@ class ServiceLocator {
     if (history == null) return const {};
     try {
       return await history.pendingDeletionIds();
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Id postów do ukrycia na profilu i w feedzie: sesje usunięte oraz
+  /// schowane z profilu na tym urządzeniu, zanim zmiana dotarła na serwer.
+  static Future<Set<String>> pendingHiddenPostIds() async {
+    final history = _localSessionHistory;
+    if (history == null) return const {};
+    try {
+      return {
+        ...await history.pendingDeletionIds(),
+        ...await history.pendingUnshareIds(),
+      };
     } catch (_) {
       return const {};
     }

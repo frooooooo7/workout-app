@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/image_multipart.dart';
 import '../domain/models/training_session.dart';
 
 /// Sesja z `GET /training-sessions/history` razem z jej `updatedAt`
@@ -65,6 +68,12 @@ class TrainingSessionRemoteDataSource {
                   completedAt: set['completedAt'] != null
                       ? DateTime.tryParse(set['completedAt'] as String)?.toUtc()
                       : null,
+                  plannedDurationSeconds:
+                      (set['plannedDurationSeconds'] as num?)?.toInt(),
+                  plannedDistanceM: (set['plannedDistanceM'] as num?)?.toInt(),
+                  actualDurationSeconds: (set['actualDurationSeconds'] as num?)
+                      ?.toInt(),
+                  actualDistanceM: (set['actualDistanceM'] as num?)?.toInt(),
                 ),
               )
               .toList();
@@ -80,6 +89,14 @@ class TrainingSessionRemoteDataSource {
             exerciseCategory: exercise['exerciseCategory'] as String,
             exerciseImageUrl: exercise['exerciseImageUrl'] as String?,
             note: exercise['note'] as String?,
+            restSeconds: (exercise['restSeconds'] as num?)?.toInt(),
+            supersetGroup: exercise['supersetGroup'] as String?,
+            tracking: ExerciseTracking.fromApi(
+              exercise['exerciseTrackingType'] as String?,
+            ),
+            distanceUnit: DistanceUnit.fromApi(
+              exercise['exerciseDistanceUnit'] as String?,
+            ),
             sets: sets,
           );
         })
@@ -101,6 +118,11 @@ class TrainingSessionRemoteDataSource {
           ? DateTime.tryParse(json['finishedAt'] as String)?.toUtc()
           : null,
       sharedToProfile: (json['sharedToProfile'] as bool?) ?? false,
+      planColorKey: json['planColorKey'] as String?,
+      planIconKey: json['planIconKey'] as String?,
+      postTitle: json['postTitle'] as String?,
+      postPhotoUrl: json['postPhotoUrl'] as String?,
+      warmupSeconds: (json['warmupSeconds'] as num?)?.toInt(),
       exercises: exercises,
     );
   }
@@ -119,6 +141,12 @@ class TrainingSessionRemoteDataSource {
       'startedAt': session.startedAt.toUtc().toIso8601String(),
       'finishedAt': session.finishedAt?.toUtc().toIso8601String(),
       'sharedToProfile': session.sharedToProfile,
+      'postTitle': session.postTitle,
+      // Nieznany czas pomijamy: `null` skasowałby na serwerze zapisaną
+      // rozgrzewkę (np. przy edycji sesji pobranej przed aktualizacją).
+      if (session.warmupSeconds != null) 'warmupSeconds': session.warmupSeconds,
+      'planColorKey': session.planColorKey,
+      'planIconKey': session.planIconKey,
       'exercises': session.exercises.asMap().entries.map((entry) {
         final exercise = entry.value;
         final serverExerciseId =
@@ -136,6 +164,10 @@ class TrainingSessionRemoteDataSource {
           'exerciseCategory': exercise.exerciseCategory,
           'exerciseImageUrl': exercise.exerciseImageUrl,
           'note': exercise.note,
+          'restSeconds': exercise.restSeconds,
+          'supersetGroup': exercise.supersetGroup,
+          'exerciseTrackingType': exercise.tracking.apiName,
+          'exerciseDistanceUnit': exercise.distanceUnit.apiName,
           'position': entry.key,
           'sets': exercise.sets.asMap().entries.map((setEntry) {
             final set = setEntry.value;
@@ -153,6 +185,10 @@ class TrainingSessionRemoteDataSource {
               'actualTempo': set.actualTempo,
               'completed': set.completed,
               'completedAt': set.completedAt?.toUtc().toIso8601String(),
+              'plannedDurationSeconds': set.plannedDurationSeconds,
+              'plannedDistanceM': set.plannedDistanceM,
+              'actualDurationSeconds': set.actualDurationSeconds,
+              'actualDistanceM': set.actualDistanceM,
             };
           }).toList(),
         };
@@ -199,6 +235,45 @@ class TrainingSessionRemoteDataSource {
     return _fromJson(data as Map<String, dynamic>);
   }
 
+  /// Flaga razem z treścią posta — dla sesji spoza lokalnej bazy.
+  Future<TrainingSession> sharePost(
+    String serverId, {
+    required String? title,
+    required String? body,
+  }) async {
+    final data = await _api.patch(
+      '/training-sessions/$serverId/shared-to-profile',
+      {'sharedToProfile': true, 'postTitle': title, 'note': body},
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `POST /training-sessions/:id/post-photo` (multipart `photo`).
+  Future<TrainingSession> uploadPostPhoto(
+    String serverId,
+    Uint8List bytes,
+    String filename,
+  ) async {
+    final data = await _api.postMultipart(
+      '/training-sessions/$serverId/post-photo',
+      files: [
+        imageMultipartFile('photo', bytes, filename, fallbackName: 'post.jpg'),
+      ],
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
+  /// `DELETE /training-sessions/:id/post-photo`.
+  Future<TrainingSession> deletePostPhoto(String serverId) async {
+    final data = await _api.delete(
+      '/training-sessions/$serverId/post-photo',
+      auth: true,
+    );
+    return _fromJson(data as Map<String, dynamic>);
+  }
+
   /// `DELETE /training-sessions/:id` → 204 (także powtórnie).
   Future<void> delete(String serverId) async {
     await _api.delete('/training-sessions/$serverId', auth: true);
@@ -207,10 +282,7 @@ class TrainingSessionRemoteDataSource {
   /// `DELETE /training-sessions/by-client-id/:clientId` → zawsze 204 i zawsze
   /// zostawia nagrobek, więc zabija też zapis wciąż czekający w kolejce.
   Future<void> deleteByClientId(String clientId) async {
-    await _api.delete(
-      '/training-sessions/by-client-id/$clientId',
-      auth: true,
-    );
+    await _api.delete('/training-sessions/by-client-id/$clientId', auth: true);
   }
 
   /// Zakończone / anulowane sesje, najnowsze najpierw. `deleted` przychodzi

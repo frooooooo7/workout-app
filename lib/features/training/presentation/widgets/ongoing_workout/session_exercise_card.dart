@@ -4,21 +4,26 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/units/weight_unit.dart';
+import '../../../../../core/utils/keyboard.dart';
 import '../../../../library/presentation/screens/exercise_details_screen.dart';
 import '../../../domain/models/training_session.dart';
 import '../../../domain/repositories/previous_performance_repository.dart';
+import '../../../domain/services/cardio_insights.dart' show formatPacePerKm;
 import '../../../domain/services/live_workout_insights.dart';
 import '../../../domain/services/stats/stats_sets.dart' show taggedMuscles;
 import '../../../domain/services/training_session_detail_mapper.dart'
     show parseReps, parseWeightKg;
 import '../../../domain/services/workout_edit.dart' show maxExerciseNoteLength;
 import '../set_type_badge.dart';
+import 'cardio_set_table.dart';
+import 'cardio_stopwatch.dart';
 import 'dashed_add_button.dart';
 import 'exercise_stat_chips.dart';
 import 'exercise_thumb.dart';
 import 'record_burst.dart';
 import 'session_set_row.dart';
 import 'set_table_layout.dart';
+import 'workout_accent.dart';
 import 'workout_colors.dart';
 
 /// Karta bieżącego ćwiczenia: miniatura, nazwa i partie, chipy „Ostatnio” /
@@ -40,6 +45,10 @@ class SessionExerciseCard extends StatefulWidget {
     required this.onRemoveSet,
     required this.onNoteChanged,
     required this.onRecord,
+    this.embedded = false,
+    this.focused = true,
+    this.stopwatch,
+    this.onLongPress,
     this.onOpenPlates,
     this.setsRevision = 0,
   });
@@ -61,6 +70,19 @@ class SessionExerciseCard extends StatefulWidget {
 
   /// Odhaczona seria pobiła rekord.
   final ValueChanged<RecordBurstData> onRecord;
+
+  /// Część karty superserii — bez własnego tła i ramki.
+  final bool embedded;
+
+  /// Czy to ćwiczenie jest teraz na kolei (w superserii tylko jedno ma
+  /// podświetloną serię).
+  final bool focused;
+
+  /// Stoper odcinków kardio (wspólny dla treningu).
+  final CardioStopwatchController? stopwatch;
+
+  /// Przytrzymanie nagłówka (miniatura i nazwa) — menu kolejności ćwiczeń.
+  final VoidCallback? onLongPress;
 
   /// Kafelek kalkulatora talerzy w nagłówku; `null` — bez kafelka.
   final VoidCallback? onOpenPlates;
@@ -94,7 +116,7 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.exercise.id != widget.exercise.id ||
         oldWidget.setsRevision != widget.setsRevision ||
-        widget.exercise.sets.length != _sets.length) {
+        !_sameSets(widget.exercise.sets, _sets)) {
       _sets = List<TrainingSessionSet>.from(widget.exercise.sets);
     }
     if (oldWidget.exercise.id != widget.exercise.id) {
@@ -108,6 +130,19 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     }
   }
 
+  /// Te same serie (obiekty), nie tylko ta sama liczba — ekran mógł zmienić
+  /// serię poza kartą (np. czas ze stopera po przebudowie karty).
+  static bool _sameSets(
+    List<TrainingSessionSet> a,
+    List<TrainingSessionSet> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
   @override
   void dispose() {
     _noteController.dispose();
@@ -118,6 +153,16 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
   ExerciseRecordBaseline? get _record => widget.history?.record;
 
   void _handleSetChanged(int setIndex, TrainingSessionSet set) {
+    final stopwatch = widget.stopwatch;
+    if (set.completed &&
+        !_sets[setIndex].completed &&
+        stopwatch?.setId == set.id) {
+      // Odhaczony w trakcie pomiaru — czas ze stopera, chyba że wpisany.
+      final measured = stopwatch!.stop();
+      set = set.actualDurationSeconds == null
+          ? set.copyWith(actualDurationSeconds: measured.inSeconds)
+          : set;
+    }
     final before = recordSetIndexes(_record, _sets);
     setState(() {
       _sets = List<TrainingSessionSet>.from(_sets);
@@ -147,11 +192,34 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     );
   }
 
-  Future<void> _pickSetType(int setIndex) async {
-    final picked = await showSetTypePicker(context, _sets[setIndex].setType);
-    if (picked == null || !mounted || setIndex >= _sets.length) return;
-    if (picked == _sets[setIndex].setType) return;
-    _handleSetChanged(setIndex, _sets[setIndex].copyWith(setType: picked));
+  /// Znaczek serii: rodzaj serii albo usunięcie (z „Cofnij” na ekranie).
+  Future<void> _openSetOptions(int setIndex) async {
+    hideKeyboard();
+    final set = _sets[setIndex];
+    final cardio = widget.exercise.tracking.tracksDuration;
+    final label = setRowLabels(_sets.map((s) => s.setType))[setIndex];
+    final title = set.setType == SetType.warmup
+        ? 'Rozgrzewka'
+        : cardio
+        ? 'Odcinek $label'
+        : 'Seria $label';
+    final choice = await showSetOptionsSheet(
+      context,
+      title: title,
+      current: set.setType,
+      removeLabel: _sets.length > 1
+          ? (cardio ? 'Usuń odcinek' : 'Usuń serię')
+          : null,
+    );
+    if (choice == null || !mounted || setIndex >= _sets.length) return;
+    if (_sets[setIndex].id != set.id) return;
+    if (choice.remove) {
+      _removeSet(setIndex);
+      return;
+    }
+    final picked = choice.type;
+    if (picked == null || picked == set.setType) return;
+    _handleSetChanged(setIndex, set.copyWith(setType: picked));
   }
 
   /// Przepisuje ciężar i powtórzenia poprzedniego wyniku do serii.
@@ -167,8 +235,29 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     );
   }
 
+  /// Stoper dla odcinka [setIndex]; „Zapisz” wpisuje zmierzony czas.
+  void _startStopwatch(int setIndex) {
+    final stopwatch = widget.stopwatch;
+    if (stopwatch == null) return;
+    final set = _sets[setIndex];
+    stopwatch.start(
+      set.id,
+      from: Duration(seconds: set.actualDurationSeconds ?? 0),
+      onSave: (measured) {
+        if (!mounted) return;
+        final index = _sets.indexWhere((s) => s.id == set.id);
+        if (index == -1) return;
+        _handleSetChanged(
+          index,
+          _sets[index].copyWith(actualDurationSeconds: measured.inSeconds),
+        );
+      },
+    );
+  }
+
   void _removeSet(int setIndex) {
-    // Dismissible musi zniknąć z drzewa w tej samej klatce.
+    final stopwatch = widget.stopwatch;
+    if (stopwatch?.setId == _sets[setIndex].id) stopwatch!.stop();
     setState(
       () => _sets = List<TrainingSessionSet>.from(_sets)..removeAt(setIndex),
     );
@@ -180,81 +269,94 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
     final exercise = widget.exercise;
     final history = widget.history;
     final previous = history?.previousSets;
-    final muscles = taggedMuscles(exercise).map((m) => m.shortLabel).take(2);
+    final cardio = exercise.tracking.tracksDuration;
+    final subtitle = cardio
+        ? 'Kardio · ${exercise.tracking.label.toLowerCase()}'
+        : taggedMuscles(exercise).map((m) => m.shortLabel).take(2).join(' · ');
+    final bestPace = history?.bestPaceSecondsPerKm;
 
+    final thumbSize = widget.embedded ? 44.0 : 56.0;
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-      ),
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.all(14),
+      decoration: widget.embedded
+          ? null
+          : BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              ExerciseThumb(
-                imageUrl: exercise.exerciseImageUrl,
-                size: 56,
-                radius: 14,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      exercise.exerciseName,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 17,
-                        height: 1.2,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (muscles.isNotEmpty) ...[
-                      const SizedBox(height: 3),
+          GestureDetector(
+            key: ValueKey('session-exercise-header-${widget.exerciseIndex}'),
+            behavior: HitTestBehavior.opaque,
+            onLongPress: widget.onLongPress,
+            child: Row(
+              children: [
+                ExerciseThumb(
+                  imageUrl: exercise.exerciseImageUrl,
+                  size: thumbSize,
+                  radius: widget.embedded ? 12 : 14,
+                  cardio: cardio,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        muscles.join(' · '),
+                        exercise.exerciseName,
                         style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                          fontSize: 17,
+                          height: 1.2,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (widget.onOpenPlates != null) ...[
-                _HeaderTile(
-                  key: ValueKey(
-                    'session-exercise-plates-${widget.exerciseIndex}',
                   ),
-                  icon: Icons.fitness_center_rounded,
-                  semanticLabel: 'Kalkulator talerzy',
-                  accent: true,
-                  onTap: widget.onOpenPlates!,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
+                if (widget.onOpenPlates != null) ...[
+                  _PlatesButton(
+                    key: ValueKey(
+                      'session-exercise-plates-${widget.exerciseIndex}',
+                    ),
+                    onTap: widget.onOpenPlates!,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                _HistoryButton(
+                  key: ValueKey(
+                    'session-exercise-details-${widget.exerciseIndex}',
+                  ),
+                  onTap: () => unawaited(
+                    openExerciseDetailsFromSession(context, exercise),
+                  ),
+                ),
               ],
-              _HeaderTile(
-                icon: Icons.show_chart_rounded,
-                semanticLabel: 'Historia ćwiczenia',
-                key: ValueKey(
-                  'session-exercise-details-${widget.exerciseIndex}',
-                ),
-                onTap: () => unawaited(
-                  openExerciseDetailsFromSession(context, exercise),
-                ),
-              ),
-            ],
+            ),
           ),
           ExerciseStatChips(
-            last: history?.lastTopSet(),
-            record: history?.record?.format(),
+            last: history?.lastResult(exercise),
+            record: cardio
+                ? (bestPace == null
+                      ? null
+                      : formatPacePerKm(bestPace, exercise.distanceUnit))
+                : history?.record?.format(),
+            recordLabel: cardio ? 'Tempo' : 'Rekord',
           ),
           if (widget.noteOpen || _hadNote) ...[
             const SizedBox(height: 10),
@@ -266,33 +368,54 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
             ),
           ],
           const SizedBox(height: 14),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final layout = SetTableLayout.of(
-                constraints.maxWidth,
-                hasPrevious: previous != null && previous.isNotEmpty,
-                showRir: widget.showRirColumn,
-                showTempo: widget.showTempoColumn,
-              );
-              return _SetTable(
-                exerciseIndex: widget.exerciseIndex,
-                sets: _sets,
-                previous: previous,
-                record: _record,
-                layout: layout,
-                onChanged: _handleSetChanged,
-                onPickType: (i) => unawaited(_pickSetType(i)),
-                onFillPrevious: _fillFromPrevious,
-                onRemove: _sets.length > 1 ? _removeSet : null,
-              );
-            },
-          ),
+          if (cardio)
+            CardioSetTable(
+              exerciseIndex: widget.exerciseIndex,
+              exercise: exercise,
+              sets: _sets,
+              previous: previous,
+              focused: widget.focused,
+              stopwatch: widget.stopwatch,
+              onChanged: _handleSetChanged,
+              onPickType: (i) => unawaited(_openSetOptions(i)),
+              onRemove: _sets.length > 1 ? _removeSet : null,
+              onStartStopwatch: widget.stopwatch == null
+                  ? null
+                  : _startStopwatch,
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final layout = SetTableLayout.of(
+                  constraints.maxWidth,
+                  hasPrevious: previous != null && previous.isNotEmpty,
+                  showWeight: exercise.tracking.tracksWeight,
+                  showRir: widget.showRirColumn,
+                  showTempo: widget.showTempoColumn,
+                );
+                return _SetTable(
+                  exerciseIndex: widget.exerciseIndex,
+                  sets: _sets,
+                  previous: previous,
+                  earlier: history?.earlierSets ?? const [],
+                  legs: isLegExercise(exercise.exerciseMuscles),
+                  record: _record,
+                  layout: layout,
+                  focused: widget.focused,
+                  onChanged: _handleSetChanged,
+                  onPickType: (i) => unawaited(_openSetOptions(i)),
+                  onFillPrevious: _fillFromPrevious,
+                  onRemove: _sets.length > 1 ? _removeSet : null,
+                );
+              },
+            ),
           const SizedBox(height: 10),
           DashedAddButton(
             key: const ValueKey('add-session-set-button'),
-            label: 'Dodaj serię',
+            label: cardio ? 'Dodaj odcinek' : 'Dodaj serię',
             onTap: widget.onAddSet,
           ),
+          if (cardio) CardioTotalsBar(exercise: exercise, sets: _sets),
         ],
       ),
     );
@@ -304,8 +427,11 @@ class _SetTable extends StatelessWidget {
     required this.exerciseIndex,
     required this.sets,
     required this.previous,
+    required this.earlier,
+    required this.legs,
     required this.record,
     required this.layout,
+    required this.focused,
     required this.onChanged,
     required this.onPickType,
     required this.onFillPrevious,
@@ -315,8 +441,13 @@ class _SetTable extends StatelessWidget {
   final int exerciseIndex;
   final List<TrainingSessionSet> sets;
   final List<TrainingSessionSet>? previous;
+
+  /// Serie z wcześniejszych treningów (od najnowszego) — do progresji.
+  final List<List<TrainingSessionSet>> earlier;
+  final bool legs;
   final ExerciseRecordBaseline? record;
   final SetTableLayout layout;
+  final bool focused;
   final void Function(int setIndex, TrainingSessionSet set) onChanged;
   final ValueChanged<int> onPickType;
   final void Function(int setIndex, TrainingSessionSet previous) onFillPrevious;
@@ -325,7 +456,7 @@ class _SetTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = setRowLabels(sets.map((set) => set.setType));
-    final activeIndex = sets.indexWhere((set) => !set.completed);
+    final activeIndex = focused ? sets.indexWhere((set) => !set.completed) : -1;
     final records = recordSetIndexes(record, sets);
     final previous = this.previous;
     return Column(
@@ -353,7 +484,16 @@ class _SetTable extends StatelessWidget {
                     ? null
                     : () => onFillPrevious(i, previousSet),
                 progression: i == activeIndex
-                    ? progressionHintFor(sets[i], previousSet)
+                    ? progressionHintFor(
+                        sets[i],
+                        previousSet,
+                        settings: WorkoutAccentScope.progressionOf(context),
+                        earlier: [
+                          for (final sessionSets in earlier)
+                            previousSetFor(sets, i, sessionSets),
+                        ],
+                        legs: legs,
+                      )
                     : null,
                 onChanged: (set) => onChanged(i, set),
                 onPickType: () => onPickType(i),
@@ -366,40 +506,56 @@ class _SetTable extends StatelessWidget {
   }
 }
 
-/// Kafelek 44 px w nagłówku karty (kalkulator talerzy, historia ćwiczenia).
-/// [accent] — niebieska ikona na granatowym tle.
-class _HeaderTile extends StatelessWidget {
-  const _HeaderTile({
-    super.key,
-    required this.icon,
-    required this.semanticLabel,
-    required this.onTap,
-    this.accent = false,
-  });
+class _HistoryButton extends StatelessWidget {
+  const _HistoryButton({super.key, required this.onTap});
 
-  final IconData icon;
-  final String semanticLabel;
   final VoidCallback onTap;
-  final bool accent;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: accent
-          ? AppColors.primary.withValues(alpha: 0.16)
-          : WorkoutColors.chip,
+      color: WorkoutColors.chip,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: SizedBox(
+        child: const SizedBox(
           width: 44,
           height: 44,
           child: Icon(
-            icon,
-            color: accent ? WorkoutColors.link : AppColors.iconOnTile,
+            Icons.show_chart_rounded,
+            color: AppColors.iconOnTile,
             size: 20,
-            semanticLabel: semanticLabel,
+            semanticLabel: 'Historia ćwiczenia',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kafelek 44 px z kalkulatorem talerzy: niebieska ikona na granatowym tle.
+class _PlatesButton extends StatelessWidget {
+  const _PlatesButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: const SizedBox(
+          width: 44,
+          height: 44,
+          child: Icon(
+            Icons.fitness_center_rounded,
+            color: WorkoutColors.link,
+            size: 20,
+            semanticLabel: 'Kalkulator talerzy',
           ),
         ),
       ),
@@ -421,10 +577,17 @@ class _NoteField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    // Długa notatka zawija się w kilka linii, ale Enter to „Gotowe” —
+    // klawiatura się chowa, a notatka jest już zapisana (onChanged).
+    final field = TextField(
       controller: controller,
       focusNode: focusNode,
       onChanged: onChanged,
+      onSubmitted: (_) => focusNode.unfocus(),
+      onTapOutside: hideKeyboardOnTapOutside,
+      textInputAction: TextInputAction.done,
+      keyboardType: TextInputType.text,
+      textAlignVertical: TextAlignVertical.center,
       maxLength: maxExerciseNoteLength,
       minLines: 1,
       maxLines: 4,
@@ -455,7 +618,24 @@ class _NoteField extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+        suffixIconConstraints: const BoxConstraints(minWidth: 44),
+        suffixIcon: ListenableBuilder(
+          listenable: focusNode,
+          builder: (context, _) => focusNode.hasFocus
+              ? IconButton(
+                  key: const ValueKey('exercise-note-done'),
+                  tooltip: 'Zapisz notatkę',
+                  onPressed: focusNode.unfocus,
+                  icon: const Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: AppColors.success,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
       ),
     );
+    return field;
   }
 }

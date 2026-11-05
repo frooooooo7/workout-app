@@ -14,17 +14,20 @@ class TrainingPlanSummary {
   const TrainingPlanSummary({
     required this.id,
     required this.name,
+    this.colorKey,
+    this.iconKey,
   });
 
   final String id;
   final String name;
+
+  /// Kolor i ikona planu z chwili treningu (plan mógł zostać usunięty).
+  final String? colorKey;
+  final String? iconKey;
 }
 
 class TrainingProgressHighlight {
-  const TrainingProgressHighlight({
-    required this.type,
-    required this.label,
-  });
+  const TrainingProgressHighlight({required this.type, required this.label});
 
   final TrainingProgressHighlightType type;
   final String label;
@@ -78,12 +81,28 @@ class TrainingSetMetrics {
     this.reps,
     this.rir,
     this.tempo,
+    this.durationSeconds,
+    this.distanceM,
   });
 
   final double? weightKg;
   final int? reps;
   final int? rir;
   final String? tempo;
+
+  /// Kardio: czas i dystans (w metrach).
+  final int? durationSeconds;
+  final int? distanceM;
+
+  /// Tempo w sekundach na kilometr; `null` bez czasu albo dystansu.
+  int? get paceSecondsPerKm {
+    final seconds = durationSeconds;
+    final meters = distanceM;
+    if (seconds == null || meters == null || seconds <= 0 || meters <= 0) {
+      return null;
+    }
+    return (seconds * 1000 / meters).round();
+  }
 }
 
 class TrainingExerciseSetDetail {
@@ -129,10 +148,16 @@ class TrainingExerciseDetail {
     this.imageUrl,
     this.note,
     required this.sets,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   });
 
   final String exerciseId;
   final String exerciseName;
+
+  /// Tryb ćwiczenia z chwili treningu — decyduje, jak rysować serie.
+  final ExerciseTracking tracking;
+  final DistanceUnit distanceUnit;
 
   /// Snapshot grup mięśniowych z chwili wykonania sesji — nie zmienia się,
   /// gdy ćwiczenie zostanie później przetagowane albo usunięte z biblioteki.
@@ -153,8 +178,7 @@ class TrainingExerciseDetail {
   int get completedSetsCount =>
       sets.where((s) => s.completed && s.countsTowardStats).length;
 
-  double get volumeKg =>
-      sets.fold(0, (sum, set) => sum + set.volumeKg);
+  double get volumeKg => sets.fold(0, (sum, set) => sum + set.volumeKg);
 
   /// Pierwszy i ostatni moment odhaczenia serii — punkt zaczepienia na osi
   /// czasu. `null`, gdy żadna seria nie ma znacznika.
@@ -174,6 +198,30 @@ class TrainingExerciseDetail {
         .toList(growable: false);
     if (stamps.isEmpty) return null;
     return stamps.reduce((a, b) => a.isAfter(b) ? a : b);
+  }
+
+  /// Kardio: suma czasu (s) i dystansu (m) zrobionych odcinków, z rozgrzewką.
+  ({int seconds, int meters}) get cardioTotals {
+    var seconds = 0;
+    var meters = 0;
+    for (final set in sets) {
+      if (!set.completed) continue;
+      seconds += set.actual?.durationSeconds ?? 0;
+      meters += set.actual?.distanceM ?? 0;
+    }
+    return (seconds: seconds, meters: meters);
+  }
+
+  /// Najszybsze tempo (s/km) zrobionego odcinka roboczego; `null` bez
+  /// odcinka z czasem i dystansem.
+  int? get bestPaceSecondsPerKm {
+    int? best;
+    for (final set in sets) {
+      if (!set.completed || !set.countsTowardStats) continue;
+      final pace = set.actual?.paceSecondsPerKm;
+      if (pace != null && (best == null || pace < best)) best = pace;
+    }
+    return best;
   }
 
   /// Najcięższa ukończona seria robocza — „top set" pokazywany w stopce karty.
@@ -201,6 +249,9 @@ class TrainingSessionDetail {
     required this.exercises,
     required this.updatedAt,
     this.sharedToProfile = false,
+    this.postTitle,
+    this.postPhotoUrl,
+    this.warmupSeconds,
   });
 
   final String id;
@@ -214,6 +265,39 @@ class TrainingSessionDetail {
   final DateTime updatedAt;
   final bool sharedToProfile;
 
+  /// Tytuł posta (gdy inny niż nazwa treningu) i zdjęcie z serwera.
+  final String? postTitle;
+  final String? postPhotoUrl;
+
+  /// Czas rozgrzewki przed treningiem (sekundy), jeśli był zmierzony. Nie jest
+  /// częścią [durationSec].
+  final int? warmupSeconds;
+
+  /// Te same szczegóły z nową treścią posta — po zapisie w arkuszu, zanim
+  /// sesja dotrze na serwer i wróci w odświeżonych szczegółach.
+  TrainingSessionDetail withPost({
+    required bool sharedToProfile,
+    required String? note,
+    required String? postTitle,
+    required String? postPhotoUrl,
+  }) {
+    return TrainingSessionDetail(
+      id: id,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      durationSec: durationSec,
+      status: status,
+      plan: plan,
+      note: note,
+      exercises: exercises,
+      updatedAt: updatedAt,
+      sharedToProfile: sharedToProfile,
+      postTitle: postTitle,
+      postPhotoUrl: postPhotoUrl,
+      warmupSeconds: warmupSeconds,
+    );
+  }
+
   int get completedSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.completedSetsCount);
 
@@ -221,8 +305,7 @@ class TrainingSessionDetail {
   int get workingSetsCount =>
       exercises.fold(0, (sum, e) => sum + e.workingSetsCount);
 
-  double get totalVolumeKg =>
-      exercises.fold(0, (sum, e) => sum + e.volumeKg);
+  double get totalVolumeKg => exercises.fold(0, (sum, e) => sum + e.volumeKg);
 
   /// Czy sesja niesie znaczniki czasu serii. Sesje sprzed dodania
   /// `completedAt` ich nie mają — oś czasu wtedy rezygnuje z godzin.
@@ -243,4 +326,3 @@ class TrainingSessionPage {
   final bool hasMore;
   final bool isFromCache;
 }
-

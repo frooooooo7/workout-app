@@ -20,6 +20,7 @@ import '../widgets/body_weight_goal_sheet.dart';
 import '../widgets/body_weight_range_tabs.dart';
 import '../widgets/body_weight_stat_tiles.dart';
 import '../widgets/body_weight_week_list.dart';
+import '../widgets/profile_details_fields.dart';
 import 'body_measurements_screen.dart';
 
 const kBodyWeightRoute = '/app/profile/body-weight';
@@ -164,6 +165,13 @@ class _BodyWeightScreenState extends State<BodyWeightScreen> {
                         onTap: () => context.push(kBodyMeasurementsRoute),
                       ),
                     ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+                    child: ProfileDetailsPrivacyNote(
+                      key: ValueKey('body-weight-privacy'),
+                      text: 'Widzisz to tylko Ty — masa ciała jest prywatna.',
+                    ),
                   ),
                   Expanded(child: _body()),
                 ],

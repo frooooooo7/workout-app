@@ -36,14 +36,6 @@ class PlansWeekCard extends StatelessWidget {
       (index) => plans.where((p) => p.selectedDays.contains(index + 1)).length,
     );
     final trainingDays = plansPerDay.where((count) => count > 0).length;
-    final exerciseCount = plans.fold(
-      0,
-      (sum, plan) => sum + plan.exercises.length,
-    );
-    final setCount = plans.fold(
-      0,
-      (sum, plan) => sum + plan.exercises.fold(0, (s, e) => s + e.sets.length),
-    );
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -98,36 +90,6 @@ class PlansWeekCard extends StatelessWidget {
                     onTap: () => onDaySelected(day),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(height: 1, color: AppColors.border.withValues(alpha: 0.6)),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: _Metric(
-                  value: '${plans.length}',
-                  label: polishPlural(plans.length, 'plan', 'plany', 'planów'),
-                ),
-              ),
-              Expanded(
-                child: _Metric(
-                  value: '$exerciseCount',
-                  label: polishPlural(
-                    exerciseCount,
-                    'ćwiczenie',
-                    'ćwiczenia',
-                    'ćwiczeń',
-                  ),
-                ),
-              ),
-              Expanded(
-                child: _Metric(
-                  value: '$setCount',
-                  label: polishPlural(setCount, 'seria', 'serie', 'serii'),
-                ),
-              ),
             ],
           ),
         ],
@@ -235,39 +197,6 @@ class _WeekDayCell extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

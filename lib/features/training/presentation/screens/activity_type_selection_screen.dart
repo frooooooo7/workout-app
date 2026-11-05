@@ -8,6 +8,7 @@ import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../bloc/training_session_cubit.dart';
 import '../utils/start_workout.dart';
+import '../utils/warmup_gate.dart';
 import '../widgets/activity_type_option_tile.dart';
 
 class ActivityTypeSelectionScreen extends StatelessWidget {
@@ -30,6 +31,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
     context,
     start: (cubit) => cubit.startCustom(),
     replace: true,
+    warmup: const WarmupRequest.custom(),
   );
 
   @override
@@ -90,7 +92,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
                 ActivityTypeOptionTile(
                   icon: Icons.view_week_rounded,
                   iconColor: AppColors.primaryVariant,
-                  imageAsset: 'assets/images/login-hero.png',
+                  imageAsset: 'assets/images/login-hero.webp',
                   imageAlignment: Alignment.centerRight,
                   eyebrow: 'Gotowy plan',
                   title: 'Moje plany',
@@ -103,7 +105,7 @@ class _ActivityTypeSelectionView extends StatelessWidget {
                 ActivityTypeOptionTile(
                   icon: Icons.bolt_rounded,
                   iconColor: const Color(0xFFF59E0B),
-                  imageAsset: 'assets/images/login-hero.png',
+                  imageAsset: 'assets/images/login-hero.webp',
                   imageAlignment: Alignment.centerLeft,
                   eyebrow: 'Wolny trening',
                   title: 'Niestandardowa',

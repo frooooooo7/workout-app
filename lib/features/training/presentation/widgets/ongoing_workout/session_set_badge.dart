@@ -4,6 +4,7 @@ import '../../../../../core/theme/app_colors.dart';
 import '../../../domain/models/set_type.dart';
 import '../set_type_badge.dart';
 import 'workout_colors.dart';
+import 'workout_accent.dart';
 
 /// Numer serii (albo litera rodzaju: W, F, D) w wierszu treningu na żywo.
 /// Zrobiona seria jest zielona, następna do zrobienia — niebieska.
@@ -27,12 +28,13 @@ class SessionSetBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = setTypeColor(type);
+    final highlight = WorkoutAccent.of(context);
     final (Color background, Color foreground) = accent != null
         ? (accent.withValues(alpha: 0.16), accent)
         : completed
         ? (AppColors.success.withValues(alpha: 0.16), AppColors.success)
         : active
-        ? (AppColors.primary, AppColors.onPrimary)
+        ? (highlight.fill, highlight.onFill)
         : (WorkoutColors.chip, AppColors.textSecondary);
     return Semantics(
       button: true,

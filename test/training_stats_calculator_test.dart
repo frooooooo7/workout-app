@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/muscle_distribution_calculator.dart';
@@ -23,7 +24,9 @@ TrainingSessionExercise _exercise(
   List<TrainingSessionSet> sets, {
   List<String> muscles = const ['chest'],
   String id = '',
+  ExerciseTracking tracking = ExerciseTracking.weightReps,
 }) => TrainingSessionExercise(
+  tracking: tracking,
   exerciseId: id,
   exerciseName: name,
   exerciseMuscles: muscles,
@@ -204,13 +207,6 @@ void main() {
       expect(activity.weeks, 12);
       expect(activity.start, DateTime(2026, 6, 29));
       expect(activity.dayAt(DateTime(2026, 9, 16))!.workouts, 2);
-      // Sesje dnia od najwcześniejszej — do otwarcia ze szczegółami.
-      final sessions = activity.dayAt(DateTime(2026, 9, 16))!.sessions;
-      expect(sessions.map((s) => s.name), ['Push', 'Push']);
-      expect(
-        sessions.first.startedAt.isBefore(sessions.last.startedAt),
-        isTrue,
-      );
       expect(activity.trainingDays, 1);
     });
 
@@ -437,6 +433,103 @@ void main() {
   });
 
   group('MuscleDistributionCalculator', () {
+    group('roles (shared rules with the session map)', () {
+      MuscleDistribution compute(List<TrainingSessionExercise> exercises) =>
+          MuscleDistributionCalculator.compute([
+            _session(DateTime(2026, 9, 14), exercises: exercises),
+          ]);
+      List<TrainingSessionSet> sets(int n) =>
+          List.generate(n, (_) => _set(weight: '50', reps: '10'));
+      MuscleStat stat(MuscleDistribution d, MuscleGroup m) =>
+          d.muscles.firstWhere((s) => s.muscle == m);
+
+      test('first tag is the target, the rest assist', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(8), muscles: ['chest', 'triceps']),
+          _exercise('Biceps', sets(1), muscles: ['biceps']),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).role, MuscleRole.primary);
+        expect(stat(d, MuscleGroup.triceps).role, MuscleRole.secondary);
+        // 1 seria to mniej niż ćwierć 8 serii lidera.
+        expect(stat(d, MuscleGroup.biceps).role, MuscleRole.secondary);
+        expect(d.leaderTargetSets, 8);
+      });
+
+      test('a tag listed twice is counted once', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(4), muscles: ['chest', 'chest']),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).sets, 4);
+        expect(stat(d, MuscleGroup.chest).targetSets, 4);
+      });
+
+      test('the same exercise done twice is one source row', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(3), muscles: ['chest']),
+          _exercise('wyciskanie ', sets(2), muscles: ['chest']),
+        ]);
+
+        final sources = stat(d, MuscleGroup.chest).sources;
+        expect(sources, hasLength(1));
+        expect(sources.single.sets, 5);
+        expect(sources.single.exerciseName, 'Wyciskanie');
+      });
+
+      test('timed work only assists when there is rep-based work', () {
+        final d = compute([
+          _exercise('Wyciskanie', sets(6), muscles: ['chest']),
+          _exercise(
+            'Rower',
+            sets(1),
+            muscles: ['legs'],
+            tracking: ExerciseTracking.durationDistance,
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.chest).role, MuscleRole.primary);
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.secondary);
+        expect(d.bodyRoles[MuscleGroup.quads], MuscleRole.secondary);
+      });
+
+      test('a running-only day counts as in the session map, per workout', () {
+        final d = MuscleDistributionCalculator.compute([
+          _session(
+            DateTime(2026, 9, 14),
+            exercises: [
+              _exercise('Wyciskanie', sets(6), muscles: ['chest']),
+            ],
+          ),
+          _session(
+            DateTime(2026, 9, 15),
+            exercises: [
+              _exercise(
+                'Bieg',
+                sets(2),
+                muscles: ['legs'],
+                tracking: ExerciseTracking.durationDistance,
+              ),
+            ],
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.primary);
+      });
+
+      test('a period of only timed work still has a primary muscle', () {
+        final d = compute([
+          _exercise(
+            'Rower',
+            sets(2),
+            muscles: ['legs'],
+            tracking: ExerciseTracking.durationDistance,
+          ),
+        ]);
+
+        expect(stat(d, MuscleGroup.legs).role, MuscleRole.primary);
+      });
+    });
     test('primary muscle gets whole sets, secondary half; regions once', () {
       final result = MuscleDistributionCalculator.compute([
         _session(
@@ -499,8 +592,8 @@ void main() {
         // Nie zgadujemy, który mięsień nóg pracował.
         expect(result.muscles.map((m) => m.muscle), [MuscleGroup.legs]);
         expect(result.muscles.single.sets, 3);
-        expect(result.bodyMap.keys.toSet(), MuscleGroup.legs.expanded);
-        expect(result.bodyMap.values, everyElement(1));
+        expect(result.bodyRoles.keys.toSet(), MuscleGroup.legs.expanded);
+        expect(result.bodyRoles.values, everyElement(MuscleRole.primary));
 
         expect(result.neglected, contains(MuscleGroup.chest));
         // Grupa zbiorcza „pokrywa” swoje mięśnie — nie da się stwierdzić braku.
@@ -508,6 +601,78 @@ void main() {
         expect(result.neglected, isNot(contains(MuscleGroup.calves)));
         // Pośladki to osobna grupa.
         expect(result.neglected, contains(MuscleGroup.glutes));
+      },
+    );
+
+    test('collects which exercises feed each muscle', () {
+      final result = MuscleDistributionCalculator.compute([
+        _session(
+          DateTime(2026, 9, 14),
+          exercises: [
+            _exercise(
+              'Wyciskanie',
+              [_set(weight: '80', reps: '10'), _set(weight: '80', reps: '10')],
+              muscles: ['chest', 'triceps'],
+            ),
+            _exercise(
+              'Prostowanie',
+              [_set(weight: '20', reps: '10')],
+              muscles: ['triceps'],
+            ),
+          ],
+        ),
+        _session(
+          DateTime(2026, 9, 16),
+          exercises: [
+            _exercise(
+              'Wyciskanie',
+              [_set(weight: '85', reps: '8')],
+              muscles: ['chest', 'triceps'],
+            ),
+          ],
+        ),
+      ]);
+
+      final triceps = result.muscles.firstWhere(
+        (s) => s.muscle == MuscleGroup.triceps,
+      );
+      // Ta sama nazwa z dwóch sesji składa się w jedno źródło.
+      expect(triceps.sources.map((s) => s.exerciseName), [
+        'Wyciskanie',
+        'Prostowanie',
+      ]);
+      expect(triceps.sources.first.sets, 3);
+      expect(triceps.sources.first.isSupport, isTrue);
+      expect(triceps.sources.last.isTarget, isTrue);
+      expect(triceps.sources.first.volumeKg, 1600 + 680);
+    });
+
+    test(
+      'a coarse tag does not outshine a specific muscle on the body map',
+      () {
+        // „Nogi” (4 serie) i łydki (1 seria): łydki leżą w grupie zbiorczej,
+        // więc nie mogą świecić mocniej niż cała grupa.
+        final result = MuscleDistributionCalculator.compute([
+          _session(
+            DateTime(2026, 9, 14),
+            exercises: [
+              _exercise(
+                'Przysiad',
+                List.generate(4, (_) => _set(weight: '100', reps: '5')),
+                muscles: ['legs'],
+              ),
+              _exercise(
+                'Wspięcia',
+                [_set(weight: '50', reps: '15')],
+                muscles: ['calves'],
+              ),
+            ],
+          ),
+        ]);
+
+        expect(result.bodyRoles[MuscleGroup.quads], MuscleRole.primary);
+        expect(result.bodyRoles[MuscleGroup.calves], MuscleRole.primary);
+        expect(result.bodyRoles[MuscleGroup.chest], isNull);
       },
     );
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../training/domain/repositories/training_stats_repository.dart';
+import '../../domain/exercise_similarity.dart';
 import '../../domain/models/exercise.dart';
 import '../../domain/models/exercise_stats.dart';
 import '../../domain/repositories/exercise_repository.dart';
@@ -12,6 +13,7 @@ class ExerciseDetailsState {
   const ExerciseDetailsState({
     this.exercise,
     this.stats,
+    this.similar = const [],
     this.loading = false,
     this.notFound = false,
   });
@@ -23,18 +25,23 @@ class ExerciseDetailsState {
   /// `null` — wyniki jeszcze się liczą.
   final ExerciseStats? stats;
 
+  /// Zamienniki z biblioteki (ten sam ruch lub mięsień).
+  final List<Exercise> similar;
+
   final bool loading;
   final bool notFound;
 
   ExerciseDetailsState copyWith({
     Exercise? exercise,
     ExerciseStats? stats,
+    List<Exercise>? similar,
     bool? loading,
     bool? notFound,
   }) {
     return ExerciseDetailsState(
       exercise: exercise ?? this.exercise,
       stats: stats ?? this.stats,
+      similar: similar ?? this.similar,
       loading: loading ?? this.loading,
       notFound: notFound ?? this.notFound,
     );
@@ -88,22 +95,25 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
   Future<void> load() async {
     if (state.exercise == null || initialIsSnapshot) await _reloadExercise();
     await _loadStats();
+    await _loadSimilar();
   }
 
   Future<void> _reloadExercise() async {
     try {
-      final all = await _repository.getAll();
+      // Z treningu przychodzi czasem id serwera (trening pobrany na nowym
+      // telefonie) — repozytorium szuka po lokalnym id i po id z serwera.
+      // Ćwiczenie spoza biblioteki szukamy jeszcze po nazwie ze snapshotu.
+      var found = await _repository.getById(exerciseId);
+      if (found == null) {
+        final name = state.exercise?.name.trim().toLowerCase();
+        if (name != null && name.isNotEmpty) {
+          final all = await _repository.getAll();
+          found = all
+              .where((e) => e.name.trim().toLowerCase() == name)
+              .firstOrNull;
+        }
+      }
       if (isClosed) return;
-      // Z treningu przychodzi czasem id serwera albo ćwiczenie spoza
-      // biblioteki — wtedy szukamy po nazwie ze snapshotu sesji.
-      final name = state.exercise?.name.trim().toLowerCase();
-      final found =
-          all.where((e) => e.id == exerciseId).firstOrNull ??
-          (name == null || name.isEmpty
-              ? null
-              : all
-                    .where((e) => e.name.trim().toLowerCase() == name)
-                    .firstOrNull);
       if (found == null) {
         emit(state.copyWith(loading: false, notFound: state.exercise == null));
         return;
@@ -112,6 +122,18 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     } catch (_) {
       if (isClosed) return;
       emit(state.copyWith(loading: false, notFound: state.exercise == null));
+    }
+  }
+
+  Future<void> _loadSimilar() async {
+    final exercise = state.exercise;
+    if (exercise == null) return;
+    try {
+      final all = await _repository.getAll();
+      if (isClosed) return;
+      emit(state.copyWith(similar: ExerciseSimilarity.substitutes(exercise, all)));
+    } catch (_) {
+      // Bez zamienników karta działa normalnie.
     }
   }
 
@@ -152,6 +174,9 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     required List<MuscleGroup> muscles,
     required ExerciseCategory category,
     required String description,
+    required ExerciseTracking tracking,
+    required DistanceUnit distanceUnit,
+    ExerciseExtras? extras,
   }) async {
     final updated = await _repository.update(
       id: state.exercise?.id ?? exerciseId,
@@ -159,6 +184,9 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
       muscles: muscles,
       category: category,
       description: description,
+      tracking: tracking,
+      distanceUnit: distanceUnit,
+      extras: extras,
     );
     if (!isClosed) {
       emit(state.copyWith(exercise: updated));
@@ -167,6 +195,8 @@ class ExerciseDetailsCubit extends Cubit<ExerciseDetailsState> {
     }
     return updated;
   }
+
+  Future<List<Exercise>> allExercises() => _repository.getAll();
 
   Future<void> delete() => _repository.delete(state.exercise?.id ?? exerciseId);
 }

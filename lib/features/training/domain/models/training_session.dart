@@ -1,8 +1,10 @@
 import 'package:uuid/uuid.dart';
 
+import '../../../library/domain/models/exercise_tracking.dart';
 import 'custom_training_plan.dart';
 import 'set_type.dart';
 
+export '../../../library/domain/models/exercise_tracking.dart';
 export 'set_type.dart';
 
 enum TrainingSessionStatus { active, completed, cancelled }
@@ -21,6 +23,10 @@ class TrainingSessionSet {
     this.actualTempo,
     this.completed = false,
     this.completedAt,
+    this.plannedDurationSeconds,
+    this.plannedDistanceM,
+    this.actualDurationSeconds,
+    this.actualDistanceM,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -35,6 +41,12 @@ class TrainingSessionSet {
   final String? actualTempo;
   final bool completed;
   final DateTime? completedAt;
+
+  /// Czas i dystans serii kardio (dystans zawsze w metrach).
+  final int? plannedDurationSeconds;
+  final int? plannedDistanceM;
+  final int? actualDurationSeconds;
+  final int? actualDistanceM;
 
   /// Czy seria wlicza się do objętości, liczby serii i rekordów.
   bool get countsTowardStats => setType.countsTowardStats;
@@ -52,11 +64,17 @@ class TrainingSessionSet {
     String? actualTempo,
     bool? completed,
     DateTime? completedAt,
+    int? plannedDurationSeconds,
+    int? plannedDistanceM,
+    int? actualDurationSeconds,
+    int? actualDistanceM,
     bool clearActualWeight = false,
     bool clearActualReps = false,
     bool clearActualRir = false,
     bool clearActualTempo = false,
     bool clearCompletedAt = false,
+    bool clearActualDuration = false,
+    bool clearActualDistance = false,
   }) {
     return TrainingSessionSet(
       id: id ?? this.id,
@@ -73,6 +91,15 @@ class TrainingSessionSet {
       actualTempo: clearActualTempo ? null : (actualTempo ?? this.actualTempo),
       completed: completed ?? this.completed,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      plannedDurationSeconds:
+          plannedDurationSeconds ?? this.plannedDurationSeconds,
+      plannedDistanceM: plannedDistanceM ?? this.plannedDistanceM,
+      actualDurationSeconds: clearActualDuration
+          ? null
+          : (actualDurationSeconds ?? this.actualDurationSeconds),
+      actualDistanceM: clearActualDistance
+          ? null
+          : (actualDistanceM ?? this.actualDistanceM),
     );
   }
 }
@@ -87,6 +114,10 @@ class TrainingSessionExercise {
     this.exerciseImageUrl,
     this.note,
     required this.sets,
+    this.restSeconds,
+    this.supersetGroup,
+    this.tracking = ExerciseTracking.weightReps,
+    this.distanceUnit = DistanceUnit.km,
   }) : id = id ?? const Uuid().v4();
 
   final String id;
@@ -100,6 +131,18 @@ class TrainingSessionExercise {
   final String? note;
   final List<TrainingSessionSet> sets;
 
+  /// Przerwa po serii skopiowana z planu przy starcie (`null` = przerwa
+  /// z ustawień). W superserii liczy się ta ostatniego ćwiczenia grupy.
+  final int? restSeconds;
+
+  /// Litera superserii z planu (A, B…).
+  final String? supersetGroup;
+
+  /// Tryb ćwiczenia z chwili dodania do sesji — historia rysuje serie
+  /// tak, jak były zapisywane, nawet gdy ćwiczenie potem zmieniono.
+  final ExerciseTracking tracking;
+  final DistanceUnit distanceUnit;
+
   TrainingSessionExercise copyWith({
     String? id,
     String? exerciseId,
@@ -110,6 +153,9 @@ class TrainingSessionExercise {
     String? note,
     List<TrainingSessionSet>? sets,
     bool clearNote = false,
+    int? restSeconds,
+    String? supersetGroup,
+    bool clearSupersetGroup = false,
   }) {
     return TrainingSessionExercise(
       id: id ?? this.id,
@@ -120,6 +166,12 @@ class TrainingSessionExercise {
       exerciseImageUrl: exerciseImageUrl ?? this.exerciseImageUrl,
       note: clearNote ? null : (note ?? this.note),
       sets: sets ?? this.sets,
+      restSeconds: restSeconds ?? this.restSeconds,
+      supersetGroup: clearSupersetGroup
+          ? null
+          : (supersetGroup ?? this.supersetGroup),
+      tracking: tracking,
+      distanceUnit: distanceUnit,
     );
   }
 }
@@ -138,6 +190,11 @@ class TrainingSession {
     this.sharedToProfile = false,
     required this.exercises,
     this.pendingOp,
+    this.planColorKey,
+    this.planIconKey,
+    this.postTitle,
+    this.postPhotoUrl,
+    this.warmupSeconds,
   }) : id = id ?? const Uuid().v4(),
        startedAt = startedAt ?? DateTime.now().toUtc();
 
@@ -157,6 +214,24 @@ class TrainingSession {
   final List<TrainingSessionExercise> exercises;
   final String? pendingOp;
 
+  /// Kolor i ikona planu z chwili startu — historia rysuje sesję w nich
+  /// także po usunięciu planu.
+  final String? planColorKey;
+  final String? planIconKey;
+
+  /// Własny tytuł posta w feedzie; `null` → nazwa treningu. Opis posta to
+  /// [note].
+  final String? postTitle;
+
+  /// Zdjęcie posta na serwerze (ścieżka `/uploads/...`). Zdjęcie wybrane
+  /// offline czeka osobno, aż sesja i ono zostaną wysłane.
+  final String? postPhotoUrl;
+
+  /// Zmierzony czas rozgrzewki przed treningiem (sekundy, co najmniej minuta);
+  /// `null` — bez rozgrzewki albo nieznany. Osobno od [startedAt]/[finishedAt]:
+  /// zegar treningu rusza dopiero po rozgrzewce.
+  final int? warmupSeconds;
+
   bool get isActive => status == TrainingSessionStatus.active;
 
   TrainingSession copyWith({
@@ -174,6 +249,14 @@ class TrainingSession {
     String? pendingOp,
     bool clearFinishedAt = false,
     bool clearPendingOp = false,
+    String? planColorKey,
+    String? planIconKey,
+    String? postTitle,
+    String? postPhotoUrl,
+    int? warmupSeconds,
+    bool clearNote = false,
+    bool clearPostTitle = false,
+    bool clearPostPhotoUrl = false,
   }) {
     return TrainingSession(
       id: id ?? this.id,
@@ -182,12 +265,19 @@ class TrainingSession {
       planServerId: planServerId ?? this.planServerId,
       planName: planName ?? this.planName,
       status: status ?? this.status,
-      note: note ?? this.note,
+      note: clearNote ? null : (note ?? this.note),
       startedAt: startedAt ?? this.startedAt,
       finishedAt: clearFinishedAt ? null : (finishedAt ?? this.finishedAt),
       sharedToProfile: sharedToProfile ?? this.sharedToProfile,
       exercises: exercises ?? this.exercises,
       pendingOp: clearPendingOp ? null : (pendingOp ?? this.pendingOp),
+      planColorKey: planColorKey ?? this.planColorKey,
+      planIconKey: planIconKey ?? this.planIconKey,
+      postTitle: clearPostTitle ? null : (postTitle ?? this.postTitle),
+      postPhotoUrl: clearPostPhotoUrl
+          ? null
+          : (postPhotoUrl ?? this.postPhotoUrl),
+      warmupSeconds: warmupSeconds ?? this.warmupSeconds,
     );
   }
 
@@ -214,6 +304,8 @@ class TrainingSession {
       planLocalId: plan.id,
       planServerId: planServerId,
       planName: plan.name,
+      planColorKey: plan.colorKey,
+      planIconKey: plan.iconKey,
       exercises: plan.exercises
           .map(
             (exercise) => TrainingSessionExercise(
@@ -224,17 +316,26 @@ class TrainingSession {
                   .toList(),
               exerciseCategory: exercise.exercise.category.name,
               exerciseImageUrl: exercise.exercise.imageUrl,
+              restSeconds: plan.restFor(exercise),
+              supersetGroup: exercise.supersetGroup,
+              tracking: exercise.exercise.tracking,
+              distanceUnit: exercise.exercise.distanceUnit,
               sets: exercise.sets
                   .map(
                     (set) => TrainingSessionSet(
                       plannedWeight: set.weight,
                       plannedReps: set.reps,
-                      plannedRir: set.rir,
-                      plannedTempo: set.tempo,
+                      // Plan z wyłączonym RIR / tempem (Ustawienia planu) nie
+                      // przenosi starych wartości do treningu — inaczej
+                      // trafiłyby do historii, choć kolumny nie było widać.
+                      plannedRir: plan.showRir ? set.rir : null,
+                      plannedTempo: plan.showTempo ? set.tempo : null,
                       actualWeight: set.weight,
                       actualReps: set.reps,
-                      actualRir: set.rir,
-                      actualTempo: set.tempo,
+                      actualRir: plan.showRir ? set.rir : null,
+                      actualTempo: plan.showTempo ? set.tempo : null,
+                      plannedDurationSeconds: set.durationSeconds,
+                      plannedDistanceM: set.distanceM,
                     ),
                   )
                   .toList(),

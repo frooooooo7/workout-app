@@ -8,6 +8,11 @@ import '../models/user_profile.dart';
 abstract class ProfileRepository {
   Future<UserProfile> getOwnProfile();
 
+  /// Ostatni własny profil zapisany na tym urządzeniu albo `null`. Odczyt
+  /// z lokalnej bazy — nigdy nie czeka na sieć, więc ekrany pokazują dane
+  /// od razu, a `getOwnProfile` odświeża je w tle.
+  Future<UserProfile?> cachedOwnProfile();
+
   Future<UserProfile> getUserProfile(String userId);
 
   Future<List<FollowingUser>> getFollowing({int limit = 20, int offset = 0});
@@ -37,12 +42,17 @@ abstract class ProfileRepository {
   /// `PATCH /profile/me` — wysyła tylko przekazane (nie-null) pola.
   /// Pusty [bio] czyści opis. [details] idą w całości — puste pola
   /// czyszczą wartości na serwerze.
+  ///
+  /// Z [detailsBaseline] idą tylko te pola [details], które się od niego
+  /// różnią — gdy punkt odniesienia ekranu mógł się zestarzeć (lokalna kopia
+  /// profilu), zapis nie cofa pól, których użytkownik nie ruszał.
   Future<UserProfile> updateProfile({
     String? firstName,
     String? lastName,
     String? bio,
     String? handle,
     ProfileDetails? details,
+    ProfileDetails? detailsBaseline,
   });
 
   /// Ustawia cel masy ciała; `null` usuwa cel. Pozostałe dane bez zmian.

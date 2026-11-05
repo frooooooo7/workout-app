@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym/core/theme/app_colors.dart';
 import 'package:gym/features/body_highlighter/models/muscle_highlight.dart';
 import 'package:gym/features/body_highlighter/models/muscle_intensity.dart';
 import 'package:gym/features/body_highlighter/widgets/muscle_body_highlighter.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
+import 'package:gym/features/training/domain/models/muscle_role.dart';
 import 'package:gym/features/training/domain/models/training_stats.dart';
 import 'package:gym/features/training/domain/services/stats/training_stats_calculator.dart';
 import 'package:gym/features/training/presentation/widgets/stats/stats_exercise_progress_card.dart';
@@ -162,6 +164,32 @@ List<Set<MuscleHighlight>> _bodyHighlights(WidgetTester tester) => [
     w.highlights,
 ];
 
+/// Ekran „Mięśnie” bez regeneracji: mapa, serie w tygodniu i ranking.
+class _MusclesScreen extends StatelessWidget {
+  const _MusclesScreen({required this.muscles});
+
+  final MuscleDistribution muscles;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        StatsMuscleMapCard(muscles: muscles),
+        StatsRegionBarsCard(
+          muscles: muscles,
+          window: StatsWindow(
+            start: DateTime(2026, 8, 17),
+            end: DateTime(2026, 9, 17),
+            bucket: StatsBucket.day,
+          ),
+          rangeLabel: '30 dni',
+        ),
+        StatsMuscleRankingCard(muscles: muscles),
+      ],
+    );
+  }
+}
+
 Future<void> _pump(WidgetTester tester, Widget card) async {
   tester.view.physicalSize = const Size(360, 800);
   tester.view.devicePixelRatio = 1;
@@ -185,14 +213,13 @@ void main() {
 
   setUp(() => snapshot = _snapshot());
 
-  group('StatsMusclesCard', () {
+  group('Muscles screen cards', () {
     testWidgets('ranks groups as tagged: coarse ones stay whole', (
       tester,
     ) async {
       final coarse = _coarseSnapshot().muscles;
-      await _pump(tester, StatsMusclesCard(muscles: coarse));
+      await _pump(tester, _MusclesScreen(muscles: coarse));
 
-      expect(find.text('Partie mięśni'), findsOneWidget);
       // Grupy zbiorcze nie rozpadają się na czworogłowe, łydki itd.
       expect(coarse.muscles.first.muscle, MuscleGroup.legs);
       expect(coarse.muscles[1].muscle, MuscleGroup.back);
@@ -204,23 +231,26 @@ void main() {
       expect(find.text('Najszersze'), findsNothing);
       expect(find.text('Przednie barki'), findsNothing);
 
-      // Podpis mówi wprost, jak liczymy.
+      // Zasady liczenia siedzą pod ikonką (i), nie nad rankingiem.
+      expect(find.textContaining('otagowano'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('stats-muscles-info')));
+      await tester.pumpAndSettle();
       expect(find.textContaining('otagowano'), findsOneWidget);
       expect(find.textContaining('po połowie'), findsOneWidget);
+      await tester.tap(find.text('Rozumiem'));
+      await tester.pumpAndSettle();
 
-      // Nogi i plecy pokrywają łydki i najszersze — nie ma o nich ostrzeżenia,
-      // brakuje tylko pośladków (przedramion backend nie zna, więc nie ostrzegamy).
-      expect(find.textContaining('Bez serii w tym okresie'), findsOneWidget);
-      expect(find.textContaining('Przedramiona'), findsNothing);
-      expect(find.textContaining('Pośladki'), findsOneWidget);
-      expect(find.textContaining('Łydki'), findsNothing);
-      expect(find.textContaining('Grupy zbiorcze'), findsOneWidget);
+      // Pominięty mięsień partii, która ma serie (pośladki w nogach), świeci
+      // na mapie na bursztynowo, ale nie dostaje własnego paska.
+      expect(find.text('Pośladki'), findsNothing);
+      expect(find.text('Przedramiona'), findsNothing);
+      expect(find.text('Łydki'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('toggle reveals hidden ranking rows', (tester) async {
       final coarse = _coarseSnapshot().muscles;
-      await _pump(tester, StatsMusclesCard(muscles: coarse));
+      await _pump(tester, _MusclesScreen(muscles: coarse));
 
       // Siedem pozycji, widać sześć — Brzuch (najmniej serii) ukryty.
       expect(coarse.muscles, hasLength(7));
@@ -241,14 +271,14 @@ void main() {
     });
 
     testWidgets('granular tags keep their short labels', (tester) async {
-      await _pump(tester, StatsMusclesCard(muscles: snapshot.muscles));
+      await _pump(tester, _MusclesScreen(muscles: snapshot.muscles));
 
       expect(find.text('Klatka'), findsWidgets); // legenda + ranking
-      expect(find.text('Nogi'), findsOneWidget); // tylko legenda partii
+      expect(find.text('Nogi'), findsOneWidget); // tylko paski partii
       expect(find.text('Czworogłowe'), findsOneWidget);
-      expect(find.textContaining('po połowie'), findsOneWidget);
-      expect(find.textContaining('Bez serii w tym okresie'), findsOneWidget);
-      expect(find.textContaining('Łydki'), findsOneWidget);
+      // Łydki to pominięty mięsień partii, która ma serie — świecą na mapie,
+      // ale nie dostają własnego paska.
+      expect(find.text('Łydki'), findsNothing);
 
       // Siedem mięśni, widać sześć — pośladki (najmniej serii) ukryte.
       expect(snapshot.muscles.muscles, hasLength(7));
@@ -269,7 +299,7 @@ void main() {
       tester,
     ) async {
       // Ranking mówi „Plecy najmocniej”, ale manekin ma świecić wyłącznie
-      // to, co jest w bodyMap.
+      // to, co jest w bodyRoles.
       const muscles = MuscleDistribution(
         muscles: [
           MuscleStat(
@@ -287,13 +317,13 @@ void main() {
             intensity: 0.33,
           ),
         ],
-        bodyMap: {
-          MuscleGroup.quads: 1,
-          MuscleGroup.calves: 0.5,
-          MuscleGroup.hamstrings: 0.2,
-          // Dwa mięśnie w tym samym obszarze manekina: wygrywa mocniejszy.
-          MuscleGroup.lats: 0.3,
-          MuscleGroup.rhomboids: 0.9,
+        bodyRoles: {
+          MuscleGroup.quads: MuscleRole.primary,
+          MuscleGroup.calves: MuscleRole.primary,
+          MuscleGroup.hamstrings: MuscleRole.secondary,
+          // Dwa mięśnie w tym samym obszarze manekina: wygrywa główny.
+          MuscleGroup.lats: MuscleRole.secondary,
+          MuscleGroup.rhomboids: MuscleRole.primary,
         },
         regions: [
           RegionStat(region: MuscleRegion.back, sets: 12, share: 0.75),
@@ -301,13 +331,13 @@ void main() {
         ],
         neglected: [],
       );
-      await _pump(tester, const StatsMusclesCard(muscles: muscles));
+      await _pump(tester, const _MusclesScreen(muscles: muscles));
 
       final maps = _bodyHighlights(tester);
       expect(maps, hasLength(2)); // przód i tył
       final expected = {
         MuscleHighlight(muscle: 'quadriceps', intensity: MuscleIntensity.high),
-        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.medium),
+        MuscleHighlight(muscle: 'calves', intensity: MuscleIntensity.high),
         MuscleHighlight(muscle: 'hamstring', intensity: MuscleIntensity.low),
         MuscleHighlight(muscle: 'upper-back', intensity: MuscleIntensity.high),
       };
@@ -315,6 +345,55 @@ void main() {
         expect(highlights, expected);
       }
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tapping a ranking row shows where its sets come from', (
+      tester,
+    ) async {
+      const muscles = MuscleDistribution(
+        muscles: [
+          MuscleStat(
+            muscle: MuscleGroup.chest,
+            sets: 9,
+            volumeKg: 0,
+            share: 1,
+            intensity: 1,
+            sources: [
+              MuscleSource(
+                exerciseName: 'Wyciskanie sztangi',
+                sets: 6,
+                targetSets: 6,
+                volumeKg: 0,
+              ),
+              MuscleSource(
+                exerciseName: 'Rozpiętki',
+                sets: 3,
+                targetSets: 0,
+                volumeKg: 0,
+              ),
+            ],
+          ),
+        ],
+        regions: [],
+        neglected: [],
+      );
+      await _pump(tester, const _MusclesScreen(muscles: muscles));
+
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
+      expect(find.text('GŁÓWNE'), findsOneWidget);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+
+      expect(find.text('Wyciskanie sztangi'), findsOneWidget);
+      expect(find.text('cel · 6 serii'), findsOneWidget);
+      expect(find.text('Rozpiętki'), findsOneWidget);
+      expect(find.text('wspomaga · 3 serie'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Klatka'));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Wyciskanie sztangi'), findsNothing);
     });
 
     testWidgets('empty bodyMap leaves the figures unlit', (tester) async {
@@ -331,7 +410,7 @@ void main() {
         regions: [],
         neglected: [],
       );
-      await _pump(tester, const StatsMusclesCard(muscles: muscles));
+      await _pump(tester, const _MusclesScreen(muscles: muscles));
 
       expect(find.text('Nogi'), findsOneWidget);
       for (final highlights in _bodyHighlights(tester)) {
@@ -344,7 +423,7 @@ void main() {
       tester,
     ) async {
       final coarse = _coarseSnapshot().muscles;
-      await _pump(tester, StatsMusclesCard(muscles: coarse));
+      await _pump(tester, _MusclesScreen(muscles: coarse));
 
       final lit = {for (final h in _bodyHighlights(tester).first) h.muscle};
       // W rankingu jest tylko „Nogi”, a manekin zapala mięśnie całego regionu.
@@ -354,14 +433,18 @@ void main() {
       );
       expect(lit, containsAll(['upper-back', 'trapezius', 'deltoids']));
       expect(lit, contains('chest'));
-      expect(lit, isNot(contains('gluteal'))); // pośladków nikt nie trenował
+      // Pośladków nikt nie trenował — świecą jako „pominięte” (bursztyn).
+      final glutes = _bodyHighlights(
+        tester,
+      ).first.singleWhere((h) => h.muscle == 'gluteal');
+      expect(glutes.customColor, AppColors.statAmber);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('empty distribution shows a hint', (tester) async {
       await _pump(
         tester,
-        const StatsMusclesCard(muscles: MuscleDistribution.empty),
+        const _MusclesScreen(muscles: MuscleDistribution.empty),
       );
       expect(find.textContaining('Dodaj partie mięśni'), findsOneWidget);
       expect(find.text('Pokaż wszystkie'), findsNothing);
@@ -384,7 +467,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Rekordy'), findsOneWidget);
+      expect(find.text('Rekordy w tym okresie'), findsOneWidget);
       expect(find.text('85 kg × 5'), findsOneWidget);
       expect(find.text('110 kg × 5'), findsOneWidget);
       expect(find.text('12 powt.'), findsOneWidget);
@@ -395,7 +478,7 @@ void main() {
       expect(find.textContaining('więcej w tym okresie'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
-      await tester.tap(find.text('Wszystkie'));
+      await tester.tap(find.text('Wszystkie ćwiczenia'));
       await tester.pumpAndSettle();
 
       expect(find.byType(PersonalBestsScreen), findsOneWidget);
@@ -440,7 +523,7 @@ void main() {
         StatsRecordsCard(records: const [], bests: const [], now: _now),
       );
       expect(find.text('Brak nowych rekordów w tym okresie'), findsOneWidget);
-      expect(find.text('Wszystkie'), findsNothing);
+      expect(find.text('Wszystkie ćwiczenia'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });
@@ -455,9 +538,8 @@ void main() {
         ),
       );
 
-      expect(find.text('Progres ćwiczeń'), findsOneWidget);
-      expect(find.text('1RM'), findsOneWidget);
-      expect(find.text('Ciężar'), findsOneWidget);
+      expect(find.text('Szac. 1RM'), findsOneWidget);
+      expect(find.text('Najcięższa seria'), findsOneWidget);
       expect(find.text('Objętość'), findsOneWidget);
       expect(find.text('Najlepszy'), findsOneWidget);
       expect(
@@ -465,27 +547,31 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.text('Ciężar'));
+      await tester.tap(find.text('Najcięższa seria'));
       await tester.pump(const Duration(milliseconds: 300));
       // Wyciskanie: 70 → 85 kg.
       expect(find.text('85 kg'), findsNWidgets(2)); // ostatnio + najlepszy
       expect(find.text('+15 kg'), findsOneWidget);
 
+      // Ćwiczenie wybiera się w arkuszu z wyszukiwarką, nie z rzędu chipów.
+      await tester.tap(find.byKey(const ValueKey('stats-exercise-picker')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Podciąganie'));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(find.text('Powtórzenia'), findsOneWidget);
-      expect(find.text('1RM'), findsNothing);
+      expect(find.text('Szac. 1RM'), findsNothing);
       expect(find.text('+4 powt.'), findsOneWidget);
 
       // Długa nazwa — jeden trening, za mało na wykres.
-      await tester.dragUntilVisible(
-        find.text(_longName),
-        find.byType(ListView),
-        const Offset(-120, 0),
+      await tester.tap(find.byKey(const ValueKey('stats-exercise-picker')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('stats-exercise-search')),
+        'skośnej',
       );
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
       await tester.tap(find.text(_longName));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
       expect(
         find.text('Za mało treningów, żeby narysować progres'),
         findsOneWidget,
@@ -506,22 +592,19 @@ void main() {
     });
   });
 
-  group('StatsTopExercisesCard', () {
-    testWidgets('ranks most frequent exercises', (tester) async {
-      await _pump(tester, StatsTopExercisesCard(exercises: snapshot.exercises));
+  group('StatsAllExercisesCard', () {
+    testWidgets('lists every exercise with its session count', (tester) async {
+      await _pump(tester, StatsAllExercisesCard(exercises: snapshot.exercises));
 
-      expect(find.text('Najczęstsze ćwiczenia'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
-      expect(find.text('4'), findsOneWidget);
-      expect(find.text('4 treningi · 12 serii'), findsOneWidget);
-      expect(find.text('3 treningi · 12 serii'), findsOneWidget);
-      expect(find.text('masa ciała'), findsOneWidget);
+      expect(find.text('Wszystkie ćwiczenia'), findsOneWidget);
+      expect(find.text('4 treningi'), findsOneWidget);
+      expect(find.text('3 treningi'), findsWidgets);
       expect(find.text(_longName), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('empty list shows a note', (tester) async {
-      await _pump(tester, const StatsTopExercisesCard(exercises: []));
+      await _pump(tester, const StatsAllExercisesCard(exercises: []));
       expect(find.text('Brak ćwiczeń w tym okresie.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

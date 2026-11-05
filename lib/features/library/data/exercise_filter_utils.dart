@@ -1,9 +1,9 @@
+import '../domain/exercise_search.dart';
 import '../domain/models/exercise.dart';
 
 /// Shared in-memory filter logic applied to a list of [Exercise] objects.
 ///
-/// Mirrors the server-side filter logic in `src/routes/exercises.ts` so that
-/// the offline (SQLite) fallback produces the same results as the online API.
+/// Tekst szukamy lokalnie ([ExerciseSearch]), bo SQLite nie zna polskich znaków.
 abstract final class ExerciseFilterUtils {
   static const recentDays = 30;
 
@@ -22,8 +22,9 @@ abstract final class ExerciseFilterUtils {
       case LibraryFilter.favourite:
         result = result.where((e) => e.isFavourite).toList();
       case LibraryFilter.recent:
-        final cutoff =
-            DateTime.now().subtract(const Duration(days: recentDays));
+        final cutoff = DateTime.now().subtract(
+          const Duration(days: recentDays),
+        );
         // Only include exercises with a known createdAt that is recent.
         result = result
             .where((e) => e.createdAt != null && e.createdAt!.isAfter(cutoff))
@@ -35,13 +36,13 @@ abstract final class ExerciseFilterUtils {
 
     // ── Muscle group ────────────────────────────────────────────────────────
     if (muscleGroup != null && muscleGroup != MuscleGroup.all) {
-      result = result.where((e) => e.muscles.contains(muscleGroup)).toList();
+      final matches = muscleGroup.filterMatches;
+      result = result.where((e) => e.muscles.any(matches.contains)).toList();
     }
 
-    // ── Text search — name only (mirrors backend `lower(name) LIKE %q%`) ───
-    if (query != null && query.isNotEmpty) {
-      final q = query.toLowerCase();
-      result = result.where((e) => e.name.toLowerCase().contains(q)).toList();
+    // ── Text search — nazwa, mięśnie, bez polskich znaków, wg trafności ────
+    if (query != null && query.trim().isNotEmpty) {
+      result = ExerciseSearch.rank(result, query);
     }
 
     return result;

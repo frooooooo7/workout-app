@@ -5,9 +5,13 @@ import 'session_manager.dart';
 
 /// Offline-first rozwiązanie użytkownika na starcie + weryfikacja tokenu w tle.
 class AppUserBootstrap {
-  AppUserBootstrap({required this.onSessionInvalidated});
+  AppUserBootstrap({required this.onSessionInvalidated, this.onAwaitingServer});
 
   final void Function() onSessionInvalidated;
+
+  /// Start czeka na `/auth/me` (brak zapisanego użytkownika) — ekran
+  /// ładowania pokazuje wtedy opis „Łączę z serwerem…”.
+  final void Function()? onAwaitingServer;
 
   /// 1. Odczyt tokenu i cache użytkownika → natychmiastowe `currentUser`.
   /// 2. `GET /auth/me` w tle (gdy cache jest) albo na wejściu (bez cache).
@@ -26,6 +30,7 @@ class AppUserBootstrap {
       return cached;
     }
 
+    onAwaitingServer?.call();
     try {
       final data = await ServiceLocator.apiClient.get('/auth/me', auth: true);
       final user = AuthUser.fromJson(data as Map<String, dynamic>);

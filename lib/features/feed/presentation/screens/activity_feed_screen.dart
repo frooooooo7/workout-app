@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_tab_header.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart'
+    show kNotificationsRoute;
+import '../../../notifications/presentation/unread_notifications.dart';
+import '../../../notifications/presentation/widgets/notification_bell.dart';
 import '../../../profile/presentation/bloc/follow_cubit.dart';
 import '../../../profile/presentation/widgets/follow_button.dart';
 import '../../domain/models/feed_post.dart';
@@ -27,11 +31,15 @@ class ActivityFeedScreen extends StatefulWidget {
     super.key,
     required this.repository,
     this.currentUserId,
+    this.notifications,
   });
 
   /// Do arkusza kudosów (lista osób).
   final FeedRepository repository;
   final String? currentUserId;
+
+  /// Licznik na dzwonku; bez niego nagłówek nie ma dzwonka.
+  final UnreadNotificationsCounter? notifications;
 
   static const findPeoplePath = '/app/profile/find-people';
 
@@ -50,6 +58,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     context.read<FeedCubit>().load();
+    widget.notifications?.refresh();
   }
 
   @override
@@ -69,6 +78,7 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
 
   Future<void> _onRefresh() async {
     HapticFeedback.lightImpact();
+    widget.notifications?.refresh();
     await context.read<FeedCubit>().pullToRefresh();
   }
 
@@ -109,7 +119,16 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const AppTabHeader(title: 'Aktywność'),
+                  AppTabHeader(
+                    title: 'Aktywność',
+                    actions: [
+                      if (widget.notifications case final counter?)
+                        NotificationBellButton(
+                          count: counter,
+                          onPressed: () => context.push(kNotificationsRoute),
+                        ),
+                    ],
+                  ),
                   const AppTabScrollEdge(),
                   Expanded(
                     child: BlocBuilder<FeedCubit, FeedState>(

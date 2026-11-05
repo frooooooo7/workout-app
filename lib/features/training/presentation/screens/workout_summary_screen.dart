@@ -1,26 +1,65 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/app_header.dart';
+import '../../../../core/sync/sync_status.dart';
 import '../../../auth/domain/models/auth_models.dart';
+import '../../domain/models/custom_training_plan.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
 import '../../domain/models/training_stats.dart';
+import '../../domain/repositories/training_plan_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
 import '../../domain/repositories/training_stats_repository.dart';
+import '../../domain/services/plan_update_from_session.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/training_session_detail_mapper.dart';
+import '../../domain/services/workout_comparison.dart';
+import '../bloc/training_home_cubit.dart';
 import '../widgets/new_records_banner.dart';
 import '../widgets/session_details/session_muscle_map.dart';
+import '../widgets/workout_summary/plan_update_card.dart';
+import '../widgets/workout_summary/share_workout_sheet.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
+import '../widgets/workout_summary/workout_comparison_card.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
 import '../widgets/workout_summary/workout_summary_exercise_list.dart';
 import '../widgets/workout_summary/workout_summary_highlights.dart';
 import '../widgets/workout_summary/workout_summary_hero.dart';
 import '../widgets/workout_summary/workout_summary_stats_card.dart';
+
+typedef _SummaryInsights = ({
+  List<PersonalRecord> records,
+  WorkoutComparison? comparison,
+});
+
+/// Rekordy sesji i porównanie z poprzednim treningiem — osobno zabezpieczone,
+/// żeby błąd jednego nie zabrał drugiego.
+_SummaryInsights _summaryInsightsJob(WorkoutComparisonInput input) {
+  var records = const <PersonalRecord>[];
+  WorkoutComparison? comparison;
+  try {
+    records = PersonalRecordsCalculator.recordsOfSession(
+      input.session,
+      input.history,
+    );
+  } catch (_) {
+    /* bez rekordów */
+  }
+  try {
+    comparison = compareWithPrevious(input.session, input.history);
+  } catch (_) {
+    /* bez porównania */
+  }
+  return (records: records, comparison: comparison);
+}
 
 class WorkoutSummaryArgs {
   const WorkoutSummaryArgs({
@@ -28,7 +67,13 @@ class WorkoutSummaryArgs {
     this.repository,
     this.statsRepository,
     this.user,
+    this.pickPhoto,
+    this.planRepository,
   });
+
+  /// Test seam; domyślnie [ServiceLocator.trainingPlanRepository] — plan, z
+  /// którego był trening („Zaktualizuj plan”).
+  final TrainingPlanRepository? planRepository;
 
   /// Ukończona sesja — źródło wszystkich metryk na ekranie.
   final TrainingSession session;
@@ -42,6 +87,9 @@ class WorkoutSummaryArgs {
 
   /// Test seam; domyślnie [ServiceLocator.currentUser].
   final AuthUser? user;
+
+  /// Test seam wyboru zdjęcia w arkuszu udostępniania.
+  final PostPhotoPicker? pickPhoto;
 }
 
 /// Ekran po zakończeniu treningu: potwierdzenie, metryki, decyzja o
@@ -64,6 +112,25 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   WorkoutShareStatus _shareStatus = WorkoutShareStatus.notShared;
   List<PersonalRecord> _records = const [];
 
+  /// Porównanie z poprzednim treningiem; `null` — nie ma z czym porównać.
+  WorkoutComparison? _comparison;
+
+  /// Zdjęcie wybrane w arkuszu, jeszcze niewysłane — pokazujemy je od razu.
+  Uint8List? _localPhoto;
+
+  /// Zdjęcie usunięte w arkuszu (serwer może go jeszcze nie wiedzieć).
+  bool _photoRemoved = false;
+
+  /// Post (sesja albo jego zdjęcie) czeka jeszcze w kolejce wysyłki.
+  bool _postQueued = false;
+
+  /// „Zaktualizuj plan” — propozycja nowych wartości planu i plan sprzed
+  /// zmiany (do „Cofnij”). `null`, gdy trening nie był z planu albo nic się
+  /// nie zmieniło.
+  PlanUpdateProposal? _planUpdate;
+  CustomTrainingPlan? _planBeforeUpdate;
+  PlanUpdateStatus _planUpdateStatus = PlanUpdateStatus.proposed;
+
   @override
   void initState() {
     super.initState();
@@ -74,25 +141,109 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     _shareStatus = _session.sharedToProfile
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
-    unawaited(_loadRecords());
+    unawaited(_loadHistoryInsights());
+    unawaited(_loadPlanUpdate());
+    ServiceLocator.syncStatus.addListener(_refreshPostQueued);
   }
 
-  /// Rekordy liczymy z lokalnej historii (offline-first) — bez sieci
-  /// „Nowy rekord!” pojawia się tak samo. Błąd odczytu po prostu chowa sekcję.
-  Future<void> _loadRecords() async {
+  @override
+  void dispose() {
+    ServiceLocator.syncStatus.removeListener(_refreshPostQueued);
+    super.dispose();
+  }
+
+  /// Podpowiedź „Offline — opublikujemy…” dotyczy tylko tego posta, nie
+  /// dowolnej innej zmiany czekającej w kolejce.
+  Future<void> _refreshPostQueued() async {
+    if (widget.args == null || _shareStatus != WorkoutShareStatus.shared) {
+      if (_postQueued && mounted) setState(() => _postQueued = false);
+      return;
+    }
+    try {
+      final session = await _repository.getById(_session.id);
+      final photo = await _repository.pendingPostPhoto(_session.id);
+      final queued = (session?.pendingOp != null) || photo is! KeepPostPhoto;
+      if (mounted && queued != _postQueued) {
+        setState(() => _postQueued = queued);
+      }
+    } catch (_) {
+      // Odczyt lokalnej bazy nie może zepsuć ekranu — podpowiedź znika.
+    }
+  }
+
+  /// Rekordy i porównanie z poprzednim treningiem liczymy z lokalnej historii
+  /// (offline-first) — bez sieci wyglądają tak samo. Jeden odczyt obsługuje
+  /// oba, a długa historia liczy się w osobnym wątku. Błąd odczytu po prostu
+  /// chowa sekcje — reszta podsumowania działa.
+  Future<void> _loadHistoryInsights() async {
     try {
       final repository =
           widget.args?.statsRepository ??
           ServiceLocator.trainingStatsRepository;
       final history = await repository.allCompletedSessions();
-      final records = PersonalRecordsCalculator.recordsOfSession(
-        _session,
-        history,
-      );
-      if (!mounted || records.isEmpty) return;
-      setState(() => _records = records);
+      final input = (session: _session, history: history);
+      final insights = history.length >= TrainingHomeCubit.isolateThreshold
+          ? await compute(_summaryInsightsJob, input)
+          : _summaryInsightsJob(input);
+      if (!mounted) return;
+      if (insights.records.isEmpty && insights.comparison == null) return;
+      setState(() {
+        _records = insights.records;
+        _comparison = insights.comparison;
+      });
     } catch (_) {
-      /* bez rekordów — reszta podsumowania działa */
+      /* bez rekordów i porównania — reszta podsumowania działa */
+    }
+  }
+
+  TrainingPlanRepository? get _planRepository {
+    try {
+      return widget.args?.planRepository ??
+          ServiceLocator.trainingPlanRepository;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Plan treningu i to, co by się w nim zmieniło. Błąd odczytu po prostu
+  /// chowa kartę — reszta podsumowania działa.
+  Future<void> _loadPlanUpdate() async {
+    final repository = _planRepository;
+    final planId = _session.planLocalId ?? _session.planServerId;
+    if (repository == null || planId == null) return;
+    try {
+      final plan = await repository.getById(planId);
+      if (plan == null) return;
+      final proposal = planUpdateFromSession(plan, _session);
+      if (!mounted || proposal == null) return;
+      setState(() {
+        _planBeforeUpdate = plan;
+        _planUpdate = proposal;
+      });
+    } catch (_) {
+      /* bez karty planu */
+    }
+  }
+
+  Future<void> _savePlan(CustomTrainingPlan plan, PlanUpdateStatus done) async {
+    final repository = _planRepository;
+    if (repository == null) return;
+    final previous = _planUpdateStatus;
+    setState(() => _planUpdateStatus = PlanUpdateStatus.saving);
+    try {
+      await repository.update(plan);
+      ServiceLocator.notifyTrainingPlansChanged();
+      if (!mounted) return;
+      setState(() => _planUpdateStatus = done);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _planUpdateStatus = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zapisać planu. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -113,6 +264,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
             ? WorkoutShareStatus.shared
             : WorkoutShareStatus.notShared;
       });
+      unawaited(_refreshPostQueued());
       unawaited(_syncAndRefreshProfile());
     } on TrainingSessionDeletedException {
       if (!mounted) return;
@@ -136,6 +288,73 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     }
   }
 
+  Future<void> _openShareSheet({required bool editing}) async {
+    final result = await showShareWorkoutSheet(
+      context,
+      planName: _session.planName,
+      statsLine: postStatsLine(_detail),
+      // Zawsze to, co naprawdę zostanie opublikowane — także po „Cofnij”,
+      // bo tytuł i zdjęcie zostają przy treningu.
+      initialTitle: _session.postTitle,
+      initialBody: _session.note,
+      initialPhotoUrl: _photoRemoved ? null : _session.postPhotoUrl,
+      initialPhotoBytes: _localPhoto,
+      editing: editing,
+      pickPhoto: widget.args?.pickPhoto,
+    );
+    if (!mounted || result == null) return;
+    switch (result) {
+      case PublishPost(:final draft):
+        await _handlePublish(draft);
+      case UnsharePost():
+        await _handleShareChanged(false);
+    }
+  }
+
+  Future<void> _handlePublish(PostDraft draft) async {
+    final previous = _shareStatus;
+    setState(() => _shareStatus = WorkoutShareStatus.saving);
+    try {
+      final updated = await _repository.sharePost(_session.id, draft);
+      if (!mounted) return;
+      setState(() {
+        _session = updated;
+        _shareStatus = WorkoutShareStatus.shared;
+        switch (draft.photo) {
+          case KeepPostPhoto():
+            break;
+          case SetPostPhoto(:final photo):
+            _localPhoto = photo.bytes;
+            _photoRemoved = false;
+          case RemovePostPhoto():
+            _localPhoto = null;
+            _photoRemoved = true;
+        }
+      });
+      unawaited(_refreshPostQueued());
+      unawaited(_syncAndRefreshProfile());
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareStatus = WorkoutShareStatus.notShared);
+      ServiceLocator.notifyTrainingSessionsChanged();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ten trening został usunięty.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _shareStatus = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się udostępnić. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   /// Synchronizacja jest best-effort — profil odświeży się także wtedy, gdy
   /// wysyłka pójdzie później z kolejki offline.
   Future<void> _syncAndRefreshProfile() async {
@@ -143,6 +362,14 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     ServiceLocator.requestProfileRefresh();
     // Udostępniony (albo schowany) trening pojawia się w feedzie.
     ServiceLocator.requestFeedRefresh();
+  }
+
+  /// Poprzedni trening planu z historii. Bez routera (testy widgetów) nic
+  /// się nie dzieje.
+  void _openPreviousSession(String sessionId) {
+    GoRouter.maybeOf(
+      context,
+    )?.push('/app/training/history/${Uri.encodeComponent(sessionId)}');
   }
 
   void _handleDone() {
@@ -202,6 +429,23 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                         index: 1,
                         child: WorkoutSummaryStatsCard(detail: _detail),
                       ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _comparison == null
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: StaggeredReveal(
+                                  index: 2,
+                                  child: WorkoutComparisonCard(
+                                    comparison: _comparison!,
+                                    onOpenPrevious: _openPreviousSession,
+                                  ),
+                                ),
+                              ),
+                      ),
                       StaggeredReveal(
                         index: 2,
                         child: WorkoutSummaryHighlights(
@@ -211,12 +455,53 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                       const SizedBox(height: 12),
                       StaggeredReveal(
                         index: 3,
-                        child: WorkoutShareCard(
-                          status: _shareStatus,
-                          user: _user,
-                          onShare: () => _handleShareChanged(true),
-                          onUnshare: () => _handleShareChanged(false),
+                        child: ValueListenableBuilder<SyncStatus>(
+                          valueListenable: ServiceLocator.syncStatus,
+                          builder: (context, sync, _) => WorkoutShareCard(
+                            status: _shareStatus,
+                            user: _user,
+                            title: _session.postTitle ?? _session.planName,
+                            body: _session.note,
+                            photoBytes: _localPhoto,
+                            photoUrl: _photoRemoved || _localPhoto != null
+                                ? null
+                                : _session.postPhotoUrl,
+                            waitingForNetwork:
+                                _postQueued && sync.phase == SyncPhase.offline,
+                            onShare: () => _openShareSheet(editing: false),
+                            onEdit: () => _openShareSheet(editing: true),
+                            onUnshare: () => _handleShareChanged(false),
+                          ),
                         ),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _planUpdate == null
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: PlanUpdateCard(
+                                  planName: _planUpdate!.plan.name,
+                                  changes: _planUpdate!.changes,
+                                  status: _planUpdateStatus,
+                                  onUpdate: () => unawaited(
+                                    _savePlan(
+                                      _planUpdate!.plan,
+                                      PlanUpdateStatus.updated,
+                                    ),
+                                  ),
+                                  onDismiss: () =>
+                                      setState(() => _planUpdate = null),
+                                  onUndo: () => unawaited(
+                                    _savePlan(
+                                      _planBeforeUpdate!,
+                                      PlanUpdateStatus.proposed,
+                                    ),
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(height: 12),
                       StaggeredReveal(

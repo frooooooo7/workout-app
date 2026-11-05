@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -15,6 +16,7 @@ class AppBottomNav extends StatelessWidget {
     required this.hasActiveSession,
     required this.onDestinationSelected,
     required this.onCenterTap,
+    this.activityBadge,
   });
 
   static const double barHeight = 68;
@@ -28,6 +30,9 @@ class AppBottomNav extends StatelessWidget {
   final bool hasActiveSession;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onCenterTap;
+
+  /// Nieprzeczytane powiadomienia — kropka z liczbą na „Aktywności”.
+  final ValueListenable<int>? activityBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +97,7 @@ class AppBottomNav extends StatelessWidget {
                       icon: Icons.monitor_heart_outlined,
                       selected: currentIndex == 3,
                       onTap: onDestinationSelected,
+                      badge: activityBadge,
                     ),
                     _NavItem(
                       index: 4,
@@ -201,6 +207,7 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.badge,
   });
 
   final int index;
@@ -208,6 +215,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final ValueChanged<int> onTap;
+  final ValueListenable<int>? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -228,7 +236,19 @@ class _NavItem extends StatelessWidget {
                 scale: selected ? 1.08 : 1,
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeOutBack,
-                child: Icon(icon, color: color, size: 22),
+                child: badge == null
+                    ? Icon(icon, color: color, size: 22)
+                    : Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(icon, color: color, size: 22),
+                          Positioned(
+                            top: -5,
+                            right: -9,
+                            child: _NavBadge(count: badge!),
+                          ),
+                        ],
+                      ),
               ),
               const SizedBox(height: 4),
               AnimatedDefaultTextStyle(
@@ -242,6 +262,46 @@ class _NavItem extends StatelessWidget {
                 child: Text(label, maxLines: 1),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Liczba na ikonie paska. Przebudowuje tylko siebie, nie cały pasek.
+class _NavBadge extends StatelessWidget {
+  const _NavBadge({required this.count});
+
+  final ValueListenable<int> count;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: count,
+      builder: (context, value, _) => AnimatedScale(
+        key: const Key('app-bottom-nav-activity-badge'),
+        scale: value > 0 ? 1 : 0,
+        duration: const Duration(milliseconds: 240),
+        curve: value > 0 ? Curves.elasticOut : Curves.easeIn,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 17),
+          height: 17,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: const Color(0xFF141924), width: 2),
+          ),
+          child: Text(
+            value > 9 ? '9+' : '${value > 0 ? value : ''}',
+            style: const TextStyle(
+              color: AppColors.onPrimary,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              height: 1,
+            ),
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -6,9 +7,14 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/plan_colors.dart';
 import '../../../../core/widgets/app_header.dart';
+import '../../domain/models/post_draft.dart';
 import '../../domain/models/training_history_models.dart';
 import '../../domain/models/training_session.dart';
+import '../../domain/models/warmup.dart';
+import '../utils/start_workout.dart';
+import '../utils/warmup_gate.dart';
 import '../../domain/repositories/training_history_repository.dart';
 import '../../domain/repositories/training_session_repository.dart';
 import '../bloc/training_session_cubit.dart';
@@ -16,6 +22,8 @@ import '../widgets/session_details/session_exercise_card.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
 import '../widgets/session_details/session_timeline.dart';
+import '../widgets/workout_summary/share_workout_sheet.dart';
+import '../widgets/workout_summary/workout_share_card.dart';
 import 'ongoing_workout_screen.dart';
 
 /// Nawigacja z ekranu szczegółów (test seam dla `context.push`).
@@ -25,6 +33,10 @@ typedef SessionDetailsNavigate =
       String location, {
       Object? extra,
     });
+
+/// `extra` trasy szczegółów: po wczytaniu od razu otwórz arkusz edycji posta
+/// (wejście z menu „⋯” posta na profilu).
+const kOpenPostEditorExtra = 'open-post-editor';
 
 /// Szczegóły zakończonej sesji, ułożone od ogółu do szczegółu:
 /// nagłówek z metrykami → mapa mięśni → oś czasu → karty ćwiczeń.
@@ -39,14 +51,19 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
     super.key,
     required this.sessionId,
     required this.repository,
+    this.openPostEditorOnStart = false,
     this.sessionRepository,
     this.dataChanges,
     this.navigate,
     this.onSessionsChanged,
+    this.pickPhoto,
   });
 
   final String sessionId;
   final TrainingHistoryRepository repository;
+
+  /// Po wczytaniu szczegółów od razu otwiera arkusz edycji posta.
+  final bool openPostEditorOnStart;
 
   /// Test seam; domyślnie [ServiceLocator.trainingSessionRepository].
   final TrainingSessionRepository? sessionRepository;
@@ -61,6 +78,9 @@ class TrainingSessionDetailsScreen extends StatefulWidget {
   /// Test seam; domyślnie odświeża historię, statystyki, profil i feed.
   final VoidCallback? onSessionsChanged;
 
+  /// Test seam wyboru zdjęcia w arkuszu posta.
+  final PostPhotoPicker? pickPhoto;
+
   @override
   State<TrainingSessionDetailsScreen> createState() =>
       _TrainingSessionDetailsScreenState();
@@ -74,6 +94,10 @@ class _TrainingSessionDetailsScreenState
   bool _loading = true;
   bool _shareSaving = false;
   bool _sharedToProfile = false;
+
+  /// Zdjęcie posta czekające w kolejce (pokazujemy je, zanim dotrze na
+  /// serwer) albo czekające usunięcie.
+  PostPhotoChange _pendingPhoto = const KeepPostPhoto();
 
   /// Trwa usuwanie / przygotowanie powtórzenia — menu jest zablokowane.
   bool _busy = false;
@@ -100,7 +124,16 @@ class _TrainingSessionDetailsScreenState
     _dataChanges =
         widget.dataChanges ?? ServiceLocator.trainingSessionDataChanges;
     _dataChanges.addListener(_onDataChanged);
-    _load();
+    unawaited(
+      _load().then((_) {
+        if (widget.openPostEditorOnStart &&
+            mounted &&
+            _detail != null &&
+            _sharedToProfile) {
+          return _onSharePressed();
+        }
+      }),
+    );
   }
 
   @override
@@ -127,7 +160,11 @@ class _TrainingSessionDetailsScreenState
     try {
       final detail = await widget.repository.getSessionDetail(widget.sessionId);
       final local = await _sessionRepository?.getById(widget.sessionId);
+      final pendingPhoto =
+          await _sessionRepository?.pendingPostPhoto(widget.sessionId) ??
+          const KeepPostPhoto();
       if (!mounted) return;
+      _pendingPhoto = pendingPhoto;
       final current = _detail;
       // Ciche przeładowanie może trafić na starszy cache — pokazujemy tylko
       // nowszą wersję (i nie restartujemy animacji bez potrzeby).
@@ -146,9 +183,13 @@ class _TrainingSessionDetailsScreenState
       if (!mounted || silent) return;
       setState(() {
         _loading = false;
-        _error = error is ApiException && error.statusCode == 410
-            ? 'Ten trening został usunięty.'
-            : 'Nie udało się pobrać szczegółów sesji.';
+        _error = switch (error) {
+          ApiException(statusCode: 410) => 'Ten trening został usunięty.',
+          ApiException(statusCode: null) =>
+            'Brak połączenia, a tego treningu nie ma jeszcze na telefonie. '
+                'Spróbuj ponownie po powrocie do sieci.',
+          _ => 'Nie udało się pobrać szczegółów sesji.',
+        };
       });
     }
   }
@@ -163,11 +204,102 @@ class _TrainingSessionDetailsScreenState
     unawaited(_syncAndRefreshProfile());
   }
 
+  /// Arkusz posta: udostępnienie z tytułem, opisem i zdjęciem, a przy już
+  /// udostępnionym — edycja albo cofnięcie.
   Future<void> _onSharePressed() async {
     final repository = _sessionRepository;
-    if (repository == null || _detail == null || _shareSaving) return;
+    final detail = _detail;
+    if (repository == null || detail == null || _shareSaving) return;
 
-    final nextShared = !_sharedToProfile;
+    final local = await repository.getById(widget.sessionId);
+    final pendingPhoto = await repository.pendingPostPhoto(widget.sessionId);
+    if (!mounted) return;
+    final editing = _sharedToProfile;
+    // Lokalna sesja jest źródłem prawdy (także celowo wyczyszczone pola);
+    // szczegóły z serwera tylko wtedy, gdy na tym urządzeniu jej nie ma.
+    final title = local != null ? local.postTitle : detail.postTitle;
+    final body = local != null ? local.note : detail.note;
+    final photoUrl = switch (pendingPhoto) {
+      RemovePostPhoto() => null,
+      _ => local != null ? local.postPhotoUrl : detail.postPhotoUrl,
+    };
+    final photoBytes = switch (pendingPhoto) {
+      SetPostPhoto(:final photo) => photo.bytes,
+      _ => null,
+    };
+    final result = await showShareWorkoutSheet(
+      context,
+      planName: local?.planName ?? detail.plan.name,
+      statsLine: postStatsLine(detail),
+      initialTitle: title,
+      initialBody: body,
+      initialPhotoUrl: photoUrl,
+      initialPhotoBytes: photoBytes,
+      editing: editing,
+      pickPhoto: widget.pickPhoto,
+    );
+    if (!mounted || result == null) return;
+    switch (result) {
+      case PublishPost(:final draft):
+        await _publishPost(repository, draft);
+      case UnsharePost():
+        await _setShared(repository, false);
+    }
+  }
+
+  Future<void> _publishPost(
+    TrainingSessionRepository repository,
+    PostDraft draft,
+  ) async {
+    final wasShared = _sharedToProfile;
+    setState(() => _shareSaving = true);
+    try {
+      final updated = await repository.sharePost(widget.sessionId, draft);
+      if (!mounted) return;
+      setState(() {
+        _sharedToProfile = true;
+        _shareSaving = false;
+        if (draft.photo is! KeepPostPhoto) _pendingPhoto = draft.photo;
+        // Ciche przeładowanie pomija wersję bez nowszego `updatedAt` (np.
+        // niewysłana sesja), więc nowa treść trafia na ekran od razu.
+        _detail = _detail?.withPost(
+          sharedToProfile: true,
+          note: updated.note,
+          postTitle: updated.postTitle,
+          postPhotoUrl: updated.postPhotoUrl,
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasShared
+                ? 'Zapisano zmiany w poście'
+                : 'Trening pojawił się na Twoim profilu',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      unawaited(_syncAndRefreshProfile());
+    } on TrainingSessionDeletedException {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      _closeAfterRemoval('Ten trening został usunięty.');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _shareSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nie udało się zapisać posta. Spróbuj ponownie.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _setShared(
+    TrainingSessionRepository repository,
+    bool nextShared,
+  ) async {
     setState(() => _shareSaving = true);
     try {
       final updated = await repository.setSharedToProfile(
@@ -204,6 +336,34 @@ class _TrainingSessionDetailsScreenState
         ),
       );
     }
+  }
+
+  /// Podgląd opublikowanego posta — ta sama karta co na podsumowaniu.
+  Widget _buildPostCard() {
+    final detail = _detail!;
+    final pending = _pendingPhoto;
+    final Uint8List? bytes = pending is SetPostPhoto
+        ? pending.photo.bytes
+        : null;
+    final url = pending is KeepPostPhoto ? detail.postPhotoUrl : null;
+    return WorkoutShareCard(
+      key: const ValueKey('session-post-card'),
+      status: _shareSaving
+          ? WorkoutShareStatus.saving
+          : WorkoutShareStatus.shared,
+      title: detail.postTitle ?? detail.plan.name,
+      body: detail.note,
+      photoBytes: bytes,
+      photoUrl: url,
+      onShare: _onSharePressed,
+      onEdit: _onSharePressed,
+      onUnshare: () {
+        final repository = _sessionRepository;
+        if (repository != null && !_shareSaving) {
+          unawaited(_setShared(repository, false));
+        }
+      },
+    );
   }
 
   Future<void> _syncAndRefreshProfile() async {
@@ -244,7 +404,7 @@ class _TrainingSessionDetailsScreenState
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Tej operacji nie można cofnąć. Znikną też kudosy i komentarze.',
+          'Tej operacji nie można cofnąć. Znikną też żółwiki i komentarze.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
@@ -338,8 +498,27 @@ class _TrainingSessionDetailsScreenState
         } else if (source.exercises.isEmpty) {
           failure = 'Ten trening nie ma ćwiczeń do powtórzenia.';
         } else {
-          started = await cubit.startFromSession(source);
-          conflict = started == null ? cubit.state.activeConflict : null;
+          // Rozgrzewka przed powtórzonym treningiem: panel ze stoperem albo
+          // pytanie przy pierwszym starcie. Przerwana — nic nie startuje.
+          if (!mounted) return;
+          final gate = await runWarmupGate(
+            context,
+            WarmupRequest(
+              target: WarmupTarget.repeat(
+                sessionId: widget.sessionId,
+                name: source.planName,
+              ),
+            ),
+            sessionInProgress: false,
+            navigate: (location, {extra}) => _navigate(location, extra: extra),
+          );
+          if (gate.proceed && mounted) {
+            started = await cubit.startFromSession(source);
+            if (started != null) {
+              started = await attachWarmupSeconds(cubit, started, gate.seconds);
+            }
+            conflict = started == null ? cubit.state.activeConflict : null;
+          }
         }
       }
     } catch (_) {
@@ -526,7 +705,7 @@ class _TrainingSessionDetailsScreenState
                       : Icons.ios_share_rounded,
                   active: _sharedToProfile,
                   tooltip: _sharedToProfile
-                      ? 'Usuń trening z profilu'
+                      ? 'Edytuj post na profilu'
                       : 'Udostępnij trening na profilu',
                   onTap: _onSharePressed,
                 ),
@@ -561,7 +740,10 @@ class _TrainingSessionDetailsScreenState
                     )
                   : _error != null
                   ? _ErrorState(message: _error!, onRetry: _load)
-                  : _DetailContent(detail: _detail!),
+                  : _DetailContent(
+                      detail: _detail!,
+                      postCard: _sharedToProfile ? _buildPostCard() : null,
+                    ),
             ),
           ],
         ),
@@ -571,9 +753,13 @@ class _TrainingSessionDetailsScreenState
 }
 
 class _DetailContent extends StatefulWidget {
-  const _DetailContent({required this.detail});
+  const _DetailContent({required this.detail, this.postCard});
 
   final TrainingSessionDetail detail;
+
+  /// Podgląd posta (gdy trening jest udostępniony) — opis jest wtedy w nim,
+  /// więc nagłówek nie powtarza notatki.
+  final Widget? postCard;
 
   @override
   State<_DetailContent> createState() => _DetailContentState();
@@ -636,8 +822,15 @@ class _DetailContentState extends State<_DetailContent> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
-        SessionSummaryHeader(detail: widget.detail),
+        SessionSummaryHeader(
+          detail: widget.detail,
+          showNote: widget.postCard == null,
+        ),
         const SizedBox(height: 12),
+        if (widget.postCard != null) ...[
+          widget.postCard!,
+          const SizedBox(height: 12),
+        ],
         SessionMuscleMap(detail: widget.detail),
         const SizedBox(height: 12),
         SessionTimeline(detail: widget.detail, onExerciseTap: _jumpToExercise),
@@ -663,6 +856,11 @@ class _DetailContentState extends State<_DetailContent> {
                 exercise: exercises[i],
                 index: i,
                 isHighlighted: _highlightedIndex == i,
+                hideRir:
+                    PlanColors.styles
+                        .styleFor(widget.detail.plan.name)
+                        ?.showRir ==
+                    false,
               ),
             ),
         ],

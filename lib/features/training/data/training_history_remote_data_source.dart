@@ -71,6 +71,8 @@ class TrainingHistoryRemoteDataSource {
           'muscles': exercise.muscles.map((m) => m.name).toList(),
           'imageUrl': exercise.imageUrl,
           'note': exercise.note,
+          'trackingType': exercise.tracking.apiName,
+          'distanceUnit': exercise.distanceUnit.apiName,
           'sets': exercise.sets.map((set) {
             return {
               'setIndex': set.setIndex,
@@ -85,6 +87,9 @@ class TrainingHistoryRemoteDataSource {
       }).toList(),
       'updatedAt': detail.updatedAt.toUtc().toIso8601String(),
       'sharedToProfile': detail.sharedToProfile,
+      'postTitle': detail.postTitle,
+      'postPhotoUrl': detail.postPhotoUrl,
+      'warmupSeconds': detail.warmupSeconds,
     };
   }
 
@@ -118,6 +123,8 @@ class TrainingHistoryRemoteDataSource {
       plan: TrainingPlanSummary(
         id: plan['id'] as String? ?? '',
         name: plan['name'] as String? ?? 'Bez planu',
+        colorKey: plan['colorKey'] as String?,
+        iconKey: plan['iconKey'] as String?,
       ),
       exercisesCount: (json['exercisesCount'] as num?)?.toInt() ?? 0,
       completedSetsCount: (json['completedSetsCount'] as num?)?.toInt() ?? 0,
@@ -149,6 +156,8 @@ class TrainingHistoryRemoteDataSource {
       plan: TrainingPlanSummary(
         id: plan['id'] as String? ?? '',
         name: plan['name'] as String? ?? 'Bez planu',
+        colorKey: plan['colorKey'] as String?,
+        iconKey: plan['iconKey'] as String?,
       ),
       note: json['note'] as String?,
       exercises: exercisesRaw
@@ -159,6 +168,9 @@ class TrainingHistoryRemoteDataSource {
           DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toUtc() ??
           DateTime.now().toUtc(),
       sharedToProfile: json['sharedToProfile'] as bool? ?? false,
+      postTitle: json['postTitle'] as String?,
+      postPhotoUrl: json['postPhotoUrl'] as String?,
+      warmupSeconds: (json['warmupSeconds'] as num?)?.toInt(),
     );
   }
 
@@ -191,6 +203,8 @@ class TrainingHistoryRemoteDataSource {
       'reps': metrics.reps,
       'rir': metrics.rir,
       'tempo': metrics.tempo,
+      'durationSeconds': metrics.durationSeconds,
+      'distanceM': metrics.distanceM,
     };
   }
 

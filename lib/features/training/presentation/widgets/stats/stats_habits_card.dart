@@ -16,8 +16,7 @@ class StatsHabitsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SessionSectionCard(
-      icon: Icons.schedule_rounded,
-      title: 'Nawyki treningowe',
+      title: 'Kiedy trenujesz',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -202,10 +201,11 @@ class _WeekdayBar extends StatelessWidget {
 }
 
 Color _timeOfDayColor(TrainingTimeOfDay time) => switch (time) {
-  TrainingTimeOfDay.morning => AppColors.statAmber,
-  TrainingTimeOfDay.midday => AppColors.statTeal,
-  TrainingTimeOfDay.evening => AppColors.statIndigo,
-  TrainingTimeOfDay.night => AppColors.statPink,
+  // Cztery odcienie niebieskiego — kolor to dane, nie ozdoba.
+  TrainingTimeOfDay.morning => const Color(0xFF9DBBFB),
+  TrainingTimeOfDay.midday => AppColors.primaryVariant,
+  TrainingTimeOfDay.evening => AppColors.primary,
+  TrainingTimeOfDay.night => const Color(0xFF1E40AF),
 };
 
 class _TimeOfDaySection extends StatelessWidget {
