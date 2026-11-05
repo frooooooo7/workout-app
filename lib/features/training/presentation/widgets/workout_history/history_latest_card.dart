@@ -18,11 +18,13 @@ import 'history_record_badge.dart';
 
 /// `DZIŚ`, `WCZORAJ`, `3 DNI TEMU`, a od tygodnia data (`ŚR 28 PAŹ`).
 String historyLatestWhen(DateTime day, DateTime today) {
-  final days = DateTime(
+  // Dni liczymy na datach w UTC: różnica dwóch lokalnych północy przez zmianę
+  // czasu ma 23 albo 25 godzin i `inDays` zgubiłby dzień.
+  final days = DateTime.utc(
     today.year,
     today.month,
     today.day,
-  ).difference(DateTime(day.year, day.month, day.day)).inDays;
+  ).difference(DateTime.utc(day.year, day.month, day.day)).inDays;
   if (days <= 0) return 'DZIŚ';
   if (days == 1) return 'WCZORAJ';
   if (days < 7) return '$days DNI TEMU';
@@ -218,6 +220,10 @@ class HistoryLatestCard extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (entry.note != null) ...[
+                      const SizedBox(height: 6),
+                      _NoteLine(note: entry.note!),
+                    ],
                     if (entry.lines.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       for (final line in entry.lines)
@@ -293,6 +299,44 @@ class HistoryLatestCard extends StatelessWidget {
         ? '$minutes min'
         : '${minutes ~/ 60} h${minutes % 60 == 0 ? '' : ' ${minutes % 60} min'}';
     return _TileDelta(text: text, direction: diff > 0 ? 1 : -1, neutral: true);
+  }
+}
+
+/// Notatka z treningu w jednej linijce.
+class _NoteLine extends StatelessWidget {
+  const _NoteLine({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.sticky_note_2_outlined,
+            size: 15,
+            color: AppColors.textMuted,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              note.replaceAll(RegExp(r'\s+'), ' '),
+              key: const ValueKey('latest-note'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

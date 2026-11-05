@@ -9,23 +9,17 @@ import '../session_details/session_details_formatters.dart';
 import 'history_compact_row.dart';
 import 'history_formatters.dart';
 
-/// Treningi jednego miesiąca: [entries] to wszystkie (do sumy w nagłówku),
-/// [rows] — te, które mają wiersz na liście (bez treningu z karty „Ostatni
-/// trening”).
+/// Treningi jednego miesiąca, które mają wiersz na liście (bez treningu z karty
+/// „Ostatni trening”). Suma w nagłówku liczy dokładnie te wiersze.
 class HistoryMonthSection {
-  const HistoryMonthSection({
-    required this.month,
-    required this.entries,
-    required this.rows,
-  });
+  const HistoryMonthSection({required this.month, required this.rows});
 
   final DateTime month;
-  final List<HistoryFeedEntry> entries;
   final List<HistoryFeedEntry> rows;
 }
 
 /// Dzieli listę (od najnowszego) na miesiące. Trening [exceptId] — ten z karty
-/// „Ostatni trening” — liczy się do sumy miesiąca, ale nie dostaje wiersza;
+/// „Ostatni trening” — nie dostaje wiersza ani nie wchodzi do sumy miesiąca;
 /// miesiąc bez wierszy znika.
 List<HistoryMonthSection> groupHistoryFeed(
   List<HistoryFeedEntry> entries, {
@@ -48,9 +42,7 @@ List<HistoryMonthSection> groupHistoryFeed(
         if (entry.item.id != exceptId) entry,
     ];
     if (rows.isEmpty) continue;
-    sections.add(
-      HistoryMonthSection(month: month, entries: inMonth, rows: rows),
-    );
+    sections.add(HistoryMonthSection(month: month, rows: rows));
   }
   return sections;
 }
@@ -113,7 +105,7 @@ class HistoryFeedSliver extends StatelessWidget {
                   showYear: sections[s].month.year != today.year,
                   isFirst: s == 0,
                   stats: MonthlyTrainingStats.fromSessions([
-                    for (final e in sections[s].entries) e.item,
+                    for (final e in sections[s].rows) e.item,
                   ]),
                 ),
               ),

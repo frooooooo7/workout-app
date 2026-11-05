@@ -92,6 +92,7 @@ void main() {
     _session(
       'today',
       todayWorkout,
+      note: 'Bark w porządku',
       sets: const [
         ('Wyciskanie', '100', '5'),
         ('OHP', '50', '8'),
@@ -163,6 +164,8 @@ void main() {
     expect(inLatest('Dipy'), findsNothing);
     // Rekord tylko na dzisiejszym Pushu.
     expect(find.text('rekord'), findsOneWidget);
+    // Notatka z treningu w jednej linijce.
+    expect(inLatest('Bark w porządku'), findsOneWidget);
 
     // Reszta to zwarte wiersze pod „Wcześniej”, bez dzisiejszego treningu.
     expect(find.text('Wcześniej'), findsOneWidget);

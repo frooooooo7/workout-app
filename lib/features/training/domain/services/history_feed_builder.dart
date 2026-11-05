@@ -136,7 +136,21 @@ List<HistoryFeedLine> _linesOf(
     if (candidate != null) candidates.add(candidate);
   }
 
-  final ranked = [...candidates]
+  // To samo ćwiczenie bywa w treningu dwa razy (np. po zamianie ćwiczenia).
+  // Statystyki i porównanie traktują je jako jedno, więc karta też pokazuje
+  // jedną linię z najlepszą serią z obu wpisów.
+  final merged = <String, _Candidate>{};
+  for (final candidate in candidates) {
+    final key = candidate.line.key;
+    final existing = key.isEmpty ? null : merged[key];
+    if (existing == null) {
+      merged[key.isEmpty ? '#${candidate.index}' : key] = candidate;
+    } else {
+      merged[key] = _merge(existing, candidate);
+    }
+  }
+
+  final ranked = [...merged.values]
     ..sort((a, b) {
       // Rekord ma pierwszeństwo — inaczej złota seria ćwiczenia bez ciężaru
       // (masa własna ma tonaż 0) albo z czwartego miejsca nie byłaby widoczna.
@@ -150,6 +164,61 @@ List<HistoryFeedLine> _linesOf(
     ..sort((a, b) => a.index.compareTo(b.index));
   return [for (final c in chosen) c.line];
 }
+
+/// Łączy dwa wpisy tego samego ćwiczenia: najlepsza seria z obu, serie i
+/// objętość razem, miejsce pierwszego wpisu.
+_Candidate _merge(_Candidate a, _Candidate b) {
+  final first = a.index <= b.index ? a : b;
+  final x = a.line;
+  final y = b.line;
+  final cardio =
+      x.durationSeconds != null ||
+      x.distanceM != null ||
+      y.durationSeconds != null ||
+      y.distanceM != null;
+  final HistoryFeedLine line;
+  if (cardio) {
+    final seconds = (x.durationSeconds ?? 0) + (y.durationSeconds ?? 0);
+    final meters = (x.distanceM ?? 0) + (y.distanceM ?? 0);
+    line = HistoryFeedLine(
+      name: first.line.name,
+      key: x.key,
+      durationSeconds: seconds > 0 ? seconds : null,
+      distanceM: meters > 0 ? meters : null,
+      distanceUnit: first.line.distanceUnit,
+      isRecord: x.isRecord || y.isRecord,
+    );
+  } else {
+    final best = _isBetterSet(y.weightKg, y.reps, x.weightKg, x.reps) ? y : x;
+    line = HistoryFeedLine(
+      name: first.line.name,
+      key: x.key,
+      weightKg: best.weightKg,
+      reps: best.reps,
+      isRecord: x.isRecord || y.isRecord,
+    );
+  }
+  return _Candidate(
+    first.index,
+    line,
+    a.volumeKg + b.volumeKg,
+    a.sets + b.sets,
+  );
+}
+
+/// Czy seria ([weight], [reps]) jest lepsza od najlepszej dotąd: cięższa, przy
+/// tym samym ciężarze z większą liczbą powtórzeń; ciężar wygrywa z masą własną.
+bool _isBetterSet(
+  double? weight,
+  int? reps,
+  double? bestWeight,
+  int? bestReps,
+) => switch ((weight, bestWeight)) {
+  (null, null) => (reps ?? 0) > (bestReps ?? 0),
+  (null, _) => false,
+  (_, null) => true,
+  (final w?, final b?) => w > b || (w == b && (reps ?? 0) > (bestReps ?? 0)),
+};
 
 _Candidate? _strengthCandidate(
   int index,
@@ -165,14 +234,7 @@ _Candidate? _strengthCandidate(
     final weight = set.hasWeight ? set.weightKg : null;
     final reps = set.reps;
     volume += set.volumeKg;
-    final better = switch ((weight, bestWeight)) {
-      (null, null) => (reps ?? 0) > (bestReps ?? 0),
-      (null, _) => false,
-      (_, null) => true,
-      (final w?, final b?) =>
-        w > b || (w == b && (reps ?? 0) > (bestReps ?? 0)),
-    };
-    if (better) {
+    if (_isBetterSet(weight, reps, bestWeight, bestReps)) {
       bestWeight = weight;
       bestReps = reps;
     }

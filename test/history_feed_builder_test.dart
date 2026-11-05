@@ -44,6 +44,15 @@ TrainingSession _session(
   exercises: exercises,
 );
 
+TrainingSessionExercise _cardio(int seconds, int meters) =>
+    _exercise('Bieżnia', [
+      TrainingSessionSet(
+        completed: true,
+        actualDurationSeconds: seconds,
+        actualDistanceM: meters,
+      ),
+    ], tracking: ExerciseTracking.durationDistance);
+
 void main() {
   final day = DateTime(2026, 10, 12, 17);
 
@@ -216,5 +225,33 @@ void main() {
     expect(entry.lines, isEmpty);
     expect(entry.recordsCount, 2);
     expect(entry.note, 'Dobry dzień');
+  });
+
+  test(
+    'the same exercise twice in a workout is one line with the best set',
+    () {
+      final feed = buildHistoryFeed([
+        _session('a', day, [
+          _exercise('Wyciskanie', [_set('80', '8')]),
+          _exercise('OHP', [_set('40', '8')]),
+          _exercise('Wyciskanie', [_set('90', '5'), _set('85', '6')]),
+        ]),
+      ], PersonalRecordsResult.empty);
+
+      final lines = feed.single.lines;
+      expect(lines.map((l) => l.name), ['Wyciskanie', 'OHP']);
+      expect(lines.first.weightKg, 90);
+      expect(lines.first.reps, 5);
+    },
+  );
+
+  test('a repeated cardio exercise sums its segments into one line', () {
+    final feed = buildHistoryFeed([
+      _session('a', day, [_cardio(600, 2000), _cardio(300, 1000)]),
+    ], PersonalRecordsResult.empty);
+
+    final line = feed.single.lines.single;
+    expect(line.durationSeconds, 900);
+    expect(line.distanceM, 3000);
   });
 }

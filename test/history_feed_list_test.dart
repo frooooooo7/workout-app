@@ -49,14 +49,13 @@ void main() {
       expect(sections[1].rows.map((e) => e.item.id), ['d']);
     });
 
-    test('the latest workout counts in its month but gets no row', () {
+    test('the latest workout gets no row and is left out of the month', () {
       final sections = groupHistoryFeed([
         _entry('a', DateTime(2026, 11, 3, 18)),
         _entry('b', DateTime(2026, 11, 1, 18)),
         _entry('c', DateTime(2026, 10, 28, 18)),
       ], exceptId: 'a');
 
-      expect(sections[0].entries.map((e) => e.item.id), ['a', 'b']);
       expect(sections[0].rows.map((e) => e.item.id), ['b']);
     });
 
@@ -77,6 +76,17 @@ void main() {
       expect(historyLatestWhen(DateTime(2026, 11, 5), today), 'DZIŚ');
       expect(historyLatestWhen(DateTime(2026, 11, 4), today), 'WCZORAJ');
       expect(historyLatestWhen(DateTime(2026, 11, 2), today), '3 DNI TEMU');
+    });
+
+    test('counts calendar days across a daylight saving change', () {
+      // Wiosenna zmiana czasu (29 III 2026): doba ma 23 godziny.
+      final afterChange = DateTime(2026, 3, 30);
+      expect(historyLatestWhen(DateTime(2026, 3, 30), afterChange), 'DZIŚ');
+      expect(historyLatestWhen(DateTime(2026, 3, 29), afterChange), 'WCZORAJ');
+      expect(
+        historyLatestWhen(DateTime(2026, 3, 27), afterChange),
+        '3 DNI TEMU',
+      );
     });
 
     test('falls back to the date from a week on', () {
@@ -108,6 +118,27 @@ void main() {
     expect(find.textContaining('Październik · 2 treningi'), findsOneWidget);
     expect(find.text('Wrzesień'), findsOneWidget);
     expect(find.text('2 rekordy'), findsOneWidget);
+  });
+
+  testWidgets('the month summary counts only the rows under it', (
+    tester,
+  ) async {
+    final entries = [
+      _entry('a', DateTime(2026, 10, 30, 18)),
+      _entry('b', DateTime(2026, 10, 28, 18)),
+    ];
+    await tester.pumpWidget(
+      _app(
+        HistoryFeedSliver(
+          sections: groupHistoryFeed(entries, exceptId: 'a'),
+          today: DateTime(2026, 11, 3),
+          dayKeyFor: (day) => GlobalKey(),
+        ),
+      ),
+    );
+
+    expect(find.byType(HistoryCompactRow), findsOneWidget);
+    expect(find.textContaining('Październik · 1 trening ·'), findsOneWidget);
   });
 
   testWidgets('only the first row of a day carries its scroll key', (
