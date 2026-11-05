@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/service_locator.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -19,16 +21,45 @@ import '../../domain/repositories/training_stats_repository.dart';
 import '../../domain/services/plan_update_from_session.dart';
 import '../../domain/services/stats/personal_records_calculator.dart';
 import '../../domain/services/training_session_detail_mapper.dart';
+import '../../domain/services/workout_comparison.dart';
+import '../bloc/training_home_cubit.dart';
 import '../widgets/new_records_banner.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/workout_summary/plan_update_card.dart';
 import '../widgets/workout_summary/share_workout_sheet.dart';
 import '../widgets/workout_summary/staggered_reveal.dart';
+import '../widgets/workout_summary/workout_comparison_card.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
 import '../widgets/workout_summary/workout_summary_exercise_list.dart';
 import '../widgets/workout_summary/workout_summary_highlights.dart';
 import '../widgets/workout_summary/workout_summary_hero.dart';
 import '../widgets/workout_summary/workout_summary_stats_card.dart';
+
+typedef _SummaryInsights = ({
+  List<PersonalRecord> records,
+  WorkoutComparison? comparison,
+});
+
+/// Rekordy sesji i porównanie z poprzednim treningiem — osobno zabezpieczone,
+/// żeby błąd jednego nie zabrał drugiego.
+_SummaryInsights _summaryInsightsJob(WorkoutComparisonInput input) {
+  var records = const <PersonalRecord>[];
+  WorkoutComparison? comparison;
+  try {
+    records = PersonalRecordsCalculator.recordsOfSession(
+      input.session,
+      input.history,
+    );
+  } catch (_) {
+    /* bez rekordów */
+  }
+  try {
+    comparison = compareWithPrevious(input.session, input.history);
+  } catch (_) {
+    /* bez porównania */
+  }
+  return (records: records, comparison: comparison);
+}
 
 class WorkoutSummaryArgs {
   const WorkoutSummaryArgs({
@@ -81,6 +112,9 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
   WorkoutShareStatus _shareStatus = WorkoutShareStatus.notShared;
   List<PersonalRecord> _records = const [];
 
+  /// Porównanie z poprzednim treningiem; `null` — nie ma z czym porównać.
+  WorkoutComparison? _comparison;
+
   /// Zdjęcie wybrane w arkuszu, jeszcze niewysłane — pokazujemy je od razu.
   Uint8List? _localPhoto;
 
@@ -107,7 +141,7 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     _shareStatus = _session.sharedToProfile
         ? WorkoutShareStatus.shared
         : WorkoutShareStatus.notShared;
-    unawaited(_loadRecords());
+    unawaited(_loadHistoryInsights());
     unawaited(_loadPlanUpdate());
     ServiceLocator.syncStatus.addListener(_refreshPostQueued);
   }
@@ -137,22 +171,28 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     }
   }
 
-  /// Rekordy liczymy z lokalnej historii (offline-first) — bez sieci
-  /// „Nowy rekord!” pojawia się tak samo. Błąd odczytu po prostu chowa sekcję.
-  Future<void> _loadRecords() async {
+  /// Rekordy i porównanie z poprzednim treningiem liczymy z lokalnej historii
+  /// (offline-first) — bez sieci wyglądają tak samo. Jeden odczyt obsługuje
+  /// oba, a długa historia liczy się w osobnym wątku. Błąd odczytu po prostu
+  /// chowa sekcje — reszta podsumowania działa.
+  Future<void> _loadHistoryInsights() async {
     try {
       final repository =
           widget.args?.statsRepository ??
           ServiceLocator.trainingStatsRepository;
       final history = await repository.allCompletedSessions();
-      final records = PersonalRecordsCalculator.recordsOfSession(
-        _session,
-        history,
-      );
-      if (!mounted || records.isEmpty) return;
-      setState(() => _records = records);
+      final input = (session: _session, history: history);
+      final insights = history.length >= TrainingHomeCubit.isolateThreshold
+          ? await compute(_summaryInsightsJob, input)
+          : _summaryInsightsJob(input);
+      if (!mounted) return;
+      if (insights.records.isEmpty && insights.comparison == null) return;
+      setState(() {
+        _records = insights.records;
+        _comparison = insights.comparison;
+      });
     } catch (_) {
-      /* bez rekordów — reszta podsumowania działa */
+      /* bez rekordów i porównania — reszta podsumowania działa */
     }
   }
 
@@ -324,6 +364,14 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
     ServiceLocator.requestFeedRefresh();
   }
 
+  /// Poprzedni trening planu z historii. Bez routera (testy widgetów) nic
+  /// się nie dzieje.
+  void _openPreviousSession(String sessionId) {
+    GoRouter.maybeOf(
+      context,
+    )?.push('/app/training/history/${Uri.encodeComponent(sessionId)}');
+  }
+
   void _handleDone() {
     Navigator.of(context).maybePop();
   }
@@ -380,6 +428,23 @@ class _WorkoutSummaryScreenState extends State<WorkoutSummaryScreen> {
                       StaggeredReveal(
                         index: 1,
                         child: WorkoutSummaryStatsCard(detail: _detail),
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _comparison == null
+                            ? const SizedBox(width: double.infinity)
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: StaggeredReveal(
+                                  index: 2,
+                                  child: WorkoutComparisonCard(
+                                    comparison: _comparison!,
+                                    onOpenPrevious: _openPreviousSession,
+                                  ),
+                                ),
+                              ),
                       ),
                       StaggeredReveal(
                         index: 2,

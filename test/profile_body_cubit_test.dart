@@ -52,6 +52,7 @@ void main() {
           _w(10, 20, 86),
           _w(11, 1, 84.5),
         ]),
+        clock: _now,
       );
       await cubit.load();
 
