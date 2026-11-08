@@ -302,6 +302,37 @@ class _SnapScrollPhysics extends ScrollPhysics {
   _SnapScrollPhysics applyTo(ScrollPhysics? ancestor) =>
       _SnapScrollPhysics(itemExtent: itemExtent, parent: buildParent(ancestor));
 
+  /// Końce linijki stawiają opór (ok. 20% ruchu), zamiast ucinać palec
+  /// o twardą krawędź. Puszczenie i tak dowozi do kreski sprężyną.
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    const retained = 0.2;
+    final rejected = 1 - retained;
+    if (value < position.pixels &&
+        position.pixels <= position.minScrollExtent) {
+      return (value - position.pixels) * rejected;
+    }
+    if (position.maxScrollExtent <= position.pixels &&
+        position.maxScrollExtent < value) {
+      return (value - position.pixels) * rejected;
+    }
+    if (value < position.minScrollExtent &&
+        position.minScrollExtent < position.pixels) {
+      return (value - position.minScrollExtent) * rejected;
+    }
+    if (position.maxScrollExtent < value &&
+        position.pixels < position.maxScrollExtent) {
+      return (value - position.maxScrollExtent) * rejected;
+    }
+    if (position.pixels < position.minScrollExtent && value > position.pixels) {
+      return 0;
+    }
+    if (position.pixels > position.maxScrollExtent && value < position.pixels) {
+      return 0;
+    }
+    return super.applyBoundaryConditions(position, value);
+  }
+
   @override
   Simulation? createBallisticSimulation(
     ScrollMetrics position,

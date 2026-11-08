@@ -102,8 +102,8 @@ class _NotificationBellButtonState extends State<NotificationBellButton>
                   child: AnimatedScale(
                     key: notificationBellBadgeKey,
                     scale: count > 0 ? 1 : 0,
-                    duration: const Duration(milliseconds: 240),
-                    curve: count > 0 ? Curves.elasticOut : Curves.easeIn,
+                    duration: Duration(milliseconds: count > 0 ? 220 : 140),
+                    curve: count > 0 ? Curves.easeOutBack : Curves.easeOutCubic,
                     child: _Badge(label: formatUnreadBadge(_shown)),
                   ),
                 ),

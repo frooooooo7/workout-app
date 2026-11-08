@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../../core/motion/sheet_drag.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/widgets/app_action_sheet.dart';
@@ -67,15 +69,17 @@ Future<ShareSheetResult?> showShareWorkoutSheet(
   return showModalBottomSheet<ShareSheetResult>(
     context: context,
     isScrollControlled: true,
-    useSafeArea: true,
-    // Przeciąganie w dół obsługuje sam arkusz — wbudowane zamyka go bez
-    // pytania i gubi wpisany post.
+    // Gest jest nasz: wbudowany arkusz zamyka się od razu i nie da się go
+    // złapać w połowie zjazdu. Przy brudnym szkicu najpierw pytamy.
     enableDrag: false,
-    backgroundColor: AppColors.surface,
-    barrierColor: Colors.black54,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
-    ),
+    isDismissible: false,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    barrierColor: Colors.transparent,
+    sheetAnimationStyle: AnimationStyle.noAnimation,
+    constraints: const BoxConstraints(maxWidth: double.infinity),
+    shape: const RoundedRectangleBorder(),
+    clipBehavior: Clip.none,
     builder: (context) => ShareWorkoutSheet(
       planName: planName,
       statsLine: statsLine,
@@ -151,7 +155,8 @@ class ShareWorkoutSheet extends StatefulWidget {
   State<ShareWorkoutSheet> createState() => _ShareWorkoutSheetState();
 }
 
-class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
+class _ShareWorkoutSheetState extends State<ShareWorkoutSheet>
+    with TickerProviderStateMixin {
   late final _titleController = TextEditingController(
     text: widget.initialTitle ?? '',
   );
@@ -170,11 +175,60 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
 
   bool get _showsPhoto => _picked != null || (_hasInitialPhoto && !_removed);
 
+  /// Piksele w dół od spoczynku. Ujemne = gumka nad krawędzią.
+  /// Sterowane wprost z palca — bez setState na każdy ruch.
+  late final AnimationController _offset = AnimationController.unbounded(
+    vsync: this,
+    value: 10000,
+  );
+  final GlobalKey _surfaceKey = GlobalKey(debugLabel: 'share-sheet-surface');
+  AnimationController? _program;
+  Completer<bool>? _programDone;
+  bool _seeded = false;
+  bool _didEntrance = false;
+  bool _userMoved = false;
+  bool _closing = false;
+  bool _closeRequested = false;
+
   @override
   void initState() {
     super.initState();
     _titleController.addListener(_refresh);
     _bodyController.addListener(_refresh);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _playEntrance());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_seeded) return;
+    _seeded = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _offset.value = 0;
+      _didEntrance = true;
+    }
+  }
+
+  bool get _reduceMotion => MediaQuery.disableAnimationsOf(context);
+
+  double get _travel {
+    final box = _surfaceKey.currentContext?.findRenderObject() as RenderBox?;
+    final height = box?.hasSize ?? false ? box!.size.height : 0.0;
+    if (height > 0) return height;
+    return MediaQuery.sizeOf(context).height;
+  }
+
+  void _playEntrance() {
+    if (!mounted || _didEntrance || _userMoved) return;
+    _didEntrance = true;
+    if (_reduceMotion) {
+      _offset.value = 0;
+      return;
+    }
+    _offset.value = _travel;
+    unawaited(
+      _runProgram(to: 0, duration: sheetEnterDuration, curve: sheetEdgeCurve),
+    );
   }
 
   void _refresh() => setState(() {});
@@ -188,32 +242,150 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
 
   bool _confirming = false;
 
-  /// Zamknięcie arkusza (X, tło, wstecz, przeciągnięcie w dół).
+  /// Zamknięcie arkusza (X, tło, wstecz). Przycisk nie odbija — zjeżdża
+  /// krzywą arkusza. Szkic z treścią najpierw pyta.
   Future<void> _requestClose() async {
-    if (!_dirty) {
-      Navigator.of(context).pop();
-      return;
+    if (_closing || _closeRequested || _confirming) return;
+    _closeRequested = true;
+    if (_dirty) {
+      _confirming = true;
+      final discard = await showAppConfirmDialog(
+        context,
+        title: widget.editing ? 'Odrzucić zmiany?' : 'Odrzucić post?',
+        message: widget.editing
+            ? 'Zmiany w poście nie zostaną zapisane.'
+            : 'Wpisany tytuł, opis i zdjęcie nie zostaną zapisane.',
+        confirmLabel: 'Odrzuć',
+      );
+      _confirming = false;
+      if (!discard || !mounted) {
+        _closeRequested = false;
+        return;
+      }
     }
-    if (_confirming) return;
-    _confirming = true;
-    final discard = await showAppConfirmDialog(
-      context,
-      title: widget.editing ? 'Odrzucić zmiany?' : 'Odrzucić post?',
-      message: widget.editing
-          ? 'Zmiany w poście nie zostaną zapisane.'
-          : 'Wpisany tytuł, opis i zdjęcie nie zostaną zapisane.',
-      confirmLabel: 'Odrzuć',
-    );
-    _confirming = false;
-    if (discard && mounted) Navigator.of(context).pop();
+    await _closeFromButton();
+    if (!_closing) _closeRequested = false;
   }
 
-  void _onHandleDragEnd(DragEndDetails details) {
-    if ((details.primaryVelocity ?? 0) > 300) unawaited(_requestClose());
+  Future<void> _closeFromButton() async {
+    if (_closing || !mounted) return;
+    _closing = true;
+    if (!_reduceMotion) {
+      final finished = await _runProgram(
+        to: _travel + 24,
+        duration: sheetButtonCloseDuration,
+        curve: sheetEdgeCurve,
+      );
+      if (!finished || !mounted || !_closing) return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _userMoved = true;
+    _closing = false;
+    _closeRequested = false;
+    _stopProgram();
+    _offset.stop();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    _offset.value = nextSheetOffset(_offset.value, details.delta.dy);
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (shouldDismissSheet(
+      offset: _offset.value,
+      travel: _travel,
+      velocity: velocity,
+    )) {
+      unawaited(_dismissFromDrag(velocity));
+      return;
+    }
+    unawaited(_springTo(0, velocity, bounce: !_reduceMotion));
+  }
+
+  void _onDragCancel() => _onDragEnd(DragEndDetails(primaryVelocity: 0));
+
+  /// Palec puścił arkusz za progiem. Czysty szkic wyjeżdża z prędkością
+  /// puszczenia. Brudny wraca i dopiero wtedy pyta — szkic nie znika,
+  /// zanim ktoś potwierdzi.
+  Future<void> _dismissFromDrag(double velocity) async {
+    if (_dirty) {
+      await _springTo(0, velocity, bounce: false);
+      if (mounted) await _requestClose();
+      return;
+    }
+    if (_closing || !mounted) return;
+    _closing = true;
+    if (_reduceMotion) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final finished = await _springTo(_travel + 32, velocity, bounce: false);
+    if (finished && mounted && _closing) Navigator.of(context).pop();
+  }
+
+  Future<bool> _springTo(
+    double target,
+    double velocity, {
+    required bool bounce,
+  }) async {
+    _stopProgram();
+    final reduce = _reduceMotion;
+    final spring = SpringDescription.withDampingRatio(
+      mass: 0.8,
+      stiffness: reduce ? 1400 : (bounce ? 640 : 520),
+      ratio: bounce && !reduce ? 0.86 : 1,
+    );
+    try {
+      await _offset.animateWith(
+        SpringSimulation(spring, _offset.value, target, reduce ? 0 : velocity),
+      );
+      return true;
+    } on TickerCanceled {
+      return false;
+    }
+  }
+
+  Future<bool> _runProgram({
+    required double to,
+    required Duration duration,
+    required Curve curve,
+  }) {
+    _stopProgram();
+    final start = _offset.value;
+    final controller = AnimationController(vsync: this, duration: duration);
+    final done = Completer<bool>();
+    _program = controller;
+    _programDone = done;
+    controller.addListener(() {
+      if (_program != controller || done.isCompleted) return;
+      _offset.value = start + (to - start) * curve.transform(controller.value);
+    });
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed && !done.isCompleted) {
+        done.complete(true);
+      }
+    });
+    controller.forward();
+    return done.future;
+  }
+
+  void _stopProgram() {
+    final done = _programDone;
+    final controller = _program;
+    _program = null;
+    _programDone = null;
+    if (done != null && !done.isCompleted) done.complete(false);
+    controller?.dispose();
   }
 
   @override
   void dispose() {
+    _stopProgram();
+    _offset.dispose();
     _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
@@ -290,181 +462,271 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final canUseCamera = ImagePicker().supportsImageSource(ImageSource.camera);
 
+    final media = MediaQuery.of(context);
+    final bodyMax = (media.size.height - media.padding.top - bottomInset - 96)
+        .clamp(120.0, media.size.height)
+        .toDouble();
+
     return PopScope(
-      canPop: !_dirty,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_requestClose());
       },
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottomInset),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onVerticalDragEnd: _onHandleDragEnd,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                        ),
+      child: SizedBox(
+        width: double.infinity,
+        height: media.size.height,
+        child: AnimatedBuilder(
+          animation: _offset,
+          builder: (context, child) {
+            final travel = _travel;
+            final progress = travel <= 0
+                ? 0.0
+                : (_offset.value / travel).clamp(0.0, 1.0);
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: _closing ? null : _requestClose,
+                    behavior: HitTestBehavior.opaque,
+                    child: ColoredBox(
+                      color: Colors.black.withValues(
+                        alpha: 0.54 * (1 - progress),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.editing
-                                ? 'Edytuj post'
-                                : 'Udostępnij trening',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Transform.translate(
+                    offset: Offset(0, _offset.value),
+                    child: child,
+                  ),
+                ),
+              ],
+            );
+          },
+          child: KeyedSubtree(
+            key: _surfaceKey,
+            child: Material(
+              key: const ValueKey('share-sheet-surface'),
+              color: AppColors.surface,
+              elevation: 12,
+              shadowColor: Colors.black54,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadius.card),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GestureDetector(
+                      key: const ValueKey('share-sheet-handle'),
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragStart: _onDragStart,
+                      onVerticalDragUpdate: _onDragUpdate,
+                      onVerticalDragEnd: _onDragEnd,
+                      onVerticalDragCancel: _onDragCancel,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(
+                            height: 44,
+                            child: Center(child: _SheetGrabber()),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.editing
+                                        ? 'Edytuj post'
+                                        : 'Udostępnij trening',
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                ),
+                                _SquareIconButton(
+                                  icon: Icons.close_rounded,
+                                  tooltip: 'Zamknij',
+                                  onTap: _requestClose,
+                                ),
+                              ],
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: bodyMax),
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          18,
+                          14,
+                          18,
+                          18 + media.padding.bottom,
                         ),
-                        _SquareIconButton(
-                          icon: Icons.close_rounded,
-                          tooltip: 'Zamknij',
-                          onTap: _requestClose,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOutCubic,
+                              alignment: Alignment.topCenter,
+                              child: _showsPhoto
+                                  ? _PhotoPreview(
+                                      key: const ValueKey('share-sheet-photo'),
+                                      bytes:
+                                          _picked?.bytes ??
+                                          widget.initialPhotoBytes,
+                                      url: _picked == null
+                                          ? widget.initialPhotoUrl
+                                          : null,
+                                      planName: widget.planName,
+                                      statsLine: widget.statsLine,
+                                      onChange: _changePhoto,
+                                      onRemove: _removePhoto,
+                                    )
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _WorkoutMini(
+                                          planName: widget.planName,
+                                          statsLine: widget.statsLine,
+                                        ),
+                                        const SizedBox(height: 14),
+                                        _PhotoSlot(
+                                          canUseCamera: canUseCamera,
+                                          onCamera: () =>
+                                              _pick(ImageSource.camera),
+                                          onGallery: () =>
+                                              _pick(ImageSource.gallery),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                            const SizedBox(height: 14),
+                            _FieldLabel(
+                              label: 'Tytuł',
+                              trailing: _titleController.text.isEmpty
+                                  ? 'opcjonalnie'
+                                  : '${postTitleLength(_titleController.text)}/$postTitleMaxLength',
+                            ),
+                            _PostField(
+                              key: const ValueKey('share-sheet-title'),
+                              controller: _titleController,
+                              hint: widget.planName,
+                              maxLength: postTitleMaxLength,
+                              measure: postTitleLength,
+                              textInputAction: TextInputAction.next,
+                            ),
+                            const SizedBox(height: 12),
+                            _FieldLabel(
+                              label: 'Opis',
+                              trailing: _bodyController.text.isEmpty
+                                  ? 'opcjonalnie'
+                                  : '${postBodyLength(_bodyController.text)}/$postBodyMaxLength',
+                            ),
+                            _PostField(
+                              key: const ValueKey('share-sheet-body'),
+                              controller: _bodyController,
+                              hint: 'Jak poszło? Napisz coś obserwującym…',
+                              maxLength: postBodyMaxLength,
+                              measure: postBodyLength,
+                              minLines: 3,
+                              maxLines: 6,
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 52,
+                              child: FilledButton.icon(
+                                key: const ValueKey('share-sheet-publish'),
+                                onPressed: _publish,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                icon: Icon(
+                                  widget.editing
+                                      ? Icons.check_rounded
+                                      : Icons.arrow_upward_rounded,
+                                  size: 20,
+                                ),
+                                label: Text(
+                                  widget.editing ? 'Zapisz' : 'Opublikuj',
+                                  style: const TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if (widget.editing)
+                              TextButton(
+                                key: const ValueKey('share-sheet-unshare'),
+                                onPressed: () => Navigator.of(
+                                  context,
+                                ).pop(const UnsharePost()),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.textSecondary,
+                                ),
+                                child: const Text(
+                                  'Cofnij udostępnienie',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              )
+                            else
+                              const Padding(
+                                padding: EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Możesz to później zmienić w szczegółach treningu',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: _showsPhoto
-                    ? _PhotoPreview(
-                        key: const ValueKey('share-sheet-photo'),
-                        bytes: _picked?.bytes ?? widget.initialPhotoBytes,
-                        url: _picked == null ? widget.initialPhotoUrl : null,
-                        planName: widget.planName,
-                        statsLine: widget.statsLine,
-                        onChange: _changePhoto,
-                        onRemove: _removePhoto,
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _WorkoutMini(
-                            planName: widget.planName,
-                            statsLine: widget.statsLine,
-                          ),
-                          const SizedBox(height: 14),
-                          _PhotoSlot(
-                            canUseCamera: canUseCamera,
-                            onCamera: () => _pick(ImageSource.camera),
-                            onGallery: () => _pick(ImageSource.gallery),
-                          ),
-                        ],
-                      ),
-              ),
-              const SizedBox(height: 14),
-              _FieldLabel(
-                label: 'Tytuł',
-                trailing: _titleController.text.isEmpty
-                    ? 'opcjonalnie'
-                    : '${postTitleLength(_titleController.text)}/$postTitleMaxLength',
-              ),
-              _PostField(
-                key: const ValueKey('share-sheet-title'),
-                controller: _titleController,
-                hint: widget.planName,
-                maxLength: postTitleMaxLength,
-                measure: postTitleLength,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              _FieldLabel(
-                label: 'Opis',
-                trailing: _bodyController.text.isEmpty
-                    ? 'opcjonalnie'
-                    : '${postBodyLength(_bodyController.text)}/$postBodyMaxLength',
-              ),
-              _PostField(
-                key: const ValueKey('share-sheet-body'),
-                controller: _bodyController,
-                hint: 'Jak poszło? Napisz coś obserwującym…',
-                maxLength: postBodyMaxLength,
-                measure: postBodyLength,
-                minLines: 3,
-                maxLines: 6,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 52,
-                child: FilledButton.icon(
-                  key: const ValueKey('share-sheet-publish'),
-                  onPressed: _publish,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  icon: Icon(
-                    widget.editing
-                        ? Icons.check_rounded
-                        : Icons.arrow_upward_rounded,
-                    size: 20,
-                  ),
-                  label: Text(
-                    widget.editing ? 'Zapisz' : 'Opublikuj',
-                    style: const TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (widget.editing)
-                TextButton(
-                  key: const ValueKey('share-sheet-unshare'),
-                  onPressed: () =>
-                      Navigator.of(context).pop(const UnsharePost()),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
-                  ),
-                  child: const Text(
-                    'Cofnij udostępnienie',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                )
-              else
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Możesz to później zmienić w szczegółach treningu',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppColors.border,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
     );
   }

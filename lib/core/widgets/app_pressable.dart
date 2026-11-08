@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Reusable pressable wrapper implementing Emil Kowalski design engineering principles:
-/// Responsive touch feedback with subtle scaling (0.96-0.98) and natural easeOutCubic curve.
+/// Przytrzymanie schodzi w 100 ms, puszczenie wraca szybciej — faza
+/// świadoma i odpuszczenie nie trwają tyle samo.
 class AppPressable extends StatefulWidget {
   const AppPressable({
     super.key,
@@ -35,14 +35,17 @@ class _AppPressableState extends State<AppPressable>
     _controller = AnimationController(
       vsync: this,
       duration: widget.duration,
+      reverseDuration: Duration(
+        milliseconds: (widget.duration.inMilliseconds * 0.65).round().clamp(
+          40,
+          1000,
+        ),
+      ),
     );
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: widget.pressedScale,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -77,10 +80,7 @@ class _AppPressableState extends State<AppPressable>
       onTapCancel: _onTapCancel,
       onTap: widget.enabled ? widget.onTap : null,
       behavior: HitTestBehavior.opaque,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: widget.child,
-      ),
+      child: ScaleTransition(scale: _scaleAnimation, child: widget.child),
     );
   }
 }

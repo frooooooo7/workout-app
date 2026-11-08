@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import 'rest_timer_controller.dart';
@@ -299,52 +300,87 @@ class _DigitalTimeStepper extends StatefulWidget {
   State<_DigitalTimeStepper> createState() => _DigitalTimeStepperState();
 }
 
-class _DigitalTimeStepperState extends State<_DigitalTimeStepper> {
+class _DigitalTimeStepperState extends State<_DigitalTimeStepper>
+    with SingleTickerProviderStateMixin {
   static const double _dragStep = 72;
-  double _dragOffset = 0;
+  late final AnimationController _shift = AnimationController.unbounded(
+    vsync: this,
+    value: 0,
+  );
+
+  @override
+  void dispose() {
+    _shift.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) => _shift.stop();
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    var next = _shift.value + details.delta.dy;
+    while (next <= -_dragStep) {
+      widget.onUp();
+      next += _dragStep;
+    }
+    while (next >= _dragStep) {
+      widget.onDown();
+      next -= _dragStep;
+    }
+    _shift.value = next;
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final spring = SpringDescription.withDampingRatio(
+      mass: 0.5,
+      stiffness: reduce ? 1600 : 900,
+      ratio: reduce ? 1 : 0.9,
+    );
+    final capped = velocity.clamp(-900.0, 900.0);
+    _shift.animateWith(
+      SpringSimulation(spring, _shift.value, 0, reduce ? 0 : capped),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       key: widget.dialKey,
-      onVerticalDragStart: (_) => _dragOffset = 0,
-      onVerticalDragUpdate: (details) {
-        _dragOffset += details.delta.dy;
-        while (_dragOffset <= -_dragStep) {
-          widget.onUp();
-          _dragOffset += _dragStep;
-        }
-        while (_dragOffset >= _dragStep) {
-          widget.onDown();
-          _dragOffset -= _dragStep;
-        }
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            key: widget.upKey,
-            tooltip: '${widget.label} więcej',
-            onPressed: widget.onUp,
-            icon: const Icon(Icons.keyboard_arrow_up_rounded),
-            color: AppColors.primaryVariant,
-          ),
-          Text(
-            widget.label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+      onVerticalDragStart: _onDragStart,
+      onVerticalDragUpdate: _onDragUpdate,
+      onVerticalDragEnd: _onDragEnd,
+      child: AnimatedBuilder(
+        animation: _shift,
+        builder: (context, child) =>
+            Transform.translate(offset: Offset(0, _shift.value), child: child),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              key: widget.upKey,
+              tooltip: '${widget.label} więcej',
+              onPressed: widget.onUp,
+              icon: const Icon(Icons.keyboard_arrow_up_rounded),
+              color: AppColors.primaryVariant,
             ),
-          ),
-          IconButton(
-            key: widget.downKey,
-            tooltip: '${widget.label} mniej',
-            onPressed: widget.onDown,
-            icon: const Icon(Icons.keyboard_arrow_down_rounded),
-            color: AppColors.primaryVariant,
-          ),
-        ],
+            Text(
+              widget.label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            IconButton(
+              key: widget.downKey,
+              tooltip: '${widget.label} mniej',
+              onPressed: widget.onDown,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              color: AppColors.primaryVariant,
+            ),
+          ],
+        ),
       ),
     );
   }

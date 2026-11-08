@@ -282,8 +282,8 @@ class _NavBadge extends StatelessWidget {
       builder: (context, value, _) => AnimatedScale(
         key: const Key('app-bottom-nav-activity-badge'),
         scale: value > 0 ? 1 : 0,
-        duration: const Duration(milliseconds: 240),
-        curve: value > 0 ? Curves.elasticOut : Curves.easeIn,
+        duration: Duration(milliseconds: value > 0 ? 220 : 140),
+        curve: value > 0 ? Curves.easeOutBack : Curves.easeOutCubic,
         child: Container(
           constraints: const BoxConstraints(minWidth: 17),
           height: 17,
