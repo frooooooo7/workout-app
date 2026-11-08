@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/training/domain/models/training_history_models.dart';
 import 'package:gym/features/training/domain/services/history_feed_builder.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_compact_row.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_feed_list.dart';
 import 'package:gym/features/training/presentation/widgets/workout_history/history_formatters.dart';
-import 'package:gym/features/training/presentation/widgets/workout_history/history_session_card.dart';
+import 'package:gym/features/training/presentation/widgets/workout_history/history_latest_card.dart';
 
 HistoryFeedEntry _entry(String id, DateTime local, {int records = 0}) =>
     HistoryFeedEntry(
@@ -24,9 +25,15 @@ HistoryFeedEntry _entry(String id, DateTime local, {int records = 0}) =>
       recordsCount: records,
     );
 
+Widget _app(Widget sliver, {ScrollController? controller}) => MaterialApp(
+  home: Scaffold(
+    body: CustomScrollView(controller: controller, slivers: [sliver]),
+  ),
+);
+
 void main() {
   group('groupHistoryFeed', () {
-    test('splits months, weeks and days, newest first', () {
+    test('splits months, newest first, keeping every training as a row', () {
       final sections = groupHistoryFeed([
         _entry('a', DateTime(2026, 11, 3, 18)),
         _entry('b', DateTime(2026, 11, 3, 8)),
@@ -38,99 +45,123 @@ void main() {
         DateTime(2026, 11),
         DateTime(2026, 10),
       ]);
-      final november = sections.first.rows;
-      // Tydzień 2–8 lis, dzień 3 (dwa treningi), potem tydzień 26 paź–1 lis
-      // z dniem 1.
-      expect(november[0], isA<HistoryWeekRow>());
-      expect((november[1] as HistoryDayRow).entries.map((e) => e.item.id), [
-        'a',
-        'b',
-      ]);
-      expect(november[2], isA<HistoryWeekRow>());
-      expect((november[3] as HistoryDayRow).day, DateTime(2026, 11, 1));
+      expect(sections[0].rows.map((e) => e.item.id), ['a', 'b', 'c']);
+      expect(sections[1].rows.map((e) => e.item.id), ['d']);
     });
 
-    test('a week cut by a month boundary shows its goal only once', () {
+    test('the latest workout gets no row and is left out of the month', () {
       final sections = groupHistoryFeed([
-        _entry('a', DateTime(2026, 11, 1, 18)),
-        _entry('b', DateTime(2026, 10, 30, 18)),
-      ]);
+        _entry('a', DateTime(2026, 11, 3, 18)),
+        _entry('b', DateTime(2026, 11, 1, 18)),
+        _entry('c', DateTime(2026, 10, 28, 18)),
+      ], exceptId: 'a');
 
-      final novemberWeek = sections[0].rows.first as HistoryWeekRow;
-      final octoberWeek = sections[1].rows.first as HistoryWeekRow;
-      expect(novemberWeek.weekStart, octoberWeek.weekStart);
-      expect(novemberWeek.showGoal, isTrue);
-      expect(octoberWeek.showGoal, isFalse);
+      expect(sections[0].rows.map((e) => e.item.id), ['b']);
     });
 
-    test('counts workouts per week', () {
-      final counts = workoutsPerWeek([
+    test('a month with only the latest workout disappears', () {
+      final sections = groupHistoryFeed([
         _entry('a', DateTime(2026, 11, 3, 18)),
-        _entry('b', DateTime(2026, 11, 2, 18)),
-        _entry('c', DateTime(2026, 10, 30, 18)),
-      ]);
+        _entry('c', DateTime(2026, 10, 28, 18)),
+      ], exceptId: 'a');
 
-      expect(counts[DateTime(2026, 11, 2)], 2);
-      expect(counts[DateTime(2026, 10, 26)], 1);
+      expect(sections.map((s) => s.month), [DateTime(2026, 10)]);
     });
   });
 
-  testWidgets('week headers show the goal counter, green once met', (
+  group('historyLatestWhen', () {
+    final today = DateTime(2026, 11, 5);
+
+    test('names today, yesterday and the last few days', () {
+      expect(historyLatestWhen(DateTime(2026, 11, 5), today), 'DZIŚ');
+      expect(historyLatestWhen(DateTime(2026, 11, 4), today), 'WCZORAJ');
+      expect(historyLatestWhen(DateTime(2026, 11, 2), today), '3 DNI TEMU');
+    });
+
+    test('counts calendar days across a daylight saving change', () {
+      // Wiosenna zmiana czasu (29 III 2026): doba ma 23 godziny.
+      final afterChange = DateTime(2026, 3, 30);
+      expect(historyLatestWhen(DateTime(2026, 3, 30), afterChange), 'DZIŚ');
+      expect(historyLatestWhen(DateTime(2026, 3, 29), afterChange), 'WCZORAJ');
+      expect(
+        historyLatestWhen(DateTime(2026, 3, 27), afterChange),
+        '3 DNI TEMU',
+      );
+    });
+
+    test('falls back to the date from a week on', () {
+      expect(historyLatestWhen(DateTime(2026, 10, 28), today), 'ŚR 28 PAŹ');
+    });
+  });
+
+  testWidgets('a month is one card of compact rows with a month summary', (
     tester,
   ) async {
     final entries = [
-      _entry('a', DateTime(2026, 11, 3, 18)),
-      _entry('b', DateTime(2026, 11, 2, 18)),
-      _entry('c', DateTime(2026, 10, 27, 18)),
+      _entry('a', DateTime(2026, 10, 30, 18), records: 2),
+      _entry('b', DateTime(2026, 10, 28, 18)),
+      _entry('c', DateTime(2026, 9, 20, 18)),
     ];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              HistoryFeedSliver(
-                sections: groupHistoryFeed(entries),
-                today: DateTime(2026, 11, 3),
-                dayKeyFor: (day) => GlobalKey(),
-                weekCounts: workoutsPerWeek(entries),
-                weeklyGoal: 2,
-              ),
-            ],
-          ),
+      _app(
+        HistoryFeedSliver(
+          sections: groupHistoryFeed(entries),
+          today: DateTime(2026, 11, 3),
+          dayKeyFor: (day) => GlobalKey(),
         ),
       ),
     );
 
-    expect(find.text('2 z 2'), findsOneWidget);
-    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
-    expect(find.text('1 z 2'), findsOneWidget);
-    expect(
-      find.textContaining('Ten tydzień', findRichText: true),
-      findsOneWidget,
-    );
-    expect(find.byType(HistorySessionCard), findsNWidgets(3));
+    expect(find.byType(HistoryCompactRow), findsNWidgets(3));
+    // Pierwszy miesiąc otwiera „Wcześniej” i niesie nazwę miesiąca w sumie.
+    expect(find.text('Wcześniej'), findsOneWidget);
+    expect(find.textContaining('Październik · 2 treningi'), findsOneWidget);
+    expect(find.text('Wrzesień'), findsOneWidget);
+    expect(find.text('2 rekordy'), findsOneWidget);
   });
 
-  testWidgets('no goal counter without a goal', (tester) async {
-    final entries = [_entry('a', DateTime(2026, 11, 3, 18))];
+  testWidgets('the month summary counts only the rows under it', (
+    tester,
+  ) async {
+    final entries = [
+      _entry('a', DateTime(2026, 10, 30, 18)),
+      _entry('b', DateTime(2026, 10, 28, 18)),
+    ];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              HistoryFeedSliver(
-                sections: groupHistoryFeed(entries),
-                today: DateTime(2026, 11, 3),
-                dayKeyFor: (day) => GlobalKey(),
-                weekCounts: workoutsPerWeek(entries),
-              ),
-            ],
-          ),
+      _app(
+        HistoryFeedSliver(
+          sections: groupHistoryFeed(entries, exceptId: 'a'),
+          today: DateTime(2026, 11, 3),
+          dayKeyFor: (day) => GlobalKey(),
         ),
       ),
     );
 
-    expect(find.textContaining(' z '), findsNothing);
+    expect(find.byType(HistoryCompactRow), findsOneWidget);
+    expect(find.textContaining('Październik · 1 trening ·'), findsOneWidget);
+  });
+
+  testWidgets('only the first row of a day carries its scroll key', (
+    tester,
+  ) async {
+    final keys = <DateTime, GlobalKey>{};
+    final entries = [
+      _entry('a', DateTime(2026, 10, 30, 18)),
+      _entry('b', DateTime(2026, 10, 30, 8)),
+      _entry('c', DateTime(2026, 10, 28, 18)),
+    ];
+    await tester.pumpWidget(
+      _app(
+        HistoryFeedSliver(
+          sections: groupHistoryFeed(entries),
+          today: DateTime(2026, 11, 3),
+          dayKeyFor: (day) => keys.putIfAbsent(day, GlobalKey.new),
+        ),
+      ),
+    );
+
+    expect(keys.keys, [DateTime(2026, 10, 30), DateTime(2026, 10, 28)]);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('only the current month header stays pinned at the top', (
@@ -144,33 +175,26 @@ void main() {
     final controller = ScrollController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CustomScrollView(
-            controller: controller,
-            slivers: [
-              HistoryFeedSliver(
-                sections: groupHistoryFeed(entries),
-                today: DateTime(2026, 11, 28),
-                dayKeyFor: (day) => GlobalKey(),
-                weekCounts: workoutsPerWeek(entries),
-              ),
-            ],
-          ),
+      _app(
+        HistoryFeedSliver(
+          sections: groupHistoryFeed(entries),
+          today: DateTime(2026, 11, 28),
+          dayKeyFor: (day) => GlobalKey(),
         ),
+        controller: controller,
       ),
     );
 
-    final headerTexts = {
-      for (final month in [8, 9, 10, 11])
-        formatMonthYear(DateTime(2026, month)).toUpperCase(),
+    final titles = {
+      'Wcześniej',
+      for (final month in [8, 9, 10]) formatMonthName(DateTime(2026, month)),
     };
     final headers = find.byWidgetPredicate(
-      (w) => w is Text && headerTexts.contains(w.data),
+      (w) => w is Text && titles.contains(w.data),
     );
 
-    // Przewijamy w głąb trzeciego miesiąca (październik): nagłówki wcześniejszych
-    // miesięcy muszą już zniknąć, a nie piętrzyć się u góry.
+    // Przewijamy w głąb trzeciego miesiąca: nagłówki wcześniejszych miesięcy
+    // muszą już zniknąć, a nie piętrzyć się u góry.
     controller.jumpTo(controller.position.maxScrollExtent * 0.55);
     await tester.pump();
     await tester.pump();
@@ -179,7 +203,7 @@ void main() {
       for (final element in headers.evaluate())
         tester.getTopLeft(find.byWidget(element.widget)).dy,
     ].where((top) => top < 90).toList();
-    // Nagłówek miesiąca ma 40 px: drugi pod pierwszym znaczyłby stos.
+    // Nagłówek miesiąca ma 44 px: drugi pod pierwszym znaczyłby stos.
     expect(pinned, hasLength(1));
   });
 }

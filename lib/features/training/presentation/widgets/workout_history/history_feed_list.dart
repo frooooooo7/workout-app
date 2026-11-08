@@ -5,52 +5,27 @@ import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/widgets/app_tab_header.dart';
 import '../../../domain/models/monthly_training_history.dart';
 import '../../../domain/services/history_feed_builder.dart';
-import '../../../domain/services/training_summary_calculator.dart';
 import '../session_details/session_details_formatters.dart';
+import 'history_compact_row.dart';
 import 'history_formatters.dart';
-import 'history_session_card.dart';
 
-/// Wiersz listy w obrębie miesiąca: nagłówek tygodnia albo dzień z kartami.
-sealed class HistoryFeedRow {
-  const HistoryFeedRow();
-}
-
-class HistoryWeekRow extends HistoryFeedRow {
-  const HistoryWeekRow({required this.weekStart, this.showGoal = true});
-
-  /// Poniedziałek tygodnia.
-  final DateTime weekStart;
-
-  /// Tydzień przecięty granicą miesiąca dostaje nagłówek w obu miesiącach,
-  /// ale licznik celu tylko w pierwszym z nich.
-  final bool showGoal;
-}
-
-class HistoryDayRow extends HistoryFeedRow {
-  const HistoryDayRow({required this.day, required this.entries});
-
-  final DateTime day;
-  final List<HistoryFeedEntry> entries;
-}
-
-/// Treningi jednego miesiąca z nagłówkami tygodni i dniami.
+/// Treningi jednego miesiąca, które mają wiersz na liście (bez treningu z karty
+/// „Ostatni trening”). Suma w nagłówku liczy dokładnie te wiersze.
 class HistoryMonthSection {
-  const HistoryMonthSection({
-    required this.month,
-    required this.entries,
-    required this.rows,
-  });
+  const HistoryMonthSection({required this.month, required this.rows});
 
   final DateTime month;
-  final List<HistoryFeedEntry> entries;
-  final List<HistoryFeedRow> rows;
+  final List<HistoryFeedEntry> rows;
 }
 
-/// Dzieli listę (od najnowszego) na miesiące, a miesiące na tygodnie i dni.
-List<HistoryMonthSection> groupHistoryFeed(List<HistoryFeedEntry> entries) {
+/// Dzieli listę (od najnowszego) na miesiące. Trening [exceptId] — ten z karty
+/// „Ostatni trening” — nie dostaje wiersza ani nie wchodzi do sumy miesiąca;
+/// miesiąc bez wierszy znika.
+List<HistoryMonthSection> groupHistoryFeed(
+  List<HistoryFeedEntry> entries, {
+  String? exceptId,
+}) {
   final sections = <HistoryMonthSection>[];
-  final seenWeeks = <DateTime>{};
-
   var index = 0;
   while (index < entries.length) {
     final local = entries[index].item.startedAt.toLocal();
@@ -62,57 +37,18 @@ List<HistoryMonthSection> groupHistoryFeed(List<HistoryFeedEntry> entries) {
       inMonth.add(entries[index]);
       index++;
     }
-
-    final rows = <HistoryFeedRow>[];
-    DateTime? currentWeek;
-    DateTime? currentDay;
-    var dayEntries = <HistoryFeedEntry>[];
-    void flushDay() {
-      if (currentDay != null) {
-        rows.add(HistoryDayRow(day: currentDay, entries: dayEntries));
-      }
-      dayEntries = [];
-    }
-
-    for (final entry in inMonth) {
-      final day = entry.day;
-      final week = TrainingSummaryCalculator.startOfWeek(day);
-      if (currentDay != day) {
-        flushDay();
-        currentDay = day;
-        if (currentWeek != week) {
-          currentWeek = week;
-          rows.add(
-            HistoryWeekRow(weekStart: week, showGoal: seenWeeks.add(week)),
-          );
-        }
-      }
-      dayEntries.add(entry);
-    }
-    flushDay();
-
-    sections.add(
-      HistoryMonthSection(month: month, entries: inMonth, rows: rows),
-    );
+    final rows = [
+      for (final entry in inMonth)
+        if (entry.item.id != exceptId) entry,
+    ];
+    if (rows.isEmpty) continue;
+    sections.add(HistoryMonthSection(month: month, rows: rows));
   }
   return sections;
 }
 
-/// Ile treningów padło w którym tygodniu (klucz: poniedziałek).
-Map<DateTime, int> workoutsPerWeek(Iterable<HistoryFeedEntry> entries) {
-  final counts = <DateTime, int>{};
-  for (final entry in entries) {
-    counts.update(
-      TrainingSummaryCalculator.startOfWeek(entry.day),
-      (v) => v + 1,
-      ifAbsent: () => 1,
-    );
-  }
-  return counts;
-}
-
-/// Ciągła lista treningów: nagłówek miesiąca (przyklejony do góry, z sumą
-/// miesiąca), pod nim tygodnie z licznikiem celu i dni z kartami.
+/// „Wcześniej”: jedna karta na miesiąc ze zwartymi wierszami treningów,
+/// nagłówek miesiąca (przyklejony do góry, z sumą miesiąca) nad każdą.
 ///
 /// Wiersze budują się leniwie, więc długa historia nie kosztuje. [onRowMounted]
 /// i [onRowUnmounted] mówią, które wiersze są akurat zbudowane — po to, żeby
@@ -124,8 +60,6 @@ class HistoryFeedSliver extends StatelessWidget {
     required this.sections,
     required this.today,
     required this.dayKeyFor,
-    this.weekCounts = const {},
-    this.weeklyGoal,
     this.highlightedDay,
     this.onRowMounted,
     this.onRowUnmounted,
@@ -134,25 +68,14 @@ class HistoryFeedSliver extends StatelessWidget {
   final List<HistoryMonthSection> sections;
   final DateTime today;
 
-  /// Klucz bloku dnia — po nim panel przewija do dnia z kalendarza.
+  /// Klucz pierwszego wiersza dnia — po nim panel przewija do dnia z kalendarza.
   final GlobalKey Function(DateTime day) dayKeyFor;
-
-  /// Wszystkie treningi tygodnia (bez filtra) — licznik celu nie powinien
-  /// zmieniać się wraz z filtrem planu.
-  final Map<DateTime, int> weekCounts;
-
-  /// Cel z profilu; `null` — bez liczników.
-  final int? weeklyGoal;
 
   final DateTime? highlightedDay;
   final ValueChanged<int>? onRowMounted;
   final ValueChanged<int>? onRowUnmounted;
 
-  /// Licznik celu pokazujemy dla ostatniego kwartału — starsze tygodnie
-  /// zasypałyby listę „2 z 4”, choć cel mógł być wtedy inny.
-  static const goalWeeksShown = 12;
-
-  /// Numer wiersza w całej liście (z nagłówkami miesięcy nie liczymy).
+  /// Numer pierwszego wiersza każdego miesiąca w całej liście.
   static List<int> rowBases(List<HistoryMonthSection> sections) {
     final bases = <int>[];
     var total = 0;
@@ -165,13 +88,6 @@ class HistoryFeedSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final thisWeek = TrainingSummaryCalculator.startOfWeek(today);
-    final lastWeek = DateTime(thisWeek.year, thisWeek.month, thisWeek.day - 7);
-    final goalSince = DateTime(
-      thisWeek.year,
-      thisWeek.month,
-      thisWeek.day - 7 * (goalWeeksShown - 1),
-    );
     final bases = rowBases(sections);
 
     return SliverMainAxisGroup(
@@ -186,54 +102,43 @@ class HistoryFeedSliver extends StatelessWidget {
                 pinned: true,
                 delegate: _MonthHeaderDelegate(
                   month: sections[s].month,
+                  showYear: sections[s].month.year != today.year,
+                  isFirst: s == 0,
                   stats: MonthlyTrainingStats.fromSessions([
-                    for (final e in sections[s].entries) e.item,
+                    for (final e in sections[s].rows) e.item,
                   ]),
                 ),
               ),
-              SliverList.builder(
-                itemCount: sections[s].rows.length,
-                itemBuilder: (context, i) {
-                  final row = sections[s].rows[i];
-                  final child = switch (row) {
-                    HistoryWeekRow() => _WeekHeader(
-                      weekStart: row.weekStart,
-                      title: row.weekStart == thisWeek
-                          ? 'Ten tydzień'
-                          : row.weekStart == lastWeek
-                          ? 'Poprzedni tydzień'
-                          : null,
-                      goal:
-                          row.showGoal &&
-                              !row.weekStart.isBefore(goalSince) &&
-                              weeklyGoal != null
-                          ? (
-                              done: weekCounts[row.weekStart] ?? 0,
-                              goal: weeklyGoal!,
-                            )
-                          : null,
-                    ),
-                    HistoryDayRow() => KeyedSubtree(
-                      key: dayKeyFor(row.day),
-                      child: HistoryDayBlock(
-                        day: row.day,
-                        entries: row.entries,
-                        highlighted: row.day == highlightedDay,
-                      ),
-                    ),
-                  };
-                  return _RowProbe(
-                    index: bases[s] + i,
-                    onMounted: onRowMounted,
-                    onUnmounted: onRowUnmounted,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.pageGutter,
-                      ),
-                      child: child,
-                    ),
-                  );
-                },
+              SliverPadding(
+                padding: EdgeInsets.only(
+                  left: AppSpacing.pageGutter,
+                  right: AppSpacing.pageGutter,
+                  bottom: s == sections.length - 1 ? 0 : AppSpacing.sm,
+                ),
+                sliver: SliverList.builder(
+                  itemCount: sections[s].rows.length,
+                  itemBuilder: (context, i) {
+                    final rows = sections[s].rows;
+                    final entry = rows[i];
+                    Widget row = HistoryCompactRow(
+                      entry: entry,
+                      isFirst: i == 0,
+                      isLast: i == rows.length - 1,
+                      highlighted: entry.day == highlightedDay,
+                    );
+                    // Klucz ma tylko pierwszy trening dnia — GlobalKey musi
+                    // być jeden.
+                    if (i == 0 || rows[i - 1].day != entry.day) {
+                      row = KeyedSubtree(key: dayKeyFor(entry.day), child: row);
+                    }
+                    return _RowProbe(
+                      index: bases[s] + i,
+                      onMounted: onRowMounted,
+                      onUnmounted: onRowUnmounted,
+                      child: row,
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -290,12 +195,24 @@ class _RowProbeState extends State<_RowProbe> {
 /// stoi na początku, jest przezroczysty — poświata zakładki nie dostaje
 /// ciemnego paska.
 class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _MonthHeaderDelegate({required this.month, required this.stats});
+  const _MonthHeaderDelegate({
+    required this.month,
+    required this.stats,
+    required this.isFirst,
+    required this.showYear,
+  });
 
   final DateTime month;
   final MonthlyTrainingStats stats;
 
-  static const _height = 40.0;
+  /// Pierwszy miesiąc otwiera sekcję „Wcześniej” — jej tytuł stoi po lewej,
+  /// a nazwa miesiąca przechodzi do podsumowania.
+  final bool isFirst;
+
+  /// Miesiąc z innego roku niż bieżący dostaje rok w nazwie.
+  final bool showYear;
+
+  static const _height = 44.0;
   static final _neverScrolled = ValueNotifier<bool>(false);
 
   @override
@@ -310,9 +227,12 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
+    final monthName = showYear
+        ? formatMonthYear(month)
+        : formatMonthName(month);
     final summary = [
+      if (isFirst) monthName,
       formatWorkoutCount(stats.totalSessions),
-      formatHoursMinutes(stats.totalDurationSec),
       if (stats.totalVolumeKg > 0) formatVolumeKg(stats.totalVolumeKg),
     ].join(' · ');
 
@@ -324,28 +244,40 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
       valueListenable: scrolled ?? _neverScrolled,
       builder: (context, isScrolled, child) => AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pageGutter),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pageGutter + 2,
+          AppSpacing.xs,
+          AppSpacing.pageGutter + 2,
+          2,
+        ),
         color: isScrolled ? AppColors.background : Colors.transparent,
         alignment: Alignment.centerLeft,
         child: child,
       ),
-      child: _row(summary),
+      child: _row(isFirst ? 'Wcześniej' : monthName, summary),
     );
   }
 
-  Widget _row(String summary) {
+  Widget _row(String title, String summary) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Semantics(
           header: true,
           child: Text(
-            formatMonthYear(month).toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.0,
-            ),
+            title,
+            style: isFirst
+                ? const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  )
+                : const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -359,7 +291,7 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
                 maxLines: 1,
                 style: const TextStyle(
                   color: AppColors.textSecondary,
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -373,111 +305,9 @@ class _MonthHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_MonthHeaderDelegate oldDelegate) =>
       oldDelegate.month != month ||
+      oldDelegate.isFirst != isFirst ||
+      oldDelegate.showYear != showYear ||
       oldDelegate.stats.totalSessions != stats.totalSessions ||
       oldDelegate.stats.totalVolumeKg != stats.totalVolumeKg ||
       oldDelegate.stats.totalDurationSec != stats.totalDurationSec;
-}
-
-/// Nagłówek tygodnia: nazwa (albo sam zakres dat) i licznik celu.
-class _WeekHeader extends StatelessWidget {
-  const _WeekHeader({required this.weekStart, this.title, this.goal});
-
-  final DateTime weekStart;
-
-  /// „Ten tydzień” / „Poprzedni tydzień”; starsze tygodnie mają tylko daty.
-  final String? title;
-
-  final ({int done, int goal})? goal;
-
-  @override
-  Widget build(BuildContext context) {
-    final weekEnd = DateTime(
-      weekStart.year,
-      weekStart.month,
-      weekStart.day + 6,
-    );
-    final range = formatWeekRange(weekStart, weekEnd);
-    final goal = this.goal;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, AppSpacing.xs, 0, AppSpacing.xs),
-      child: SizedBox(
-        height: 28,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: title ?? range),
-                    if (title != null)
-                      TextSpan(
-                        text: ' · $range',
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            if (goal != null) ...[
-              const SizedBox(width: AppSpacing.xs),
-              _GoalPill(done: goal.done, goal: goal.goal),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// `1 z 4`; po zrobieniu celu zielone, z ptaszkiem.
-class _GoalPill extends StatelessWidget {
-  const _GoalPill({required this.done, required this.goal});
-
-  final int done;
-  final int goal;
-
-  @override
-  Widget build(BuildContext context) {
-    final met = done >= goal;
-    final color = met ? AppColors.success : AppColors.primaryVariant;
-    return Semantics(
-      label: 'Cel tygodnia: $done z $goal',
-      excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (met) ...[
-              Icon(Icons.check_circle_rounded, size: 14, color: color),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              '$done z $goal',
-              style: TextStyle(
-                color: color,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

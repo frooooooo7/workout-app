@@ -11,13 +11,13 @@ import '../../../../../core/widgets/app_tab_header.dart';
 import '../../../../../core/widgets/skeleton.dart';
 import '../../../domain/services/history_feed_builder.dart';
 import '../../bloc/history_feed_cubit.dart';
-import '../../bloc/training_stats_cubit.dart';
 import 'history_feed_list.dart';
-import 'history_filter_bar.dart';
+import 'history_latest_card.dart';
 
-/// Pierwszy panel Historii: filtry i ciągła lista treningów z ćwiczeniami.
-/// Kalendarz otwiera się osobno, z ikonki w nagłówku; do wskazanego w nim dnia
-/// panel przewija przez [HistorySessionsPanelState.showDay].
+/// Pierwszy panel Historii: karta „Ostatni trening” i pod nią „Wcześniej” —
+/// jedna karta na miesiąc ze zwartymi wierszami. Kalendarz otwiera się osobno,
+/// z ikonki w nagłówku; do wskazanego w nim dnia panel przewija przez
+/// [HistorySessionsPanelState.showDay].
 class HistorySessionsPanel extends StatefulWidget {
   const HistorySessionsPanel({super.key, required this.onRefresh});
 
@@ -33,16 +33,12 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
   final _dayKeys = <DateTime, GlobalKey>{};
   final _builtRows = <int>{};
 
-  HistoryFilter _filter = HistoryFilter.all;
   DateTime? _highlightedDay;
   Timer? _highlightTimer;
 
-  // Podział listy liczymy raz na zmianę danych albo filtra, nie przy każdej
-  // przebudowie.
+  // Podział listy liczymy raz na zmianę danych, nie przy każdej przebudowie.
   List<HistoryFeedEntry>? _sectionsFor;
-  HistoryFilter? _sectionsFilter;
   List<HistoryMonthSection> _sections = const [];
-  Map<DateTime, int> _weekCounts = const {};
 
   @override
   void dispose() {
@@ -54,36 +50,34 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
   GlobalKey _dayKey(DateTime day) =>
       _dayKeys.putIfAbsent(day, () => GlobalKey(debugLabel: 'day-$day'));
 
-  void _group(List<HistoryFeedEntry> entries, HistoryFilter filter) {
-    if (identical(entries, _sectionsFor) && filter == _sectionsFilter) return;
-    _sectionsFor = entries;
-    _sectionsFilter = filter;
-    _weekCounts = workoutsPerWeek(entries);
-    _sections = groupHistoryFeed([
-      for (final entry in entries)
-        if (filter.matches(entry)) entry,
-    ]);
+  void _group(HistoryFeedState state) {
+    if (identical(state.entries, _sectionsFor)) return;
+    _sectionsFor = state.entries;
+    _sections = groupHistoryFeed(
+      state.entries,
+      exceptId: state.latest?.entry.item.id,
+    );
   }
 
-  /// Przewija listę do [day] i podświetla go na chwilę. Filtr, który ukrywa
-  /// ten dzień, wraca do „Wszystkie”.
+  /// Przewija listę do [day] i podświetla go na chwilę. Dzień ostatniego
+  /// treningu to góra listy, a tam stoi jego karta.
   Future<void> showDay(DateTime day) async {
     final target = DateTime(day.year, day.month, day.day);
-    final entries = context.read<HistoryFeedCubit>().state.entries;
-    final dayEntries = [
-      for (final entry in entries)
-        if (entry.day == target) entry,
-    ];
-    if (dayEntries.isEmpty) return;
-    if (!dayEntries.any(_filter.matches)) {
-      setState(() => _filter = HistoryFilter.all);
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-    }
+    final state = context.read<HistoryFeedCubit>().state;
+    if (!state.entries.any((entry) => entry.day == target)) return;
 
     final index = _rowIndexOf(target);
-    if (index == null) return;
-    await _scrollToRow(target, index);
+    if (state.latest?.entry.day == target || index == null) {
+      if (_scroll.hasClients) {
+        await _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    } else {
+      await _scrollToRow(target, index);
+    }
     if (!mounted) return;
     _highlightTimer?.cancel();
     setState(() => _highlightedDay = target);
@@ -95,8 +89,8 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
   int? _rowIndexOf(DateTime day) {
     var index = 0;
     for (final section in _sections) {
-      for (final row in section.rows) {
-        if (row is HistoryDayRow && row.day == day) return index;
+      for (final entry in section.rows) {
+        if (entry.day == day) return index;
         index++;
       }
     }
@@ -117,7 +111,7 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
       if (context != null && context.mounted) {
         await Scrollable.ensureVisible(
           context,
-          alignment: 0.12,
+          alignment: 0.2,
           duration: const Duration(milliseconds: 380),
           curve: Curves.easeOutCubic,
         );
@@ -141,21 +135,6 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
     }
   }
 
-  HistoryFilter _effectiveFilter(
-    bool showFilters,
-    List<HistoryPlanOption> plans,
-    bool hasRecords,
-  ) {
-    final filter = _filter;
-    if (!showFilters || filter == HistoryFilter.all) return HistoryFilter.all;
-    if (filter == HistoryFilter.records) {
-      return hasRecords ? filter : HistoryFilter.all;
-    }
-    return plans.any((p) => HistoryFilter.plan(p.key) == filter)
-        ? filter
-        : HistoryFilter.all;
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<HistoryFeedCubit, HistoryFeedState>(
@@ -172,38 +151,15 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
   }
 
   Widget _buildLoaded(BuildContext context, HistoryFeedState state) {
-    final plans = historyPlanOptions(state.entries);
-    final hasRecords = state.entries.any((e) => e.recordsCount > 0);
-    final showFilters = HistoryFilterBar.isUseful(
-      plans: plans.length,
-      hasRecords: hasRecords,
-    );
-
-    // Filtr, którego już nie ma w danych (plan zniknął po synchronizacji),
-    // nie może zostawić pustej listy.
-    final filter = _effectiveFilter(showFilters, plans, hasRecords);
-    _group(state.entries, filter);
-
-    final goal = context.select(
-      (TrainingStatsCubit c) => c.state.snapshot?.goal?.goal,
-    );
+    _group(state);
+    final latest = state.latest;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showFilters) ...[
-          const SizedBox(height: AppSpacing.xs),
-          HistoryFilterBar(
-            plans: plans,
-            hasRecords: hasRecords,
-            selected: filter,
-            onSelected: (selected) => setState(() => _filter = selected),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-        ] else
-          const SizedBox(height: AppSpacing.xs),
+        const SizedBox(height: AppSpacing.xs),
         const AppTabScrollEdge(),
         Expanded(
           child: RefreshIndicator(
@@ -213,28 +169,34 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
               controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                if (state.entries.isEmpty)
+                if (latest == null)
                   const SliverToBoxAdapter(child: _EmptyHistory())
-                else if (_sections.isEmpty)
-                  SliverToBoxAdapter(
-                    child: _EmptyFilter(
-                      onShowAll: () =>
-                          setState(() => _filter = HistoryFilter.all),
+                else ...[
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pageGutter,
+                      AppSpacing.xxs,
+                      AppSpacing.pageGutter,
+                      AppSpacing.xs,
                     ),
-                  )
-                else
-                  HistoryFeedSliver(
-                    sections: _sections,
-                    today: today,
-                    dayKeyFor: _dayKey,
-                    weekCounts: _weekCounts,
-                    // Licznik celu dotyczy całego tygodnia — przy filtrze
-                    // planu pokazywałby tylko jego część.
-                    weeklyGoal: filter == HistoryFilter.all ? goal : null,
-                    highlightedDay: _highlightedDay,
-                    onRowMounted: _builtRows.add,
-                    onRowUnmounted: _builtRows.remove,
+                    sliver: SliverToBoxAdapter(
+                      child: HistoryLatestCard(
+                        latest: latest,
+                        today: today,
+                        highlighted: latest.entry.day == _highlightedDay,
+                      ),
+                    ),
                   ),
+                  if (_sections.isNotEmpty)
+                    HistoryFeedSliver(
+                      sections: _sections,
+                      today: today,
+                      dayKeyFor: _dayKey,
+                      highlightedDay: _highlightedDay,
+                      onRowMounted: _builtRows.add,
+                      onRowUnmounted: _builtRows.remove,
+                    ),
+                ],
                 SliverToBoxAdapter(
                   child: SizedBox(
                     height:
@@ -250,7 +212,7 @@ class HistorySessionsPanelState extends State<HistorySessionsPanel> {
   }
 }
 
-/// Szkielet pierwszego wczytania: filtry i kilka kart.
+/// Szkielet pierwszego wczytania: karta ostatniego treningu i kilka wierszy.
 class _HistorySkeleton extends StatelessWidget {
   const _HistorySkeleton();
 
@@ -266,22 +228,12 @@ class _HistorySkeleton extends StatelessWidget {
           AppSpacing.md,
           AppSpacing.xs + MediaQuery.paddingOf(context).bottom,
         ),
-        children: [
-          Row(
-            children: const [
-              SkeletonBlock(width: 96, height: 40, radius: 20),
-              SizedBox(width: AppSpacing.xs),
-              SkeletonBlock(width: 72, height: 40, radius: 20),
-              SizedBox(width: AppSpacing.xs),
-              SkeletonBlock(width: 72, height: 40, radius: 20),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          const SkeletonBlock(width: 160, height: 16),
-          for (var i = 0; i < 3; i++) ...[
-            const SizedBox(height: AppSpacing.sm),
-            const SkeletonBlock(height: 150, radius: 22),
-          ],
+        children: const [
+          SkeletonBlock(height: 330, radius: 24),
+          SizedBox(height: AppSpacing.md),
+          SkeletonBlock(width: 160, height: 16),
+          SizedBox(height: AppSpacing.sm),
+          SkeletonBlock(height: 66 * 3, radius: 22),
         ],
       ),
     );
@@ -403,22 +355,6 @@ class _EmptyHistory extends StatelessWidget {
       message: 'Brak zarejestrowanych treningów',
       actionLabel: 'Zacznij trening',
       onAction: () => context.go('/app/training'),
-    );
-  }
-}
-
-class _EmptyFilter extends StatelessWidget {
-  const _EmptyFilter({required this.onShowAll});
-
-  final VoidCallback onShowAll;
-
-  @override
-  Widget build(BuildContext context) {
-    return _EmptyCard(
-      icon: Icons.filter_alt_off_rounded,
-      message: 'Brak treningów dla tego filtra',
-      actionLabel: 'Pokaż wszystkie',
-      onAction: onShowAll,
     );
   }
 }

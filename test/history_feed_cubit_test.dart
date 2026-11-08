@@ -129,6 +129,32 @@ void main() {
     expect(cubit.state.entries.first.lines.single.name, 'Wyciskanie');
   });
 
+  test('the latest workout is compared with the previous one', () async {
+    stats.sessions = [
+      _local('old', at),
+      _local('new', at.add(const Duration(days: 3))),
+    ];
+    await cubit.load();
+    await pumpEventQueue();
+
+    final latest = cubit.state.latest!;
+    expect(latest.entry.item.id, 'new');
+    // Obie sesje bez planu: porównanie ćwiczeń z ostatnim razem.
+    expect(latest.comparison, isNotNull);
+    final line = latest.entry.lines.single;
+    expect(latest.comparisonOf(line)!.exerciseName, 'Wyciskanie');
+  });
+
+  test('the server list gives a latest card without a comparison', () async {
+    history.items = [_server('srv', at)];
+    await cubit.load();
+    await pumpEventQueue();
+
+    expect(cubit.state.fromServer, isTrue);
+    expect(cubit.state.latest!.entry.item.id, 'srv');
+    expect(cubit.state.latest!.comparison, isNull);
+  });
+
   test(
     'uses the sessions and records the stats cubit already loaded',
     () async {

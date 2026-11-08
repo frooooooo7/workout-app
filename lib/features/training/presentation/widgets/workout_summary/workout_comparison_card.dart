@@ -623,8 +623,9 @@ String _formatResult(
   return formatSetResult(result.weightKg, result.reps, unit: unit) ?? '—';
 }
 
-/// Chip z różnicą: `2,5 kg`, `1 powt.`, `0,4 km`, `0:30`.
-String _deltaText(ExerciseComparison exercise) {
+/// Chip z różnicą: `2,5 kg`, `1 powt.`, `0,4 km`, `0:30`. Bez znaku — kierunek
+/// pokazuje kolor albo strzałka.
+String exerciseDeltaText(ExerciseComparison exercise) {
   final delta = exercise.delta;
   if (delta == null) return 'bez zmian';
   final value = delta.value.abs();
@@ -689,7 +690,7 @@ class _ExerciseRow extends StatelessWidget {
                   _Chip(
                     text: trend == ExerciseTrend.fresh
                         ? 'Nowe'
-                        : _deltaText(exercise),
+                        : exerciseDeltaText(exercise),
                     color: color,
                     icon: trend == ExerciseTrend.improved
                         ? Icons.arrow_upward_rounded
