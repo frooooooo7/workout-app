@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/motion/motion.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/units/weight_unit.dart';
@@ -662,10 +663,10 @@ class _GoalTile extends StatelessWidget {
                         Positioned(
                           top: 10,
                           right: 10,
-                          child: AnimatedScale(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOutBack,
-                            scale: selected ? 1 : 0,
+                          child: MotionAppear(
+                            visible: selected,
+                            shown: const Duration(milliseconds: 160),
+                            hidden: const Duration(milliseconds: 120),
                             child: const _CheckBadge(),
                           ),
                         ),

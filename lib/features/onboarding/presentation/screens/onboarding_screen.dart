@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/motion/motion.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/widgets/app_tab_header.dart';
@@ -145,8 +146,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final currentKey = ValueKey(state.step);
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      switchInCurve: motionEaseOut,
+      switchOutCurve: motionEaseOutReverse,
       layoutBuilder: (current, previous) =>
           Stack(children: [...previous, ?current]),
       // Wspólna oś: nowy krok wjeżdża z kierunku ruchu, stary odjeżdża.

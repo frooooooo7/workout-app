@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/utils/polish_plural.dart';
@@ -140,8 +141,8 @@ class _StackedBar extends StatelessWidget {
                     if (i > 0) const SizedBox(width: _gap),
                     TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: widths[i]),
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.easeOutCubic,
+                      duration: motionDuration(context),
+                      curve: motionEaseOut,
                       builder: (context, w, _) => SizedBox(
                         width: w,
                         height: _height,

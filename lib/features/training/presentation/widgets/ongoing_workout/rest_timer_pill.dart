@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_typography.dart';
 import '../../../../../core/widgets/app_pressable.dart';
@@ -307,9 +308,9 @@ class _RestRing extends StatelessWidget {
           if (finalCountdown)
             TweenAnimationBuilder<double>(
               key: ValueKey(seconds),
-              tween: Tween(begin: 1.18, end: 1),
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutBack,
+              tween: Tween(begin: 1.06, end: 1),
+              duration: const Duration(milliseconds: 160),
+              curve: motionEaseOut,
               builder: (context, scale, child) =>
                   Transform.scale(scale: scale, child: child),
               child: label,

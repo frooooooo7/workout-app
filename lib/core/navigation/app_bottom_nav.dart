@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../motion/motion.dart';
 import '../theme/app_colors.dart';
 
 /// Pływający pasek nawigacji z wyróżnionym środkowym przyciskiem „Trening”.
@@ -269,7 +270,8 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// Liczba na ikonie paska. Przebudowuje tylko siebie, nie cały pasek.
+/// Liczba na ikonie paska. Pojawia się ze skali 0,95, nie z zera.
+/// Przebudowuje tylko siebie, nie cały pasek.
 class _NavBadge extends StatelessWidget {
   const _NavBadge({required this.count});
 
@@ -279,11 +281,9 @@ class _NavBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: count,
-      builder: (context, value, _) => AnimatedScale(
-        key: const Key('app-bottom-nav-activity-badge'),
-        scale: value > 0 ? 1 : 0,
-        duration: Duration(milliseconds: value > 0 ? 220 : 140),
-        curve: value > 0 ? Curves.easeOutBack : Curves.easeOutCubic,
+      builder: (context, value, _) => MotionAppear(
+        scaleKey: const Key('app-bottom-nav-activity-badge'),
+        visible: value > 0,
         child: Container(
           constraints: const BoxConstraints(minWidth: 17),
           height: 17,

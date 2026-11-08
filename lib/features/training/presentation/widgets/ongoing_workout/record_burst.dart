@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import 'workout_colors.dart';
 
@@ -62,7 +63,7 @@ class _RecordBurstState extends State<RecordBurst>
   );
   late final _exit = CurvedAnimation(
     parent: _controller,
-    curve: const Interval(0.88, 1, curve: Curves.easeIn),
+    curve: const Interval(0.88, 1, curve: motionEaseOut),
   );
 
   @override

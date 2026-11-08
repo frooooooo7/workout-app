@@ -5,6 +5,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/motion/sheet_drag.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
@@ -579,7 +580,7 @@ class _ShareWorkoutSheetState extends State<ShareWorkoutSheet>
                           children: [
                             AnimatedSize(
                               duration: const Duration(milliseconds: 240),
-                              curve: Curves.easeOutCubic,
+                              curve: motionEaseOut,
                               alignment: Alignment.topCenter,
                               child: _showsPhoto
                                   ? _PhotoPreview(

@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/motion/motion.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -42,8 +42,7 @@ class PlanAppearanceScreen extends StatefulWidget {
   final Uint8List? coverBytes;
 
   /// Test seam; domyślnie galeria / aparat.
-  final Future<PickedPostPhoto?> Function(BuildContext, ImageSource)?
-  pickPhoto;
+  final Future<PickedPostPhoto?> Function(BuildContext, ImageSource)? pickPhoto;
 
   final String planName;
 
@@ -72,9 +71,8 @@ class _PlanAppearanceScreenState extends State<PlanAppearanceScreen> {
 
   Uint8List? get _coverBytes =>
       _picked?.bytes ?? (_coverRemoved ? null : widget.coverBytes);
-  String? get _coverUrl => _picked != null || _coverRemoved
-      ? null
-      : widget.coverUrl;
+  String? get _coverUrl =>
+      _picked != null || _coverRemoved ? null : widget.coverUrl;
 
   Future<void> _changeCover() async {
     final pick = widget.pickPhoto ?? pickPostPhoto;
@@ -746,10 +744,10 @@ class _Swatch extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   )
-                : AnimatedScale(
-                    scale: selected ? 1 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutBack,
+                : MotionAppear(
+                    visible: selected,
+                    shown: const Duration(milliseconds: 160),
+                    hidden: const Duration(milliseconds: 120),
                     child: Icon(
                       Icons.check_rounded,
                       size: 20,

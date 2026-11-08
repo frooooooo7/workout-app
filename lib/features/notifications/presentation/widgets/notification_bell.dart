@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/motion/motion.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 
@@ -12,8 +13,8 @@ const notificationBellBadgeKey = Key('notification-bell-badge');
 /// `9+` powyżej dziewięciu — plakietka zostaje okrągła.
 String formatUnreadBadge(int count) => count > 9 ? '9+' : '$count';
 
-/// Dzwonek w nagłówku „Aktywności”. Plakietka wskakuje sprężyście, a gdy
-/// licznik rośnie, dzwonek się kołysze.
+/// Dzwonek w nagłówku „Aktywności”. Plakietka pojawia się ze skali 0,95,
+/// a gdy licznik rośnie, dzwonek się kołysze.
 class NotificationBellButton extends StatefulWidget {
   const NotificationBellButton({
     super.key,
@@ -98,14 +99,10 @@ class _NotificationBellButtonState extends State<NotificationBellButton>
               Positioned(
                 top: -4,
                 right: -4,
-                child: IgnorePointer(
-                  child: AnimatedScale(
-                    key: notificationBellBadgeKey,
-                    scale: count > 0 ? 1 : 0,
-                    duration: Duration(milliseconds: count > 0 ? 220 : 140),
-                    curve: count > 0 ? Curves.easeOutBack : Curves.easeOutCubic,
-                    child: _Badge(label: formatUnreadBadge(_shown)),
-                  ),
+                child: MotionAppear(
+                  scaleKey: notificationBellBadgeKey,
+                  visible: count > 0,
+                  child: _Badge(label: formatUnreadBadge(_shown)),
                 ),
               ),
             ],

@@ -109,7 +109,7 @@ void main() {
     addTearDown(unread.dispose);
     await tester.pumpWidget(buildSubject(activityBadge: unread));
     const badge = Key('app-bottom-nav-activity-badge');
-    expect(tester.widget<AnimatedScale>(find.byKey(badge)).scale, 0);
+    expect(tester.widget<AnimatedScale>(find.byKey(badge)).scale, 0.95);
 
     unread.value = 3;
     await tester.pumpAndSettle();

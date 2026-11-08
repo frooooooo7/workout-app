@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/utils/polish_plural.dart';
@@ -189,8 +190,8 @@ class _GoalRing extends StatelessWidget {
         height: _size,
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: fraction),
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeOutCubic,
+          duration: motionDuration(context),
+          curve: motionEaseOut,
           builder: (context, value, child) => CustomPaint(
             painter: _RingPainter(
               fraction: value,
@@ -481,8 +482,8 @@ class _GoalBarColumn extends StatelessWidget {
                   widthFactor: 0.6,
                   child: TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0, end: barHeight),
-                    duration: const Duration(milliseconds: 450),
-                    curve: Curves.easeOutCubic,
+                    duration: motionDuration(context),
+                    curve: motionEaseOut,
                     builder: (context, h, _) => Container(
                       height: h,
                       decoration: BoxDecoration(

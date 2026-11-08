@@ -182,22 +182,15 @@ class _LiveClockState extends State<_LiveClock> {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final dimmed = !reduceMotion && _elapsed.inSeconds.isOdd;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AnimatedOpacity(
-          opacity: dimmed ? 0.35 : 1,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-          child: Container(
-            width: 7,
-            height: 7,
-            decoration: const BoxDecoration(
-              color: AppColors.success,
-              shape: BoxShape.circle,
-            ),
+        Container(
+          width: 7,
+          height: 7,
+          decoration: const BoxDecoration(
+            color: AppColors.success,
+            shape: BoxShape.circle,
           ),
         ),
         const SizedBox(width: 6),

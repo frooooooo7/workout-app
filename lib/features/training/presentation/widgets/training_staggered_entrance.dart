@@ -21,7 +21,7 @@ class TrainingStaggeredEntrance extends StatefulWidget {
   /// O ile pikseli karta wysuwa się z dołu (0 — tylko pojawia się).
   final double offset;
 
-  static const _duration = Duration(milliseconds: 380);
+  static const _duration = Duration(milliseconds: 280);
   static const _step = Duration(milliseconds: 60);
 
   @override

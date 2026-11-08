@@ -198,7 +198,7 @@ void main() {
         ),
       );
       final badge = find.byKey(notificationBellBadgeKey);
-      expect(tester.widget<AnimatedScale>(badge).scale, 0);
+      expect(tester.widget<AnimatedScale>(badge).scale, 0.95);
 
       count.value = 12;
       await tester.pump();

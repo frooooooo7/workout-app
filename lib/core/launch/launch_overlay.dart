@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../features/auth/presentation/widgets/auth_hero_background.dart';
+import '../motion/motion.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import 'app_launch_controller.dart';
@@ -227,16 +228,16 @@ class _LaunchOverlayState extends State<LaunchOverlay>
             logoShift = (landing - Offset(cx, cy - _lift)) * morph;
             logoScale = 1 + (target.width / _logoWidth - 1) * morph;
             logoOpacity = 1 - _outSeg(496, 620);
-            fgFade = 1 - _outSeg(0, 200, Curves.easeIn);
-            bgFade = 1 - _outSeg(100, 480, Curves.easeIn);
+            fgFade = 1 - _outSeg(0, 200, motionEaseOut);
+            bgFade = 1 - _outSeg(100, 480, motionEaseOut);
           } else {
-            final go = _outSeg(0, 320, Curves.easeInCubic);
+            final go = _outSeg(0, 320, motionEaseOut);
             logoScale = 1 + .14 * go;
             logoOpacity = 1 - go;
-            final fg = _outSeg(0, 220, Curves.easeIn);
+            final fg = _outSeg(0, 220, motionEaseOut);
             fgFade = 1 - fg;
             fgScale = 1 + .03 * fg;
-            bgFade = 1 - _outSeg(80, 460, Curves.easeIn);
+            bgFade = 1 - _outSeg(80, 460, motionEaseOut);
           }
         }
 

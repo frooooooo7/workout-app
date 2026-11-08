@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/widgets/user_avatar.dart';
 import '../../../../auth/domain/models/auth_models.dart';
@@ -115,8 +116,8 @@ class WorkoutShareCard extends StatelessWidget {
           const SizedBox(width: 8),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
+            switchInCurve: motionEaseOut,
+            switchOutCurve: motionEaseOutReverse,
             child: _isShared
                 ? _UnshareButton(
                     key: const ValueKey('workout-share-shared-actions'),

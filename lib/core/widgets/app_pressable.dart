@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../motion/motion.dart';
+
 /// Przytrzymanie schodzi w 100 ms, puszczenie wraca szybciej — faza
 /// świadoma i odpuszczenie nie trwają tyle samo.
 class AppPressable extends StatefulWidget {
@@ -42,10 +44,14 @@ class _AppPressableState extends State<AppPressable>
         ),
       ),
     );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: widget.pressedScale,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: widget.pressedScale)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: motionEaseOut,
+            reverseCurve: motionEaseOutReverse,
+          ),
+        );
   }
 
   @override

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/motion/motion.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_spacing.dart';
 import '../../../../../core/utils/polish_plural.dart';
@@ -225,8 +226,8 @@ class _RegionBarRow extends StatelessWidget {
                               begin: 0,
                               end: (value / scale).clamp(0, 1),
                             ),
-                            duration: const Duration(milliseconds: 520),
-                            curve: Curves.easeOutCubic,
+                            duration: motionDuration(context),
+                            curve: motionEaseOut,
                             builder: (context, f, _) => Container(
                               width: w * f,
                               height: 6,
@@ -700,8 +701,8 @@ class _MuscleBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     child: TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: fill),
-                      duration: const Duration(milliseconds: 520),
-                      curve: Curves.easeOutCubic,
+                      duration: motionDuration(context),
+                      curve: motionEaseOut,
                       builder: (context, value, _) => LinearProgressIndicator(
                         value: value,
                         minHeight: 5,

@@ -439,6 +439,7 @@ void main() {
 
     await tester.tap(find.text('Cofnij'));
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
     expect(repository.session.exercises, hasLength(1));
     expect(find.text('Dodaj pierwsze ćwiczenie'), findsNothing);
 

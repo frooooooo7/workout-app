@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../motion/motion.dart';
 import '../services/service_locator.dart';
 import '../sync/sync_status.dart';
 import '../theme/app_colors.dart';
@@ -275,9 +276,7 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
   @override
   Widget build(BuildContext context) {
     final spec = _specFor(_visual, widget.status);
-    final duration = _reduceMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 280);
+    final duration = motionDuration(context, const Duration(milliseconds: 160));
     final iconSize = widget.size * 0.48;
     final radius = BorderRadius.circular(AppRadius.tile);
 
@@ -326,13 +325,13 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
                   children: [
                     AnimatedSwitcher(
                       duration: duration,
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
+                      switchInCurve: motionEaseOut,
+                      switchOutCurve: motionEaseOutReverse,
                       transitionBuilder: (child, animation) => FadeTransition(
                         opacity: animation,
                         child: ScaleTransition(
                           scale: Tween<double>(
-                            begin: 0.55,
+                            begin: 0.92,
                             end: 1,
                           ).animate(animation),
                           child: child,
@@ -343,10 +342,10 @@ class _SyncStatusButtonState extends State<_SyncStatusButton>
                     Positioned(
                       top: widget.size * 0.2,
                       right: widget.size * 0.2,
-                      child: AnimatedScale(
-                        scale: spec.badgeColor == null ? 0 : 1,
-                        duration: duration,
-                        curve: Curves.easeOutBack,
+                      child: MotionAppear(
+                        visible: spec.badgeColor != null,
+                        shown: duration,
+                        hidden: duration,
                         child: Container(
                           width: 9,
                           height: 9,
