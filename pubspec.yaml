@@ -1,5 +1,5 @@
 name: gym
-description: "A new Flutter project."
+description: "Dziennik treningowy: plany, treningi, statystyki i społeczność."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -89,6 +89,9 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/body_highlighter/
+    # Noty licencyjne czcionek (SIL OFL) — pokazywane w Ustawienia → Licencje.
+    - assets/fonts/OFL-Manrope.txt
+    - assets/fonts/OFL-BarlowCondensed.txt
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

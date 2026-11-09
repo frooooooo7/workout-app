@@ -40,8 +40,19 @@ void main() {
     expect(find.text('Wyloguj ze wszystkich urządzeń'), findsOneWidget);
     expect(find.text('Powiadomienia'), findsOneWidget);
     expect(find.text('Pomoc'), findsOneWidget);
+    expect(find.text('Licencje'), findsOneWidget);
     expect(find.text('STREFA NIEBEZPIECZNA'), findsOneWidget);
     expect(find.byKey(settingsDeleteAccountRowKey), findsOneWidget);
+  });
+
+  testWidgets('"Licencje" opens the license page', (tester) async {
+    await pumpScreen(tester);
+
+    await tester.tap(find.byKey(settingsLicensesRowKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LicensePage), findsOneWidget);
+    expect(find.text('Stronger'), findsWidgets);
   });
 
   testWidgets('logout from all devices asks for confirmation first', (

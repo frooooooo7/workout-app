@@ -8,6 +8,7 @@ import 'core/launch/app_launch_controller.dart';
 import 'core/launch/launch_overlay.dart';
 import 'core/launch/launch_route_watcher.dart';
 import 'core/launch/native_splash_gate.dart';
+import 'core/licenses/app_licenses.dart';
 import 'core/navigation/app_router.dart';
 import 'core/services/service_locator.dart';
 import 'core/session/app_user_bootstrap.dart';
@@ -26,6 +27,7 @@ void main() async {
     databaseFactory = databaseFactoryFfiWeb;
   }
 
+  registerAppLicenses();
   ServiceLocator.init();
   await WeightUnits.load();
   await PlateSettingsStore.load();
