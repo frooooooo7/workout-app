@@ -128,6 +128,10 @@ void main() {
       map('password_too_weak'),
       'Nowe hasło musi zawierać wielką literę i cyfrę.',
     );
+    expect(
+      map('password_too_common'),
+      'To hasło jest zbyt popularne. Wybierz inne.',
+    );
     expect(map('missing_fields'), 'Uzupełnij wszystkie pola.');
     expect(map('password_unchanged'), 'Nowe hasło musi różnić się od obecnego.');
     expect(map('too_many_requests', 429), 'Zbyt wiele prób. Spróbuj za chwilę.');

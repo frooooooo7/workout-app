@@ -209,6 +209,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Usuń ćwiczenie z treningu'));
     await tester.pumpAndSettle();
+    // Zapis szkicu jest odroczony — ekran już pokazuje samą bieżnię, a do
+    // repozytorium trafia dopiero po opóźnieniu.
+    expect(find.text('Usunięto „Bench press”'), findsOneWidget);
+    await _flushDraftSave(tester);
     expect(repository.session.exercises.single.exerciseName, 'Bieżnia');
 
     await tester.tap(find.byKey(const Key('cardio-stopwatch-save')));

@@ -7,6 +7,8 @@ String authErrorMessage(String error) => switch (error) {
       'password_too_short' => 'Hasło musi mieć co najmniej 8 znaków.',
       'password_too_weak' =>
         'Hasło musi zawierać wielką literę i cyfrę.',
+      'password_too_common' =>
+        'To hasło jest zbyt popularne. Wybierz inne.',
       'password_too_long' => 'Hasło jest za długie (maks. 72 znaki).',
       'database_unavailable' =>
         'Serwer chwilowo niedostępny. Spróbuj później.',

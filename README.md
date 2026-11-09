@@ -98,6 +98,8 @@ flutter run --dart-define=API_BASE_URL=http://192.168.1.20:3000   # fizyczne urz
 
 `API_BASE_URL` to **origin** serwera (bez `/api/v1` — prefiks dokleja aplikacja).
 
+W buildzie **release** adres `http://` jest odrzucany (aplikacja kończy start błędem), chyba że wskazuje maszynę lokalną: `localhost`, emulator (`10.0.2.2`) albo sieć prywatną (`192.168.*`, `10.*`, `172.16–31.*`, `*.local`). Serwer w internecie musi mieć `https://`.
+
 ## Testy
 
 ### Jednostkowe i widgetowe

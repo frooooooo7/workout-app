@@ -33,6 +33,7 @@ const settingsWarmupRowKey = Key('settings-warmup');
 const settingsWarmupSwitchKey = Key('settings-warmup-switch');
 Key settingsWarmupTargetKey(int minutes) => Key('settings-warmup-$minutes');
 const settingsHelpRowKey = Key('settings-help');
+const settingsLicensesRowKey = Key('settings-licenses');
 const settingsDeleteAccountRowKey = Key('settings-delete-account');
 
 class ProfileSettingsScreen extends StatelessWidget {
@@ -308,6 +309,16 @@ class _ProfileSettingsView extends StatelessWidget {
                   icon: Icons.help_outline_rounded,
                   label: 'Pomoc',
                   onTap: () => context.push(kHelpRoute),
+                ),
+                const SizedBox(height: 10),
+                _MenuRow(
+                  key: settingsLicensesRowKey,
+                  icon: Icons.description_outlined,
+                  label: 'Licencje',
+                  onTap: () => showLicensePage(
+                    context: context,
+                    applicationName: 'Stronger',
+                  ),
                 ),
                 const SizedBox(height: 32),
                 OutlinedButton.icon(
