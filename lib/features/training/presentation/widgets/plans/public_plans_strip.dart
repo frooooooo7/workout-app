@@ -14,10 +14,14 @@ class PublicPlansStrip extends StatelessWidget {
     super.key,
     required this.plans,
     required this.onOpen,
+    this.showCopies = true,
   });
 
   final List<CustomTrainingPlan> plans;
   final ValueChanged<CustomTrainingPlan> onOpen;
+
+  /// Własne plany nie mają sensu z licznikiem kopii — pokazują „Otwórz”.
+  final bool showCopies;
 
   static const _cardWidth = 232.0;
   static const _height = 124.0;
@@ -38,6 +42,7 @@ class PublicPlansStrip extends StatelessWidget {
             child: _PublicPlanCard(
               key: ValueKey('public-plan-${plan.id}'),
               plan: plan,
+              showCopies: showCopies,
               onTap: () => onOpen(plan),
             ),
           );
@@ -48,10 +53,16 @@ class PublicPlansStrip extends StatelessWidget {
 }
 
 class _PublicPlanCard extends StatelessWidget {
-  const _PublicPlanCard({super.key, required this.plan, required this.onTap});
+  const _PublicPlanCard({
+    super.key,
+    required this.plan,
+    required this.onTap,
+    required this.showCopies,
+  });
 
   final CustomTrainingPlan plan;
   final VoidCallback onTap;
+  final bool showCopies;
 
   @override
   Widget build(BuildContext context) {
@@ -117,11 +128,19 @@ class _PublicPlanCard extends StatelessWidget {
             const Spacer(),
             Row(
               children: [
-                Icon(Icons.copy_rounded, size: 14, color: color),
+                Icon(
+                  showCopies
+                      ? Icons.copy_rounded
+                      : Icons.fitness_center_rounded,
+                  size: 14,
+                  color: color,
+                ),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    copies == 0
+                    !showCopies
+                        ? 'Otwórz w treningu'
+                        : copies == 0
                         ? 'Podgląd i kopia'
                         : 'skopiowany $copies '
                               '${polishPlural(copies, 'raz', 'razy', 'razy')}',

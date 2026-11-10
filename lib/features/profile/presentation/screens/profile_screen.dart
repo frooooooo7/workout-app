@@ -18,10 +18,13 @@ import 'body_weight_screen.dart';
 import 'profile_details_screen.dart';
 import '../bloc/profile_body_cubit.dart';
 import '../bloc/profile_cubit.dart';
+import '../bloc/profile_plans_cubit.dart';
 import '../bloc/profile_posts_cubit.dart';
 import '../bloc/profile_posts_state.dart';
 import '../bloc/profile_state.dart';
 import '../bloc/profile_week_cubit.dart';
+import '../../../training/domain/models/custom_training_plan.dart';
+import '../../../training/presentation/widgets/plans/public_plans_strip.dart';
 import '../widgets/following_avatar_strip.dart';
 import '../widgets/profile_body_shortcuts.dart';
 import '../widgets/profile_hero_header.dart';
@@ -56,6 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfilePostsCubit>().load();
     context.read<ProfileWeekCubit>().load();
     context.read<ProfileBodyCubit>().load();
+    context.read<ProfilePlansCubit>().load();
   }
 
   @override
@@ -101,6 +105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfilePostsCubit>().refresh(),
     context.read<ProfileWeekCubit>().load(),
     context.read<ProfileBodyCubit>().load(),
+    context.read<ProfilePlansCubit>().load(),
   ]);
 
   @override
@@ -363,6 +368,27 @@ class _ProfileContent extends StatelessWidget {
           ),
           SliverToBoxAdapter(
             child: FollowingAvatarStrip(following: state.following),
+          ),
+          SliverToBoxAdapter(
+            child: BlocBuilder<ProfilePlansCubit, List<CustomTrainingPlan>?>(
+              builder: (context, plans) {
+                if (plans == null || plans.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const ProfileSectionHeader(title: 'Moje plany'),
+                    PublicPlansStrip(
+                      plans: plans,
+                      // Szczegóły planu żyją w kubitach zakładki Trening.
+                      onOpen: (_) => context.go('/app/training'),
+                      showCopies: false,
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
           const SliverToBoxAdapter(
             child: ProfileSectionHeader(title: 'Moje treningi'),

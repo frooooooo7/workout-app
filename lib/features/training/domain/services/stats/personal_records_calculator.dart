@@ -107,6 +107,7 @@ abstract final class PersonalRecordsCalculator {
             exerciseKey: entry.key,
             exerciseName: top.name,
             exerciseId: top.exerciseId,
+            imageUrl: top.imageUrl,
             sessionId: session.id,
             date: date,
             kinds: kinds,
@@ -158,9 +159,11 @@ abstract final class PersonalRecordsCalculator {
 class _SessionTop {
   _SessionTop(TrainingSessionExercise exercise)
     : name = exercise.exerciseName.trim(),
-      exerciseId = exercise.exerciseId;
+      exerciseId = exercise.exerciseId,
+      imageUrl = exercise.exerciseImageUrl;
 
   final String name;
+  final String? imageUrl;
   final String exerciseId;
   bool hasAnySet = false;
   double? weightKg;

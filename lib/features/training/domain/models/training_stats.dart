@@ -388,11 +388,15 @@ class PersonalRecord {
     this.reps,
     this.oneRepMaxKg,
     this.improvement,
+    this.imageUrl,
   });
 
   final String exerciseKey;
   final String exerciseName;
   final String exerciseId;
+
+  /// Miniatura ćwiczenia (ścieżka uploadu lub URL); `null` = brak obrazka.
+  final String? imageUrl;
   final String sessionId;
   final DateTime date;
   final Set<PersonalRecordKind> kinds;

@@ -14,7 +14,10 @@ import 'package:gym/features/profile/domain/repositories/profile_repository.dart
 import 'package:gym/features/profile/domain/services/profile_week_calculator.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_body_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_cubit.dart';
+import 'package:gym/features/profile/presentation/bloc/profile_plans_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_posts_cubit.dart';
+import 'package:gym/features/training/domain/models/custom_training_plan.dart';
+import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_week_cubit.dart';
 import 'package:gym/features/profile/presentation/screens/profile_screen.dart';
@@ -58,6 +61,7 @@ Future<void> _pumpProfile(
   List<FeedPost> posts = const [],
   ProfileWeekSummary? week,
   ProfileBodySummary? body,
+  List<CustomTrainingPlan> plans = const [],
 }) async {
   final feed = _FeedRepo(posts);
   await tester.binding.setSurfaceSize(const Size(430, 2400));
@@ -72,6 +76,7 @@ Future<void> _pumpProfile(
           ),
           BlocProvider<ProfileWeekCubit>(create: (_) => _FakeWeekCubit(week)),
           BlocProvider<ProfileBodyCubit>(create: (_) => _FakeBodyCubit(body)),
+          BlocProvider(create: (_) => ProfilePlansCubit(_PlansRepo(plans))),
         ],
         child: ProfileScreen(feedRepository: feed),
       ),
@@ -80,8 +85,36 @@ Future<void> _pumpProfile(
   await tester.pumpAndSettle();
 }
 
+class _PlansRepo implements TrainingPlanRepository {
+  _PlansRepo(this.plans);
+  final List<CustomTrainingPlan> plans;
+
+  @override
+  Future<List<CustomTrainingPlan>> getAll() async => plans;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   _weekCardTests();
+
+  testWidgets('ProfileScreen shows my local plans', (tester) async {
+    await _pumpProfile(
+      tester,
+      state: const ProfileState(profile: _profile),
+      plans: [CustomTrainingPlan(id: 'p1', name: 'Push A')],
+    );
+    expect(find.text('Moje plany'), findsOneWidget);
+    expect(find.text('Push A'), findsOneWidget);
+  });
+
+  testWidgets('ProfileScreen hides plans section when there are none', (
+    tester,
+  ) async {
+    await _pumpProfile(tester, state: const ProfileState(profile: _profile));
+    expect(find.text('Moje plany'), findsNothing);
+  });
 
   testWidgets('ProfileScreen renders header, week, following and posts', (
     tester,

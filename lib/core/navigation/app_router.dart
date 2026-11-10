@@ -48,6 +48,7 @@ import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
+import '../../features/profile/presentation/bloc/profile_plans_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
 import '../../features/training/presentation/bloc/training_stats_cubit.dart';
@@ -411,6 +412,11 @@ GoRouter buildRouter({
                           weightChanges: ServiceLocator.bodyWeightDataChanges,
                           measurementsChanges:
                               ServiceLocator.bodyMeasurementsDataChanges,
+                        ),
+                      ),
+                      BlocProvider(
+                        create: (_) => ProfilePlansCubit(
+                          ServiceLocator.trainingPlanRepository,
                         ),
                       ),
                       BlocProvider(

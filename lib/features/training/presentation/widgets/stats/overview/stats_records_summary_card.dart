@@ -6,6 +6,7 @@ import '../../personal_record_format.dart';
 import '../stats_format.dart';
 import 'stats_headlines.dart';
 import 'stats_overview_card.dart';
+import '../../../../../library/presentation/widgets/exercise_thumbnail.dart';
 
 /// Pulpit: ile rekordów padło w okresie i dwa najnowsze. Trofeum jest złote
 /// tylko tu i na liście rekordów — to jedyne miejsce, gdzie znaczy „rekord”.
@@ -116,14 +117,12 @@ class _Row extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.record.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
+          ExerciseThumbnail(
+            imageUrl: record.imageUrl,
+            size: 36,
+            borderRadius: 10,
+            backgroundColor: AppColors.record.withValues(alpha: 0.14),
+            placeholder: const Icon(
               Icons.emoji_events_rounded,
               size: 19,
               color: AppColors.record,
