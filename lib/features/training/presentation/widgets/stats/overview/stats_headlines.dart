@@ -108,14 +108,14 @@ abstract final class StatsHeadlines {
     return 'Rośniesz w $up z $total głównych ćwiczeń';
   }
 
-  /// „9 nowych rekordów”.
+  /// „7 ćwiczeń z rekordem” — jedno ćwiczenie liczy się raz.
   static String records(int count) {
     if (count == 0) return 'Brak nowych rekordów';
     final noun = polishPlural(
       count,
-      'nowy rekord',
-      'nowe rekordy',
-      'nowych rekordów',
+      'ćwiczenie z rekordem',
+      'ćwiczenia z rekordem',
+      'ćwiczeń z rekordem',
     );
     return '$count $noun';
   }
@@ -199,18 +199,4 @@ abstract final class StatsHeadlines {
 
   /// „5 tyg.” — pigułka passy.
   static String streak(int weeks) => '$weeks tyg.';
-
-  /// Podpis zakresu nad liczbą treningów: „Ostatnie 30 dni”.
-  static String periodTitle(TrainingStatsSnapshot s) => switch (s.range) {
-    StatsRange.week => 'Ostatnie 7 dni',
-    StatsRange.month => 'Ostatnie 30 dni',
-    StatsRange.quarter => 'Ostatnie 3 miesiące',
-    StatsRange.year => 'Ostatni rok',
-    StatsRange.all => 'Cała historia',
-    StatsRange.custom =>
-      s.customRange == null
-          ? 'Własny zakres'
-          : '${formatStatsDayMonth(s.customRange!.start)} – '
-                '${formatStatsDayMonth(s.customRange!.end)}',
-  };
 }

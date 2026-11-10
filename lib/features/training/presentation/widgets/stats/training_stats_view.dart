@@ -8,14 +8,14 @@ import '../../../../profile/domain/repositories/body_weight_repository.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import '../workout_summary/staggered_reveal.dart';
-import 'overview/stats_consistency_summary_card.dart';
-import 'overview/stats_muscles_summary_card.dart';
+import 'overview/stats_notes_card.dart';
 import 'overview/stats_period_summary_card.dart';
-import 'overview/stats_records_summary_card.dart';
-import 'overview/stats_strength_summary_card.dart';
+import 'overview/stats_tiles.dart';
 import 'stats_body_weight_card.dart';
 import 'stats_date_range_picker.dart';
 import 'stats_detail_screen.dart';
+import 'stats_navigation.dart';
+import 'stats_period_navigator.dart';
 import 'stats_range_selector.dart';
 import 'stats_scroll_page.dart';
 import 'stats_states.dart';
@@ -85,6 +85,16 @@ class TrainingStatsView extends StatelessWidget {
                   onPickCustom: () => _pickCustomRange(context, state),
                 ),
               ),
+            if (snapshot != null && snapshot.hasHistory)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pageGutter,
+                ),
+                child: StatsPeriodNavigator(
+                  snapshot: snapshot,
+                  onShift: cubit.shiftPeriod,
+                ),
+              ),
             // Tuż nad przewijaną treścią, pod przypiętym zakresem.
             const AppTabScrollEdge(),
             Expanded(child: body),
@@ -109,9 +119,9 @@ class TrainingStatsView extends StatelessWidget {
     if (picked != null) cubit.selectCustomRange(picked);
   }
 
-  /// Karty pulpitu w stałej kolejności, od najczęstszego pytania. Rekordy,
-  /// passa i regeneracja liczą się z całej historii, więc przy pustym
-  /// zakresie zostają, a karty z danymi okresu znikają.
+  /// Pulpit w stałej kolejności: podsumowanie okresu, najwyżej dwie uwagi,
+  /// cztery kafle działów i masa ciała. Rekordy życiowe, passa i gotowość
+  /// mięśni liczą się z całej historii, więc przy pustym okresie zostają.
   List<Widget> _cards(
     BuildContext context,
     TrainingStatsSnapshot s,
@@ -120,6 +130,22 @@ class TrainingStatsView extends StatelessWidget {
     final empty = s.isEmpty;
     final repository = bodyWeightRepository;
     void open(StatsDetail d) => openStatsDetail(context, d);
+    final notes = empty
+        ? const <StatsNote>[]
+        : buildStatsNotes(
+            s,
+            onOpen: (insight) => switch (insight.kind) {
+              StatsInsightKind.plateau || StatsInsightKind.progress
+                  when insight.exerciseId != null &&
+                      canOpenStatsExercise(insight.exerciseId!) =>
+                () => openStatsExercise(context, insight.exerciseId!),
+              StatsInsightKind.plateau ||
+              StatsInsightKind.progress => () => open(StatsDetail.strength),
+              StatsInsightKind.neglected => () => open(StatsDetail.muscles),
+              StatsInsightKind.volumeDown => () => open(StatsDetail.trend),
+              _ => null,
+            },
+          );
 
     final sections = <(String, Widget)>[
       (
@@ -138,37 +164,8 @@ class TrainingStatsView extends StatelessWidget {
                 : () => cubit.selectRange(StatsRange.all),
           ),
         ),
-      if (!empty && s.exercises.isNotEmpty)
-        (
-          'strength',
-          StatsStrengthSummaryCard(
-            snapshot: s,
-            onTap: () => open(StatsDetail.strength),
-          ),
-        ),
-      if (s.recordsCount > 0 || s.bests.isNotEmpty)
-        (
-          'records',
-          StatsRecordsSummaryCard(
-            snapshot: s,
-            onTap: () => open(StatsDetail.records),
-          ),
-        ),
-      if (!empty && !s.muscles.isEmpty)
-        (
-          'muscles',
-          StatsMusclesSummaryCard(
-            snapshot: s,
-            onTap: () => open(StatsDetail.muscles),
-          ),
-        ),
-      (
-        'consistency',
-        StatsConsistencySummaryCard(
-          snapshot: s,
-          onTap: () => open(StatsDetail.consistency),
-        ),
-      ),
+      if (notes.isNotEmpty) ('notes', StatsNotesCard(notes: notes)),
+      ('tiles', StatsTilesGrid(snapshot: s, now: DateTime.now(), onOpen: open)),
       if (repository != null)
         (
           'body-weight',
@@ -193,8 +190,8 @@ class TrainingStatsView extends StatelessWidget {
       const Padding(
         padding: EdgeInsets.fromLTRB(8, AppSpacing.md, 8, 0),
         child: Text(
-          'Rekordy wszystkich czasów, passa i gotowość mięśni liczą się '
-          'z całej historii, niezależnie od zakresu.',
+          'Rekordy życiowe, passa i gotowość mięśni liczą się '
+          'z całej historii, niezależnie od okresu.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.textMuted,

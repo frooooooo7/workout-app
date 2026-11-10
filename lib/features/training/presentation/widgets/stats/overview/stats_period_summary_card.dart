@@ -6,7 +6,7 @@ import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/utils/polish_plural.dart';
 import '../../../../domain/models/training_stats.dart';
 import '../stats_format.dart';
-import 'stats_headlines.dart';
+
 import 'stats_overview_card.dart';
 
 /// Górna karta pulpitu: ile treningów w okresie, słupki tygodni na tle celu
@@ -30,28 +30,21 @@ class StatsPeriodSummaryCard extends StatelessWidget {
     final workouts = current.workouts;
     final bars = _bars(s);
     final goalWeeks = _goalWeeks(s);
-    final inactivity = s.insights
-        .where((i) => i.kind == StatsInsightKind.inactivity)
-        .firstOrNull;
     final countDelta = previous == null
         ? null
         : StatsDelta.absolute(workouts, previous.workouts);
 
     final volume = formatStatsVolume(current.volumeKg);
-    final duration = formatStatsDuration(current.durationSec);
+    // Średnie na trening: więcej treningów nie ma udawać postępu.
+    final perWorkout = formatStatsVolume(
+      workouts == 0 ? 0 : current.volumeKg / workouts,
+    );
+    final duration = formatStatsDuration(
+      workouts == 0 ? 0 : current.durationSec ~/ workouts,
+    );
 
     return StatsOverviewCard(
-      title: StatsHeadlines.periodTitle(s),
-      trailing: previous == null || s.range.previousLabel.isEmpty
-          ? null
-          : Text(
-              'vs ${s.range.previousLabel}',
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+      title: 'Treningi',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -87,7 +80,8 @@ class StatsPeriodSummaryCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (countDelta != null) _Delta(delta: countDelta),
+                    if (countDelta != null)
+                      _Delta(delta: countDelta, countLabel: true),
                   ],
                 ),
               ),
@@ -100,29 +94,6 @@ class StatsPeriodSummaryCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (inactivity != null) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 16,
-                  color: AppColors.statAmber,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    inactivity.text,
-                    style: const TextStyle(
-                      color: AppColors.statAmber,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
           if (bars != null) ...[
             const SizedBox(height: 16),
             _WeekBars(bars: bars),
@@ -149,27 +120,29 @@ class StatsPeriodSummaryCard extends StatelessWidget {
               ),
               Expanded(
                 child: _MiniStat(
-                  value: duration.value,
-                  unit: duration.unit,
-                  label: 'na treningach',
-                  delta: previous == null
+                  key: const ValueKey('stats-per-workout'),
+                  value: perWorkout.value,
+                  unit: perWorkout.unit,
+                  label: 'na trening',
+                  delta: previous == null || previous.workouts == 0
                       ? null
                       : StatsDelta.percent(
-                          current.durationSec,
-                          previous.durationSec,
+                          workouts == 0 ? 0 : current.volumeKg / workouts,
+                          previous.volumeKg / previous.workouts,
                         ),
                 ),
               ),
               Expanded(
                 child: _MiniStat(
-                  value: formatStatsDecimal(current.completedSets.toDouble()),
-                  unit: '',
-                  label: 'serii',
-                  delta: previous == null
+                  value: duration.value,
+                  unit: duration.unit,
+                  label: 'śr. czas',
+                  neutral: true,
+                  delta: previous == null || previous.workouts == 0
                       ? null
                       : StatsDelta.percent(
-                          current.completedSets,
-                          previous.completedSets,
+                          workouts == 0 ? 0 : current.durationSec / workouts,
+                          previous.durationSec / previous.workouts,
                         ),
                 ),
               ),
@@ -566,6 +539,8 @@ class _GoalPill extends StatelessWidget {
 
 class _MiniStat extends StatelessWidget {
   const _MiniStat({
+    super.key,
+    this.neutral = false,
     required this.value,
     required this.unit,
     required this.label,
@@ -576,6 +551,9 @@ class _MiniStat extends StatelessWidget {
   final String unit;
   final String label;
   final StatsDelta? delta;
+
+  /// Zmiana bez oceny (czas treningu nie jest ani dobry, ani zły).
+  final bool neutral;
 
   @override
   Widget build(BuildContext context) {
@@ -631,7 +609,9 @@ class _MiniStat extends StatelessWidget {
           const SizedBox(height: 4),
           SizedBox(
             height: 16,
-            child: delta == null ? null : _Delta(delta: delta!, compact: true),
+            child: delta == null
+                ? null
+                : _Delta(delta: delta!, compact: true, neutral: neutral),
           ),
         ],
       ),
@@ -640,18 +620,33 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _Delta extends StatelessWidget {
-  const _Delta({required this.delta, this.compact = false});
+  const _Delta({
+    required this.delta,
+    this.compact = false,
+    this.neutral = false,
+    this.countLabel = false,
+  });
 
   final StatsDelta delta;
   final bool compact;
+  final bool neutral;
+
+  /// „3 więcej” zamiast samej liczby (licznik treningów).
+  final bool countLabel;
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (delta.direction) {
-      > 0 => AppColors.trendUp,
-      < 0 => AppColors.trendDown,
-      _ => AppColors.textMuted,
-    };
+    final color = neutral
+        ? AppColors.textSecondary
+        : switch (delta.direction) {
+            > 0 => AppColors.trendUp,
+            < 0 => AppColors.trendDown,
+            _ => AppColors.textMuted,
+          };
+    final plain = delta.text.replaceFirst(RegExp('^[+−]'), '');
+    final text = countLabel && delta.direction != 0
+        ? '$plain ${delta.direction > 0 ? 'więcej' : 'mniej'}'
+        : plain;
     final icon = switch (delta.direction) {
       > 0 => Icons.arrow_upward_rounded,
       < 0 => Icons.arrow_downward_rounded,
@@ -667,7 +662,7 @@ class _Delta extends StatelessWidget {
           const SizedBox(width: 2),
           Text(
             // Strzałka niesie kierunek, więc znak z tekstu zbędny.
-            delta.text.replaceFirst(RegExp('^[+−]'), ''),
+            text,
             style: TextStyle(
               color: color,
               fontSize: compact ? 12 : 13.5,

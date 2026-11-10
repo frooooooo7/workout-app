@@ -7,6 +7,7 @@ import '../../../../../core/theme/app_spacing.dart';
 import '../../../domain/models/training_stats.dart';
 import '../../bloc/training_stats_cubit.dart';
 import 'stats_date_range_picker.dart';
+import 'stats_format.dart';
 import 'stats_range_selector.dart' show formatStatsDateRange;
 
 /// Wybór zakresu na ekranach szczegółów: mała pigułka „30 dni ▾” w nagłówku
@@ -17,11 +18,17 @@ class StatsRangeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<TrainingStatsCubit, TrainingStatsState>(
-      buildWhen: (a, b) => a.range != b.range || a.customRange != b.customRange,
+      buildWhen: (a, b) =>
+          a.range != b.range ||
+          a.customRange != b.customRange ||
+          a.snapshot?.window != b.snapshot?.window,
       builder: (context, state) {
+        final snapshot = state.snapshot;
         final label =
             state.range == StatsRange.custom && state.customRange != null
             ? formatStatsDateRange(state.customRange!)
+            : snapshot != null && snapshot.range == state.range
+            ? formatStatsPeriodTitle(snapshot)
             : state.range.label;
         return Semantics(
           button: true,

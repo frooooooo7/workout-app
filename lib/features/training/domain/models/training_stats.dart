@@ -14,11 +14,11 @@ enum StatsRange {
   custom;
 
   /// Zakresy z paska; [custom] ma własny przycisk z kalendarzem.
-  static const presets = [week, month, quarter, year, all];
+  static const presets = [week, month, year, all];
 
   String get label => switch (this) {
-    StatsRange.week => '7 dni',
-    StatsRange.month => '30 dni',
+    StatsRange.week => 'Tydzień',
+    StatsRange.month => 'Miesiąc',
     StatsRange.quarter => '3 mies.',
     StatsRange.year => 'Rok',
     StatsRange.all => 'Całość',
@@ -27,8 +27,8 @@ enum StatsRange {
 
   /// Podpis porównania w kafelkach („vs poprzednie 7 dni”).
   String get previousLabel => switch (this) {
-    StatsRange.week => 'poprzednie 7 dni',
-    StatsRange.month => 'poprzednie 30 dni',
+    StatsRange.week => 'poprzedni tydzień',
+    StatsRange.month => 'poprzedni miesiąc',
     StatsRange.quarter => 'poprzednie 3 mies.',
     StatsRange.year => 'poprzedni rok',
     StatsRange.all => '',
@@ -751,6 +751,8 @@ class TrainingStatsSnapshot {
     required this.progressFrom,
     required this.hasHistory,
     this.customRange,
+    this.offset = 0,
+    this.hasEarlier = false,
     this.goal,
     this.repRanges = RepRangeDistribution.empty,
     this.sessionRecords = SessionRecords.empty,
@@ -763,6 +765,12 @@ class TrainingStatsSnapshot {
 
   /// Daty zakresu [StatsRange.custom]; w pozostałych `null`.
   final StatsDateRange? customRange;
+
+  /// Ile okresów kalendarzowych wstecz od bieżącego (0 = bieżący).
+  final int offset;
+
+  /// Czy przed oknem są jakiekolwiek treningi (można iść strzałką wstecz).
+  final bool hasEarlier;
   final StatsWindow window;
   final TrainingPeriodStats current;
 

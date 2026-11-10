@@ -32,6 +32,7 @@ abstract final class TrainingStatsCalculator {
     DateTime now, {
     DateTime? earliest,
     StatsDateRange? custom,
+    int offset = 0,
   }) {
     final today = statsDay(now.toLocal());
     final y = today.year;
@@ -41,18 +42,35 @@ abstract final class TrainingStatsCalculator {
 
     switch (range) {
       case StatsRange.week:
+        // Tydzień kalendarzowy (poniedziałek–niedziela), [offset] tygodni wstecz.
+        final thisWeek = TrainingSummaryCalculator.startOfWeek(today);
+        final start = DateTime(
+          thisWeek.year,
+          thisWeek.month,
+          thisWeek.day - 7 * offset,
+        );
+        final previousStart = DateTime(start.year, start.month, start.day - 7);
         return StatsWindow(
-          start: DateTime(y, m, d - 6),
-          end: tomorrow,
+          start: start,
+          end: DateTime(start.year, start.month, start.day + 7),
           bucket: StatsBucket.day,
-          previousStart: DateTime(y, m, d - 13),
+          previousStart: previousStart,
+          previousEnd: offset == 0
+              ? _sameElapsed(previousStart, start, tomorrow)
+              : null,
         );
       case StatsRange.month:
+        // Miesiąc kalendarzowy, [offset] miesięcy wstecz.
+        final start = DateTime(y, m - offset);
+        final previousStart = DateTime(y, m - offset - 1);
         return StatsWindow(
-          start: DateTime(y, m, d - 29),
-          end: tomorrow,
+          start: start,
+          end: DateTime(y, m - offset + 1),
           bucket: StatsBucket.day,
-          previousStart: DateTime(y, m, d - 59),
+          previousStart: previousStart,
+          previousEnd: offset == 0
+              ? _sameElapsed(previousStart, start, tomorrow)
+              : null,
         );
       case StatsRange.quarter:
         final week = TrainingSummaryCalculator.startOfWeek(today);
@@ -70,14 +88,17 @@ abstract final class TrainingStatsCalculator {
           previousEnd: _sameElapsed(previousStart, start, tomorrow),
         );
       case StatsRange.year:
-        final start = DateTime(y, m - 11);
-        final previousStart = DateTime(y, m - 23);
+        // Rok kalendarzowy, [offset] lat wstecz.
+        final start = DateTime(y - offset);
+        final previousStart = DateTime(y - offset - 1);
         return StatsWindow(
           start: start,
-          end: DateTime(y, m + 1),
+          end: DateTime(y - offset + 1),
           bucket: StatsBucket.month,
           previousStart: previousStart,
-          previousEnd: _sameElapsed(previousStart, start, tomorrow),
+          previousEnd: offset == 0
+              ? _sameElapsed(previousStart, start, tomorrow)
+              : null,
         );
       case StatsRange.custom:
         final picked = custom ?? StatsDateRange(DateTime(y, m, d - 29), today);
@@ -209,6 +230,7 @@ abstract final class TrainingStatsCalculator {
     PersonalRecordsResult? records,
     StatsDateRange? customRange,
     int? weeklyGoal,
+    int offset = 0,
   }) {
     final completed = <TrainingSession>[];
     DateTime? earliest;
@@ -226,6 +248,7 @@ abstract final class TrainingStatsCalculator {
       now,
       earliest: earliest,
       custom: customRange,
+      offset: offset,
     );
     final today = statsDay(now.toLocal());
     final inWindow = <TrainingSession>[];
@@ -241,16 +264,20 @@ abstract final class TrainingStatsCalculator {
 
     final current = TrainingSummaryCalculator.aggregate(inWindow);
     final allRecords = records ?? PersonalRecordsCalculator.compute(completed);
+    // Jedno ćwiczenie liczy się w okresie raz (jego najnowszy rekord) —
+    // „7 ćwiczeń z rekordem” zamiast „45 rekordów” z osobno liczonych rodzajów.
     final windowRecords = <PersonalRecord>[];
-    var previousRecords = 0;
+    final seenInWindow = <String>{};
+    final seenInPrevious = <String>{};
     for (final record in allRecords.records.reversed) {
       final local = record.date.toLocal();
       if (window.contains(local)) {
-        windowRecords.add(record);
+        if (seenInWindow.add(record.exerciseKey)) windowRecords.add(record);
       } else if (window.containsPrevious(local)) {
-        previousRecords++;
+        seenInPrevious.add(record.exerciseKey);
       }
     }
+    final previousRecords = seenInPrevious.length;
 
     final streaks = _streaks(completed, today);
     final elapsedDays = _elapsedDays(
@@ -284,6 +311,8 @@ abstract final class TrainingStatsCalculator {
     return TrainingStatsSnapshot(
       range: range,
       customRange: range == StatsRange.custom ? customRange : null,
+      offset: offset,
+      hasEarlier: earliest != null && earliest.toLocal().isBefore(window.start),
       window: window,
       current: current,
       previous: window.previousStart == null

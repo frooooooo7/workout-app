@@ -222,3 +222,56 @@ List<int> roundedPercents(List<double> shares) {
 /// niepustego paska nie stało „0%”.
 String formatStatsPercent(int percent, {required bool nonZero}) =>
     nonZero && percent == 0 ? '<1%' : '$percent%';
+
+const _monthsInstrumental = [
+  'styczniem',
+  'lutym',
+  'marcem',
+  'kwietniem',
+  'majem',
+  'czerwcem',
+  'lipcem',
+  'sierpniem',
+  'wrześniem',
+  'październikiem',
+  'listopadem',
+  'grudniem',
+];
+
+/// Tytuł okresu na pulpicie: „Październik 2026”, „2026”, „3–9 lis 2026”,
+/// „Cała historia”. Okno końca nie wlicza, więc ostatni dzień to `end - 1`.
+String formatStatsPeriodTitle(TrainingStatsSnapshot s) {
+  final w = s.window;
+  switch (s.range) {
+    case StatsRange.month:
+      return '${_monthsNominative[w.start.month - 1]} ${w.start.year}';
+    case StatsRange.year:
+      return '${w.start.year}';
+    case StatsRange.week:
+      final last = DateTime(w.start.year, w.start.month, w.start.day + 6);
+      final sameMonth = w.start.month == last.month;
+      final from = sameMonth ? '${w.start.day}' : formatStatsDayMonth(w.start);
+      return '$from – ${formatStatsDayMonth(last)} ${last.year}';
+    case StatsRange.all:
+      return 'Cała historia';
+    case StatsRange.quarter:
+      return 'Ostatnie 3 miesiące';
+    case StatsRange.custom:
+      return s.customRange == null
+          ? 'Własny zakres'
+          : '${formatStatsDayMonth(s.customRange!.start)} – '
+                '${formatStatsDayMonth(s.customRange!.end)}';
+  }
+}
+
+/// „porównanie z wrześniem”; `null`, gdy okres nie ma porównania.
+String? formatStatsComparisonLabel(TrainingStatsSnapshot s) {
+  final prev = s.window.previousStart;
+  if (prev == null) return null;
+  return switch (s.range) {
+    StatsRange.month => 'porównanie z ${_monthsInstrumental[prev.month - 1]}',
+    StatsRange.year => 'porównanie z ${prev.year}',
+    StatsRange.week => 'porównanie z poprzednim tygodniem',
+    _ => 'porównanie z poprzednim okresem',
+  };
+}

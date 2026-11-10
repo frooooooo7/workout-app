@@ -120,7 +120,7 @@ class StatsTrendRow extends StatelessWidget {
               children: [
                 Text(
                   trend.exercise.exerciseName,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.textPrimary,

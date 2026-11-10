@@ -96,7 +96,7 @@ void main() {
     ]);
     final bodyWeight = FakeBodyWeightRepository([
       BodyWeightEntry(date: DateTime(2026, 7, 1), weightKg: 90),
-      BodyWeightEntry(date: DateTime(2026, 8, 20), weightKg: 84),
+      BodyWeightEntry(date: DateTime(2026, 9, 2), weightKg: 84),
       BodyWeightEntry(date: DateTime(2026, 9, 14), weightKg: 82.8),
     ]);
     await _pump(tester, repository, bodyWeight: bodyWeight);
@@ -126,27 +126,28 @@ void main() {
     final repository = _FakeStatsRepository([
       _session(DateTime(2026, 9, 15, 18)),
       _session(DateTime(2026, 9, 3, 18)),
-      _session(DateTime(2026, 8, 1, 18)), // poprzednie 30 dni
+      _session(DateTime(2026, 8, 1, 18)), // poprzedni miesiąc
     ]);
     await _pump(tester, repository);
 
     expect(find.text('Statystyki'), findsOneWidget);
-    expect(find.text('OSTATNIE 30 DNI'), findsOneWidget);
-    expect(find.text('vs poprzednie 30 dni'), findsOneWidget);
+    expect(find.text('Wrzesień 2026'), findsOneWidget);
+    expect(find.text('porównanie z sierpniem'), findsOneWidget);
     expect(find.textContaining('kcal'), findsNothing);
     expect(find.text('2'), findsWidgets);
     expect(find.text('treningi'), findsOneWidget);
     // 80 kg × 10 × 2 sesje, 2 × 45 min.
     expect(find.textContaining('1 600', findRichText: true), findsOneWidget);
-    expect(find.textContaining('1 h 30', findRichText: true), findsOneWidget);
+    // Średnio na trening: 800 kg i 45 min.
+    expect(find.textContaining('45 min', findRichText: true), findsOneWidget);
     expect(find.text('objętość'), findsOneWidget);
-    expect(find.text('na treningach'), findsOneWidget);
-    expect(find.text('serii'), findsOneWidget);
+    expect(find.text('na trening'), findsOneWidget);
+    expect(find.text('śr. czas'), findsOneWidget);
 
-    await tester.tap(find.text('7 dni'));
+    await tester.tap(find.text('Tydzień'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('OSTATNIE 7 DNI'), findsOneWidget);
+    expect(find.text('14 – 20 wrz 2026'), findsOneWidget);
     expect(find.text('1'), findsWidgets);
     expect(find.text('trening'), findsOneWidget);
     expect(find.textContaining('45', findRichText: true), findsWidgets);
@@ -170,7 +171,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     for (final title in [
-      'OSTATNIE 30 DNI',
+      'TRENINGI',
       'SIŁA',
       'REKORDY',
       'MIĘŚNIE',
@@ -297,7 +298,7 @@ void main() {
     await _openCard(tester, 'Przebieg w czasie');
     final chip = find.byKey(const ValueKey('stats-range-chip-button'));
     expect(
-      find.descendant(of: chip, matching: find.text('30 dni')),
+      find.descendant(of: chip, matching: find.text('Wrzesień 2026')),
       findsOneWidget,
     );
 
@@ -308,10 +309,10 @@ void main() {
 
     await tester.tap(chip);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('stats-range-quarter')));
+    await tester.tap(find.byKey(const ValueKey('stats-range-year')));
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: chip, matching: find.text('3 mies.')),
+      find.descendant(of: chip, matching: find.text('2026')),
       findsOneWidget,
     );
     expect(find.text('serie łącznie'), findsOneWidget, reason: 'metric kept');
@@ -319,7 +320,8 @@ void main() {
     // Pulpit pod spodem ma ten sam zakres.
     await tester.tap(find.byTooltip('Wstecz'));
     await tester.pumpAndSettle();
-    expect(find.text('OSTATNIE 3 MIESIĄCE'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stats-period-title')), findsOneWidget);
+    expect(find.text('2026'), findsOneWidget);
     expect(repository.allReads, 1, reason: 'range change reuses loaded data');
   });
 
@@ -329,8 +331,9 @@ void main() {
     await _pump(tester, _FakeStatsRepository([_session(DateTime(2026, 1, 5))]));
 
     expect(find.text('Brak treningów w tym okresie.'), findsOneWidget);
-    expect(find.text('SIŁA'), findsNothing);
-    expect(find.text('MIĘŚNIE'), findsNothing);
+    // Kafle zostają, ale bez danych okresu mówią „za mało danych”.
+    expect(find.text('SIŁA'), findsOneWidget);
+    expect(find.text('za mało danych'), findsWidgets);
     expect(find.text('REKORDY'), findsOneWidget);
     expect(find.text('REGULARNOŚĆ'), findsOneWidget);
 
@@ -348,8 +351,8 @@ void main() {
     await tester.tap(find.text('Całość'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('CAŁA HISTORIA'), findsOneWidget);
-    expect(find.textContaining('vs poprzednie'), findsNothing);
+    expect(find.text('Cała historia'), findsOneWidget);
+    expect(find.textContaining('porównanie z'), findsNothing);
   });
 
   testWidgets('empty range suggests the whole history', (tester) async {
@@ -371,7 +374,7 @@ void main() {
 
     expect(find.text('Tu pojawią się Twoje statystyki'), findsOneWidget);
     expect(find.text('Rozpocznij trening'), findsOneWidget);
-    expect(find.text('OSTATNIE 30 DNI'), findsNothing);
+    expect(find.text('Wrzesień 2026'), findsNothing);
   });
 
   testWidgets('failure offers a retry that reloads', (tester) async {
@@ -387,7 +390,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('OSTATNIE 30 DNI'), findsOneWidget);
+    expect(find.text('Wrzesień 2026'), findsOneWidget);
   });
 
   testWidgets('reloads when session data changes', (tester) async {
