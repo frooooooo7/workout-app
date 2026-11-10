@@ -9,6 +9,7 @@ import '../session_details/session_section_card.dart';
 import 'stats_format.dart';
 import 'stats_personal_bests_screen.dart';
 import 'stats_navigation.dart';
+import '../../../../library/presentation/widgets/exercise_thumbnail.dart';
 
 /// Najnowsze rekordy pobite w zakresie + wejście do listy najlepszych wyników
 /// wszystkich ćwiczeń.
@@ -107,14 +108,12 @@ class _RecordRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.record.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(AppRadius.md - 2),
-            ),
-            child: const Icon(
+          ExerciseThumbnail(
+            imageUrl: r.imageUrl,
+            size: 36,
+            borderRadius: AppRadius.md - 2,
+            backgroundColor: AppColors.record.withValues(alpha: 0.14),
+            placeholder: const Icon(
               Icons.emoji_events_rounded,
               size: 18,
               color: AppColors.record,
