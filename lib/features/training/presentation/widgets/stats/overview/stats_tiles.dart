@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/utils/polish_plural.dart';
 import '../../../../domain/models/training_stats.dart';
+import '../../../../domain/services/stats/stats_insights_calculator.dart';
 import '../stats_format.dart';
 import '../stats_detail_screen.dart' show StatsDetail;
 import 'stats_headlines.dart';
@@ -120,21 +121,21 @@ abstract final class StatsTileData {
     for (final t in trends) {
       if (t.direction == null) continue;
       total++;
-      if (t.direction == 1) up++;
+      // Ćwiczenie, które uwaga na pulpicie uznaje za stojące, nie „rośnie”.
+      if (t.direction == 1 &&
+          StatsInsightsCalculator.stalledFor(t.exercise) == null) {
+        up++;
+      }
     }
     return (up: up, total: total);
   }
 
-  /// „Przysiad 120 kg × 5, wczoraj”; `null` bez rekordów w okresie.
+  /// „ostatni wczoraj: Przysiad”; `null` bez rekordów w okresie.
   static String? latestRecord(TrainingStatsSnapshot s, DateTime now) {
     if (s.records.isEmpty) return null;
     final r = s.records.first;
-    final w = r.weightKg;
-    final result = w != null && w > 0
-        ? ' ${formatStatsWeight(w)}${r.reps == null ? '' : ' × ${r.reps}'}'
-        : '';
-    return 'ostatni: ${r.exerciseName}$result, '
-        '${formatStatsRelativeDay(r.date.toLocal(), now)}';
+    return 'ostatni ${formatStatsRelativeDay(r.date.toLocal(), now)}: '
+        '${r.exerciseName}';
   }
 
   /// Partie w zakresie 10–20 serii tygodniowo i wszystkie trenowane partie.
