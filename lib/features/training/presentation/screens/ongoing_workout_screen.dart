@@ -117,6 +117,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
 
   /// Ćwiczenia, w których notatkę otwarto z menu ⋯.
   final Set<String> _openNotes = {};
+  final Map<String, int> _noteFocusRequests = {};
 
   /// Ile razy serie ćwiczenia zmieniono spoza jego karty (kalkulator
   /// talerzy) — karta odświeża wtedy pola.
@@ -695,6 +696,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
       showRirColumn: _shouldShowRirColumn(exercise),
       showTempoColumn: _shouldShowTempoColumn(exercise),
       noteOpen: _openNotes.contains(exercise.id),
+      noteFocusRequest: _noteFocusRequests[exercise.id] ?? 0,
       embedded: embedded,
       focused: focused,
       stopwatch: _stopwatch,
@@ -1091,7 +1093,14 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           _currentExerciseIndex.value.clamp(0, session.exercises.length - 1),
         );
       case WorkoutOptionsAction.note:
-        setState(() => _openNotes.add(exercise!.id));
+        setState(() {
+          _openNotes.add(exercise!.id);
+          _noteFocusRequests.update(
+            exercise.id,
+            (n) => n + 1,
+            ifAbsent: () => 1,
+          );
+        });
       case WorkoutOptionsAction.swap:
         await _swapExercise(
           context,
@@ -1106,7 +1115,7 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
     }
   }
 
-  /// „Klatka · 1 z 3 serii” pod nazwą ćwiczenia w arkuszu opcji.
+  /// „1 z 3 serii” pod nazwą ćwiczenia w arkuszu opcji.
   String _optionsSubtitle(TrainingSessionExercise exercise) {
     final done = exercise.sets.where((set) => set.completed).length;
     return '$done z ${exercise.sets.length} serii';

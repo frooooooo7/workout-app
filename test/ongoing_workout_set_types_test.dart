@@ -441,6 +441,31 @@ void main() {
       expect(repository.session.exercises.first.note, isNull);
     });
 
+    testWidgets(
+      'the Notatka tile focuses the note again after the keyboard hides',
+      (tester) async {
+        await _pump(tester);
+        await _chooseFromMenu(tester, 'Notatka');
+        final field = find.byKey(const ValueKey('exercise-note-field-0'));
+        bool focused() => tester
+            .widget<EditableText>(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+            )
+            .focusNode
+            .hasFocus;
+        await tester.pump();
+        expect(focused(), isTrue);
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(focused(), isFalse);
+
+        await _chooseFromMenu(tester, 'Notatka');
+        await tester.pump();
+        expect(focused(), isTrue);
+      },
+    );
+
     testWidgets('an existing note is shown straight away', (tester) async {
       await _pump(tester, session: _session(benchNote: 'z pauzą 2 s'));
 
