@@ -7,6 +7,7 @@ import 'package:gym/features/training/domain/services/stats/training_stats_calcu
 import 'package:gym/features/training/presentation/bloc/training_stats_cubit.dart';
 import 'package:gym/features/training/presentation/screens/training_stats_screen.dart';
 import 'package:gym/features/training/presentation/widgets/stats/overview/stats_notes_card.dart';
+import 'package:gym/features/training/presentation/widgets/stats/overview/stats_tiles.dart';
 
 class _Repo implements TrainingStatsRepository {
   _Repo(this.sessions);
@@ -51,6 +52,30 @@ final _now = DateTime(2026, 9, 16, 12);
 
 void main() {
   group('calendar periods', () {
+    test('the series of the running month ends today, not at month end', () {
+      final snapshot = TrainingStatsCalculator.compute(
+        [_session(DateTime(2026, 9, 10, 18))],
+        range: StatsRange.month,
+        now: _now, // 16 września
+      );
+      expect(snapshot.series, hasLength(16));
+      expect(snapshot.series.last.start, DateTime(2026, 9, 16));
+      final year = TrainingStatsCalculator.compute(
+        [_session(DateTime(2026, 9, 10, 18))],
+        range: StatsRange.year,
+        now: _now,
+      );
+      expect(year.series, hasLength(9));
+      // Miniony miesiąc ma pełną serię.
+      final august = TrainingStatsCalculator.compute(
+        [_session(DateTime(2026, 8, 10, 18))],
+        range: StatsRange.month,
+        now: _now,
+        offset: 1,
+      );
+      expect(august.series, hasLength(31));
+    });
+
     test('offset moves to an earlier month and flags earlier history', () {
       final sessions = [
         _session(DateTime(2026, 9, 15, 18)),
@@ -193,6 +218,44 @@ void main() {
         ['c', 'd'],
       );
     });
+  });
+
+  test('a stalled exercise is not counted as growing on the Siła tile', () {
+    // Siedem treningów: wzrost na początku, potem cztery bez poprawy.
+    final sessions = [
+      for (final (i, w) in ['60', '70', '80', '80', '80', '80', '80'].indexed)
+        _session(DateTime(2026, 9, 1 + i * 2, 18), weight: w),
+    ];
+    final snapshot = TrainingStatsCalculator.compute(
+      sessions,
+      range: StatsRange.month,
+      now: _now,
+    );
+    expect(StatsTileData.strength(snapshot), (up: 0, total: 1));
+  });
+
+  testWidgets('an empty period shows dashes instead of 0 kg and -100%', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TrainingStatsScreen(
+          repository: _Repo([_session(DateTime(2026, 8, 15, 18))]),
+          dataChanges: ChangeNotifier(),
+          clock: () => _now,
+          weeklyGoalLoader: () async => null,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('–'), findsNWidgets(2));
+    // Został tylko spadek objętości do zera — to prawdziwa zmiana.
+    expect(find.textContaining('100%'), findsOneWidget);
   });
 
   testWidgets('arrows change the period; next is off on the current one', (

@@ -6,8 +6,6 @@ import '../../models/training_summary_stats.dart';
 /// Krótkie wnioski z policzonych statystyk. Każda reguła daje najwyżej jeden
 /// wniosek, a na ekran trafia [maxInsights] najpilniejszych.
 abstract final class StatsInsightsCalculator {
-  static const maxInsights = 4;
-
   /// Zmiana objętości, od której warto o niej wspomnieć. Spadek ma wyższy
   /// próg — tydzień z mniejszą liczbą serii to normalna zmienność, nie sygnał.
   static const volumeUpThreshold = 10;
@@ -154,7 +152,9 @@ abstract final class StatsInsightsCalculator {
       );
     }
 
-    return List.unmodifiable(insights.take(maxInsights));
+    // Limit dwóch uwag stosuje pulpit — tu zostają wszystkie, żeby uwaga
+    // z końca listy (np. pominięta partia) nie znikała przed wyborem.
+    return List.unmodifiable(insights);
   }
 
   /// Wartość do porównań progresu: szacowane 1RM, a bez ciężarów powtórzenia.
@@ -173,7 +173,7 @@ abstract final class StatsInsightsCalculator {
 
   /// Ile treningów minęło od najlepszego wyniku, gdy ćwiczenie stoi w miejscu;
   /// `null`, gdy się rozwija albo za mało danych.
-  static int? _stalledFor(ExerciseProgress e) {
+  static int? stalledFor(ExerciseProgress e) {
     final values = _values(e);
     if (values.length < plateauMinSessions) return null;
     var best = 0;
@@ -191,7 +191,7 @@ abstract final class StatsInsightsCalculator {
   ) {
     for (final e in exercises) {
       if (withRecord.contains(e.exerciseKey)) continue;
-      final since = _stalledFor(e);
+      final since = stalledFor(e);
       if (since == null) continue;
       return StatsInsight(
         kind: StatsInsightKind.plateau,
@@ -213,7 +213,7 @@ abstract final class StatsInsightsCalculator {
       // Ćwiczenie w stagnacji nie może jednocześnie „rosnąć”: zmiana między
       // pierwszym a ostatnim punktem bywa dodatnia, choć od tygodni nic
       // się nie poprawiło.
-      if (_stalledFor(e) != null) continue;
+      if (stalledFor(e) != null) continue;
       final change = e.change;
       // Poniżej kilograma (albo powtórzenia) to szum zaokrągleń Epleya: inne
       // serie dają to samo szacowane 1RM, a różnica wychodzi z ułamków.

@@ -233,6 +233,9 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
   /// Strzałki okresu: [delta] -1 = wcześniejszy, +1 = późniejszy. Nie wychodzi
   /// poza bieżący okres ani poza początek historii.
   void shiftPeriod(int delta) {
+    // Dopóki snapshot nie dogonił wybranego okresu (liczenie w wątku), strzałki
+    // nie działają — `hasEarlier` pochodziłoby ze starego okna.
+    if (state.snapshot?.offset != state.offset) return;
     final next = state.offset - delta;
     if (next < 0) return;
     if (delta < 0 && !(state.snapshot?.hasEarlier ?? false)) return;

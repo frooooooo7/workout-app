@@ -36,12 +36,13 @@ class StatsPeriodSummaryCard extends StatelessWidget {
 
     final volume = formatStatsVolume(current.volumeKg);
     // Średnie na trening: więcej treningów nie ma udawać postępu.
-    final perWorkout = formatStatsVolume(
-      workouts == 0 ? 0 : current.volumeKg / workouts,
-    );
-    final duration = formatStatsDuration(
-      workouts == 0 ? 0 : current.durationSec ~/ workouts,
-    );
+    const dash = (value: '–', unit: '');
+    final perWorkout = workouts == 0
+        ? dash
+        : formatStatsVolume(current.volumeKg / workouts);
+    final duration = workouts == 0
+        ? dash
+        : formatStatsDuration(current.durationSec ~/ workouts);
 
     return StatsOverviewCard(
       title: 'Treningi',
@@ -124,10 +125,13 @@ class StatsPeriodSummaryCard extends StatelessWidget {
                   value: perWorkout.value,
                   unit: perWorkout.unit,
                   label: 'na trening',
-                  delta: previous == null || previous.workouts == 0
+                  delta:
+                      previous == null ||
+                          previous.workouts == 0 ||
+                          workouts == 0
                       ? null
                       : StatsDelta.percent(
-                          workouts == 0 ? 0 : current.volumeKg / workouts,
+                          current.volumeKg / workouts,
                           previous.volumeKg / previous.workouts,
                         ),
                 ),
@@ -138,10 +142,13 @@ class StatsPeriodSummaryCard extends StatelessWidget {
                   unit: duration.unit,
                   label: 'śr. czas',
                   neutral: true,
-                  delta: previous == null || previous.workouts == 0
+                  delta:
+                      previous == null ||
+                          previous.workouts == 0 ||
+                          workouts == 0
                       ? null
                       : StatsDelta.percent(
-                          workouts == 0 ? 0 : current.durationSec / workouts,
+                          current.durationSec / workouts,
                           previous.durationSec / previous.workouts,
                         ),
                 ),

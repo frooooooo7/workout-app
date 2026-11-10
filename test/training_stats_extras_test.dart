@@ -1184,7 +1184,7 @@ void main() {
       );
     });
 
-    test('caps the list, one insight per rule, most urgent first', () {
+    test('one insight per rule, most urgent first, none dropped', () {
       final list = insights(
         daysSince: 10,
         streak: 6,
@@ -1201,14 +1201,10 @@ void main() {
           ),
         ],
       );
-      expect(list, hasLength(StatsInsightsCalculator.maxInsights));
       expect(list.first.kind, StatsInsightKind.inactivity);
       expect(list.map((i) => i.kind).toSet(), hasLength(list.length));
-      expect(
-        list.map((i) => i.kind),
-        isNot(contains(StatsInsightKind.neglected)),
-        reason: 'najmniej pilny odpada przy limicie',
-      );
+      // Limit dwóch uwag stosuje pulpit, więc najmniej pilny też zostaje.
+      expect(list.last.kind, StatsInsightKind.neglected);
     });
 
     test('are part of the snapshot', () {

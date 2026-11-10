@@ -327,7 +327,7 @@ abstract final class TrainingStatsCalculator {
           : previousRecords,
       currentStreakWeeks: streaks.current,
       bestStreakWeeks: streaks.best,
-      series: _series(inWindow, window),
+      series: _series(inWindow, window, today),
       activity: _activity(completed, today, elapsedDays),
       habits: _habits(inWindow, elapsedDays),
       muscles: muscles,
@@ -402,6 +402,7 @@ abstract final class TrainingStatsCalculator {
   static List<StatsSeriesPoint> _series(
     List<TrainingSession> sessions,
     StatsWindow window,
+    DateTime today,
   ) {
     final starts = <DateTime>[];
     // Własny zakres nie musi zaczynać się na granicy słupka (poniedziałek,
@@ -411,6 +412,9 @@ abstract final class TrainingStatsCalculator {
       cursor.isBefore(window.end);
       cursor = nextBucket(cursor, window.bucket)
     ) {
+      // Okno bieżącego okresu sięga końca tygodnia, miesiąca czy roku —
+      // przedziały z przyszłości nie mają danych i psułyby średnie.
+      if (cursor.isAfter(today)) break;
       starts.add(cursor);
     }
 
