@@ -233,7 +233,10 @@ void main() {
 
       final snapshot = cubit.state.snapshot!;
       expect(snapshot.range, StatsRange.month);
-      expect(snapshot.current.workouts, 29); // 18 sierpnia – 15 września
+      final sessionsInSeptember = sessions
+          .where((s) => s.startedAt.month == 9 && !s.startedAt.isAfter(_now))
+          .length;
+      expect(snapshot.current.workouts, sessionsInSeptember);
       expect(snapshot.hasHistory, isTrue);
       expect(snapshot.goal!.goal, 4);
 
@@ -258,7 +261,15 @@ void main() {
       // Pasek zakresów reaguje od razu, wykresy po chwili.
       expect(cubit.state.range, StatsRange.week);
       await _until(() => cubit.state.snapshot!.range == StatsRange.week);
-      expect(cubit.state.snapshot!.current.workouts, 6); // 10–15 września
+      expect(
+        cubit.state.snapshot!.current.workouts,
+        TrainingStatsCalculator.compute(
+          sessions,
+          range: StatsRange.week,
+          now: _now,
+          weeklyGoal: 4,
+        ).current.workouts,
+      );
 
       // Szybka seria zmian: liczy się ostatnia, starsze odpowiedzi znikają.
       cubit

@@ -315,7 +315,7 @@ class _BestTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   b.exerciseName,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppColors.textPrimary,

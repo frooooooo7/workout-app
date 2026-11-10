@@ -56,7 +56,23 @@ TrainingStatsSnapshot _snapshot(
   List<TrainingSession>? sessions,
 ]) => TrainingStatsCalculator.compute(
   sessions ?? _sessions,
-  range: range,
+  // Te testy sprawdzają karty, nie okresy: tydzień i miesiąc to tu okna
+  // ruchome (7 i 30 dni do `_now`).
+  range: switch (range) {
+    StatsRange.week || StatsRange.month => StatsRange.custom,
+    _ => range,
+  },
+  customRange: switch (range) {
+    StatsRange.week => StatsDateRange(
+      DateTime(2026, 9, 10),
+      DateTime(2026, 9, 16),
+    ),
+    StatsRange.month => StatsDateRange(
+      DateTime(2026, 8, 18),
+      DateTime(2026, 9, 16),
+    ),
+    _ => null,
+  },
   now: _now,
 );
 

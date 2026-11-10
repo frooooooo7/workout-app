@@ -95,7 +95,8 @@ TrainingStatsSnapshot _snapshot() {
   ];
   return TrainingStatsCalculator.compute(
     sessions,
-    range: StatsRange.month,
+    range: StatsRange.custom,
+    customRange: StatsDateRange(DateTime(2026, 8, 18), DateTime(2026, 9, 16)),
     now: _now,
   );
 }
@@ -151,7 +152,8 @@ TrainingStatsSnapshot _coarseSnapshot() {
   ];
   return TrainingStatsCalculator.compute(
     sessions,
-    range: StatsRange.month,
+    range: StatsRange.custom,
+    customRange: StatsDateRange(DateTime(2026, 8, 18), DateTime(2026, 9, 16)),
     now: _now,
   );
 }
@@ -457,7 +459,8 @@ void main() {
     testWidgets('lists newest records and opens all bests with search', (
       tester,
     ) async {
-      expect(snapshot.records.length, greaterThan(4));
+      // Jedno ćwiczenie to jeden rekord w okresie (najnowszy).
+      expect(snapshot.records.length, 3);
       await _pump(
         tester,
         StatsRecordsCard(
@@ -475,7 +478,7 @@ void main() {
       expect(find.text('+2 powt.'), findsWidgets);
       expect(find.text('Powtórzenia'), findsWidgets);
       expect(find.text('wczoraj'), findsNWidgets(3));
-      expect(find.textContaining('więcej w tym okresie'), findsOneWidget);
+      expect(find.textContaining('więcej w tym okresie'), findsNothing);
       expect(tester.takeException(), isNull);
 
       await tester.tap(find.text('Wszystkie ćwiczenia'));

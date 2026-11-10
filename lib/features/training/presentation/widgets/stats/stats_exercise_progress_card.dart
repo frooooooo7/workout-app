@@ -253,7 +253,7 @@ class _ExercisePicker extends StatelessWidget {
                     ),
                     Text(
                       selected.exerciseName,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textPrimary,

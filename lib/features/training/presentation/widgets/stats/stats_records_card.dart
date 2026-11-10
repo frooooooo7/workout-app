@@ -129,7 +129,7 @@ class _RecordRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         r.exerciseName,
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppColors.textPrimary,

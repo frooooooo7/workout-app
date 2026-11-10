@@ -12,6 +12,7 @@ import '../../domain/services/stats/training_stats_calculator.dart';
 class TrainingStatsState {
   const TrainingStatsState({
     this.range = StatsRange.month,
+    this.offset = 0,
     this.customRange,
     this.snapshot,
     this.loading = true,
@@ -22,6 +23,9 @@ class TrainingStatsState {
   });
 
   final StatsRange range;
+
+  /// Ile okresów kalendarzowych wstecz (tydzień/miesiąc/rok); 0 = bieżący.
+  final int offset;
 
   /// Ostatnio wybrane daty z kalendarza; ma sens przy [StatsRange.custom],
   /// ale zostaje po przełączeniu na inny zakres, żeby dało się do nich wrócić.
@@ -48,6 +52,7 @@ class TrainingStatsState {
 
   TrainingStatsState copyWith({
     StatsRange? range,
+    int? offset,
     StatsDateRange? customRange,
     TrainingStatsSnapshot? snapshot,
     bool? loading,
@@ -58,6 +63,7 @@ class TrainingStatsState {
   }) {
     return TrainingStatsState(
       range: range ?? this.range,
+      offset: offset ?? this.offset,
       customRange: customRange ?? this.customRange,
       snapshot: snapshot ?? this.snapshot,
       loading: loading ?? this.loading,
@@ -159,7 +165,11 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       // liczenia zestawiłaby nowe sesje ze starymi rekordami.
       _sessions = sessions;
       _records = records;
-      final snapshot = await _snapshotFor(state.range, state.customRange);
+      final snapshot = await _snapshotFor(
+        state.range,
+        state.customRange,
+        state.offset,
+      );
       if (isClosed || snapshot == null) return;
       emit(
         state.copyWith(
@@ -176,6 +186,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       emit(
         TrainingStatsState(
           range: state.range,
+          offset: state.offset,
           customRange: state.customRange,
           snapshot: state.snapshot,
           loading: false,
@@ -197,7 +208,11 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       _weeklyGoal = goal;
       // Bez wczytanych sesji cel dołączy się przy pierwszym liczeniu.
       if (_records == null || state.snapshot == null) return;
-      final snapshot = await _snapshotFor(state.range, state.customRange);
+      final snapshot = await _snapshotFor(
+        state.range,
+        state.customRange,
+        state.offset,
+      );
       if (isClosed || snapshot == null) return;
       emit(state.copyWith(snapshot: snapshot, loading: false));
     } catch (_) {
@@ -211,8 +226,20 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       if (saved != null) selectCustomRange(saved);
       return;
     }
-    if (range == state.range) return;
-    _switchTo(range, state.customRange);
+    if (range == state.range && state.offset == 0) return;
+    _switchTo(range, state.customRange, 0);
+  }
+
+  /// Strzałki okresu: [delta] -1 = wcześniejszy, +1 = późniejszy. Nie wychodzi
+  /// poza bieżący okres ani poza początek historii.
+  void shiftPeriod(int delta) {
+    final next = state.offset - delta;
+    if (next < 0) return;
+    if (delta < 0 && !(state.snapshot?.hasEarlier ?? false)) return;
+    if (state.range == StatsRange.all || state.range == StatsRange.custom) {
+      return;
+    }
+    _switchTo(state.range, state.customRange, next);
   }
 
   /// Zakres z kalendarza (oba dni włącznie).
@@ -220,34 +247,39 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
     if (state.range == StatsRange.custom && state.customRange == custom) {
       return;
     }
-    _switchTo(StatsRange.custom, custom);
+    _switchTo(StatsRange.custom, custom, 0);
   }
 
-  void _switchTo(StatsRange range, StatsDateRange? custom) {
+  void _switchTo(StatsRange range, StatsDateRange? custom, int offset) {
     // Przed pierwszym wczytaniem liczyć nie ma z czego — zakres zapamiętany,
     // policzy go [load].
     if (_records == null) {
-      emit(state.copyWith(range: range, customRange: custom));
+      emit(state.copyWith(range: range, customRange: custom, offset: offset));
       return;
     }
     if (!_heavy) {
       emit(
         state.copyWith(
           range: range,
+          offset: offset,
           customRange: custom,
-          snapshot: _computeNow(range, custom),
+          snapshot: _computeNow(range, custom, offset),
         ),
       );
       return;
     }
     // Pasek zakresów reaguje od razu; wykresy dopiero, gdy wątek skończy.
-    emit(state.copyWith(range: range, customRange: custom));
-    unawaited(_recompute(range, custom));
+    emit(state.copyWith(range: range, customRange: custom, offset: offset));
+    unawaited(_recompute(range, custom, offset));
   }
 
-  Future<void> _recompute(StatsRange range, StatsDateRange? custom) async {
+  Future<void> _recompute(
+    StatsRange range,
+    StatsDateRange? custom,
+    int offset,
+  ) async {
     try {
-      final snapshot = await _snapshotFor(range, custom);
+      final snapshot = await _snapshotFor(range, custom, offset);
       if (isClosed || snapshot == null) return;
       emit(state.copyWith(snapshot: snapshot, loading: false));
     } catch (_) {
@@ -257,6 +289,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
       emit(
         TrainingStatsState(
           range: state.range,
+          offset: state.offset,
           customRange: state.customRange,
           snapshot: state.snapshot,
           loading: false,
@@ -273,9 +306,10 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
   Future<TrainingStatsSnapshot?> _snapshotFor(
     StatsRange range,
     StatsDateRange? custom,
+    int offset,
   ) async {
     final seq = ++_computeSeq;
-    if (!_heavy) return _computeNow(range, custom);
+    if (!_heavy) return _computeNow(range, custom, offset);
     while (true) {
       final goal = _weeklyGoal;
       final result = await compute(
@@ -284,6 +318,7 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
           sessions: _sessions,
           range: range,
           customRange: custom,
+          offset: offset,
           now: _clock(),
           records: _records,
           weeklyGoal: goal,
@@ -296,15 +331,19 @@ class TrainingStatsCubit extends Cubit<TrainingStatsState> {
     }
   }
 
-  TrainingStatsSnapshot _computeNow(StatsRange range, StatsDateRange? custom) =>
-      TrainingStatsCalculator.compute(
-        _sessions,
-        range: range,
-        customRange: custom,
-        now: _clock(),
-        records: _records,
-        weeklyGoal: _weeklyGoal,
-      );
+  TrainingStatsSnapshot _computeNow(
+    StatsRange range,
+    StatsDateRange? custom,
+    int offset,
+  ) => TrainingStatsCalculator.compute(
+    _sessions,
+    range: range,
+    customRange: custom,
+    offset: offset,
+    now: _clock(),
+    records: _records,
+    weeklyGoal: _weeklyGoal,
+  );
 
   void _onDataChanged() {
     if (isClosed) return;
@@ -330,6 +369,7 @@ class _SnapshotArgs {
     required this.sessions,
     required this.range,
     required this.customRange,
+    required this.offset,
     required this.now,
     required this.records,
     required this.weeklyGoal,
@@ -338,6 +378,7 @@ class _SnapshotArgs {
   final List<TrainingSession> sessions;
   final StatsRange range;
   final StatsDateRange? customRange;
+  final int offset;
   final DateTime now;
   final PersonalRecordsResult? records;
   final int? weeklyGoal;
@@ -348,6 +389,7 @@ TrainingStatsSnapshot _snapshotJob(_SnapshotArgs a) =>
       a.sessions,
       range: a.range,
       customRange: a.customRange,
+      offset: a.offset,
       now: a.now,
       records: a.records,
       weeklyGoal: a.weeklyGoal,

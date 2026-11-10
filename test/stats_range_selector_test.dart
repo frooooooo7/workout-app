@@ -98,17 +98,11 @@ void main() {
       final changes = <StatsRange>[];
       await _pump(tester, onChanged: changes.add);
 
-      await tester.tap(find.text('7 dni'));
-      await tester.tap(find.text('3 mies.'));
+      await tester.tap(find.text('Tydzień'));
       await tester.tap(find.text('Rok'));
       await tester.tap(find.text('Całość'));
 
-      expect(changes, [
-        StatsRange.week,
-        StatsRange.quarter,
-        StatsRange.year,
-        StatsRange.all,
-      ]);
+      expect(changes, [StatsRange.week, StatsRange.year, StatsRange.all]);
     });
 
     testWidgets('tapping the already selected preset does nothing', (
@@ -117,16 +111,16 @@ void main() {
       final changes = <StatsRange>[];
       await _pump(tester, onChanged: changes.add);
 
-      await tester.tap(find.text('30 dni'));
+      await tester.tap(find.text('Miesiąc'));
 
       expect(changes, isEmpty);
     });
 
     testWidgets('highlights only the selected preset', (tester) async {
-      await _pump(tester, selected: StatsRange.quarter);
+      await _pump(tester, selected: StatsRange.year);
 
-      expect(_presetFill(tester, '3 mies.'), AppColors.primary);
-      for (final label in ['7 dni', '30 dni', 'Rok', 'Całość']) {
+      expect(_presetFill(tester, 'Rok'), AppColors.primary);
+      for (final label in ['Tydzień', 'Miesiąc', 'Całość']) {
         expect(_presetFill(tester, label), Colors.transparent, reason: label);
       }
       expect(_calendarFill(tester), AppColors.surface);
@@ -253,7 +247,7 @@ void main() {
         onChanged: changes.add,
       );
 
-      await tester.tap(find.text('30 dni'));
+      await tester.tap(find.text('Miesiąc'));
 
       expect(changes, [StatsRange.month]);
     });
@@ -288,7 +282,7 @@ void main() {
       await tapBySemantics('Wybierz własny zakres dat');
       expect(picks, 1);
 
-      await tapBySemantics('Zakres 7 dni');
+      await tapBySemantics('Zakres Tydzień');
       expect(changes, [StatsRange.week]);
 
       await tapBySemantics('Wyjdź z własnego zakresu dat');

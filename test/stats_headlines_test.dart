@@ -110,10 +110,10 @@ void main() {
   group('records headline', () {
     test('polish plural forms', () {
       expect(StatsHeadlines.records(0), 'Brak nowych rekordów');
-      expect(StatsHeadlines.records(1), '1 nowy rekord');
-      expect(StatsHeadlines.records(3), '3 nowe rekordy');
-      expect(StatsHeadlines.records(9), '9 nowych rekordów');
-      expect(StatsHeadlines.records(12), '12 nowych rekordów');
+      expect(StatsHeadlines.records(1), '1 ćwiczenie z rekordem');
+      expect(StatsHeadlines.records(3), '3 ćwiczenia z rekordem');
+      expect(StatsHeadlines.records(9), '9 ćwiczeń z rekordem');
+      expect(StatsHeadlines.records(12), '12 ćwiczeń z rekordem');
     });
   });
 

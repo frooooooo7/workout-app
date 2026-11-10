@@ -329,16 +329,20 @@ void main() {
 
     test('year: the running month is compared with the same days only', () {
       final window = TrainingStatsCalculator.windowFor(StatsRange.year, _now);
-      expect(window.previousStart, DateTime(2024, 10));
+      expect(window.previousStart, DateTime(2025));
       expect(window.previousEnd!.isBefore(window.start), isTrue);
       // Poprzedni okres nie sięga tak daleko, jak pełny rok.
       expect(window.containsPrevious(DateTime(2025, 9, 30)), isFalse);
     });
 
-    test('7 and 30 days keep the full previous period', () {
-      final week = TrainingStatsCalculator.windowFor(StatsRange.week, _now);
+    test('a finished period keeps the full previous period', () {
+      final week = TrainingStatsCalculator.windowFor(
+        StatsRange.week,
+        _now,
+        offset: 1,
+      );
       expect(week.previousEnd, isNull);
-      expect(week.containsPrevious(DateTime(2026, 9, 9)), isTrue);
+      expect(week.containsPrevious(DateTime(2026, 9, 2)), isTrue);
     });
 
     test('delta is not dragged down by the days that have not happened', () {

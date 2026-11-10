@@ -54,23 +54,70 @@ TrainingSession _session(
 /// Środa 16 września 2026, 12:00.
 final _now = DateTime(2026, 9, 16, 12);
 
+/// Ostatnie siedem dni do `_now` — te testy sprawdzają agregacje, nie okresy.
+final _sevenDays = StatsDateRange(DateTime(2026, 9, 10), DateTime(2026, 9, 16));
+
 void main() {
   group('windowFor', () {
-    test('7 and 30 days end today and compare with the same length before', () {
-      final week = TrainingStatsCalculator.windowFor(StatsRange.week, _now);
-      expect(week.start, DateTime(2026, 9, 10));
-      expect(week.end, DateTime(2026, 9, 17));
-      expect(week.previousStart, DateTime(2026, 9, 3));
-      expect(week.bucket, StatsBucket.day);
-      expect(week.days, 7);
+    test(
+      'week and month are calendar periods with a same-elapsed comparison',
+      () {
+        // środa 16 września 2026
+        final week = TrainingStatsCalculator.windowFor(StatsRange.week, _now);
+        expect(week.start, DateTime(2026, 9, 14));
+        expect(week.end, DateTime(2026, 9, 21));
+        expect(week.previousStart, DateTime(2026, 9, 7));
+        // trzy dni tygodnia minęły (pn–śr): porównujemy pn–śr poprzedniego
+        expect(week.previousEnd, DateTime(2026, 9, 10));
+        expect(week.bucket, StatsBucket.day);
+        expect(week.days, 7);
 
-      final month = TrainingStatsCalculator.windowFor(StatsRange.month, _now);
-      expect(month.start, DateTime(2026, 8, 18));
-      expect(month.days, 30);
-      expect(month.previousStart, DateTime(2026, 7, 19));
+        final month = TrainingStatsCalculator.windowFor(StatsRange.month, _now);
+        expect(month.start, DateTime(2026, 9));
+        expect(month.end, DateTime(2026, 10));
+        expect(month.previousStart, DateTime(2026, 8));
+        expect(month.previousEnd, DateTime(2026, 8, 17));
+      },
+    );
+
+    test('offset moves whole periods back and compares full periods', () {
+      final month = TrainingStatsCalculator.windowFor(
+        StatsRange.month,
+        _now,
+        offset: 1,
+      );
+      expect(month.start, DateTime(2026, 8));
+      expect(month.end, DateTime(2026, 9));
+      expect(month.previousStart, DateTime(2026, 7));
+      expect(month.previousEnd, isNull);
+
+      final january = TrainingStatsCalculator.windowFor(
+        StatsRange.month,
+        _now,
+        offset: 8,
+      );
+      expect(january.start, DateTime(2026));
+      expect(january.previousStart, DateTime(2025, 12));
+
+      final week = TrainingStatsCalculator.windowFor(
+        StatsRange.week,
+        _now,
+        offset: 2,
+      );
+      expect(week.start, DateTime(2026, 8, 31));
+      expect(week.end, DateTime(2026, 9, 7));
+
+      final year = TrainingStatsCalculator.windowFor(
+        StatsRange.year,
+        _now,
+        offset: 1,
+      );
+      expect(year.start, DateTime(2025));
+      expect(year.end, DateTime(2026));
+      expect(year.previousStart, DateTime(2024));
     });
 
-    test('3 months are 13 whole weeks; a year is 12 whole months', () {
+    test('3 months are 13 whole weeks; a year is a calendar year', () {
       final quarter = TrainingStatsCalculator.windowFor(
         StatsRange.quarter,
         _now,
@@ -81,9 +128,9 @@ void main() {
       expect(quarter.days, 91);
 
       final year = TrainingStatsCalculator.windowFor(StatsRange.year, _now);
-      expect(year.start, DateTime(2025, 10));
-      expect(year.end, DateTime(2026, 10));
-      expect(year.previousStart, DateTime(2024, 10));
+      expect(year.start, DateTime(2026));
+      expect(year.end, DateTime(2027));
+      expect(year.previousStart, DateTime(2025));
       expect(year.bucket, StatsBucket.month);
     });
 
@@ -132,7 +179,8 @@ void main() {
             status: TrainingSessionStatus.cancelled,
           ),
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
 
@@ -157,7 +205,8 @@ void main() {
           ),
           _session(DateTime(2026, 9, 10, 7)),
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
 
@@ -199,7 +248,8 @@ void main() {
           _session(DateTime(2026, 6, 22, 18)), // pierwszy dzień heatmapy
           _session(DateTime(2026, 6, 21, 18)), // przed heatmapą
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
 
@@ -235,7 +285,8 @@ void main() {
             duration: const Duration(minutes: 50),
           ),
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
 
@@ -276,7 +327,8 @@ void main() {
             ],
           ),
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
 
@@ -423,7 +475,8 @@ void main() {
             ],
           ),
         ],
-        range: StatsRange.week,
+        range: StatsRange.custom,
+        customRange: _sevenDays,
         now: _now,
       );
       expect(snapshot.recordsCount, 1);
