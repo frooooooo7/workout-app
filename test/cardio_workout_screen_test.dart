@@ -207,7 +207,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('workout-more-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.tap(find.text('Usuń z tego treningu'));
     await tester.pumpAndSettle();
     // Zapis szkicu jest odroczony — ekran już pokazuje samą bieżnię, a do
     // repozytorium trafia dopiero po opóźnieniu.

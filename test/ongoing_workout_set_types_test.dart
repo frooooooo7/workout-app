@@ -401,8 +401,8 @@ void main() {
       // 360 dp z dwoma polami: kolumna mieści się.
       expect(find.text('POPRZEDNIO'), findsOneWidget);
 
-      await _chooseFromMenu(tester, 'Pokaż kolumnę RIR');
-      await _chooseFromMenu(tester, 'Pokaż kolumnę tempo');
+      await _toggleFromMenu(tester, 'options-rir');
+      await _toggleFromMenu(tester, 'options-tempo');
 
       // Z RIR i tempem zabrakłoby miejsca na pola — kolumna znika.
       expect(find.text('RIR'), findsOneWidget);
@@ -423,7 +423,7 @@ void main() {
       final repository = await _pump(tester);
 
       expect(find.byKey(const ValueKey('exercise-note-field-0')), findsNothing);
-      await _chooseFromMenu(tester, 'Dodaj notatkę');
+      await _chooseFromMenu(tester, 'Notatka');
 
       final field = find.byKey(const ValueKey('exercise-note-field-0'));
       expect(field, findsOneWidget);
@@ -441,14 +441,45 @@ void main() {
       expect(repository.session.exercises.first.note, isNull);
     });
 
+    testWidgets(
+      'the Notatka tile focuses the note again after the keyboard hides',
+      (tester) async {
+        await _pump(tester);
+        await _chooseFromMenu(tester, 'Notatka');
+        final field = find.byKey(const ValueKey('exercise-note-field-0'));
+        bool focused() => tester
+            .widget<EditableText>(
+              find.descendant(of: field, matching: find.byType(EditableText)),
+            )
+            .focusNode
+            .hasFocus;
+        await tester.pump();
+        expect(focused(), isTrue);
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(focused(), isFalse);
+
+        await _chooseFromMenu(tester, 'Notatka');
+        await tester.pump();
+        expect(focused(), isTrue);
+      },
+    );
+
     testWidgets('an existing note is shown straight away', (tester) async {
       await _pump(tester, session: _session(benchNote: 'z pauzą 2 s'));
 
       expect(find.text('z pauzą 2 s'), findsOneWidget);
-      // Notatka już jest, więc menu jej nie proponuje.
-      await tester.tap(find.byKey(const Key('workout-more-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('Dodaj notatkę'), findsNothing);
     });
   });
+}
+
+/// Przełączniki RIR/tempo nie zamykają arkusza — zamykamy go tapnięciem w tło.
+Future<void> _toggleFromMenu(WidgetTester tester, String key) async {
+  await tester.tap(find.byKey(const Key('workout-more-button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey(key)));
+  await tester.pumpAndSettle();
+  await tester.tapAt(const Offset(10, 10));
+  await tester.pumpAndSettle();
 }

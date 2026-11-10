@@ -40,6 +40,7 @@ class SessionExerciseCard extends StatefulWidget {
     required this.showRirColumn,
     required this.showTempoColumn,
     required this.noteOpen,
+    this.noteFocusRequest = 0,
     required this.onSetChanged,
     required this.onAddSet,
     required this.onRemoveSet,
@@ -63,6 +64,9 @@ class SessionExerciseCard extends StatefulWidget {
 
   /// Notatka otwarta z menu ⋯ — pole dostaje fokus.
   final bool noteOpen;
+
+  /// Rośnie przy każdym „Notatka” w menu — karta znowu bierze fokus.
+  final int noteFocusRequest;
   final void Function(int setIndex, TrainingSessionSet set) onSetChanged;
   final VoidCallback onAddSet;
   final void Function(int setIndex) onRemoveSet;
@@ -123,7 +127,9 @@ class _SessionExerciseCardState extends State<SessionExerciseCard> {
       _noteController.text = widget.exercise.note ?? '';
       _hadNote = _noteController.text.trim().isNotEmpty;
     }
-    if (widget.noteOpen && !oldWidget.noteOpen) {
+    if (widget.noteOpen &&
+        (!oldWidget.noteOpen ||
+            widget.noteFocusRequest != oldWidget.noteFocusRequest)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _noteFocus.requestFocus();
       });

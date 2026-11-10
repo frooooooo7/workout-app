@@ -176,12 +176,12 @@ void main() {
     await cubit.close();
   });
 
-  testWidgets('calculator is in the ⋯ menu', (tester) async {
+  testWidgets('calculator is a tile in the ⋯ menu', (tester) async {
     final (_, cubit) = await pumpWorkout(tester, plannedWeight: '60');
 
     await tester.tap(find.byKey(const Key('workout-more-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Kalkulator talerzy'));
+    await tester.tap(find.byKey(const ValueKey('options-plates')));
     await tester.pumpAndSettle();
 
     expect(find.byType(PlateCalculatorSheet), findsOneWidget);
