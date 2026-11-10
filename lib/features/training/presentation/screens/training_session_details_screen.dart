@@ -21,7 +21,6 @@ import '../bloc/training_session_cubit.dart';
 import '../widgets/session_details/session_exercise_card.dart';
 import '../widgets/session_details/session_muscle_map.dart';
 import '../widgets/session_details/session_summary_header.dart';
-import '../widgets/session_details/session_timeline.dart';
 import '../widgets/workout_summary/share_workout_sheet.dart';
 import '../widgets/workout_summary/workout_share_card.dart';
 import 'ongoing_workout_screen.dart';
@@ -39,7 +38,7 @@ typedef SessionDetailsNavigate =
 const kOpenPostEditorExtra = 'open-post-editor';
 
 /// Szczegóły zakończonej sesji, ułożone od ogółu do szczegółu:
-/// nagłówek z metrykami → mapa mięśni → oś czasu → karty ćwiczeń.
+/// nagłówek z metrykami (z godzinami od–do) → karty ćwiczeń → mapa mięśni.
 ///
 /// Metryki całej sesji pojawiają się **wyłącznie** w nagłówku; każda kolejna
 /// sekcja dokłada informację, której poprzednie nie niosą.
@@ -766,55 +765,6 @@ class _DetailContent extends StatefulWidget {
 }
 
 class _DetailContentState extends State<_DetailContent> {
-  /// Klucze kart ćwiczeń — punkt zaczepienia dla skoku z osi czasu.
-  late List<GlobalKey> _exerciseKeys;
-  int? _highlightedIndex;
-  Timer? _highlightTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _exerciseKeys = List.generate(
-      widget.detail.exercises.length,
-      (_) => GlobalKey(),
-    );
-  }
-
-  @override
-  void didUpdateWidget(_DetailContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.detail.exercises.length != widget.detail.exercises.length) {
-      _exerciseKeys = List.generate(
-        widget.detail.exercises.length,
-        (_) => GlobalKey(),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _highlightTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _jumpToExercise(int index) async {
-    final context = _exerciseKeys[index].currentContext;
-    if (context == null) return;
-
-    setState(() => _highlightedIndex = index);
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(milliseconds: 1600), () {
-      if (mounted) setState(() => _highlightedIndex = null);
-    });
-
-    await Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 420),
-      curve: Curves.easeOutCubic,
-      alignment: 0.08,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final exercises = widget.detail.exercises;
@@ -831,11 +781,8 @@ class _DetailContentState extends State<_DetailContent> {
           widget.postCard!,
           const SizedBox(height: 12),
         ],
-        SessionMuscleMap(detail: widget.detail),
-        const SizedBox(height: 12),
-        SessionTimeline(detail: widget.detail, onExerciseTap: _jumpToExercise),
         if (exercises.isNotEmpty) ...[
-          const SizedBox(height: 22),
+          const SizedBox(height: 10),
           const Padding(
             padding: EdgeInsets.only(left: 4, bottom: 12),
             child: Text(
@@ -850,12 +797,10 @@ class _DetailContentState extends State<_DetailContent> {
           ),
           for (var i = 0; i < exercises.length; i++)
             Padding(
-              key: _exerciseKeys[i],
               padding: const EdgeInsets.only(bottom: 10),
               child: SessionExerciseCard(
                 exercise: exercises[i],
                 index: i,
-                isHighlighted: _highlightedIndex == i,
                 hideRir:
                     PlanColors.styles
                         .styleFor(widget.detail.plan.name)
@@ -864,6 +809,8 @@ class _DetailContentState extends State<_DetailContent> {
               ),
             ),
         ],
+        const SizedBox(height: 2),
+        SessionMuscleMap(detail: widget.detail),
       ],
     );
   }
