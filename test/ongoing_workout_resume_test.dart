@@ -80,7 +80,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('workout-more-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.tap(find.text('Usuń z tego treningu'));
     await tester.pump(const Duration(milliseconds: 400));
     expect(
       find.byKey(const ValueKey('exercise-removed-snackbar')),
@@ -112,7 +112,7 @@ void main() {
     for (var i = 0; i < 2; i++) {
       await tester.tap(find.byKey(const Key('workout-more-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.tap(find.text('Usuń z tego treningu'));
       await tester.pumpAndSettle();
     }
     // Pierwszy snackbar kończy się dopiero po pokazaniu drugiego.

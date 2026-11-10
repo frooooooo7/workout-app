@@ -47,6 +47,7 @@ import '../widgets/ongoing_workout/superset_block_card.dart';
 import '../widgets/ongoing_workout/workout_accent.dart';
 import '../widgets/ongoing_workout/workout_colors.dart';
 import '../widgets/ongoing_workout/workout_progress_header.dart';
+import '../widgets/ongoing_workout/workout_options_sheet.dart';
 import '../widgets/plates/plate_calculator_sheet.dart';
 import '../widgets/plates/rest_plate_strip.dart';
 import 'workout_summary_screen.dart';
@@ -83,18 +84,6 @@ class OngoingWorkoutArgs {
 
   /// Historia do rekordów ćwiczeń; domyślnie lokalne statystyki.
   final TrainingStatsRepository? statsRepository;
-}
-
-/// Pozycje menu ⋯ w nagłówku treningu.
-enum _WorkoutMenuAction {
-  rest,
-  plates,
-  rir,
-  tempo,
-  note,
-  exercises,
-  removeExercise,
-  discard,
 }
 
 /// Menu po przytrzymaniu ćwiczenia.
@@ -1077,100 +1066,51 @@ class _OngoingWorkoutScreenState extends State<OngoingWorkoutScreen> {
           )]
         : null;
     final restActive = _rest.isActive;
-    final action = await showAppActionSheet<_WorkoutMenuAction>(
+    final action = await showWorkoutOptionsSheet(
       context,
       title: exercise?.exerciseName ?? 'Trening',
-      actions: [
-        AppSheetAction(
-          value: _WorkoutMenuAction.rest,
-          icon: restActive ? Icons.timer_off_outlined : Icons.timer_outlined,
-          label: restActive ? 'Zatrzymaj odpoczynek' : 'Odpoczynek',
-          subtitle: restActive
-              ? null
-              : 'Wybierz czas — przerwa startuje sama po odhaczeniu serii',
-        ),
-        if (exercise != null) ...[
-          const AppSheetAction(
-            value: _WorkoutMenuAction.plates,
-            icon: Icons.fitness_center_rounded,
-            label: 'Kalkulator talerzy',
-            subtitle: 'Ile talerzy założyć na każdą stronę gryfu',
-          ),
-          AppSheetAction(
-            value: _WorkoutMenuAction.rir,
-            icon: Icons.speed_rounded,
-            label: _shouldShowRirColumn(exercise)
-                ? 'Ukryj kolumnę RIR'
-                : 'Pokaż kolumnę RIR',
-            subtitle: 'Ile powtórzeń zostało w zapasie',
-          ),
-          AppSheetAction(
-            value: _WorkoutMenuAction.tempo,
-            icon: Icons.av_timer_rounded,
-            label: _shouldShowTempoColumn(exercise)
-                ? 'Ukryj kolumnę tempo'
-                : 'Pokaż kolumnę tempo',
-            subtitle: 'Np. 3-1-1-0',
-          ),
-          if (!_noteVisible(exercise))
-            const AppSheetAction(
-              value: _WorkoutMenuAction.note,
-              icon: Icons.sticky_note_2_outlined,
-              label: 'Dodaj notatkę',
-            ),
-          const AppSheetAction(
-            value: _WorkoutMenuAction.exercises,
-            icon: Icons.format_list_bulleted_rounded,
-            label: 'Lista ćwiczeń',
-            subtitle: 'Przejdź do ćwiczenia albo zmień kolejność',
-          ),
-          const AppSheetAction(
-            value: _WorkoutMenuAction.removeExercise,
-            icon: Icons.remove_circle_outline_rounded,
-            label: 'Usuń ćwiczenie z treningu',
-            subtitle: 'Tylko z tej sesji — plan zostaje bez zmian',
-            destructive: true,
-          ),
-        ],
-        const AppSheetAction(
-          value: _WorkoutMenuAction.discard,
-          icon: Icons.delete_outline_rounded,
-          label: 'Odrzuć trening',
-          destructive: true,
-        ),
-      ],
+      subtitle: exercise == null ? '' : _optionsSubtitle(exercise),
+      hasExercise: exercise != null,
+      restActive: restActive,
+      rirVisible: () => _shouldShowRirColumn(exercise!),
+      tempoVisible: () => _shouldShowTempoColumn(exercise!),
+      onToggleRir: () => _toggleRirColumn(exercise!),
+      onToggleTempo: () => _toggleTempoColumn(exercise!),
     );
     if (action == null || !context.mounted) return;
     switch (action) {
-      case _WorkoutMenuAction.rest:
+      case WorkoutOptionsAction.rest:
         if (restActive) {
           _rest.stop();
         } else {
           await _pickRestDuration(context);
         }
-      case _WorkoutMenuAction.plates:
+      case WorkoutOptionsAction.plates:
         await _openPlateCalculator(
           context,
           _currentExerciseIndex.value.clamp(0, session.exercises.length - 1),
         );
-      case _WorkoutMenuAction.rir:
-        _toggleRirColumn(exercise!);
-      case _WorkoutMenuAction.tempo:
-        _toggleTempoColumn(exercise!);
-      case _WorkoutMenuAction.note:
+      case WorkoutOptionsAction.note:
         setState(() => _openNotes.add(exercise!.id));
-      case _WorkoutMenuAction.exercises:
+      case WorkoutOptionsAction.swap:
+        await _swapExercise(
+          context,
+          _currentExerciseIndex.value.clamp(0, session.exercises.length - 1),
+        );
+      case WorkoutOptionsAction.exercises:
         await _showOrderSheet(context, _currentExerciseIndex.value);
-      case _WorkoutMenuAction.removeExercise:
+      case WorkoutOptionsAction.removeExercise:
         await _removeExercise(context, _currentExerciseIndex.value);
-      case _WorkoutMenuAction.discard:
+      case WorkoutOptionsAction.discard:
         await _cancelWorkout(context, session);
     }
   }
 
-  bool _noteVisible(TrainingSessionExercise exercise) =>
-      _openNotes.contains(exercise.id) ||
-      (exercise.note?.trim().isNotEmpty ?? false);
+  /// „Klatka · 1 z 3 serii” pod nazwą ćwiczenia w arkuszu opcji.
+  String _optionsSubtitle(TrainingSessionExercise exercise) {
+    final done = exercise.sets.where((set) => set.completed).length;
+    return '$done z ${exercise.sets.length} serii';
+  }
 
   void _toggleRirColumn(TrainingSessionExercise exercise) {
     setState(() {

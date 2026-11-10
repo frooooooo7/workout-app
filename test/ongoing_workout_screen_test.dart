@@ -244,7 +244,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('workout-more-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.tap(find.text('Usuń z tego treningu'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
 
@@ -271,7 +271,41 @@ void main() {
     },
   );
 
-  testWidgets('⋯ menu has one „Lista ćwiczeń” entry that opens and jumps', (
+  testWidgets(
+    '⋯ menu shows quick tiles, exercise group and a separate discard',
+    (tester) async {
+      final repository = _FakeTrainingSessionRepository(_session());
+      final cubit = await pumpRemovalScreen(tester, repository);
+
+      await tester.tap(find.byKey(const Key('workout-more-button')));
+      await tester.pumpAndSettle();
+
+      for (final key in [
+        'options-rest',
+        'options-plates',
+        'options-note',
+        'options-swap',
+        'options-exercises',
+        'options-remove',
+        'options-rir',
+        'options-tempo',
+        'options-discard',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
+      }
+      expect(find.text('Odrzuć cały trening'), findsOneWidget);
+
+      // Przełącznik działa od razu i arkusz zostaje otwarty.
+      await tester.tap(find.byKey(const ValueKey('options-rir')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('options-discard')), findsOneWidget);
+      expect(find.text('RIR'), findsOneWidget);
+
+      await cubit.close();
+    },
+  );
+
+  testWidgets('⋯ menu has one „Lista i kolejność” entry that opens and jumps', (
     tester,
   ) async {
     final repository = _FakeTrainingSessionRepository(_session());
@@ -281,7 +315,7 @@ void main() {
     await tester.pumpAndSettle();
     // Lista i kolejność to jedna pozycja, nie dwie.
     expect(find.text('Zmień kolejność ćwiczeń'), findsNothing);
-    await tester.tap(find.text('Lista ćwiczeń'));
+    await tester.tap(find.text('Lista i kolejność'));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.drag_handle_rounded), findsNWidgets(2));
@@ -390,7 +424,7 @@ void main() {
     Future<void> startRemoval() async {
       await tester.tap(find.byKey(const Key('workout-more-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+      await tester.tap(find.text('Usuń z tego treningu'));
       await tester.pumpAndSettle();
     }
 
@@ -469,7 +503,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('workout-more-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Usuń ćwiczenie z treningu'));
+    await tester.tap(find.text('Usuń z tego treningu'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
 
@@ -572,12 +606,12 @@ void main() {
     expect(find.text('RIR'), findsNothing);
     expect(find.text('TEMPO'), findsNothing);
 
-    await _chooseFromMenu(tester, 'Pokaż kolumnę RIR');
+    await _toggleFromMenu(tester, 'options-rir');
 
     expect(find.text('RIR'), findsOneWidget);
     expect(find.text('TEMPO'), findsNothing);
 
-    await _chooseFromMenu(tester, 'Pokaż kolumnę tempo');
+    await _toggleFromMenu(tester, 'options-tempo');
 
     expect(find.text('RIR'), findsOneWidget);
     expect(find.text('TEMPO'), findsOneWidget);
@@ -590,12 +624,12 @@ void main() {
 
     expect(repository.session.exercises.first.sets.first.actualTempo, '2-0-2');
 
-    await _chooseFromMenu(tester, 'Ukryj kolumnę RIR');
+    await _toggleFromMenu(tester, 'options-rir');
 
     expect(find.text('RIR'), findsNothing);
     expect(find.text('TEMPO'), findsOneWidget);
 
-    await _chooseFromMenu(tester, 'Ukryj kolumnę tempo');
+    await _toggleFromMenu(tester, 'options-tempo');
 
     expect(find.text('RIR'), findsNothing);
     expect(find.text('TEMPO'), findsNothing);
@@ -865,7 +899,7 @@ void main() {
       ),
     );
 
-    await _chooseFromMenu(tester, 'Odpoczynek');
+    await _chooseFromMenu(tester, 'Przerwa');
 
     expect(find.text('30s'), findsNothing);
     expect(find.text('1:30'), findsOneWidget);
@@ -882,7 +916,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(_restLabel('0:59'), findsOneWidget);
 
-    await _chooseFromMenu(tester, 'Zatrzymaj odpoczynek');
+    await _chooseFromMenu(tester, 'Stop przerwy');
 
     expect(scheduler.cancelCount, 1);
     expect(_restDock(tester).visible, isFalse);
@@ -918,7 +952,7 @@ void main() {
       ),
     );
 
-    await _chooseFromMenu(tester, 'Odpoczynek');
+    await _chooseFromMenu(tester, 'Przerwa');
 
     await tester.tap(find.byKey(const ValueKey('rest-duration-custom-option')));
     await tester.pumpAndSettle();
@@ -961,7 +995,7 @@ void main() {
 
     // Dotknięcie panelu też otwiera wybór — tu panel jest schowany, więc
     // przez menu.
-    await _chooseFromMenu(tester, 'Odpoczynek');
+    await _chooseFromMenu(tester, 'Przerwa');
 
     expect(find.text('Ostatni własny'), findsOneWidget);
     expect(find.text('2:29'), findsOneWidget);
@@ -1554,5 +1588,15 @@ Future<void> _chooseFromMenu(WidgetTester tester, String label) async {
   await tester.tap(
     find.descendant(of: find.byType(BottomSheet), matching: find.text(label)),
   );
+  await tester.pumpAndSettle();
+}
+
+/// Przełączniki RIR/tempo nie zamykają arkusza — zamykamy go tapnięciem w tło.
+Future<void> _toggleFromMenu(WidgetTester tester, String key) async {
+  await tester.tap(find.byKey(const Key('workout-more-button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(ValueKey(key)));
+  await tester.pumpAndSettle();
+  await tester.tapAt(const Offset(10, 10));
   await tester.pumpAndSettle();
 }
