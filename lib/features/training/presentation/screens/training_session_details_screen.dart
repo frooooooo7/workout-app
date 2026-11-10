@@ -26,12 +26,11 @@ import '../widgets/workout_summary/workout_share_card.dart';
 import 'ongoing_workout_screen.dart';
 
 /// Nawigacja z ekranu szczegółów (test seam dla `context.push`).
-typedef SessionDetailsNavigate =
-    Future<Object?> Function(
-      BuildContext context,
-      String location, {
-      Object? extra,
-    });
+typedef SessionDetailsNavigate = Future<Object?> Function(
+  BuildContext context,
+  String location, {
+  Object? extra,
+});
 
 /// `extra` trasy szczegółów: po wczytaniu od razu otwórz arkusz edycji posta
 /// (wejście z menu „⋯” posta na profilu).
@@ -492,8 +491,7 @@ class _TrainingSessionDetailsScreenState
       if (conflict == null) {
         final source = await repository.loadForEdit(widget.sessionId);
         if (source == null) {
-          failure =
-              'Nie udało się wczytać treningu. Sprawdź połączenie i spróbuj ponownie.';
+          failure = 'Nie udało się wczytać treningu. Sprawdź połączenie i spróbuj ponownie.';
         } else if (source.exercises.isEmpty) {
           failure = 'Ten trening nie ma ćwiczeń do powtórzenia.';
         } else {
@@ -751,7 +749,7 @@ class _TrainingSessionDetailsScreenState
   }
 }
 
-class _DetailContent extends StatefulWidget {
+class _DetailContent extends StatelessWidget {
   const _DetailContent({required this.detail, this.postCard});
 
   final TrainingSessionDetail detail;
@@ -761,26 +759,15 @@ class _DetailContent extends StatefulWidget {
   final Widget? postCard;
 
   @override
-  State<_DetailContent> createState() => _DetailContentState();
-}
-
-class _DetailContentState extends State<_DetailContent> {
-  @override
   Widget build(BuildContext context) {
-    final exercises = widget.detail.exercises;
+    final exercises = detail.exercises;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
-        SessionSummaryHeader(
-          detail: widget.detail,
-          showNote: widget.postCard == null,
-        ),
+        SessionSummaryHeader(detail: detail, showNote: postCard == null),
         const SizedBox(height: 12),
-        if (widget.postCard != null) ...[
-          widget.postCard!,
-          const SizedBox(height: 12),
-        ],
+        if (postCard != null) ...[postCard!, const SizedBox(height: 12)],
         if (exercises.isNotEmpty) ...[
           const SizedBox(height: 10),
           const Padding(
@@ -802,15 +789,13 @@ class _DetailContentState extends State<_DetailContent> {
                 exercise: exercises[i],
                 index: i,
                 hideRir:
-                    PlanColors.styles
-                        .styleFor(widget.detail.plan.name)
-                        ?.showRir ==
+                    PlanColors.styles.styleFor(detail.plan.name)?.showRir ==
                     false,
               ),
             ),
         ],
         const SizedBox(height: 2),
-        SessionMuscleMap(detail: widget.detail),
+        SessionMuscleMap(detail: detail),
       ],
     );
   }

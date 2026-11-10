@@ -497,8 +497,6 @@ class _PostDetailsBody extends StatelessWidget {
               currentUserId: currentUserId,
             ),
           ),
-          const SizedBox(height: 12),
-          SessionMuscleMap(detail: sessionDetail),
           if (exercises.isNotEmpty) ...[
             const SizedBox(height: 22),
             const _SectionTitle('Ćwiczenia'),
@@ -507,7 +505,9 @@ class _PostDetailsBody extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: SessionExerciseCard(exercise: exercises[i], index: i),
               ),
-          ],
+          ] else
+            const SizedBox(height: 12),
+          SessionMuscleMap(detail: sessionDetail),
           const SizedBox(height: 18),
           _CommentsSection(
             key: commentsKey,

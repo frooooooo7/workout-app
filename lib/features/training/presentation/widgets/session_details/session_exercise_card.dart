@@ -21,7 +21,6 @@ class SessionExerciseCard extends StatelessWidget {
     super.key,
     required this.exercise,
     required this.index,
-    this.isHighlighted = false,
     this.hideRir = false,
   });
 
@@ -31,9 +30,6 @@ class SessionExerciseCard extends StatelessWidget {
 
   final TrainingExerciseDetail exercise;
   final int index;
-
-  /// Podświetlenie po skoku z osi czasu — wygasa samo.
-  final bool isHighlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -46,24 +42,19 @@ class SessionExerciseCard extends StatelessWidget {
     final note = exercise.note?.trim();
     // Kolumna RIR tylko wtedy, gdy któraś seria go ma — plan bez RIR-u
     // nie pokazuje pustej kolumny z kreskami.
-    final showRir = !hideRir && exercise.sets.any(
-      (set) => set.actual?.rir != null || set.planned?.rir != null,
-    );
+    final showRir =
+        !hideRir &&
+        exercise.sets.any(
+          (set) => set.actual?.rir != null || set.planned?.rir != null,
+        );
     final setLabels = setRowLabels(exercise.sets.map((set) => set.setType));
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOut,
+    return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isHighlighted
-              ? AppColors.primary
-              : AppColors.border.withValues(alpha: 0.8),
-          width: isHighlighted ? 1.6 : 1,
-        ),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,14 +212,14 @@ class _ExerciseThumbnail extends StatelessWidget {
         };
 
   Color get _accent => switch (_region) {
-        MuscleRegion.chest => AppColors.primaryVariant,
-        MuscleRegion.back => const Color(0xFF4DB6AC),
-        MuscleRegion.legs => AppColors.success,
-        MuscleRegion.shoulders => AppColors.strengthMedium,
-        MuscleRegion.arms => const Color(0xFF6C8EFF),
-        MuscleRegion.core => const Color(0xFF4DB6AC),
-        null => AppColors.primary,
-      };
+    MuscleRegion.chest => AppColors.primaryVariant,
+    MuscleRegion.back => const Color(0xFF4DB6AC),
+    MuscleRegion.legs => AppColors.success,
+    MuscleRegion.shoulders => AppColors.strengthMedium,
+    MuscleRegion.arms => const Color(0xFF6C8EFF),
+    MuscleRegion.core => const Color(0xFF4DB6AC),
+    null => AppColors.primary,
+  };
 
   Widget _placeholder() {
     return Container(
