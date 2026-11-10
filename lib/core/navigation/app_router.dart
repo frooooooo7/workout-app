@@ -417,6 +417,7 @@ GoRouter buildRouter({
                       BlocProvider(
                         create: (_) => ProfilePlansCubit(
                           ServiceLocator.trainingPlanRepository,
+                          dataChanges: ServiceLocator.trainingPlanDataChanges,
                         ),
                       ),
                       BlocProvider(

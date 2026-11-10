@@ -139,7 +139,7 @@ class _PublicPlanCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     !showCopies
-                        ? 'Otwórz w treningu'
+                        ? 'Otwórz w planach'
                         : copies == 0
                         ? 'Podgląd i kopia'
                         : 'skopiowany $copies '

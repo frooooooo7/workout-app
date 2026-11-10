@@ -381,8 +381,8 @@ class _ProfileContent extends StatelessWidget {
                     const ProfileSectionHeader(title: 'Moje plany'),
                     PublicPlansStrip(
                       plans: plans,
-                      // Szczegóły planu żyją w kubitach zakładki Trening.
-                      onOpen: (_) => context.go('/app/training'),
+                      // Szczegóły planu żyją w kubitach zakładki Plany.
+                      onOpen: (_) => context.go('/app/plans'),
                       showCopies: false,
                     ),
                   ],
