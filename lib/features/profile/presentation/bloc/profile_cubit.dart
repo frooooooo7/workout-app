@@ -1,13 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_client.dart';
-import '../../domain/models/following_user.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/repositories/profile_repository.dart';
 import 'profile_state.dart';
 
-/// Nagłówek własnego profilu: dane, liczniki i obserwowane osoby. Oś czasu
-/// ładuje osobno `ProfilePostsCubit`.
+/// Nagłówek własnego profilu: dane i liczniki. Oś czasu ładuje osobno
+/// `ProfilePostsCubit`.
 class ProfileCubit extends Cubit<ProfileState> {
   ProfileCubit(this._repository) : super(const ProfileState());
 
@@ -39,7 +38,7 @@ class ProfileCubit extends Cubit<ProfileState> {
 
     if (!isRefresh && state.profile == null) {
       // Lokalna kopia profilu z ostatniej wizyty — ekran jest od razu,
-      // a świeże dane (i obserwowani) dochodzą po odpowiedzi serwera.
+      // a świeże dane dochodzą po odpowiedzi serwera.
       UserProfile? cached;
       try {
         cached = await _repository.cachedOwnProfile();
@@ -55,17 +54,11 @@ class ProfileCubit extends Cubit<ProfileState> {
     }
 
     try {
-      final results = await Future.wait([
-        _repository.getOwnProfile(),
-        _repository.getFollowing(limit: 20),
-      ]);
+      final profile = await _repository.getOwnProfile();
       if (isClosed) return;
       emit(
         state.copyWith(
-          profile: version == _appliedVersion
-              ? results[0] as UserProfile
-              : state.profile,
-          following: results[1] as List<FollowingUser>,
+          profile: version == _appliedVersion ? profile : state.profile,
           loading: false,
           refreshing: false,
           offline: false,
@@ -87,7 +80,8 @@ class ProfileCubit extends Cubit<ProfileState> {
               'Profil wczyta się, gdy wrócisz online — treningi możesz '
                   'zapisywać bez przeszkód.',
             (true, true) => 'Brak połączenia — pokazuję ostatnie dane profilu.',
-            (false, false) => 'Nie udało się wczytać profilu. Spróbuj ponownie.',
+            (false, false) =>
+              'Nie udało się wczytać profilu. Spróbuj ponownie.',
             (false, true) => 'Nie udało się odświeżyć profilu.',
           },
         ),

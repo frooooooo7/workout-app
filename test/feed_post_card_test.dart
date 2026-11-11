@@ -7,6 +7,7 @@ import 'package:gym/features/feed/presentation/utils/feed_formatters.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_empty_state.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_people_strip.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_post_card.dart';
+import 'package:gym/features/feed/presentation/widgets/post_author_row.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
@@ -273,6 +274,12 @@ void main() {
           findsOneWidget,
         );
         expect(find.text('Twój trening'), findsNothing);
+        // „⋯” na wysokości wiersza autora, nie wyżej w rogu karty.
+        final menuY = tester
+            .getCenter(find.byKey(const ValueKey('profile-post-menu-p1')))
+            .dy;
+        final authorY = tester.getCenter(find.byType(PostAuthorRow)).dy;
+        expect((menuY - authorY).abs(), lessThan(2));
       },
     );
 

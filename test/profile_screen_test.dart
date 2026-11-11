@@ -8,7 +8,6 @@ import 'package:gym/features/feed/domain/models/feed_author.dart';
 import 'package:gym/features/feed/domain/models/feed_post.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
 import 'package:gym/core/theme/app_colors.dart';
-import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
@@ -144,18 +143,7 @@ void main() {
   ) async {
     await _pumpProfile(
       tester,
-      state: const ProfileState(
-        profile: _profile,
-        following: [
-          FollowingUser(
-            id: 'u1',
-            firstName: 'Anna',
-            lastName: 'Nowak',
-            handle: 'annanowak',
-          ),
-        ],
-        loading: false,
-      ),
+      state: const ProfileState(profile: _profile, loading: false),
       week: const ProfileWeekSummary(
         trainedWeekdays: {1},
         stats: TrainingPeriodStats(workouts: 1),
@@ -168,7 +156,6 @@ void main() {
     expect(find.text('Masa ciała'), findsNothing);
     expect(find.text('Pomiary'), findsNothing);
     expect(find.text('Obserwowani'), findsNothing);
-    expect(find.text('Anna'), findsNothing);
     expect(find.text('Zobacz wszystkich'), findsNothing);
     // Bez serii kółko nazywa się po prostu „Seria”.
     expect(find.text('Seria'), findsOneWidget);

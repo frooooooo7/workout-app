@@ -56,7 +56,8 @@ class FeedPostCard extends StatelessWidget {
   /// mięśni (rekordy zostają), a własny post bez przycisku „Komentarz”.
   final bool compact;
 
-  /// Menu „⋯” własnego posta na profilu w prawym górnym rogu karty.
+  /// Menu „⋯” własnego posta na profilu: w wierszu autora albo (bez autora)
+  /// w prawym górnym rogu karty.
   /// Pojawia się, gdy podano którąkolwiek z akcji.
   final VoidCallback? onEditTap;
   final VoidCallback? onUnshareTap;
@@ -120,9 +121,17 @@ class FeedPostCard extends StatelessWidget {
                         timestamp: timestampLabel,
                         onTap: onAuthorTap,
                         avatarSize: PostAuthorAvatarSize.large,
-                        // Z menu „⋯” w rogu plakietka nie ma miejsca.
+                        // Menu „⋯” w miejscu plakietki, na wysokości
+                        // awatara (przesunięte ku krawędzi karty).
                         trailing: hasMenu
-                            ? const SizedBox(width: 32)
+                            ? Transform.translate(
+                                offset: const Offset(8, 0),
+                                child: _OwnPostMenu(
+                                  postId: post.id,
+                                  onEdit: onEditTap,
+                                  onUnshare: onUnshareTap,
+                                ),
+                              )
                             : post.isOwn
                             ? const _OwnBadge()
                             : isNew
@@ -208,7 +217,7 @@ class FeedPostCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (hasMenu)
+              if (hasMenu && !showAuthor)
                 Positioned(
                   top: 2,
                   right: 2,

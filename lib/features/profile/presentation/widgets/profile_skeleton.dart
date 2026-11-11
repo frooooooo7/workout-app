@@ -21,21 +21,28 @@ class ProfileSkeleton extends StatelessWidget {
               horizontal: AppSpacing.pageGutter,
             ),
             child: Column(
-              children: const [
-                SizedBox(height: AppSpacing.xs),
-                SkeletonBlock(width: 96, height: 96, radius: 48),
-                SizedBox(height: AppSpacing.md),
-                SkeletonBlock(width: 180, height: 22),
-                SizedBox(height: AppSpacing.xs),
-                SkeletonBlock(width: 110, height: 14),
-                SizedBox(height: AppSpacing.lg),
-                SkeletonBlock(
+              children: [
+                const SizedBox(height: AppSpacing.xs),
+                const SkeletonBlock(width: 104, height: 104, radius: 52),
+                const SizedBox(height: AppSpacing.sm),
+                const SkeletonBlock(width: 180, height: 22),
+                const SizedBox(height: AppSpacing.sm),
+                const SkeletonBlock(height: 48, radius: AppRadius.md),
+                const SizedBox(height: AppSpacing.md),
+                const SkeletonBlock(
                   height: AppSpacing.minTapTarget,
                   radius: AppRadius.md,
                 ),
-                SizedBox(height: AppSpacing.md),
-                SkeletonBlock(height: 64, radius: AppRadius.lg),
-                SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: AppSpacing.md),
+                // Kółka wyróżnień.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    for (var i = 0; i < 4; i++)
+                      const SkeletonBlock(width: 60, height: 60, radius: 30),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xl),
               ],
             ),
           ),
