@@ -56,7 +56,7 @@ class FeedPostCard extends StatelessWidget {
   /// mięśni (rekordy zostają), a własny post bez przycisku „Komentarz”.
   final bool compact;
 
-  /// Menu „⋯” własnego posta na profilu (tylko bez autora w nagłówku).
+  /// Menu „⋯” własnego posta na profilu w prawym górnym rogu karty.
   /// Pojawia się, gdy podano którąkolwiek z akcji.
   final VoidCallback? onEditTap;
   final VoidCallback? onUnshareTap;
@@ -70,7 +70,7 @@ class FeedPostCard extends StatelessWidget {
     final bestSet = pickBestSetExercise(post.topExercises);
     // Z własnym tytułem nazwa treningu przechodzi do linii z datą.
     final timestamp = formatFeedTimestamp(post.startedAt, now: now);
-    final hasMenu = !showAuthor && (onEditTap != null || onUnshareTap != null);
+    final hasMenu = onEditTap != null || onUnshareTap != null;
     final timestampLabel = post.postTitle == null
         ? timestamp
         : '$timestamp · ${post.title}';
@@ -120,7 +120,10 @@ class FeedPostCard extends StatelessWidget {
                         timestamp: timestampLabel,
                         onTap: onAuthorTap,
                         avatarSize: PostAuthorAvatarSize.large,
-                        trailing: post.isOwn
+                        // Z menu „⋯” w rogu plakietka nie ma miejsca.
+                        trailing: hasMenu
+                            ? const SizedBox(width: 32)
+                            : post.isOwn
                             ? const _OwnBadge()
                             : isNew
                             ? const FeedNewBadge()
