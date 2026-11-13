@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym/features/feed/domain/models/cursor_page.dart';
@@ -6,22 +8,16 @@ import 'package:gym/features/feed/domain/models/feed_author.dart';
 import 'package:gym/features/feed/domain/models/feed_post.dart';
 import 'package:gym/features/feed/domain/repositories/feed_repository.dart';
 import 'package:gym/core/theme/app_colors.dart';
-import 'package:gym/features/profile/domain/models/following_user.dart';
-import 'package:gym/features/profile/domain/models/profile_details.dart';
 import 'package:gym/features/profile/domain/models/profile_stats.dart';
 import 'package:gym/features/profile/domain/models/user_profile.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
 import 'package:gym/features/profile/domain/services/profile_week_calculator.dart';
-import 'package:gym/features/profile/presentation/bloc/profile_body_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_cubit.dart';
-import 'package:gym/features/profile/presentation/bloc/profile_plans_cubit.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_posts_cubit.dart';
-import 'package:gym/features/training/domain/models/custom_training_plan.dart';
-import 'package:gym/features/training/domain/repositories/training_plan_repository.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_state.dart';
 import 'package:gym/features/profile/presentation/bloc/profile_week_cubit.dart';
+import 'package:gym/features/profile/presentation/screens/profile_progress_screen.dart';
 import 'package:gym/features/profile/presentation/screens/profile_screen.dart';
-import 'package:gym/features/profile/presentation/widgets/following_avatar_strip.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_week_card.dart';
 import 'package:gym/features/profile/presentation/widgets/profile_hero_header.dart';
 import 'package:gym/features/training/domain/models/training_session.dart';
@@ -60,79 +56,54 @@ Future<void> _pumpProfile(
   required ProfileState state,
   List<FeedPost> posts = const [],
   ProfileWeekSummary? week,
-  ProfileBodySummary? body,
-  List<CustomTrainingPlan> plans = const [],
+  void Function(String location)? onRoute,
 }) async {
   final feed = _FeedRepo(posts);
   await tester.binding.setSurfaceSize(const Size(430, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(
-    MaterialApp(
-      home: MultiBlocProvider(
-        providers: [
-          BlocProvider<ProfileCubit>.value(value: _FakeProfileCubit(state)),
-          BlocProvider(
-            create: (_) => ProfilePostsCubit(repository: feed, userId: 'me'),
-          ),
-          BlocProvider<ProfileWeekCubit>(create: (_) => _FakeWeekCubit(week)),
-          BlocProvider<ProfileBodyCubit>(create: (_) => _FakeBodyCubit(body)),
-          BlocProvider(create: (_) => ProfilePlansCubit(_PlansRepo(plans))),
-        ],
-        child: ProfileScreen(feedRepository: feed),
-      ),
+  final providers = [
+    BlocProvider<ProfileCubit>.value(value: _FakeProfileCubit(state)),
+    BlocProvider(
+      create: (_) => ProfilePostsCubit(repository: feed, userId: 'me'),
     ),
+    BlocProvider<ProfileWeekCubit>(create: (_) => _FakeWeekCubit(week)),
+  ];
+  final profile = MultiBlocProvider(
+    providers: providers,
+    child: ProfileScreen(feedRepository: feed),
   );
+  if (onRoute == null) {
+    await tester.pumpWidget(MaterialApp(home: profile));
+  } else {
+    // Kroki „push” kończą na pustym ekranie, a ścieżkę zapisuje [onRoute].
+    final router = GoRouter(
+      initialLocation: '/app/profile',
+      routes: [
+        GoRoute(path: '/app/profile', builder: (_, _) => profile),
+        GoRoute(
+          path: '/app/profile/:page',
+          builder: (_, state) {
+            onRoute(state.uri.path);
+            return Scaffold(appBar: AppBar());
+          },
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+  }
   await tester.pumpAndSettle();
-}
-
-class _PlansRepo implements TrainingPlanRepository {
-  _PlansRepo(this.plans);
-  final List<CustomTrainingPlan> plans;
-
-  @override
-  Future<List<CustomTrainingPlan>> getAll() async => plans;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {
   _weekCardTests();
 
-  testWidgets('ProfileScreen shows my local plans', (tester) async {
-    await _pumpProfile(
-      tester,
-      state: const ProfileState(profile: _profile),
-      plans: [CustomTrainingPlan(id: 'p1', name: 'Push A')],
-    );
-    expect(find.text('Moje plany'), findsOneWidget);
-    expect(find.text('Push A'), findsOneWidget);
-  });
-
-  testWidgets('ProfileScreen hides plans section when there are none', (
-    tester,
-  ) async {
-    await _pumpProfile(tester, state: const ProfileState(profile: _profile));
-    expect(find.text('Moje plany'), findsNothing);
-  });
-
-  testWidgets('ProfileScreen renders header, week, following and posts', (
+  testWidgets('ProfileScreen renders a centered card, highlights and posts', (
     tester,
   ) async {
     await _pumpProfile(
       tester,
-      state: const ProfileState(
-        profile: _profile,
-        following: [
-          FollowingUser(
-            id: 'u1',
-            firstName: 'Anna',
-            lastName: 'Nowak',
-            handle: 'annanowak',
-          ),
-        ],
-        loading: false,
-      ),
+      state: const ProfileState(profile: _profile, loading: false),
       posts: [
         _post('p1', 'Push — klatka i triceps', kudos: 12),
         _post('p2', 'Pull — plecy i biceps'),
@@ -144,48 +115,30 @@ void main() {
       ),
     );
 
-    expect(find.text('Profil'), findsOneWidget);
-    expect(find.text('Jan Kowalski'), findsOneWidget);
+    // Nick w nagłówku, imię pod awatarem i w wierszu autora każdego posta.
     expect(find.text('@jan.kowalski'), findsOneWidget);
+    expect(find.text('Jan Kowalski'), findsNWidgets(3));
     expect(find.text('12,3 tys.'), findsOneWidget);
+    expect(find.text('treningów'), findsOneWidget);
+    expect(find.text('obserwujących'), findsOneWidget);
+    expect(find.text('obserwowanych'), findsOneWidget);
     expect(find.text('Dodaj opis profilu'), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-edit-button')), findsOneWidget);
-    expect(find.text('Ten tydzień'), findsOneWidget);
+    expect(find.text('Edytuj profil'), findsOneWidget);
+    expect(find.text('Udostępnij profil'), findsOneWidget);
+    expect(find.byTooltip('Znajdź osoby'), findsOneWidget);
     expect(find.text('3 tygodnie'), findsOneWidget);
-    expect(find.text('Anna'), findsOneWidget);
-    expect(find.text('Zobacz wszystkich'), findsOneWidget);
+    expect(find.text('Rekordy'), findsOneWidget);
+    expect(find.text('Plany'), findsOneWidget);
+    expect(find.text('Postępy'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
     expect(find.text('Push — klatka i triceps'), findsOneWidget);
     expect(find.text('Pull — plecy i biceps'), findsOneWidget);
-    // Oś czasu profilu nie powtarza autora na każdej karcie.
+    // Pełne karty jak w feedzie: z menu „⋯” zamiast plakietki „Twój trening”.
     expect(find.text('Twój trening'), findsNothing);
+    expect(find.byKey(const ValueKey('profile-post-menu-p1')), findsOneWidget);
   });
 
-  testWidgets('ProfileScreen passes the weekly goal to the week card', (
-    tester,
-  ) async {
-    await _pumpProfile(
-      tester,
-      state: ProfileState(
-        profile: _profile.copyWith(
-          details: const ProfileDetails(weeklyTrainingDays: 4),
-        ),
-        loading: false,
-      ),
-      week: const ProfileWeekSummary(
-        trainedWeekdays: {1, 3},
-        stats: TrainingPeriodStats(workouts: 2),
-        streakWeeks: 0,
-      ),
-    );
-
-    expect(find.text('Cel 2/4'), findsOneWidget);
-    expect(
-      tester.widget<ProfileWeekCard>(find.byType(ProfileWeekCard)).weeklyGoal,
-      4,
-    );
-  });
-
-  testWidgets('ProfileScreen without a weekly goal hides the progress', (
+  testWidgets('private data and the following strip left the profile', (
     tester,
   ) async {
     await _pumpProfile(
@@ -198,68 +151,71 @@ void main() {
       ),
     );
 
-    expect(find.byType(ProfileWeekCard), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-week-goal')), findsNothing);
+    expect(find.byType(ProfileWeekCard), findsNothing);
+    expect(find.text('Ten tydzień'), findsNothing);
+    expect(find.text('Masa ciała'), findsNothing);
+    expect(find.text('Pomiary'), findsNothing);
+    expect(find.text('Obserwowani'), findsNothing);
+    expect(find.text('Zobacz wszystkich'), findsNothing);
+    // Bez serii kółko nazywa się po prostu „Seria”.
+    expect(find.text('Seria'), findsOneWidget);
   });
 
-  testWidgets('without a weekly goal the card invites to set one', (
+  testWidgets('profile counters and buttons open their screens', (
     tester,
   ) async {
+    final opened = <String>[];
     await _pumpProfile(
       tester,
       state: const ProfileState(profile: _profile, loading: false),
-      week: const ProfileWeekSummary(
-        trainedWeekdays: {1},
-        stats: TrainingPeriodStats(workouts: 1),
-        streakWeeks: 0,
+      onRoute: opened.add,
+    );
+
+    const targets = {
+      'profile-counter-followers': '/app/profile/followers',
+      'profile-counter-following': '/app/profile/following',
+      'profile-edit-button': '/app/profile/edit',
+      'profile-find-people-button': '/app/profile/find-people',
+      'profile-highlight-progress': kProfileProgressRoute,
+    };
+    for (final entry in targets.entries) {
+      await tester.tap(find.byKey(ValueKey(entry.key)));
+      await tester.pumpAndSettle();
+      expect(opened.last, entry.value, reason: entry.key);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('sharing the profile copies an invitation with the nick', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
       ),
     );
-
-    expect(find.byKey(const ValueKey('profile-week-set-goal')), findsOneWidget);
-    expect(find.text('Ustaw cel'), findsOneWidget);
-  });
-
-  testWidgets('body shortcuts show the latest weight and its change', (
-    tester,
-  ) async {
     await _pumpProfile(
       tester,
       state: const ProfileState(profile: _profile, loading: false),
-      body: ProfileBodySummary(
-        weightKg: 84.5,
-        weightDeltaKg: -2.5,
-        lastMeasurementOn: DateTime(2026, 10, 12),
-      ),
     );
 
-    expect(
-      find.byKey(const ValueKey('profile-shortcut-weight')),
-      findsOneWidget,
-    );
-    expect(find.text('84,5 kg'), findsOneWidget);
-    expect(find.text('↓ 2,5 kg w 30 dni'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('profile-shortcut-measurements')),
-      findsOneWidget,
-    );
-  });
+    await tester.tap(find.byKey(const ValueKey('profile-share-button')));
+    await tester.pumpAndSettle();
 
-  testWidgets('body shortcuts without data invite to add the first entry', (
-    tester,
-  ) async {
-    await _pumpProfile(
-      tester,
-      state: const ProfileState(profile: _profile, loading: false),
-      body: const ProfileBodySummary(),
-    );
-
-    expect(find.text('Dodaj'), findsNWidgets(2));
-    // Dane o ciele są prywatne: kłódka w obu kafelkach i podpis pod nimi.
-    expect(
-      find.byKey(const ValueKey('profile-shortcut-lock')),
-      findsNWidgets(2),
-    );
-    expect(find.text('Dane o ciele widzisz tylko Ty.'), findsOneWidget);
+    expect(copied, contains('@jan.kowalski'));
+    expect(find.text('Skopiowano zaproszenie z Twoim nickiem'), findsOneWidget);
   });
 
   testWidgets('timeline section is called "Moje treningi"', (tester) async {
@@ -294,8 +250,6 @@ void main() {
 
     expect(find.text('Brak udostępnionych treningów'), findsOneWidget);
     expect(find.text('Rozpocznij trening'), findsOneWidget);
-    expect(find.text('Znajdź osoby'), findsOneWidget);
-    expect(find.text('Zobacz wszystkich'), findsNothing);
   });
 
   testWidgets('offline without cached profile shows calm offline view', (
@@ -334,26 +288,6 @@ void main() {
     await tester.tap(find.text('Obserwowani'));
     await tester.pump();
 
-    expect(tapped, isTrue);
-  });
-
-  testWidgets('FollowingAvatarStrip shows empty state CTA', (tester) async {
-    var tapped = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: FollowingAvatarStrip(
-            following: const [],
-            onFindPeopleTap: () => tapped = true,
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Znajdź osoby'), findsOneWidget);
-    await tester.tap(find.text('Znajdź osoby'));
-    await tester.pump();
     expect(tapped, isTrue);
   });
 }
@@ -504,15 +438,6 @@ class _FakeProfileCubit extends ProfileCubit {
 
 class _FakeWeekCubit extends ProfileWeekCubit {
   _FakeWeekCubit(ProfileWeekSummary? initial) : super(_NoOpStats()) {
-    if (initial != null) emit(initial);
-  }
-
-  @override
-  Future<void> load() async {}
-}
-
-class _FakeBodyCubit extends ProfileBodyCubit {
-  _FakeBodyCubit(ProfileBodySummary? initial) {
     if (initial != null) emit(initial);
   }
 

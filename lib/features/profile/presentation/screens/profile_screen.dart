@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,25 +14,17 @@ import '../../../training/domain/repositories/training_session_repository.dart';
 import '../../../training/presentation/screens/training_session_details_screen.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/services/profile_week_calculator.dart';
-import 'body_measurements_screen.dart';
-import 'body_weight_screen.dart';
-import 'profile_details_screen.dart';
-import '../bloc/profile_body_cubit.dart';
+import 'profile_progress_screen.dart';
 import '../bloc/profile_cubit.dart';
-import '../bloc/profile_plans_cubit.dart';
 import '../bloc/profile_posts_cubit.dart';
 import '../bloc/profile_posts_state.dart';
 import '../bloc/profile_state.dart';
 import '../bloc/profile_week_cubit.dart';
-import '../../../training/domain/models/custom_training_plan.dart';
-import '../../../training/presentation/widgets/plans/public_plans_strip.dart';
-import '../widgets/following_avatar_strip.dart';
-import '../widgets/profile_body_shortcuts.dart';
-import '../widgets/profile_hero_header.dart';
+import '../widgets/profile_card_header.dart';
+import '../widgets/profile_highlights_row.dart';
 import '../widgets/profile_posts_sliver.dart';
 import '../widgets/profile_section_header.dart';
 import '../widgets/profile_skeleton.dart';
-import '../widgets/profile_week_card.dart';
 
 /// Zakładka Profil. Wymaga w kontekście [ProfileCubit], [ProfilePostsCubit]
 /// i [ProfileWeekCubit].
@@ -58,8 +51,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfileCubit>().load();
     context.read<ProfilePostsCubit>().load();
     context.read<ProfileWeekCubit>().load();
-    context.read<ProfileBodyCubit>().load();
-    context.read<ProfilePlansCubit>().load();
   }
 
   @override
@@ -104,8 +95,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     context.read<ProfileCubit>().refresh(),
     context.read<ProfilePostsCubit>().refresh(),
     context.read<ProfileWeekCubit>().load(),
-    context.read<ProfileBodyCubit>().load(),
-    context.read<ProfilePlansCubit>().load(),
   ]);
 
   @override
@@ -130,6 +119,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Po powrocie na /app/profile i tak ruszy odświeżenie (liczniki itd.);
     // nowe dane z edycji pokazujemy od razu.
     cubit.applyProfile(updated);
+  }
+
+  /// Na razie bez publicznego linku do profilu: kopiujemy zaproszenie z
+  /// nickiem, który znajomi wpiszą w „Znajdź osoby”.
+  Future<void> _shareProfile(UserProfile profile) async {
+    await Clipboard.setData(
+      ClipboardData(
+        text:
+            'Dołącz do mnie w Stronger! Znajdź mnie po nicku '
+            '${profile.displayHandle}.',
+      ),
+    );
+    if (!mounted) return;
+    _showSnack(context, 'Skopiowano zaproszenie z Twoim nickiem');
   }
 
   void _editPost(String postId) {
@@ -217,7 +220,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               AppTabHeader(
-                title: 'Profil',
+                title: context.select<ProfileCubit, String>(
+                  (cubit) => cubit.state.profile?.displayHandle ?? 'Profil',
+                ),
                 actions: [
                   AppTabHeaderButton(
                     icon: Icons.settings_outlined,
@@ -270,6 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onEditPost: _editPost,
                         onUnsharePost: _unsharePost,
                         onEditProfile: () => _openEditProfile(context, profile),
+                        onShareProfile: () => _shareProfile(profile),
                       );
                     },
                   ),
@@ -290,6 +296,7 @@ class _ProfileContent extends StatelessWidget {
     required this.feedRepository,
     required this.onRefresh,
     required this.onEditProfile,
+    required this.onShareProfile,
     required this.onEditPost,
     required this.onUnsharePost,
   });
@@ -299,6 +306,7 @@ class _ProfileContent extends StatelessWidget {
   final FeedRepository feedRepository;
   final Future<void> Function() onRefresh;
   final VoidCallback onEditProfile;
+  final VoidCallback onShareProfile;
   final void Function(String postId) onEditPost;
   final void Function(String postId) onUnsharePost;
 
@@ -312,88 +320,43 @@ class _ProfileContent extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
-            child: ProfileHeroHeader(
+            child: ProfileCardHeader(
               profile: profile,
               onAddBioTap: onEditProfile,
-              trailingAction: ProfileEditButton(onPressed: onEditProfile),
-              stats: ProfileStatsRow(
-                followingCount: profile.stats.followingCount,
-                followersCount: profile.stats.followersCount,
+              counters: ProfileCountersRow(
                 workoutsCount: profile.stats.workoutsCount,
+                followersCount: profile.stats.followersCount,
+                followingCount: profile.stats.followingCount,
                 onWorkoutsTap: () => context.go('/app/history'),
                 onFollowersTap: () => context.push('/app/profile/followers'),
                 onFollowingTap: () => context.push('/app/profile/following'),
               ),
+              actions: ProfileActionButtons(
+                onEditTap: onEditProfile,
+                onShareTap: onShareProfile,
+                onFindPeopleTap: () => context.push('/app/profile/find-people'),
+              ),
             ),
           ),
           SliverToBoxAdapter(
-            child: BlocBuilder<ProfileWeekCubit, ProfileWeekSummary?>(
-              builder: (context, summary) {
-                if (summary == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.xs),
-                  child: ProfileWeekCard(
-                    summary: summary,
-                    weeklyGoal: profile.details?.weeklyTrainingDays,
-                    onTap: () => context.push('/app/training/stats'),
-                    onSetGoalTap: () => context.push(kProfileDetailsRoute),
-                  ),
-                );
-              },
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: BlocBuilder<ProfileBodyCubit, ProfileBodySummary?>(
-              builder: (context, summary) {
-                if (summary == null) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: ProfileBodyShortcuts(
-                    summary: summary,
-                    today: context.read<ProfileBodyCubit>().today,
-                    onWeightTap: () => context.push(kBodyWeightRoute),
-                    onMeasurementsTap: () =>
-                        context.push(kBodyMeasurementsRoute),
-                  ),
-                );
-              },
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: ProfileSectionHeader(
-              title: 'Obserwowani',
-              actionLabel: state.following.isEmpty ? null : 'Zobacz wszystkich',
-              onActionTap: () => context.push('/app/profile/following'),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: FollowingAvatarStrip(following: state.following),
-          ),
-          SliverToBoxAdapter(
-            child: BlocBuilder<ProfilePlansCubit, List<CustomTrainingPlan>?>(
-              builder: (context, plans) {
-                if (plans == null || plans.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const ProfileSectionHeader(title: 'Moje plany'),
-                    PublicPlansStrip(
-                      plans: plans,
-                      // Szczegóły planu żyją w kubitach zakładki Plany.
-                      onOpen: (_) => context.go('/app/plans'),
-                      showCopies: false,
-                    ),
-                  ],
-                );
-              },
+            child: Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.md),
+              child: BlocBuilder<ProfileWeekCubit, ProfileWeekSummary?>(
+                builder: (context, summary) => ProfileHighlightsRow(
+                  streakWeeks: summary?.streakWeeks ?? 0,
+                  onStreakTap: () => context.push('/app/training/stats'),
+                  onRecordsTap: () => context.push('/app/training/stats'),
+                  onPlansTap: () => context.go('/app/plans'),
+                  onProgressTap: () => context.push(kProfileProgressRoute),
+                ),
+              ),
             ),
           ),
           const SliverToBoxAdapter(
             child: ProfileSectionHeader(title: 'Moje treningi'),
           ),
           ProfilePostsSliver(
+            fullCards: true,
             feedRepository: feedRepository,
             currentUserId: profile.id,
             emptyMessage:

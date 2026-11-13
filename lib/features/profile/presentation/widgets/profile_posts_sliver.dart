@@ -12,8 +12,9 @@ import '../bloc/profile_posts_cubit.dart';
 import '../bloc/profile_posts_state.dart';
 import 'profile_empty_state.dart';
 
-/// Udostępnione treningi na profilu — te same karty co w feedzie, bez
-/// powtarzania autora. Wymaga [ProfilePostsCubit] w kontekście.
+/// Udostępnione treningi na profilu. Domyślnie kompaktowe karty bez autora;
+/// z [fullCards] — pełne karty jak w feedzie. Własne posty mają menu „⋯”.
+/// Wymaga [ProfilePostsCubit] w kontekście.
 class ProfilePostsSliver extends StatelessWidget {
   const ProfilePostsSliver({
     super.key,
@@ -26,6 +27,7 @@ class ProfilePostsSliver extends StatelessWidget {
     this.onEmptyActionTap,
     this.onEditPost,
     this.onUnsharePost,
+    this.fullCards = false,
   });
 
   final FeedRepository feedRepository;
@@ -38,6 +40,10 @@ class ProfilePostsSliver extends StatelessWidget {
   /// Menu „⋯” własnych postów (id posta = id sesji); `null` — bez menu.
   final void Function(String postId)? onEditPost;
   final void Function(String postId)? onUnsharePost;
+
+  /// Pełne karty jak w feedzie (z autorem, najlepszą serią i mięśniami)
+  /// zamiast kompaktowych — oś aktywności na własnym profilu.
+  final bool fullCards;
 
   @override
   Widget build(BuildContext context) {
@@ -98,8 +104,8 @@ class ProfilePostsSliver extends StatelessWidget {
                 child: FeedPostCard(
                   key: ValueKey('profile-post-${post.id}'),
                   post: post,
-                  showAuthor: false,
-                  compact: true,
+                  showAuthor: fullCards,
+                  compact: !fullCards,
                   onEditTap: post.isOwn && onEditPost != null
                       ? () => onEditPost!(post.id)
                       : null,

@@ -7,6 +7,7 @@ import 'package:gym/features/feed/presentation/utils/feed_formatters.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_empty_state.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_people_strip.dart';
 import 'package:gym/features/feed/presentation/widgets/feed_post_card.dart';
+import 'package:gym/features/feed/presentation/widgets/post_author_row.dart';
 import 'package:gym/features/library/domain/models/exercise.dart';
 import 'package:gym/features/profile/domain/models/following_user.dart';
 import 'package:gym/features/profile/domain/repositories/profile_repository.dart';
@@ -81,21 +82,25 @@ Future<void> _pumpCard(
 }
 
 void main() {
-  testWidgets('own post title replaces the workout name, which moves next to the date', (
-    tester,
-  ) async {
-    await _pumpCard(
-      tester,
-      _post(postTitle: 'W końcu 82,5!', photoUrl: '/uploads/post-photos/a.webp'),
-    );
-    await tester.pump();
+  testWidgets(
+    'own post title replaces the workout name, which moves next to the date',
+    (tester) async {
+      await _pumpCard(
+        tester,
+        _post(
+          postTitle: 'W końcu 82,5!',
+          photoUrl: '/uploads/post-photos/a.webp',
+        ),
+      );
+      await tester.pump();
 
-    expect(find.text('W końcu 82,5!'), findsOneWidget);
-    expect(find.textContaining('· Push A'), findsOneWidget);
-    expect(find.text('Push A'), findsNothing);
-    expect(find.text('Nowy rekord na ławce'), findsOneWidget);
-    expect(find.byType(Image), findsWidgets);
-  });
+      expect(find.text('W końcu 82,5!'), findsOneWidget);
+      expect(find.textContaining('· Push A'), findsOneWidget);
+      expect(find.text('Push A'), findsNothing);
+      expect(find.text('Nowy rekord na ławce'), findsOneWidget);
+      expect(find.byType(Image), findsWidgets);
+    },
+  );
 
   testWidgets('without a post title the card keeps the workout name', (
     tester,
@@ -155,8 +160,9 @@ void main() {
   });
 
   group('FeedPostCard', () {
-    testWidgets('renders post content for another user and toggles kudos',
-        (tester) async {
+    testWidgets('renders post content for another user and toggles kudos', (
+      tester,
+    ) async {
       var kudosTaps = 0;
       var listTaps = 0;
       var commentTaps = 0;
@@ -203,8 +209,9 @@ void main() {
       expect(find.byIcon(Icons.sports_mma_rounded), findsOneWidget);
     });
 
-    testWidgets('own post has no kudos button but keeps comments',
-        (tester) async {
+    testWidgets('own post has no kudos button but keeps comments', (
+      tester,
+    ) async {
       await _pumpCard(tester, _post(isOwn: true, kudos: 0, comments: 0));
 
       expect(find.byKey(const ValueKey('feed-kudos-button-p1')), findsNothing);
@@ -244,6 +251,37 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'own post with author row shows the menu instead of the badge',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: FeedPostCard(
+                  post: _post(isOwn: true),
+                  onEditTap: () {},
+                  onUnshareTap: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(
+          find.byKey(const ValueKey('profile-post-menu-p1')),
+          findsOneWidget,
+        );
+        expect(find.text('Twój trening'), findsNothing);
+        // „⋯” na wysokości wiersza autora, nie wyżej w rogu karty.
+        final menuY = tester
+            .getCenter(find.byKey(const ValueKey('profile-post-menu-p1')))
+            .dy;
+        final authorY = tester.getCenter(find.byType(PostAuthorRow)).dy;
+        expect((menuY - authorY).abs(), lessThan(2));
+      },
+    );
 
     testWidgets('own post menu calls edit and unshare', (tester) async {
       var edited = 0;
@@ -338,8 +376,9 @@ void main() {
     });
   });
 
-  testWidgets('empty state shows explanation and suggested users',
-      (tester) async {
+  testWidgets('empty state shows explanation and suggested users', (
+    tester,
+  ) async {
     var findFriendsTaps = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -382,18 +421,23 @@ void main() {
     expect(findFriendsTaps, 1);
   });
 
-  testWidgets('people strip lists distinct other authors after find tile',
-      (tester) async {
+  testWidgets('people strip lists distinct other authors after find tile', (
+    tester,
+  ) async {
     var findTaps = 0;
     final tapped = <String>[];
-    FeedPost post(String id, String authorId, String name, {bool own = false}) =>
-        FeedPost(
-          id: id,
-          author: FeedAuthor(id: authorId, firstName: name, lastName: 'X'),
-          title: 'T',
-          startedAt: DateTime(2026, 9, 15, 10),
-          isOwn: own,
-        );
+    FeedPost post(
+      String id,
+      String authorId,
+      String name, {
+      bool own = false,
+    }) => FeedPost(
+      id: id,
+      author: FeedAuthor(id: authorId, firstName: name, lastName: 'X'),
+      title: 'T',
+      startedAt: DateTime(2026, 9, 15, 10),
+      isOwn: own,
+    );
 
     await tester.pumpWidget(
       MaterialApp(

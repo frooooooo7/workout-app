@@ -48,7 +48,6 @@ import '../../features/profile/presentation/bloc/edit_profile_cubit.dart';
 import '../../features/profile/presentation/bloc/follow_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_details_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_cubit.dart';
-import '../../features/profile/presentation/bloc/profile_plans_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_posts_cubit.dart';
 import '../../features/profile/presentation/bloc/profile_week_cubit.dart';
 import '../../features/training/presentation/bloc/training_stats_cubit.dart';
@@ -59,6 +58,7 @@ import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/find_people_screen.dart';
 import '../../features/profile/presentation/screens/following_list_screen.dart';
 import '../../features/profile/presentation/screens/profile_details_screen.dart';
+import '../../features/profile/presentation/screens/profile_progress_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_settings_screen.dart';
 import '../../features/profile/presentation/screens/user_profile_screen.dart';
@@ -405,22 +405,6 @@ GoRouter buildRouter({
                         ),
                       ),
                       BlocProvider(
-                        create: (_) => ProfileBodyCubit(
-                          weightRepository: ServiceLocator.bodyWeightRepository,
-                          measurementsRepository:
-                              ServiceLocator.bodyMeasurementsRepository,
-                          weightChanges: ServiceLocator.bodyWeightDataChanges,
-                          measurementsChanges:
-                              ServiceLocator.bodyMeasurementsDataChanges,
-                        ),
-                      ),
-                      BlocProvider(
-                        create: (_) => ProfilePlansCubit(
-                          ServiceLocator.trainingPlanRepository,
-                          dataChanges: ServiceLocator.trainingPlanDataChanges,
-                        ),
-                      ),
-                      BlocProvider(
                         create: (_) => ProfileWeekCubit(
                           ServiceLocator.trainingStatsRepository,
                           weeklyGoalLoader: loadOwnWeeklyGoal,
@@ -465,6 +449,36 @@ GoRouter buildRouter({
                         child: const EditProfileScreen(),
                       );
                     },
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: appRootNavigatorKey,
+                    path: 'progress',
+                    builder: (_, s) => MultiBlocProvider(
+                      providers: [
+                        BlocProvider(
+                          create: (_) => ProfileWeekCubit(
+                            ServiceLocator.trainingStatsRepository,
+                            weeklyGoalLoader: loadOwnWeeklyGoal,
+                            dataChanges:
+                                ServiceLocator.trainingSessionDataChanges,
+                          ),
+                        ),
+                        BlocProvider(
+                          create: (_) => ProfileBodyCubit(
+                            weightRepository:
+                                ServiceLocator.bodyWeightRepository,
+                            measurementsRepository:
+                                ServiceLocator.bodyMeasurementsRepository,
+                            weightChanges: ServiceLocator.bodyWeightDataChanges,
+                            measurementsChanges:
+                                ServiceLocator.bodyMeasurementsDataChanges,
+                          ),
+                        ),
+                      ],
+                      child: const ProfileProgressScreen(
+                        weeklyGoalLoader: loadOwnWeeklyGoal,
+                      ),
+                    ),
                   ),
                   GoRoute(
                     parentNavigatorKey: appRootNavigatorKey,
