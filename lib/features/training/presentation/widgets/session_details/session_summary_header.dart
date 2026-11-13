@@ -9,7 +9,7 @@ import 'warmup_time_note.dart';
 
 /// Nagłówek sesji — **jedyne** miejsce z metrykami całego treningu.
 ///
-/// Sekcje poniżej (mapa mięśni, oś czasu, ćwiczenia) celowo ich nie powtarzają:
+/// Sekcje poniżej (ćwiczenia, mapa mięśni) celowo ich nie powtarzają:
 /// każda pokazuje wyłącznie to, czego nagłówek nie umie pokazać.
 class SessionSummaryHeader extends StatelessWidget {
   const SessionSummaryHeader({
@@ -71,7 +71,7 @@ class SessionSummaryHeader extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      formatDateWithTime(detail.startedAt),
+                      _dateWithHours(detail),
                       style: const TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 12.5,
@@ -150,4 +150,12 @@ class SessionSummaryHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// `10 lis 2026, 18:02–19:14` (bez godziny końca, gdy jej nie ma).
+String _dateWithHours(TrainingSessionDetail detail) {
+  final start = formatDateWithTime(detail.startedAt);
+  final end = detail.endedAt;
+  if (end == null) return start;
+  return '$start–${formatClock(end.toLocal())}';
 }
